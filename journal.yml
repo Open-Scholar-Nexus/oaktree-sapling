@@ -1,0 +1,11 @@
+# journal.yml
+
+papers:
+- repo: "https://github.com/jupyter-book/mystmd-quickstart.git"
+  main_file: "README"
+
+# - repo: "https://github.com/other-author/study-of-gadgets"
+#   main_file: "article/main" 
+
+# - repo: "https://github.com/another-author/myst-paper-example"
+#   main_file: "paper"
