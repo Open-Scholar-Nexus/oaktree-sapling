@@ -32,4 +32,4 @@ To absolutely 100% ensure replicability of environment, we currently use devcont
 
 ### where to find more info
 
-Most of the work will follow our issue board.
+Most of the work will follow our issue board. This work is funded by Neuromatch! More info [here](https://neuromatch.io/about/)
