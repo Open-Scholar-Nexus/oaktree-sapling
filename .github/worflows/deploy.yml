@@ -1,0 +1,54 @@
+name: Deploy MyST to GitHub Pages
+
+on:
+  push:
+    branches:
+    - main
+  workflow_dispatch:
+
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow only one concurrent deployment
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: bookworm
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup Micromamba
+      uses: mamba-org/setup-micromamba@v2
+      with:
+        environment-file: .devcontainer/environment.yaml
+        cache-environment: true
+        cache-downloads: true
+
+    - name: Run build_toc.py
+      run: python build_toc.py
+
+    - name: Build MyST site
+      run: myst build --html
+
+    - name: Upload artifact
+      uses: actions/upload-pages-artifact@v3
+      with:
+        path: '_build/html'
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: bookworm
+    needs: build
+    steps:
+    - name: Deploy to GitHub Pages
+      id: deployment
+      uses: actions/deploy-pages@v4
