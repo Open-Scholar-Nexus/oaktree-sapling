@@ -1,0 +1,15 @@
+version: 1
+
+project:
+  id: conference-proceedings-2024
+  title: Conference Proceedings 2024
+  description: Research papers on climate and oceanography
+  plugins:
+  - type: executable
+    path: card-list.py
+  toc:
+  - title: Welcome
+    file: index.md
+
+site:
+  template: book-theme
