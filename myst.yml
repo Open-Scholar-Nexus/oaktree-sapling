@@ -9,6 +9,15 @@ project:
   toc:
   - title: Welcome
     file: index.md
+  - title: Impact Scholars Program
+    file: impact-scholars.md
+    children:
+      - title: 2025 Edition
+        file: impact-scholars-2025.md
+      - title: 2024 Edition
+        file: impact-scholars-2024.md
+      - title: 2023 Edition
+        file: impact-scholars-2023.md
   - title: Who We Are
     file: who-we-are.md
   - title: Submission Guidelines
@@ -23,5 +32,3 @@ site:
       url: /who-we-are
     - title: Submit
       url: /submission-guidelines
-  options:
-    hide_toc: true

@@ -11,12 +11,6 @@ This journal operates on principles that should have been obvious three centurie
 
 Learn more [about our mission and team](who-we-are.md), or review our [submission guidelines](submission-guidelines.md) if you're interested in publishing with us.
 
-## Featured Papers
-
-This collection includes cutting-edge research on:
-
-- **Hurricane Impact Studies**: Analysis of sea level data during extreme weather events
-- **Climate Patterns**: Understanding oceanic oscillations and their impact on regional climatology
 
 ## Navigation
 
