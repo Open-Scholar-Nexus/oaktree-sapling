@@ -11,8 +11,8 @@ project:
 site:
   template: book-theme
   nav:
-  - title: Welcome
-    url: https://pollomarzo.github.io
+  - title: Home
+    url: https://pollomarzo.github.io/scholar-nexus
   - title: Who We Are
     url: https://pollomarzo.github.io/scholar-nexus/who-we-are/
   - title: Submit
