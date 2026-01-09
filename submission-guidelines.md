@@ -24,7 +24,7 @@ All research published on Scholar Nexus is freely accessible to anyone with an i
 ### Open Science Standards
 We encourage and support open data, open methods, and reproducible research practices. Science advances faster when the entire process is transparent and collaborative.
 
-Learn more about [our mission and values](who-we-are.md).
+Learn more about [our mission and values](./who-we-are.md).
 
 ---
 
