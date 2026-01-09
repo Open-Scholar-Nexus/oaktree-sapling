@@ -12,11 +12,11 @@ site:
   template: book-theme
   nav:
   - title: Welcome
-    url: /index
+    url: https://pollomarzo.github.io
   - title: Who We Are
-    url: /who-we-are
+    url: https://pollomarzo.github.io/scholar-nexus/who-we-are/
   - title: Submit
-    url: /submission-guidelines
+    url: https://pollomarzo.github.io/scholar-nexus/submission-guidelines/
   options:
     logo: https://raw.githubusercontent.com/pollomarzo/scholar-nexus/main/logos/logo.png
     logo_dark: https://raw.githubusercontent.com/pollomarzo/scholar-nexus/main/logos/logo.png
