@@ -6,3 +6,9 @@ ecco-tides-maria
 
 # 2023
 burned-area-argentina-patagonia
+enso-upwelling-northwest-africa
+enso-iod-monsoon-indonesia-australia
+enso-climate-pacific-region
+precipitation-extreme-events-india
+land-cover-change-tropical-agriculture
+cloud-ndvi-patterns-east-africa
