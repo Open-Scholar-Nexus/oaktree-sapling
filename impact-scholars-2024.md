@@ -6,6 +6,8 @@ options:
 ---
 
 # Impact Scholars Program - 2024 Edition
+> [!WARNING]
+> **Work in Progress** - This page is currently being developed. Check back soon!
 
 Featured research from scholars participating in our 2024 program.
 
