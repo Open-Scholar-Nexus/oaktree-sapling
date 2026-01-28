@@ -3,10 +3,6 @@ version: 1
 project:
   id: scholar-nexus-home
   title: Scholar Nexus
-  # open_access: true
-  # license:
-  #   content: CC-BY-4.0
-  #   code: Apache-2.0
 
 site:
   template: book-theme
@@ -18,6 +14,7 @@ site:
   - title: Submit
     url: https://pollomarzo.github.io/scholar-nexus/submission-guidelines/
   options:
+    favicon: https://raw.githubusercontent.com/pollomarzo/scholar-nexus/main/logos/logo.png
     logo: https://raw.githubusercontent.com/pollomarzo/scholar-nexus/main/logos/logo.png
     logo_dark: https://raw.githubusercontent.com/pollomarzo/scholar-nexus/main/logos/logo.png
     logo_url: https://pollomarzo.github.io/scholar-nexus/
