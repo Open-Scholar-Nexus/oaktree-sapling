@@ -10,8 +10,7 @@ project:
     content: CC-BY-4.0
 
   plugins:
-  - type: executable
-    path: card-list.py
+  - paper-gallery.mjs
   toc:
   - title: Home
     file: index.md
