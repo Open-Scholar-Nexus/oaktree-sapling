@@ -95,7 +95,7 @@ const paperCardsDirective = {
     const subset = data.options?.subset;
     const allPapers = parsePapers();
     const papers = allPapers.filter(p => !subset || p.year === subset);
-    console.warning(`paper-cards: subset=${subset}, found ${papers.length} papers`);
+    console.warn(`paper-cards: subset=${subset}, found ${papers.length} papers`);
 
     const cards = papers.map(({ name }) => {
       const config = getPaperConfig(name);
