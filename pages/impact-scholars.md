@@ -23,9 +23,9 @@ The Impact Scholars Program showcases cutting-edge research from scholars commit
 
 Browse our collection of publications by year:
 
-- [2025 Edition](./impact-scholars-2025.md) - Latest research from 2025
-- [2024 Edition](./impact-scholars-2024.md) - Research from 2024
-- [2023 Edition](./impact-scholars-2023.md) - Research from 2023
+- [2025 Edition](./impact-scholars/impact-scholars-2025.md) - Latest research from 2025
+- [2024 Edition](./impact-scholars/impact-scholars-2024.md) - Research from 2024
+- [2023 Edition](./impact-scholars/impact-scholars-2023.md) - Research from 2023
 
 ---
 

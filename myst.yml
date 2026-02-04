@@ -13,20 +13,20 @@ project:
   - plugins/paper-gallery.mjs
   toc:
   - title: Home
-    file: index.md
+    file: pages/index.md
   - title: Impact Scholars Program
-    file: impact-scholars.md
+    file: pages/impact-scholars.md
     children:
     - title: 2025 Edition
-      file: impact-scholars/impact-scholars-2025.md
+      file: pages/impact-scholars/impact-scholars-2025.md
     - title: 2024 Edition
-      file: impact-scholars/impact-scholars-2024.md
+      file: pages/impact-scholars/impact-scholars-2024.md
     - title: 2023 Edition
-      file: impact-scholars/impact-scholars-2023.md
+      file: pages/impact-scholars/impact-scholars-2023.md
   - title: Who We Are
-    file: who-we-are.md
+    file: pages/who-we-are.md
   - title: Submission Guidelines
-    file: submission-guidelines.md
+    file: pages/submission-guidelines.md
 
 site:
   template: book-theme
