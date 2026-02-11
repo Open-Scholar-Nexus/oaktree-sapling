@@ -19,7 +19,7 @@ The template repository we prepared for the Impact Scholar Program micropublicat
 
 ```yaml
 extends:
-  - https://raw.githubusercontent.com/pollomarzo/scholar-nexus/main/nexus.yml
+  - https://raw.githubusercontent.com/pollomarzo/scholar-nexus/v0.1.0/nexus.yml
   - https://raw.githubusercontent.com/pollomarzo/scholar-nexus-paper-config/main/isp-micropublication-2025.yml
 ```
 

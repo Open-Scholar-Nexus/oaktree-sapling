@@ -14,9 +14,9 @@ site:
   - title: Submit
     url: https://pollomarzo.github.io/scholar-nexus/submission-guidelines/
   options:
-    favicon: https://raw.githubusercontent.com/pollomarzo/scholar-nexus/main/static/logos/logo.png
-    logo: https://raw.githubusercontent.com/pollomarzo/scholar-nexus/main/static/logos/logo.png
-    logo_dark: https://raw.githubusercontent.com/pollomarzo/scholar-nexus/main/static/logos/logo.png
+    favicon: https://raw.githubusercontent.com/pollomarzo/scholar-nexus/v0.1.0/static/logos/logo.png
+    logo: https://raw.githubusercontent.com/pollomarzo/scholar-nexus/v0.1.0/static/logos/logo.png
+    logo_dark: https://raw.githubusercontent.com/pollomarzo/scholar-nexus/v0.1.0/static/logos/logo.png
     logo_text: Scholar Nexus
     logo_url: https://pollomarzo.github.io/scholar-nexus/
     style: static/custom.css
