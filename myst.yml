@@ -5,6 +5,8 @@ extends:
 project:
   id: scholar-nexus-home
   title: Scholar Nexus
+  description: A zero-cost, open-access journal
+  github: https://github.com/pollomarzo/scholar-nexus
   open_access: true
   license:
     content: CC-BY-4.0
