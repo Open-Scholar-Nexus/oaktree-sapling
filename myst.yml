@@ -3,10 +3,10 @@ extends:
 - nexus.yml
 
 project:
-  id: scholar-nexus-home
-  title: Scholar Nexus
+  id: oaktree-sapling-home
+  title: Oaktree Sapling
   description: A zero-cost, open-access journal
-  github: https://github.com/pollomarzo/scholar-nexus
+  github: https://github.com/Open-Scholar-Nexus/oaktree-sapling
   open_access: true
   license:
     content: CC-BY-4.0

@@ -3,12 +3,3 @@
 # 2024
 
 # 2023
-oceanic-oscillations-congo
-ecco-tides-maria
-burned-area-argentina-patagonia
-enso-upwelling-northwest-africa
-enso-iod-monsoon-indonesia-australia
-enso-climate-pacific-region
-precipitation-extreme-events-india
-land-cover-change-tropical-agriculture
-cloud-ndvi-patterns-east-africa

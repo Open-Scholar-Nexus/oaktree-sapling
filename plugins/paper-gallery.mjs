@@ -7,8 +7,8 @@ import yaml from 'js-yaml';
 // used for debugging locally
 const LOCAL_PATH = process.env.NEXUS_LOCAL_PATH;
 
-const GITHUB_RAW_BASE = 'https://raw.githubusercontent.com/pollomarzo';
-const GITHUB_PAGES_BASE = 'https://pollomarzo.github.io';
+const GITHUB_RAW_BASE = 'https://raw.githubusercontent.com/Open-Scholar-Nexus';
+const GITHUB_PAGES_BASE = 'https://open-scholar-nexus.github.io';
 
 function parsePapers() {
   const lines = readFileSync('papers.txt', 'utf8').split('\n');
