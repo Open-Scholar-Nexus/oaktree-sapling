@@ -1,0 +1,51 @@
+name: PR Preview
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+  deployments: write
+
+concurrency:
+  group: preview-${{ github.head_ref }}
+  cancel-in-progress: true
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Micromamba
+        uses: mamba-org/setup-micromamba@v2
+        with:
+          environment-file: .devcontainer/environment.yml
+          generate-run-shell: true
+          cache-environment: true
+          cache-downloads: true
+
+      - name: Install npm dependencies
+        run: npm install
+
+      - name: Myst build
+        run: myst build --html
+        shell: micromamba-shell {0}
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        id: deploy
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy _build/html --project-name=oaktree-sapling --branch=${{ github.head_ref }}
+
+      - name: Comment preview URL on PR
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          message: |
+            🔍 **Preview deployed!**
+            ${{ steps.deploy.outputs.deployment-url }}
