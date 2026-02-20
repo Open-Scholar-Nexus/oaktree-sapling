@@ -10,6 +10,8 @@ project:
   open_access: true
   license:
     content: CC-BY-4.0
+  references:
+    spec: https://mystmd.org/spec
 
   plugins:
   - plugins/paper-gallery.mjs
@@ -32,6 +34,10 @@ project:
   - title: Tutorials
     file: pages/tutorials.md
     children:
+    - title: ISP Tutorial
+      file: pages/tutorials/ISP-intro.md
+    - title: Why MyST?
+      file: pages/tutorials/why-myst.md
     - title: MyST - A Deeper Dive
       file: pages/tutorials/myst-deeper.md
     - title: Conda/Mamba Tutorial

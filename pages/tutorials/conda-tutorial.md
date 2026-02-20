@@ -22,7 +22,7 @@ There are many options with confusing names. You might have heard of Anaconda, M
 
 1. Run the downloaded `.exe` file
 2. Choose "Just Me" when asked
-3. **Important:** Check the box that says "Add Miniforge3 to my PATH" — this lets you use conda from any terminal
+3. **Important:** Check the box that says "Add Miniforge3 to my PATH": this lets you use conda from any terminal
 4. Finish the installation
 
 ### macOS
@@ -41,7 +41,7 @@ Accept the license, confirm the install location, and say "yes" when it asks to 
 
 ## Verify it worked
 
-Open a fresh terminal (or command prompt on Windows—you may need to use "Miniforge Prompt" from the Start menu) and type:
+Open a fresh terminal (or command prompt on Windows, you may need to use "Miniforge Prompt" from the Start menu) and type:
 
 ```bash
 mamba --version
@@ -51,7 +51,7 @@ If you see a version number, you're done! 🎉
 
 ## Wait, what's an "environment"?
 
-You'll see us (and others) talk about "environments." Think of them as separate workspaces. If one project needs specific versions of tools that might conflict with another project, environments keep them isolated. You don't need to understand this deeply right now—just know that when we say `mamba create -n myproject`, we're making a fresh workspace called "myproject," and `mamba activate myproject` switches you into it.
+You'll see us (and others) talk about "environments." Think of them as separate workspaces. If one project needs specific versions of tools that might conflict with another project, environments keep them isolated. You don't need to understand this deeply right now: just know that when we say `mamba create -n myproject`, we're making a fresh workspace called "myproject," and `mamba activate myproject` switches you into it.
 
 
 **Something went wrong?** The most common issue is that your terminal can't find conda. Try closing and reopening your terminal. On Windows, try searching for "Miniforge Prompt" in the Start menu and using that instead.
