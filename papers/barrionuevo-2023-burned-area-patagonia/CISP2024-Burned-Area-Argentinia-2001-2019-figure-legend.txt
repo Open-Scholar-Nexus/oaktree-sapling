@@ -1,0 +1,5 @@
+A) Land cover and land use map: Delineates the diversity in the land cover and land use in AAPF. This map highlights the study region's complex geography and provides insightful information about biomass fuel availability among other features. For a detailed description of the product methodology and land cover types, refer to Buchhorn et al. (2020). 
+
+B) Orography map: Derived from surface geopotential height measurements obtained from the ERA5 reanalysis data, this map presents the orography of the AAPF. It illustrates the elevation gradient from the Andes Mountains to the Patagonian plateau, with values expressed in meters. 
+
+C) Count of active fire seasons and its activity by latitude: The horizontal bar plot shows the count of active fire seasons at different latitudes within the AAPF from 2001 to 2019 fire seasons. Active seasons are defined as periods with fire events covering an area greater than 0.05336 km^2^ (5.3364 ha). The color gradient represents the total burned area in km^2^, indicating the spatial intensity of fires.

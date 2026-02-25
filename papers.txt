@@ -3,3 +3,12 @@
 # 2024
 
 # 2023
+hartzell-2023-oceanic-oscillations-congo
+barrionuevo-2023-burned-area-patagonia
+pozo-2023-cloud-ndvi-eastafrica
+porteous-2023-ecco-tides-maria
+shree-2023-enso-climate-pacific
+yang-2023-enso-iod-monsoon
+ray-2023-enso-upwelling-africa
+oliveira-2023-landcover-tropical-agriculture
+thomas-2023-precipitation-extremes-india

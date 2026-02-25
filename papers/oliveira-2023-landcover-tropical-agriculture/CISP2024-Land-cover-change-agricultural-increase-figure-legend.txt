@@ -1,0 +1,1 @@
+Figure 1: (a) Sankey plot of land cover change in Mato Grosso from 2001 to 2021. (b) Mato Grosso normalized variables time series and (c) Pearson correlations. Source: Self-Generated

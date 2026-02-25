@@ -1,0 +1,7 @@
+﻿Order in publication,Firstname,Middle name,Surname,Conceptualization,Data curation,Formal analysis,Investigation,Methodology,Project administration,Resources,Supervision,Validation,Visualization,Writing - original draft,Writing - review & editing,Email address,Primary affiliation,ORCID iD,Corresponding author?
+1,Stefy,,Thomas,TRUE,TRUE,TRUE,FALSE,TRUE,TRUE,FALSE,FALSE,TRUE,TRUE,TRUE,TRUE,stefythomas@cusat.ac.in,Cochin University of Science and Technology,,TRUE
+2,Khushi,,Dani,FALSE,TRUE,TRUE,TRUE,TRUE,FALSE,FALSE,FALSE,FALSE,TRUE,FALSE,FALSE,,IIT Bombay,,FALSE
+3,Sattiki,,Ganguly,FALSE,FALSE,TRUE,TRUE,FALSE,TRUE,TRUE,FALSE,TRUE,FALSE,TRUE,TRUE,,Arthan,,FALSE
+4,Pandurang,,Choudhari,FALSE,TRUE,TRUE,TRUE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,,University of Mumbai,,FALSE
+5,Risa ,,Madoff,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,TRUE,FALSE,FALSE,FALSE,FALSE,,University of North Dakota ,,FALSE
+-,Sintayehu,Fetene,Demessie,TRUE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,,,,

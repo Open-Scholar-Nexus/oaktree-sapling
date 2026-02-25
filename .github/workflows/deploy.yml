@@ -5,8 +5,9 @@ on:
     branches:
       - main
     tags:
-      - 'v*'
+      - "v*"
   workflow_dispatch:
+
 env:
   BASE_URL: /${{ github.event.repository.name }}
 
@@ -40,14 +41,14 @@ jobs:
       - name: Install npm dependencies
         run: npm install
 
-      - name: Myst build
-        run: myst build --html
+      - name: Build stitched site
+        run: ./build.bash --base-url "$BASE_URL"
         shell: micromamba-shell {0}
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: "_build/html"
+          path: "_site"
 
   deploy:
     environment:

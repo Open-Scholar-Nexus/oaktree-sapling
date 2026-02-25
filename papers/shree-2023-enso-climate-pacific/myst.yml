@@ -1,0 +1,57 @@
+version: 1
+extends:
+- https://raw.githubusercontent.com/Open-Scholar-Nexus/oaktree-sapling/v0.1.0/nexus.yml
+- https://raw.githubusercontent.com/Open-Scholar-Nexus/oaktree-sapling-config/v0.1.0/climatematch-2023.yml
+
+project:
+  doi: 10.5281/zenodo.11201102
+  date: 2024-05-16
+  authors:
+  - name: Anjana Shree R J
+    email: rjanjana2003@gmail.com
+    affiliations:
+    - Thiagarajar College, India
+    corresponding: true
+  - name: Kimia Marvi
+    email: kimia.marvi.33@gmail.com
+    affiliations:
+    - University of Teheran, Iran
+    corresponding: true
+  - name: Kirtana Sunil Phatnani
+    email: kirtanaphatnani99@gmail.com
+    orcid: 0000-0001-9988-1167
+    affiliations:
+    - Fractal Analytics, India
+    corresponding: true
+  - name: Neil Marc Sordilla
+    email: nmsordilla@gmail.com
+    affiliations:
+    - Hasselt University, Belgium
+    corresponding: true
+  - name: Eligio Maure
+    email: eligiomaure@gmail.com
+    affiliations:
+    - Navagis Inc., Mozambique
+    corresponding: true
+  - name: Danny McCulloch
+    email: dm575@exeter.ac.uk
+    affiliations:
+    - University of Exeter, United Kingdom
+    corresponding: true
+
+  toc:
+  - file: index.md
+
+  id: enso-climate-pacific-region
+  title: Impacts of ENSO on Climate Variable in the Pacific Region
+  keywords:
+  - ENSO
+  - Sea Surface Temperature
+  - Air Temperature
+  - Oceanic Niño Index
+  github: https://github.com/Open-Scholar-Nexus/shree-2023-enso-climate-pacific
+  downloads:
+  - file: CISP2024-ENSO-Climate-PacificRegion-source-code.zip
+    title: Code
+  - file: CISP2024-ENSO-Climate-PacificRegion-supplementary-materials.zip
+    title: Supplementary material
