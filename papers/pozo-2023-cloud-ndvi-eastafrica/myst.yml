@@ -1,0 +1,50 @@
+version: 1
+extends:
+- https://raw.githubusercontent.com/Open-Scholar-Nexus/oaktree-sapling/v0.1.0/nexus.yml
+- https://raw.githubusercontent.com/Open-Scholar-Nexus/oaktree-sapling-config/v0.1.0/climatematch-2023.yml
+
+project:
+  doi: 10.5281/zenodo.11001991
+  date: 2024-04-20
+  authors:
+  - name: Jesús Pozo
+    orcid: 0000-0001-5643-3444
+    affiliations:
+    - National Agrarian University La Molina, Peru
+  - name: Andrea Miranda
+    orcid: 0000-0003-1125-4340
+    affiliations:
+    - National Institute for Research in Glaciers and Mountain Ecosystems
+  - name: Alethia Kielbasa
+    orcid: 0000-0003-0406-6122
+    affiliations:
+    - University of Oklahoma
+  - name: Sergei Nabatov
+    orcid: 0009-0004-7350-8945
+    affiliations:
+    - Politecnico di Milano
+  - name: Benedetta Francesconi
+    orcid: 0009-0002-2478-7859
+    affiliations:
+    - VU Amsterdam
+  - name: Abdus Samad
+    orcid: 0000-0001-7434-6942
+    affiliations:
+    - University of Rochester
+
+  toc:
+  - file: index.md
+
+  id: cloud-ndvi-patterns-east-africa
+  title: Long-term Climatological Patterns of Cloud Coverage and NDVI in East Africa
+  keywords:
+  - NDVI
+  - Cloud Coverage
+  - East Africa
+  - Remote Sensing
+  github: https://github.com/Open-Scholar-Nexus/pozo-2023-cloud-ndvi-eastafrica
+  bibliography:
+  - bib.bib
+  downloads:
+  - file: CISP-2024-Long-term-climatological-patterns-East-Africa-code.zip
+    title: Code

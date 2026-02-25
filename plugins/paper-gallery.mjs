@@ -1,14 +1,9 @@
 // inspired by FreekPols and luukfroling's gallery https://github.com/TUD-JB-Templates/JB2_plugins
-import fs from 'fs/promises';
-import { readFileSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 import path from 'path';
 import yaml from 'js-yaml';
 
-// used for debugging locally
-const LOCAL_PATH = process.env.NEXUS_LOCAL_PATH;
-
-const GITHUB_RAW_BASE = 'https://raw.githubusercontent.com/Open-Scholar-Nexus';
-const GITHUB_PAGES_BASE = 'https://open-scholar-nexus.github.io';
+const PAPERS_DIR = 'papers';
 
 function parsePapers() {
   const lines = readFileSync('papers.txt', 'utf8').split('\n');
@@ -27,19 +22,26 @@ function parsePapers() {
   return papers;
 }
 
-async function fetchPaperConfig(name) {
-  if (LOCAL_PATH) {
-    const configPath = path.join(LOCAL_PATH, name, 'myst.yml');
-    const content = await fs.readFile(configPath, 'utf8');
-    return yaml.load(content);
-  } else {
-    const url = `${GITHUB_RAW_BASE}/${name}/main/myst.yml`;
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch config for "${name}": ${response.status} ${response.statusText}`);
-    }
-    return yaml.load(await response.text());
+function fetchPaperConfig(name) {
+  const configPath = path.join(PAPERS_DIR, name, 'myst.yml');
+  if (!existsSync(configPath)) {
+    console.warn(`paper-gallery: skipping "${name}" (no ${configPath})`);
+    return null;
   }
+  const content = readFileSync(configPath, 'utf8');
+  return yaml.load(content);
+}
+
+function getPaperUrl(name) {
+  // BASE_URL is set by build.bash (e.g. /oaktree-sapling for GH Pages)
+  const base = process.env.BASE_URL || '';
+  return `${base}/${PAPERS_DIR}/${name}`;
+}
+
+function getThumbnailUrl(name) {
+  // In the monorepo, thumbnails are served from each paper's built site
+  const base = process.env.BASE_URL || '';
+  return `${base}/${PAPERS_DIR}/${name}/thumbnails/thumbnail.png`;
 }
 
 const paperCardsDirective = {
@@ -74,7 +76,12 @@ function paperCardsTransform(opts, utils) {
 
     await Promise.all(
       nodes.map(async (node) => {
-        const config = await fetchPaperConfig(node.name);
+        const config = fetchPaperConfig(node.name);
+        if (!config) {
+          node.type = 'paragraph';
+          node.children = [{ type: 'text', value: `Paper "${node.name}" not found locally.` }];
+          return;
+        }
         console.log(`Building card for "${node.name}"`);
 
         const title = config.project.title || node.name;
@@ -82,12 +89,12 @@ function paperCardsTransform(opts, utils) {
 
         // Mutate node into a card
         node.type = 'card';
-        node.url = `${GITHUB_PAGES_BASE}/${node.name}`;
+        node.url = getPaperUrl(node.name);
         node.children = [
           { type: 'header', children: [{ type: 'text', value: title }] },
           {
             type: 'image',
-            url: `${GITHUB_RAW_BASE}/${node.name}/main/thumbnails/thumbnail.png`,
+            url: getThumbnailUrl(node.name),
             alt: title,
             width: '100%',
           },

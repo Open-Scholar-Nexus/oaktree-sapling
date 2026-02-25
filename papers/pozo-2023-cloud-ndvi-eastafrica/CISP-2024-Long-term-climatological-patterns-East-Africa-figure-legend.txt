@@ -1,0 +1,1 @@
+A) Interannual variation of mean NDVI from 1991 to 2020. B) Monthly cycle of cloud coverage distribution. C) Scatter plot between regional number of pixels of cloud coverage and NVDI as independent and dependent parameters respectively. D) Mean NDVI from 1991 to 202 over the Juba-Shabelle basin in East Africa.

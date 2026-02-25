@@ -1,0 +1,27 @@
+version: 1
+extends:
+- https://raw.githubusercontent.com/Open-Scholar-Nexus/oaktree-sapling/v0.1.0/nexus.yml
+- https://raw.githubusercontent.com/Open-Scholar-Nexus/oaktree-sapling-config/v0.1.0/climatematch-2023.yml
+
+project:
+  doi: 10.5281/zenodo.12611241
+  date: 2024-05-16
+  authors:
+  - name: Franck Porteous
+  - name: Hannah Krohn
+  - name: Faith Hunja
+    orcid: 0000-0001-5747-0247
+
+  toc:
+  - file: index.md
+
+  id: observing-ecco-model-vs-tide-gauges-affected-by-hurricane-maria
+  title: Observing ECCO Model vs Tide Gauges Affected by Hurricane Maria
+  keywords:
+  - ECCO
+  - Tide Gauges
+  - Hurricane Maria
+  github: https://github.com/Open-Scholar-Nexus/porteous-2023-ecco-tides-maria
+  downloads:
+  - file: assets/CISP2024-ECCO-TideGauges-HurricaneMaria-source-code.zip
+    title: Code

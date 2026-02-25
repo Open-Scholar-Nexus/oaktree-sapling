@@ -1,0 +1,40 @@
+version: 1
+extends:
+- https://raw.githubusercontent.com/Open-Scholar-Nexus/oaktree-sapling/v0.1.0/nexus.yml
+- https://raw.githubusercontent.com/Open-Scholar-Nexus/oaktree-sapling-config/v0.1.0/climatematch-2023.yml
+
+project:
+  doi: 10.5281/zenodo.11069076
+  date: 2024-04-25
+  authors:
+  - name: Zhixian Yang
+    email: yimu01439@gmail.com
+    affiliations:
+    - School of Atmospheric Sciences, Sun Yat-sen University
+    corresponding: true
+  - name: Selyn Rousse Acuña
+    email: selynacunacama@gmail.com
+  - name: Tejawini M. Pawase
+    email: kintsugi2030@gmail.com
+    affiliations:
+    - Interdisciplinary School of Science, Savitribai Phule Pune University
+  - name: Gizachew Kassa Agegn
+    email: gizachewka@gmail.com
+  - name: Rene Navarro Labastida
+  - name: Rosmery Lidez Condori
+  - name: Naomi Nafisa Rahman
+
+  toc:
+  - file: index.md
+
+  id: enso-iod-monsoon-indonesia-australia
+  title: Impact of Interannual Variability on the onset of Summer Monsoon over the Indonesia-Northern Australia Region
+  keywords:
+  - ENSO
+  - IOD
+  - Australia
+  - Climate Teleconnections
+  github: https://github.com/Open-Scholar-Nexus/yang-2023-enso-iod-monsoon
+  downloads:
+  - file: CISP-ENSO-&IOD-On-Onset-of-Summer-Moonson-Australia-Code.zip
+    title: Code

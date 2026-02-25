@@ -1,0 +1,47 @@
+version: 1
+extends:
+- https://raw.githubusercontent.com/Open-Scholar-Nexus/oaktree-sapling/v0.1.0/nexus.yml
+- https://raw.githubusercontent.com/Open-Scholar-Nexus/oaktree-sapling-config/v0.1.0/climatematch-2023.yml
+
+project:
+  doi: 10.5281/zenodo.11002004
+  date: 2024-04-20
+  authors:
+  - name: Sofia Corradi Oliveira
+    email: sofiacorradio@gmail.com
+    affiliations:
+    - Federal University of Minas Gerais, Brazil
+    orcid: 0000-0001-8644-9674
+    corresponding: true
+  - name: Andres Fernando Figueroa Curo
+    affiliations:
+    - National Agrarian University of La Molina
+    - Water Research and Technology Center (UTEC)
+    orcid: 0009-0008-4778-1381
+  - name: Manojna Polisetty
+    affiliations:
+    - World Resource Institute India
+    orcid: 0009-0002-2666-5855
+  - name: Magnolia Song
+    affiliations:
+    - Monash University
+    orcid: 0000-0003-4123-7170
+  - name: Daniela Velasquez Gushiken
+    affiliations:
+    - National Agrarian University of La Molina
+    orcid: 0009-0002-0092-4599
+  - name: Maryann Alessandra Alata Chambilla
+    affiliations:
+    - National Agrarian University of La Molina
+    orcid: 0009-0002-0198-5553
+
+  toc:
+  - file: index.md
+
+  id: land-cover-change-tropical-agriculture
+  title: The influence of rapid agricultural expansion on land use and land cover changes in tropical Mato Grosso, Brazil
+  keywords:
+  - Rainforest
+  - Surface Temperature
+  - Agricultural Impact
+  github: https://github.com/Open-Scholar-Nexus/oliveira-2023-landcover-tropical-agriculture

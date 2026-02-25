@@ -1,0 +1,61 @@
+version: 1
+extends:
+- https://raw.githubusercontent.com/Open-Scholar-Nexus/oaktree-sapling/v0.1.0/nexus.yml
+- https://raw.githubusercontent.com/Open-Scholar-Nexus/oaktree-sapling-config/v0.1.0/climatematch-2023.yml
+
+project:
+  doi: 10.5281/zenodo.12206635
+  date: 2024-06-21
+  authors:
+  - name: Franco Barrionuevo
+    roles:
+    - Conceptualization
+    - Formal analysis
+    - Investigation
+    - Methodology
+    - Software
+    - Visualization
+    - Writing - original draft
+    - Writing - review & editing
+  - name: Raphael Rocha
+    roles:
+    - Conceptualization
+    - Formal analysis
+    - Investigation
+    - Methodology
+    - Visualization
+    - Writing - original draft
+    - Writing - review & editing
+  - name: Luciana Rojas
+    roles:
+    - Formal analysis
+    - Investigation
+    - Writing - original draft
+    - Writing - review & editing
+  - name: Ricardo Rengifo
+    roles:
+    - Formal analysis
+    - Investigation
+    - Writing - original draft
+    - Writing - review & editing
+  - name: Cristian Farfan
+    roles:
+    - Formal analysis
+    - Writing - original draft
+    - Writing - review & editing
+
+  toc:
+  - file: index.md
+
+  id: burned-area-argentina-patagonia
+  title: Latitudinal assessment of burned area in the Argentinian Andean-Patagonian Forest during 2001-2019 fire seasons
+  keywords:
+  - Argentinian Forest
+  - Satellite Imaging
+  - Conservation Strategies
+  github: https://github.com/Open-Scholar-Nexus/barrionuevo-2023-burned-area-patagonia
+  bibliography:
+  - bib.bib
+  downloads:
+  - file: CISP2024-Burned-Area-Argentinia-2001-2019-supp-material.zip
+    title: Supplementary Material
