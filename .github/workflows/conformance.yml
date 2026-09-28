@@ -1,0 +1,113 @@
+name: conformance
+
+# Tests a release of oak on the test paper repository and uploads the result to the release.
+# https://scholar.nexus/oaktree-sapling/reference/cli#conformance
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release to test; empty only resets the test repository'
+        required: false
+      only-reset:
+        description: 'Only reset the test repository'
+        type: boolean
+        default: false
+  workflow_run:
+    workflows: ['cut-engine-release']
+    types: [completed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: conformance
+  cancel-in-progress: false
+
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    environment: conformance
+    permissions:
+      contents: write # upload cert.json to the release
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      # Tests with the oak built from this checkout.
+      - run: npm run bundle
+
+      - name: Pick the release
+        id: r
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+          INPUT_ONLY_RESET: ${{ inputs.only-reset }}
+        run: |
+          if [ "$EVENT" = workflow_run ]; then
+            tag=$(gh release list -R "$GITHUB_REPOSITORY" --limit 1 --json tagName --jq '.[0].tagName')
+            only_reset=false
+          else
+            tag=$INPUT_TAG
+            only_reset=$INPUT_ONLY_RESET
+          fi
+          if [ -n "$tag" ] && ! [[ $tag =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-dev\.[0-9]+)?$ ]]; then
+            echo "::error::not a release tag: $tag"
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "only_reset=$only_reset" >> "$GITHUB_OUTPUT"
+
+      - name: Test the release, or reset
+        id: cert
+        env:
+          GH_TOKEN: ${{ secrets.CONFORMANCE_PAT }}
+          FIXTURE: ${{ vars.CONFORMANCE_FIXTURE_REPO }}
+          TAG: ${{ steps.r.outputs.tag }}
+          ONLY_RESET: ${{ steps.r.outputs.only_reset }}
+          RUN_ID: ${{ github.run_id }}
+          FORK_REPO: ${{ vars.CONFORMANCE_FORK_REPO }} # unset skips the fork preview
+          CONFORMANCE_FORK_PAT: ${{ secrets.CONFORMANCE_FORK_PAT }}
+        run: |
+          # `oak upgrade` pushes to the test repository over https, and the runner has no credential helper.
+          git config --global url."https://x-access-token:${GH_TOKEN}@github.com/".insteadOf "https://github.com/"
+          if [ "$ONLY_RESET" = true ] || [ -z "$TAG" ]; then
+            node dist/cli.cjs conformance reset --repo "$FIXTURE"
+            exit 0
+          fi
+          set +e
+          fork=()
+          [ -n "$FORK_REPO" ] && fork=(--fork-repo "$FORK_REPO") # an empty value is refused [R134]
+          node dist/cli.cjs conformance certify --repo "$FIXTURE" --tag "$TAG" --run-id "$RUN_ID" "${fork[@]}" --record cert.json
+          echo "code=$?" >> "$GITHUB_OUTPUT"
+
+      - name: Upload the result to the release
+        if: ${{ steps.r.outputs.tag != '' && steps.r.outputs.only_reset != 'true' && hashFiles('cert.json') != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }} # the PAT cannot write this repo
+          TAG: ${{ steps.r.outputs.tag }}
+        run: gh release upload "$TAG" cert.json --clobber
+
+      # Fails on 1 or on no result [R111]; 3 means a third party timed out, which is not oak's fault.
+      - name: Fail if the test failed
+        if: ${{ steps.r.outputs.tag != '' && steps.r.outputs.only_reset != 'true' }}
+        env:
+          CODE: ${{ steps.cert.outputs.code }}
+        run: |
+          if [ ! -f cert.json ]; then
+            echo "::error::the test wrote no cert.json (exit ${CODE:-none})"
+            exit 1
+          fi
+          case "$CODE" in
+            0) exit 0 ;;
+            3) echo "::warning::INCONCLUSIVE: a third party did not respond in time"; exit 0 ;;
+            *) exit 1 ;;
+          esac
