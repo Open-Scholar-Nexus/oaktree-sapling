@@ -18,6 +18,21 @@ project:
       severity: error
   toc:
     - file: index.md
+    - title: Start
+      children:
+        - file: start/journal.md
+        - file: start/paper.md
+    - title: Guides
+      children:
+        - file: guide/journal-yml.md
+        - file: guide/branding.md
+        - file: guide/checks.md
+        - file: guide/journal-site.md
+        - file: guide/pins.md
+    - title: Reference
+      children:
+        - file: reference/files.md
+        - file: reference/cli.md
     - title: Design
       children:
         - file: design/index.md
