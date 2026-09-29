@@ -79,7 +79,7 @@ function readEngineRepo(paperRoot: string): string {
     const v = parseDocument(readFileSync(pins, 'utf8')).get('engine_repo');
     if (typeof v === 'string') return v;
   }
-  return 'pollomarzo/whitelabel';
+  return 'Open-Scholar-Nexus/oaktree-sapling';
 }
 
 /**
@@ -847,7 +847,7 @@ async function cmdCheckPost(argv: string[]): Promise<number> {
 }
 
 /** Default engine home pin, matching readEngineRepo's fallback ([R56]). */
-const ENGINE_REPO_DEFAULT = 'pollomarzo/whitelabel';
+const ENGINE_REPO_DEFAULT = 'Open-Scholar-Nexus/oaktree-sapling';
 
 /** Confirm gate: print the plan to stderr, then honour --yes (required non-TTY) or prompt. */
 function makeConfirm(argv: string[]): (plan: string[]) => Promise<boolean> {

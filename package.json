@@ -6,7 +6,7 @@
   "license": "BSD-3-Clause",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/pollomarzo/whitelabel.git"
+    "url": "git+https://github.com/Open-Scholar-Nexus/oaktree-sapling.git"
   },
   "type": "module",
   "bin": {
