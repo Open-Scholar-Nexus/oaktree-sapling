@@ -1,0 +1,21 @@
+version: 1
+
+# The MyST config every paper extends. Anything specific to a journal lives in its brand and
+# editions instead. MyST merges `exports` by id, whole entries only, so the typst export is
+# declared complete here and editions declare none [R52]. oak adds the template URL at build
+# time [R5], and a paper with several articles replaces the entry in its own myst.yml.
+project:
+  thumbnail: thumbnails/thumbnail.png # read by the gallery plugin
+  exports:
+    - format: typst
+      id: typst-pdf
+      articles:
+        - file: index.md
+          level: 0
+  downloads:
+    - id: typst-pdf
+      title: PDF export
+
+site:
+  options:
+    hide_toc: true

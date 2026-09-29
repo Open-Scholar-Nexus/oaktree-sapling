@@ -1,0 +1,42 @@
+name: Prepare Zenodo deposit
+
+# Editor-dispatched: reserves the concept DOI, opens the myst.yml PR. The version enters at publish.
+# https://scholar.nexus/oaktree-sapling/reference/cli#deposit
+
+on:
+  workflow_dispatch:
+    inputs:
+      sandbox:
+        description: "Use the Zenodo sandbox (rehearsal) instead of production"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write # commit the DOI PR branch
+  pull-requests: write # open the DOI PR
+
+jobs:
+  prepare:
+    environment: zenodo-prepare # Zenodo tokens; main only
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # The CLI would refuse anyway; this prints a helpful message.
+      - name: Refuse a sandbox run with no sandbox token
+        if: ${{ inputs.sandbox }}
+        env:
+          SANDBOX_TOKEN: ${{ secrets.ZENODO_TOKEN_SANDBOX }}
+        run: |
+          if [ -z "$SANDBOX_TOKEN" ]; then
+            echo "::error::sandbox run requested but ZENODO_TOKEN_SANDBOX is not set; refusing to fall back to the production token"
+            exit 1
+          fi
+
+      - uses: ./.github/actions/engine
+        with:
+          args: deposit prepare ${{ inputs.sandbox && '--sandbox' || '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ZENODO_TOKEN: ${{ secrets.ZENODO_TOKEN }}
+          ZENODO_TOKEN_SANDBOX: ${{ secrets.ZENODO_TOKEN_SANDBOX }}
