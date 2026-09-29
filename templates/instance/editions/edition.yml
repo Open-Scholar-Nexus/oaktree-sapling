@@ -1,0 +1,11 @@
+version: 1
+
+# The frontmatter every paper in this edition extends; this file's name is the edition id.
+# https://scholar.nexus/oaktree-sapling/reference/files#file-editions
+project:
+  subject: Article
+  venue: CHANGE-ME Journal
+  license: CC-BY-4.0
+  open_access: true
+  # funding: |
+  #   Your funder
