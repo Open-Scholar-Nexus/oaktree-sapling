@@ -7,4 +7,4 @@
 ## Changing the set
 
 (validate-runs-paper-code)=
-## `oak validate` runs the paper's own code
+## `oak validate` runs the paper's code

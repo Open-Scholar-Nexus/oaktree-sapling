@@ -4,10 +4,10 @@
 *Work in progress.*
 
 (logo-text)=
-## logo_text: the words at the top of every page
+## logo_text
 
 (colours)=
 ## Colours
 
 (pdf-logo)=
-## The image on the PDF's first page
+## Logo
