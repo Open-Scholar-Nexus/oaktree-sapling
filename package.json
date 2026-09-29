@@ -1,0 +1,52 @@
+{
+  "name": "oaktree-sapling",
+  "version": "0.0.3",
+  "description": "White-label journal engine: MyST + GitHub + Zenodo. All platform logic, referenced by version.",
+  "author": "paolo marzolo",
+  "license": "BSD-3-Clause",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pollomarzo/whitelabel.git"
+  },
+  "type": "module",
+  "bin": {
+    "oak": "dist/cli.cjs"
+  },
+  "scripts": {
+    "check:refs": "node scripts/check-ledger-refs.mjs --warn",
+    "test": "npm run bundle && npm run check:refs && vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "bundle": "esbuild src/cli.ts --bundle --platform=node --format=cjs --minify-whitespace --outfile=dist/cli.cjs",
+    "build:fixture": "node scripts/build-fixture.mjs",
+    "docs": "cd docs && npx -y mystmd@1.10.1 start",
+    "docs:build": "cd docs && npx -y mystmd@1.10.1 build --html --strict",
+    "prepack": "npm run typecheck && npm run bundle"
+  },
+  "files": [
+    "dist/cli.cjs",
+    "templates/",
+    "!templates/*/README.md",
+    "ci/",
+    "plugins/",
+    "paper-base.yml",
+    "typst.version"
+  ],
+  "devDependencies": {
+    "@curvenote/check-definitions": "^0.16.5",
+    "@curvenote/check-implementations": "^0.16.5",
+    "@types/adm-zip": "^0.5.8",
+    "@types/node": "^22.0.0",
+    "adm-zip": "^0.5.18",
+    "esbuild": "^0.28.1",
+    "js-yaml": "^4.1.0",
+    "myst-cli": "^1.10.1",
+    "prettier": "^3.9.6",
+    "typescript": "^5.6.0",
+    "vitest": "^4.1.10",
+    "yaml": "^2.6.0",
+    "zod": "^4.0.0"
+  }
+}
