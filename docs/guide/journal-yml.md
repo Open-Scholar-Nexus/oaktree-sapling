@@ -7,4 +7,4 @@
 ## id_pattern: the paper id rule
 
 (typst-template)=
-## typst_template: your own PDF template
+## custom PDF template
