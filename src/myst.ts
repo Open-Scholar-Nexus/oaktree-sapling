@@ -1,0 +1,114 @@
+/**
+ * myst.ts: the mystmd edge. The ONE module that imports the (bundled) myst-cli, so the
+ * rest of the engine stays testable without the toolchain. Programmatic invocation
+ * (design §7a, [R51]): `new Session()` → `loadConfig` / `build`, no shell-out.
+ *
+ * The spike (whitelabel/bundling-test) proved `loadConfig`, `build`, and typst export all
+ * run from a single esbuild CJS bundle on Node 24. `build()` reads the project from the
+ * cwd, so we chdir into the paper root for the build call (as the spike's test6 did).
+ *
+ * SITE POINTER (found in the first live shim run): `loadConfig` populates the store's
+ * `sites`/`projects` maps but does NOT set `currentSitePath`/`currentProjectPath`, those
+ * are what `myst build --html` builds. The `myst` CLI sets them via `findCurrent*AndLoad`;
+ * a bare `loadConfig` leaves `currentSitePath` undefined, so `build()` prints "No site
+ * configuration found" and skips HTML (PDF still renders). So before building we call
+ * myst's own `findCurrentProjectAndLoad` + `findCurrentSiteAndLoad` (same helpers the CLI
+ * uses): they reload the final working-tree config (picking up the two-pass override,
+ * since the raw config changed → loadConfig's cache is bypassed) and set both pointers.
+ */
+import {
+  Session,
+  loadConfig,
+  build,
+  startServer,
+  processProject,
+  findCurrentProjectAndLoad,
+  findCurrentSiteAndLoad,
+} from 'myst-cli';
+import type { ISession } from 'myst-cli';
+import type { MystEdge, BuildOpts, StartOpts } from './materialize.js';
+import type { ResolvedProject } from './compose.js';
+
+export function createMystEdge(): MystEdge {
+  /**
+   * One Session per config filename ([R71]). `configFiles` is a first-class Session option
+   * (`myst-cli/session/session.js:70`, default `['myst.yml','myst.yaml']`) and every lookup
+   * routes through it: `configFromPath`, `defaultConfigFile`, `project/load.js`, `fromTOC.js`,
+   * `fromPath.js`, so pointing it at the derived config makes myst ignore the author's
+   * `myst.yml` entirely. Keyed cache rather than one session: `build` and a composed `validate`
+   * read the derived config, while a DEGRADED validate (nothing to compose, no instance) still
+   * reads the author's ([R82]).
+   */
+  const sessions = new Map<string, Session>();
+  const sessionFor = (configFile?: string): Session => {
+    const key = configFile ?? '';
+    let s = sessions.get(key);
+    if (!s) {
+      s = configFile ? new Session({ configFiles: [configFile] }) : new Session();
+      sessions.set(key, s);
+    }
+    return s;
+  };
+
+  return {
+    async loadProject(dir: string, configFile?: string): Promise<ResolvedProject> {
+      const res = await loadConfig(sessionFor(configFile), dir);
+      return (res?.project ?? {}) as ResolvedProject;
+    },
+    async build(dir: string, opts: BuildOpts, configFile?: string): Promise<void> {
+      const session = sessionFor(configFile);
+      const prev = process.cwd();
+      process.chdir(dir);
+      try {
+        // Set the current project + site pointers from the FINAL (post-two-pass) config,
+        // the way the myst CLI does: otherwise `build --html` finds no current site.
+        await findCurrentProjectAndLoad(session, dir);
+        if (opts.exportsOnly) {
+          // Offline canary: typst export only, no site (HTML needs a network theme zip).
+          await build(session, [], { typst: true } as Parameters<typeof build>[2]);
+        } else {
+          await findCurrentSiteAndLoad(session, dir);
+          await build(session, [], { all: opts.all, html: opts.html });
+        }
+      } finally {
+        process.chdir(prev);
+      }
+    },
+    async start(dir: string, opts: StartOpts, configFile?: string): Promise<void> {
+      const session = sessionFor(configFile);
+      // The dev server stays up, so this chdir is PERMANENT for the process (unlike build's):
+      // myst's watcher and its `npm run start` child both resolve paths from cwd. `oak start`
+      // does nothing after this call, so there is nothing left to surprise.
+      process.chdir(dir);
+      // Same site/project pointers the build needs ([R59]); a bare loadConfig leaves
+      // `currentSitePath` unset and the server would have no site to serve.
+      await findCurrentProjectAndLoad(session, dir);
+      await findCurrentSiteAndLoad(session, dir);
+      await startServer(session, opts);
+    },
+    async withProjectSession<T>(
+      dir: string,
+      fn: (session: ISession) => Promise<T>,
+      configFile?: string,
+    ): Promise<T> {
+      // `oak validate` passes the DERIVED config ([R82]): the Layer-B editorial checks read the
+      // config that actually gets published, not the author's pre-extends one. Omitted only when
+      // there was nothing to compose (no instance), then myst's default `myst.yml` is all there is.
+      const session = sessionFor(configFile);
+      const prev = process.cwd();
+      process.chdir(dir);
+      try {
+        // Set the current-project pointer ([R59], bare loadConfig leaves it unset) AND process
+        // the project into mdast, both from the paper root (cwd). The curvenote checks read from
+        // cwd/'.': `loadProjectFromDisk` defaults to cwd and `selectLocalProjectConfig(state,'.')`
+        // is keyed off it, so they must run with cwd === the paper root. No file writes, no HTML
+        // theme, no exports: far lighter than a build; enough for the frontmatter/abstract checks.
+        await findCurrentProjectAndLoad(session, '.');
+        await processProject(session, { path: '.' }, { writeFiles: false, writeTOC: false });
+        return await fn(session);
+      } finally {
+        process.chdir(prev);
+      }
+    },
+  };
+}
