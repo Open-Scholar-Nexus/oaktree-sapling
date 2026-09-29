@@ -1,0 +1,31 @@
+version: 1
+
+# Your paper's metadata. Fill in the form below; do not add `extends:`.
+# https://scholar.nexus/oaktree-sapling/start/paper
+project:
+  # A fresh id, unique in this journal. The build rejects this placeholder.
+  # https://scholar.nexus/oaktree-sapling/guide/journal-yml#id-pattern
+  id: CHANGE-ME-template-placeholder
+  title: CHANGE-ME (your paper title)
+  # authors:
+  #   - name: Ada Lovelace
+  #     orcid: 0000-0000-0000-0000
+  #     affiliations:
+  #       - Your Institution
+  #     email: you@example.org
+  #     corresponding: true
+  #     roles:
+  #       - conceptualization
+  #       - writing - original draft
+  # keywords:
+  #   - keyword one
+  #   - keyword two
+  bibliography:
+  - bib.bib
+  options:
+    # written by `oak bootstrap` and `oak upgrade`.
+    # this is what tells oaktree-sapling where to look for
+    # your journal's configuration
+    oaktree-sapling:
+      version: CHANGE-ME-engine-version
+      edition: CHANGE-ME-edition

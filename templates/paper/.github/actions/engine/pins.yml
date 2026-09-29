@@ -1,0 +1,7 @@
+# The engine and journal repositories, read by CI and local oak. Gated: both select code.
+# https://scholar.nexus/oaktree-sapling/design/paper-ci#design-paper-ci-engine-ref
+
+engine_repo: pollomarzo/whitelabel
+
+# "." when this repository is the journal
+instance_repo: pollomarzo/CHANGE-ME-instance-config

@@ -1,0 +1,67 @@
+name: Journal checks post
+
+# Stage 2 of the journal checks: posts Stage 1's report from the base context, never rebuilding.
+# https://scholar.nexus/oaktree-sapling/design/paper-ci#design-paper-ci-stage2-inputs
+
+on:
+  workflow_run:
+    workflows: ["Journal checks"]
+    types: [completed]
+
+permissions:
+  contents: read
+  actions: read # download the cross-run artifact
+  checks: write # post the "Journal checks" Check Run
+  pull-requests: write # upsert the sticky checks comment
+
+concurrency:
+  # Head repo in the key: forks share branch names.
+  group: check-post-${{ github.event.workflow_run.head_repository.full_name }}-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: true
+
+jobs:
+  post:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1; base branch, never the PR head
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: journal-checks
+          path: journal-checks
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      # Artifact is fork-controlled: only read pr-number, and check it; everything else from the event.
+      - id: meta
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          [ -f journal-checks/pr-number ] || exit 0
+          pr=$(cat journal-checks/pr-number)
+          if [[ ! "$pr" =~ ^[0-9]{1,10}$ ]]; then
+            echo "::error::pr-number in the artifact is not a number; refusing to comment"
+            exit 1
+          fi
+          pr_head=$(gh api "repos/$REPO/pulls/$pr" --jq .head.sha)
+          if [ "$pr_head" != "$HEAD_SHA" ]; then
+            echo "::error::PR #$pr heads at $pr_head, not the $HEAD_SHA this run checked; refusing to comment"
+            exit 1
+          fi
+          echo "pr=$pr" >> "$GITHUB_OUTPUT"
+
+      # Best-effort: https://scholar.nexus/oaktree-sapling/reference/cli#check-post
+      - uses: ./.github/actions/engine
+        with:
+          args: >-
+            check-post
+            --report journal-checks/report.json
+            --repo ${{ github.repository }}
+            --sha ${{ github.event.workflow_run.head_sha }}
+            --base ${{ github.event.repository.default_branch }}
+            --verified-head ${{ github.event.workflow_run.head_sha }}
+            ${{ steps.meta.outputs.pr && format('--pr {0}', steps.meta.outputs.pr) || '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}

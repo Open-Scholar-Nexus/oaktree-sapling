@@ -1,0 +1,59 @@
+name: Journal checks
+
+# Stage 1 of the journal checks: validates with no secrets; check-post.yml posts the report.
+# https://scholar.nexus/oaktree-sapling/design/paper-ci#design-paper-ci-two-stages
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # Head repo in the key: forks share branch names.
+  group: ${{ github.event_name == 'pull_request' && format('check-pr-{0}-{1}', github.event.pull_request.head.repo.full_name, github.head_ref) || 'check-push-main' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Stage 1 passes on a failing verdict, or Stage 2 never posts it; only a missing report fails.
+      - id: validate
+        continue-on-error: true
+        uses: ./.github/actions/engine
+        with:
+          args: validate --report report.json
+          paper-env: true
+
+      - name: Ensure a valid report was produced
+        env:
+          VALIDATE_OUTCOME: ${{ steps.validate.outcome }}
+        run: |
+          if ! jq -e '.checkRun.conclusion' report.json >/dev/null 2>&1; then
+            echo "::error::oak validate wrote no report at all. The engine died before it could report. The real error is in the '$VALIDATE_OUTCOME' validate step's log above; nothing was posted to the PR."
+            exit 1
+          fi
+          echo "report ok; conclusion: $(jq -r '.checkRun.conclusion' report.json)"
+
+      - name: Record PR number
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            printf '%s\n' "$PR_NUMBER" > pr-number
+          fi
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: journal-checks
+          path: |
+            report.json
+            pr-number
+          if-no-files-found: error
