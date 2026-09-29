@@ -7,4 +7,4 @@
 ## Commit and push
 
 (first-deploy)=
-## The website takes a few minutes
+## First deploy

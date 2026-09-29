@@ -1,4 +1,5 @@
 (guide-pins)=
-# The three pinned versions
+# Pins
 
 *Work in progress.*
+About gallery plugin URL, the theme zip and mystmd.
