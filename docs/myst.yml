@@ -37,6 +37,7 @@ project:
       children:
         - file: design/index.md
         - file: design/paper-ci.md
+        - file: design/releases.md
 
 site:
   template: book-theme
