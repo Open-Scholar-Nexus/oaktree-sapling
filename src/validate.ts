@@ -1,17 +1,12 @@
 /**
- * validate.ts: `oak validate`, the journal-controlled check aggregator (slice 4).
+ * `oak validate`, in two layers:
+ *   A. oak's own rules: the paper id ([R12]), the layout ([R46] [R50]), the brand favicon and
+ *      watermark ([R61] [R62]), the thumbnail ([R81]) and the `deposit/` names ([R28]). `oak
+ *      build` runs these first too [R21].
+ *   B. The editorial checks the journal turns on in `journal.yml` `checks:` (checks.ts).
  *
- * Two layers:
- *   A. Engine pre-flight INVARIANTS (pure): id sentinel/pattern/uniqueness ([R12]), the
- *      canonical layout ([R46]/[R50]), brand favicon/watermark resolvability
- *      ([R61]/[R62]), the paper's thumbnail ([R81]) and its `deposit/` names ([R28]).
- *      These are the engine's own contract (not tenant-editorial) and also
- *      run as the mandatory first phase of `oak build` (fail fast, [R21]).
- *   B. Journal-CONFIGURED editorial checks (checks.ts), selected by `journal.yml` `checks:`.
- *
- * IO (fs, loadConfig) is injected so the pure checks stay unit-testable; the real edge pulls
- * in myst-cli via myst.ts (kept the sole importer). No git here; the caller resolves the repo
- * (for registry-self exclusion) and passes it in, so validate stays pure/testable.
+ * File and myst access is injected so the rules are testable; myst-cli comes in only through
+ * myst.ts. The caller passes the repository, used to find the paper's own registry entry.
  */
 import * as msg from './messages.js';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
@@ -40,7 +35,7 @@ import type { ComposeInput } from './compose.js';
 
 export interface FsProbes {
   existsProbe(path: string): boolean;
-  /** All paths under a dir, recursive + relative (real impl: readdirSync recursive). */
+  /** Every path under a directory, recursive and relative. */
   listTree(dir: string): string[];
 }
 const realFs: FsProbes = {
@@ -48,11 +43,10 @@ const realFs: FsProbes = {
   listTree: (dir) => (existsSync(dir) ? readdirSync(dir, { recursive: true }).map(String) : []),
 };
 
-/** Gate routing (id-gate-relocation): `structural` (missing index.md / stray myst.yml) blocks
- *  the build; `identity` (id present/shape/uniqueness), `brand` and `config` do NOT, identity is
- *  enforced at merge via the Journal-checks Check Run, so a fresh/placeholder-id paper still
- *  renders. `config` is instance-config hygiene ([R72] extends-layer overlap): it makes results
- *  non-deterministic rather than impossible, so it gates merge, not the build. */
+/** What a finding blocks. `structural` (no index.md, a stray myst.yml) blocks the build;
+ *  `identity` (the id), `brand` and `config` only block the merge, through the Journal checks,
+ *  so a new paper with a placeholder id still builds. `config` covers keys that overlap between
+ *  journal layers [R72], which make results unpredictable rather than impossible. */
 export type FindingKlass = 'structural' | 'identity' | 'brand' | 'config';
 
 export interface NamedFinding {
@@ -62,10 +56,10 @@ export interface NamedFinding {
   klass: FindingKlass;
 }
 
-/* ---- pure Layer-A checks ------------------------------------------------- */
+/* ---- Layer A checks (pure) ---------------------------------------------- */
 
-/** index.md + myst.yml at the paper root, and NO stray secondary myst.yml under it (which
- *  would break the n=1 layout: [R50]). Returns only the problems (empty = clean). */
+/** index.md and myst.yml at the paper root, and no other myst.yml under it [R50]. Returns the
+ *  problems; empty means clean. */
 export function checkLayout(
   paperRoot: string,
   probes: FsProbes,
@@ -81,11 +75,9 @@ export function checkLayout(
     .map((f) => f.replace(/\\/g, '/'))
     .filter((f) => {
       if (f === 'myst.yml' || !/(^|\/)myst\.yml$/.test(f)) return false;
-      // Ignore infra dirs that tooling drops INTO the paper root; they aren't the author's
-      // layout. Critically `.engine/`: the CI composite action checks the engine out there
-      // (`path: .engine`), under the paper root, so its own fixture/template myst.yml files
-      // would otherwise read as strays. Same for any dotdir (`.git`, `.github`), `_build/`,
-      // and a nested `node_modules/`.
+      // Skip directories tools put inside the paper root: `.engine/` (where the engine action
+      // checks oak out, with its own template myst.yml files), any dotdir, `_build/` and
+      // `node_modules/`.
       const dirs = f.split('/').slice(0, -1);
       return !dirs.some((d) => d.startsWith('.') || d === '_build' || d === 'node_modules');
     });
@@ -98,8 +90,8 @@ export function checkLayout(
   return out;
 }
 
-/** Warn on a brand with no resolvable favicon: an unset/broken one fatally 500s the HTML
- *  prerender on /favicon.ico ([R61]). A URL resolves for HTML, so it passes. */
+/** Warns when the brand has no favicon that resolves: a missing one makes the HTML prerender
+ *  fail on /favicon.ico [R61]. A URL resolves for HTML, so it passes. */
 export function checkBrandFavicon(
   input: { instanceRoot: string | null; favicon?: string },
   probes: FsProbes,
@@ -119,8 +111,8 @@ export function checkBrandFavicon(
     : { ok: false, severity: 'warn', message: msg.validate.brandFaviconUnresolved(favicon) };
 }
 
-/** Warn on a brand typst watermark (project.options.logo) that is absent, a URL (typst can't
- *  fetch, unlike the HTML favicon), or an unresolvable local file ([R62]/[R68]). */
+/** Warns when the brand's PDF watermark (`project.options.logo`) is absent, a URL (typst cannot
+ *  fetch) or a local file that does not resolve [R62] [R68]. */
 export function checkBrandWatermark(
   input: { instanceRoot: string | null; logo?: string },
   probes: FsProbes,
@@ -147,22 +139,14 @@ export function checkBrandWatermark(
 }
 
 /**
- * Warn on a `project.thumbnail` that names a file which isn't there.
+ * Warns when `project.thumbnail` names a file that is not there. paper-base sets it, so the
+ * gallery knows where to look, and setting it turns off myst's own fallback (the first image in
+ * the paper): a wrong path means no thumbnail at all and a blank gallery card.
  *
- * Pinning `thumbnail:` (which `paper-base.yml` does, so the gallery knows where to look)
- * DISABLES myst's own fallback: `transformThumbnail` only searches the mdast for a first
- * content image when the value is *unset* (`transforms/images.ts:543-556`). So a broken path
- * is worse than no path: `saveImageInStaticFolder` returns null and the paper ships with **no
- * thumbnail at all**, silently, and its gallery card renders blank.
- *
- * A plain existence probe against the paper root is the right test. `thumbnail` is NOT rebased
- * by `resolveProjectConfigPaths` (`config.ts:389-430` rebases `bibliography`, `index` and
- * `plugins` only), and myst resolves it against the SOURCE FILE (`getSourceFolder`,
- * `links.ts:92`) (i.e. `<paperRoot>/index.md`'s folder) not against the extends layer that
- * declared it. No absolutizing, unlike brand assets ([R62]/[R68]) or `exports[].template` ([R74]).
- *
- * Absent → nothing to check: myst's first-image fallback is live again, which is a working
- * thumbnail, not a missing one. A URL passes; myst downloads it for the HTML build ([R80]).
+ * myst resolves it against the paper's source folder, not the layer that set it, so it is
+ * checked against the paper root and needs no rewriting, unlike brand assets [R62] [R68] or
+ * templates [R74]. When unset, the fallback works again; a URL passes, since myst downloads it
+ * [R80].
  */
 export function checkThumbnail(
   input: { paperRoot: string; thumbnail?: string },
@@ -181,10 +165,9 @@ export function checkThumbnail(
 }
 
 /**
- * A `deposit/` file whose name the engine also writes into the bundle ([R28]).
- *
- * Reported at PR time, not just refused at the tag. Shares {@link depositCollisions} with
- * `oak release`. Top level only, as in the bundle.
+ * A `deposit/` file whose name oak also writes into the bundle [R28], reported on the pull
+ * request as well as refused at release. Shares {@link depositCollisions} with `oak release`;
+ * top level only, as in the bundle.
  */
 export function checkDepositNames(input: { paperRoot: string }, probes: FsProbes): NamedFinding[] {
   const entries = probes
@@ -205,23 +188,15 @@ export function checkDepositNames(input: { paperRoot: string }, probes: FsProbes
   ];
 }
 
-/* ---- typst template hygiene ([R76]) -------------------------------------- */
+/* ---- typst template checks ([R76]) --------------------------------------- */
 
 /**
- * Does a template reference FLOAT: i.e. name a moving target whose bytes can change
- * without the reference changing? The [R5] hygiene lint, and the *only* place floating is
- * handled: it is never an error and never a runtime drop.
+ * Whether a template reference floats: names something whose bytes can change while the
+ * reference stays the same, like a branch URL [R5]. Remote is fine when pinned. Floating only
+ * warns: the deposit keeps the resolved template, so a DOI stays reproducible, and only the live
+ * site may render differently later; a floating template is normal while developing one.
  *
- * Correcting a conflation worth naming: floating is not the same as REMOTE. A pinned
- * tag/release URL is remote and perfectly reproducible; a branch URL is the problem. And
- * DOI reproducibility does not actually rest on this check at all; the deposit archives
- * the RESOLVED template bytes (zenodo.ts), so a floating source still yields a reproducible
- * PDF. What floating costs you is the *living site* quietly re-rendering differently one
- * day, which is worth a warning and not worth a block (a floating template during template
- * development is entirely legitimate).
- *
- * Conservative by design: warn only on recognizably-floating forms, so a tenant hosting
- * `https://example.org/templates/mine-v1.zip` is not nagged about a pin we cannot see.
+ * Warns only on forms that clearly float, so a pin we cannot see (a versioned zip URL) passes.
  */
 export function isFloatingTemplate(value: string): boolean {
   if (isBrandAssetUrl(value)) {
@@ -232,23 +207,20 @@ export function isFloatingTemplate(value: string): boolean {
     if (/\.git$/.test(url!)) return !(ref && /^([0-9a-f]{7,40}|v?\d)/.test(ref));
     return false;
   }
-  // A local path is bytes: committed and review-gated, not a moving pointer.
+  // A local path is committed and reviewed, so it does not float.
   if (isAbsolute(value) || isInstanceRelativeTemplate(value)) return false;
-  // A bare myst template NAME resolves against the live template API: by-name = floating
-  // (design §7). Reproducible PDFs still ride the deposit archive.
+  // A bare template name resolves against the live template API, so it floats [design §7].
   return true;
 }
 
 /**
- * The typst-template findings, computed from the two layers a paper can see: the AUTHOR's
- * own `exports[].template` and the TENANT's `journal.yml: typst_template`. (The engine's
- * default needs no check: a local checkout is bytes, and its release-zip fallback is
- * pinned to the engine tag by construction.)
+ * The template findings, from the two layers a paper can change: the author's
+ * `exports[].template` and the journal's `typst_template`. oak's own template needs none: a
+ * checkout is fixed bytes, and the release zip is pinned to the tag.
  *
- * The override finding is the feature's whole trust surface. compose warns too, but a build
- * log is not review: this is what puts "this paper reskins itself away from the journal" in
- * the Check Run and the sticky PR comment, where an editor decides. Deliberately a WARN:
- * whether to allow it is the tenant's editorial call, not the engine's.
+ * compose also warns about an author override, but a build log is not a review; this puts it in
+ * the Check Run and the pull request comment, where an editor decides. A warning, since allowing
+ * it is the journal's call.
  */
 export function checkTemplates(
   input: { instanceRoot: string | null; authorTemplate?: string; tenantTemplate?: string },
@@ -271,10 +243,9 @@ export function checkTemplates(
     warn('template-floating', msg.validate.templateFloating(layer, value));
   }
 
-  // The path-vs-name ambiguity, made loud. Only `./`/`../` means "a path in my
-  // instance-config", so a bare `templates/typst` goes to myst as a NAME and 404s against
-  // the template API. That is invisible until the build fails weirdly, UNLESS a directory of
-  // that name is sitting right there, which is exactly when the tenant meant a path.
+  // Only `./` or `../` is a path, so a bare `templates/typst` goes to myst as a name and fails
+  // later in a confusing way. Warn when a directory with that name exists: then a path was
+  // meant.
   if (tenantTemplate && instanceRoot && !isBrandAssetUrl(tenantTemplate)) {
     const bare = !isAbsolute(tenantTemplate) && !isInstanceRelativeTemplate(tenantTemplate);
     if (bare && probes.existsProbe(join(instanceRoot, tenantTemplate))) {
@@ -285,15 +256,16 @@ export function checkTemplates(
   return out;
 }
 
-/* ---- instance-config readers -------------------------------------------- */
+/* ---- journal repository readers ----------------------------------------- */
 
-/** A policy-less placeholder journal, so a run with no resolvable `journal.yml` keeps its shape
- *  while the [R116] finding gates. */
+/** A journal with no settings, so a run without a readable `journal.yml` keeps its shape while
+ *  the [R116] finding blocks. */
 function emptyJournal(): JournalConfig {
   return JournalConfig.parse({ name: 'unknown' });
 }
 
-/** null = a resolved instance root with no `journal.yml`: broken, not `--no-instance` ([R116]). */
+/** null means the journal repository has no `journal.yml`: broken, unlike `--no-instance`
+ *  [R116]. */
 function loadJournal(instanceRoot: string | null, probes: FsProbes): JournalConfig | null {
   if (instanceRoot) {
     const p = join(instanceRoot, 'journal.yml');
@@ -311,26 +283,21 @@ function loadRegistry(instanceRoot: string | null, probes: FsProbes): Registry |
   return null;
 }
 
-/** The paper's OWN registry entry (excluded from the uniqueness check), keyed by its GitHub
- *  repo (owner/repo). Without a repo we can't identify self, uniqueness then flags the paper's
- *  own entry as a clash, which the caller avoids by passing the repo (env or git origin). */
+/** The paper's own registry entry, found by its repository, so the uniqueness check skips it.
+ *  Without a repository it cannot be found, so callers pass one (environment or git origin). */
 function findSelf(registry: Registry | null, repo: string | null): { slug: string } | undefined {
   if (!registry || !repo) return undefined;
   const e = registry.find((x) => x.location.repo === repo);
   return e ? { slug: e.slug } : undefined;
 }
 
-/* ---- extends-layer disjointness ([R72]) ---------------------------------- */
+/* ---- overlapping keys between layers ([R72]) ---------------------------- */
 
 /**
- * Keys declared by ONE extends layer, as comparable coordinates.
- *
- * Granularity matters and differs per field: `site.options` / `project.options` merge
- * **field-wise** base-wins (`fillPageFrontmatter.js:22-25`, [R68]), so two layers may safely
- * own different keys inside them: compare at the LEAF (`site.options.logo`). Everything else
- * merges at the top-level key (and `exports` merges whole-entry by id, [R52]/[R53]), so compare
- * at the immediate key (`project.venue`). Comparing `site.options` as a unit would falsely flag
- * paper-base's `hide_toc` against brand's `logo`.
+ * The keys one layer declares. `site.options` and `project.options` merge field by field, so two
+ * layers may set different keys inside them, and those are compared at the leaf
+ * (`site.options.logo`) [R68]. Everything else merges at the top-level key (`exports` whole, by
+ * id [R52] [R53]), so is compared there (`project.venue`).
  */
 export function declaredKeys(config: unknown): string[] {
   const out: string[] = [];
@@ -352,13 +319,10 @@ export function declaredKeys(config: unknown): string[] {
 }
 
 /**
- * The extends layers must own DISJOINT keys ([R72]). myst folds `extends` entries under
- * `Promise.all` with a shared accumulator, so precedence follows *load-completion* order, not
- * declaration order: two layers declaring the same key is a race whose winner can change
- * between runs, not an override. Only the paper's own config (the derived base slot) wins
- * deterministically.
- *
- * Pure: takes already-parsed layer configs so it stays testable without fs.
+ * The layers must declare different keys [R72]. MyST loads `extends:` entries in parallel into
+ * one shared result, so when two layers set the same key, the one that loads last wins, and that
+ * can change between runs. Only the paper's own config, the base, wins predictably. Takes parsed
+ * configs, so it is testable without the filesystem.
  */
 export function checkLayerDisjointness(
   layers: Array<{ name: string; config: unknown }>,
@@ -398,11 +362,9 @@ function extendsRefs(config: unknown): string[] {
 }
 
 /**
- * Each named layer plus everything its own `extends:` pulls in ([R119]b).
- *
- * A nested layer folds into its parent's accumulator, so a key one file down races as if
- * declared in the layer itself; named `<parent> -> <ref>`. A ref this cannot follow comes back
- * in `unreadable`, since an unread layer makes the disjointness verdict unsound.
+ * Each layer plus everything its own `extends:` pulls in [R119]. A nested layer merges into the
+ * same result, so its keys count as the parent's (named `<parent> -> <ref>`). A reference this
+ * cannot follow is returned in `unreadable`, since the check is unsound without it.
  */
 export function expandLayers(
   roots: Array<{ name: string; path: string }>,
@@ -436,25 +398,17 @@ export function runLayerA(
   input: {
     paperRoot: string;
     instanceRoot: string | null;
-    /** The COMPOSED project ([R82]): author config + extends chain, i.e. what ships. Only
-     *  fields no engine layer stamps are read here; the author's typst `template:` is
-     *  raw-lifted separately (see below), because for that one value the PROVENANCE is the
-     *  point and the composed view has lost it.
-     *
-     *  Specifically PASS 1, and deliberately so: it carries every layer-declared field but
-     *  none of compose's pass-2 stamps. `oak build` cannot hand over anything else: its
-     *  [R21] pre-flight runs BETWEEN the passes, so a structurally broken paper never
-     *  reaches compose. Pass 1 is therefore the one view both callers can share, at the cost
-     *  of Layer B reading pass 2 (it takes the derived FILE) while Layer A reads pass 1.
-     *  Today nothing overlaps: the stamps are `output`, `template`, `site.template` and the
-     *  absolutized brand assets, and Layer A reads the brand raw from `brand.yml`. A future
-     *  Layer-A check that wants a STAMPED field is the signal to revisit this, not to reach
-     *  for the derived file here. */
+    /** The composed project from pass 1 [R82]: the author's config with the `extends:` chain,
+     *  without compose's pass-2 additions (`output`, `template`, `site.template`, brand asset
+     *  paths). Pass 1 is what `oak build` has when it runs these checks, between the passes
+     *  [R21]; Layer B reads the pass-2 file. No check here needs a pass-2 field yet; one that
+     *  does should change this, rather than read the derived file. The author's template is
+     *  read separately (below), since the composed view no longer says who set it. */
     project: { id?: string; thumbnail?: string };
     repo: string | null;
-    /** Engine checkout, for the [R72] extends-layer disjointness check. Omitted → skipped. */
+    /** oak's checkout, for the [R72] check. Skipped when absent. */
     engineRoot?: string | null;
-    /** Edition id, to locate the right `editions/<edition>.yml` layer. Omitted → skipped. */
+    /** The edition, to find `editions/<edition>.yml`. Skipped when absent. */
     edition?: string | null;
   },
   probes: FsProbes = realFs,
@@ -468,7 +422,7 @@ export function runLayerA(
   const loaded = loadJournal(instanceRoot, probes);
   const registry = loadRegistry(instanceRoot, probes);
 
-  // An absent policy is not a passing one: every id rule and every Layer-B check no-ops ([R116]).
+  // No journal settings is not a pass: every id rule and Layer B check would do nothing [R116].
   if (loaded === null) {
     findings.push({
       check: 'journal-config',
@@ -479,8 +433,8 @@ export function runLayerA(
   }
   const journal = loaded ?? emptyJournal();
 
-  // Both id keys are optional. The sentinel is engine-owned (ENGINE_ID_SENTINEL); the pattern
-  // is the tenant's, so its absence is stated rather than overridden ([R119]a).
+  // Both id keys are optional. The placeholder id is oak's (ENGINE_ID_SENTINEL); the pattern is
+  // the journal's, so a missing one is reported rather than filled in [R119].
   if (instanceRoot && loaded && !loaded.id_pattern) {
     findings.push({
       check: 'id-policy',
@@ -524,11 +478,9 @@ export function runLayerA(
     });
   }
 
-  // A missing thumbnail is `structural` (it is the paper's own layout, not brand or identity)
-  // but only a WARN, so it never blocks the build, only `error` + `structural` does. A
-  // mid-draft paper that hasn't made one yet should still render; the thumbnail becomes
-  // mandatory at REGISTRATION, where a *registered* paper without one hard-fails the journal
-  // site build under `--strict` ([R80]) with an editor in the loop.
+  // A missing thumbnail is `structural` but only a warning, so a draft without one still builds.
+  // It becomes required at registration: the journal site's `--strict` build fails on a
+  // registered paper without one [R80].
   add(
     'thumbnail',
     'structural',
@@ -577,12 +529,10 @@ export function runLayerA(
     checkBrandWatermark({ instanceRoot, logo: brand.project.logo }, probes),
   );
 
-  // The author's template comes from a RAW LIFT of their own myst.yml, never from `project`
-  // ([R82]). Digging it out of the composed `exports` would find compose's pass-2 stamp
-  // (`flag ?? author ?? tenant ?? engine`), so `template-override` would fire on every paper
-  // and `template-floating` would misattribute the layer. Same discipline as the brand assets
-  // ([R68]) and the tenant's own template ([R79]): a value whose provenance is the point is
-  // read outside the merge.
+  // The author's template is read from their own myst.yml, not `project` [R82]: the composed
+  // export carries compose's choice, so `template-override` would fire on every paper. As with
+  // brand assets [R68] and the journal's template [R79], a value whose source matters is read
+  // outside the merge.
   findings.push(
     ...checkTemplates(
       {
@@ -597,33 +547,19 @@ export function runLayerA(
   return findings;
 }
 
-/* ---- Layer-B preconditions ----------------------------------------------- */
+/* ---- Layer B preconditions ---------------------------------------------- */
 
-/** The one catalog check that needs BUILD ARTIFACTS, not just a loaded project. */
+/** The one catalog check that needs build output, not only a loaded project. */
 const EXPORTS_EXIST = 'exports-exist';
 
 /**
- * Split off the selected checks whose precondition is unmet, reporting them instead of
- * running them ([R82] §5).
+ * Takes out the selected checks that cannot run without a build, today only `exports-exist`,
+ * which looks for the built PDF. `oak validate` does not build, so it would fail on every paper.
+ * Each becomes an `error` result ("could not run"; `CheckStatus` has no skip) marked `optional`,
+ * so it never blocks a merge whatever the journal set [R82].
  *
- * `exports-exist` compares each collected export's `output` against the filesystem, and
- * `oak validate` does not build. Under the composed view it now collects the REAL typst
- * export ([R53]), so left to run it would report a hard "Missing export" on every unbuilt
- * paper: a true statement about a file validate never promised to produce.
- * `CheckStatus` has no `skip`; `error` is documented as *"the check could not be run"*,
- * which is exactly the situation and already how we report an unloadable project.
- *
- * Not solved by building first: `check.yml` is deliberately a separate, secretless Stage-1
- * workflow from `ci.yml`, and building there would either couple the merge gate to build
- * success or build every PR twice.
- *
- * ALWAYS `optional`, whatever the journal said. `optional` is what keeps a result out of
- * `blockingCheckFail`, and an unmet precondition must not gate: in CI `_build/exports` is
- * NEVER present (gitignored, fresh checkout, no build step), so a plain selection of this id
- * would fail the Check Run on every PR of every paper, with nothing any AUTHOR could do
- * about it, since only the tenant can edit `journal.yml`. It would also pass locally, where
- * a previous `oak build` left the directory behind. The tenant still sees the result and its
- * cause in the summary table; it just cannot brick the merge gate.
+ * Building first is not an option: `check.yml` runs apart from `ci.yml`, so it would either tie
+ * the merge to the build or build every pull request twice.
  */
 export function splitUnrunnableChecks(
   journalChecks: JournalCheck[],
@@ -655,11 +591,9 @@ export interface ValidateResult {
   warnings: NamedFinding[];
   checks: EngineCheckResult[];
   checkRun: CheckRun;
-  /** Info-level notes about HOW the run happened, today, that it ran uncomposed ([R82]).
-   *  Never gates: when composing was possible and FAILED, the `compose` finding above is what
-   *  gates; a note only ever explains. They ride into `checkRun.summary`, so the Check Run and
-   *  the sticky comment both show them; a difference visible only in stdout is still the
-   *  [R71] mistake, since the PR UI is where anyone actually reads a verdict. */
+  /** Notes about how the run happened, such as running uncomposed [R82]. They never decide the
+   *  outcome: a failed compose is the `compose` finding. They go into `checkRun.summary`, so the
+   *  pull request shows them [R71]. */
   notes: string[];
   exitCode: number;
 }
@@ -669,15 +603,14 @@ export async function runValidate(
     paperRoot: string;
     instanceRoot: string | null;
     edge: MystEdge;
-    /** Engine checkout + edition, for the [R72] disjointness check AND the composed view. */
+    /** oak's checkout and the edition, for the [R72] check and the composed view. */
     engineRoot?: string | null;
     edition?: string | null;
-    /** `engine_repo` pin, only so compose can build its fallback asset URLs. Never read by a
-     *  check here (the author's template is raw-lifted ([R82])) so a default is harmless. */
+    /** The `engine_repo` pin, only for compose's fallback asset URLs; no check reads it
+     *  [R82]. */
     engineRepo?: string;
-    /** The dev/CI-from-checkout asset overrides `oak build` passes. Must be the SAME ones:
-     *  both verbs materialize one `myst.oak.yml`, and compose resolves the engine template
-     *  from these, so differing inputs make the shared function emit differing files. */
+    /** The asset overrides `oak build` passes, and they must match: both write the same
+     *  `myst.oak.yml`, and different inputs would write different files. */
     assetOverrides?: ComposeInput['assetOverrides'];
   },
   opts: { strict?: boolean; repo?: string | null; pathBase?: string } = {},
@@ -686,16 +619,11 @@ export async function runValidate(
   const repo = opts.repo ?? null;
   const notes: string[] = [];
 
-  // --- The view: COMPOSED when there is something to compose ([R82]) ----------------
-  // Validate must read the config that SHIPS, not the author's own file: `paper-base.yml`'s
-  // pinned `thumbnail` and its complete typst export exist only post-`extends`, so on the
-  // author's view those checks silently pass ([R81]). Materialization is SHARED with `oak
-  // build` so the two cannot drift: that drift is exactly what [R71] was about.
-  //
-  // Degrading is deliberate, not a fallback of last resort: a bare local `oak validate` or
-  // `--no-instance` has nothing to compose ([R193] soft-warn precedent). And we GUARD the
-  // materialization for the same reason the Layer-B call is guarded, validate is a REPORTER,
-  // and a gate that crashes tells the author less than a gate that says what it could not do.
+  // Composed when there is something to compose [R82]: paper-base's thumbnail and typst export
+  // exist only after the merge, so checking the author's file alone would pass them [R81].
+  // Shared with `oak build` so the two read the same config [R71]. A bare local run or
+  // `--no-instance` has nothing to compose [R193]. Guarded: validate reports, and a crash tells
+  // the author less than a finding.
   let project: { id?: string; exports?: Array<Record<string, unknown>>; thumbnail?: string };
   let configFile: string | undefined;
   let composeFailure: string | undefined;
@@ -714,14 +642,10 @@ export async function runValidate(
       project = materialized.resolvedProject;
       configFile = DERIVED_CONFIG_FILE;
     } catch (e) {
-      // A throw HERE is a finding, not just a note. We had an engine checkout AND an
-      // instance-config (everything compose needs) so the failure is a defect in the
-      // paper's own config (a typo'd `edition:`, a missing/mismatched engine coordinate,
-      // the [R36] cross-check), and `oak build` will hit the identical throw on `main`.
-      // Reporting it as a note alone let a paper whose build provably crashes come back
-      // `status: ok`, exit 0, Check Run success: the merge gate green on a broken paper.
-      // Still guarded rather than rethrown: the rest of the report is worth more than a
-      // stack trace, and this way the author gets the whole fix-list at once.
+      // With oak's checkout and a journal present, a failed compose is the paper's own mistake
+      // (a wrong `edition:`, a missing version, the [R36] check), and `oak build` would fail the
+      // same way, so it blocks the merge; having nothing to compose only adds a note. Caught, so
+      // the rest of the report still runs.
       composeFailure = (e as Error).message;
       notes.push(msg.validate.noteComposeFailed(composeFailure));
     }
@@ -742,10 +666,9 @@ export async function runValidate(
     },
     probes,
   );
-  // `config`, not `structural`: structural errors short-circuit Layer B, and the author is
-  // better served seeing the editorial fix-list in the same run (id-gate-relocation). Those
-  // Layer-B results are read off the author's config, so some may be vacuous, which is what
-  // the note says, and why this finding is the one that gates.
+  // Recorded as `config`: it blocks the merge and Layer B still runs, so the author sees every
+  // finding at once. Without a compose, Layer B reads the author's own config, so some of its
+  // results may not apply; the note says so.
   if (composeFailure) {
     layerA.push({
       check: 'compose',
@@ -757,26 +680,18 @@ export async function runValidate(
   const errors = layerA.filter((f) => f.severity === 'error');
   const warnings = layerA.filter((f) => f.severity === 'warn');
 
-  // Layer B: journal-configured editorial checks, provided by @curvenote/check-implementations.
-  // They read the myst store, so we run them inside a loaded+processed project session (the edge
-  // keeps myst-cli confined to myst.ts), pointed at the DERIVED config when we have one, i.e.
-  // the post-pass-2 file, stamps and all ([R82]), unlike Layer A above which reads pass 1.
-  //
-  // A blocking Layer-A finding (missing index.md, a stray secondary myst.yml, a bad id) means the
-  // project can't be processed: `withProjectSession` would THROW and take the whole report down,
-  // hiding the very Layer-A finding that explains the failure. So we short-circuit: skip Layer B
-  // when Layer A already blocks. And even when Layer A is clean we GUARD the Layer-B call, so an
-  // unexpected myst/curvenote throw degrades to a reported check error, never a crashed gate.
-  // Layer A already blocked on an absent policy ([R116]); the default just keeps the shape.
+  // Layer B: the journal's editorial checks (@curvenote/check-implementations). They read the
+  // myst store, so they run in a processed project session, on the derived config with its
+  // pass-2 additions [R82]. When Layer A finds a structural error myst cannot process the
+  // project, so Layer B is skipped rather than crash the report; otherwise it is guarded, so a
+  // myst or curvenote error becomes a check error.
+  // Layer A already blocked on missing journal settings [R116]; the default keeps the shape.
   const journal = loadJournal(input.instanceRoot, probes) ?? emptyJournal();
   let checks: EngineCheckResult[] = [];
-  // Only STRUCTURAL Layer-A errors (missing index.md / stray myst.yml) stop myst from
-  // processing → skip Layer B. A bad id (identity) does NOT stop processing, so editorial
-  // checks still run and the author sees the full fix-list at once (id-gate-relocation).
+  // Only structural errors stop myst processing. A bad id does not, so the editorial checks
+  // still run and the author sees every finding at once.
   const structuralErrors = errors.filter((f) => f.klass === 'structural');
-  // A selected check whose precondition is unmet is REPORTED, not run ([R82] §5), today only
-  // `exports-exist`, which under the composed view collects the real typst export and would
-  // hard-fail on a paper validate never promised to build.
+  // Checks whose precondition is unmet are reported, not run [R82]; see splitUnrunnableChecks.
   const { runnable, unrunnable } = splitUnrunnableChecks(
     (journal.checks ?? []) as JournalCheck[],
     input.paperRoot,
@@ -805,8 +720,7 @@ export async function runValidate(
     }
   }
 
-  // Combined results for the Check Run: Layer-A findings as synthetic results (errors gate,
-  // warns are optional) + the Layer-B editorial results.
+  // The Check Run's results: Layer A findings (errors block, warnings are optional) and Layer B's.
   const layerAResults: EngineCheckResult[] = layerA.map((f) => ({
     id: f.check,
     status: CheckStatus.fail,
@@ -814,8 +728,8 @@ export async function runValidate(
     // --strict blocks warnings, so they gate the Check Run too ([R119]).
     optional: opts.strict ? false : f.severity === 'warn',
   }));
-  // Relativize curvenote's (sometimes absolute) annotation paths against the repo checkout root
-  // so GitHub can resolve them; default to the paper root (== repo root in the n=1 model).
+  // Make curvenote's absolute paths relative to the checkout root, so GitHub can resolve them;
+  // the paper root by default, which is the repository root for a single-paper repository.
   const checkRun = toCheckRun(
     [...layerAResults, ...checks],
     opts.pathBase ?? input.paperRoot,
