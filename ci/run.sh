@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # Runs oak in a paper's CI. The engine action has already checked out oak at the pinned version
-# and set INSTANCE_REPO; this adds typst, the journal repository and the base URL
-# [design §1b].
+# and set INSTANCE_REPO; this adds typst, the journal repository and the base URL.
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -48,7 +47,7 @@ echo "engine dir : $engine"
 echo "verb       : $verb"
 echo "instance   : ${INSTANCE_REPO:-<co-located>}"
 echo "extra args : ${extra[*]:-<none>}"
-# Whether each secret is set, never its value [design §1a].
+# Whether each secret is set, never its value.
 echo "GH_TOKEN     : ${GH_TOKEN:+present}"
 echo "ZENODO_TOKEN : ${ZENODO_TOKEN:+present}"
 echo "CLOUDFLARE   : ${CLOUDFLARE_API_TOKEN:+present}"
