@@ -1,9 +1,7 @@
 version: 1
 
-# The MyST config every paper extends. Anything specific to a journal lives in its brand and
-# editions instead. MyST merges `exports` by id, whole entries only, so the typst export is
-# declared complete here and editions declare none [R52]. oak adds the template URL at build
-# time [R5], and a paper with several articles replaces the entry in its own myst.yml.
+# The MyST config every paper extends [design §5]. The typst export is declared whole here
+# because MyST merges `exports` whole, by id [R52]; oak adds the template URL [R5].
 project:
   thumbnail: thumbnails/thumbnail.png # read by the gallery plugin
   exports:

@@ -1,19 +1,12 @@
 /**
- * build.ts: `oak build`, the two-pass orchestrator ([R52], design §12a).
+ * `oak build`. The author's `myst.yml` is read, never written [R71]; oak writes the derived
+ * config `myst.oak.yml` beside it and builds from that, in two passes [R52] [design §12a]:
  *
- * The author's `myst.yml` is READ-ONLY ([R71]); both passes write the DERIVED config
- * (`myst.oak.yml`) beside it, and myst is pointed there via `Session({ configFiles })`.
+ * 1. The author's config with the `extends:` chain, loaded to resolve the whole project.
+ * 2. compose's additions (the typst export, the theme) written over it, then the build.
  *
- * Pass 1: author config + `extends:` chain → derived → loadConfig → resolved project
- *         (its typst export now carries the edition's `articles`).
- * Pass 2: compose(resolved) → ownOverride → write the complete engine typst entry +
- *         theme `site.template` into the derived config → build.
- *
- * Both passes live in `materializeDerived` (`materialize.ts`), which `oak validate` calls too
- * ([R82]): one materialization, so what validate checks cannot drift from what the build renders.
- *
- * The myst edge (loadConfig + build) is injected as `MystEdge` so this orchestration is
- * unit-testable with a fake: the real edge (myst.ts) pulls in the bundled myst-cli.
+ * `oak validate` shares both passes through `materialize.ts`, so it checks what gets built
+ * [R82]. The myst calls are injected (`MystEdge`) so tests can use a fake.
  */
 import { type ResolvedProject } from './compose.js';
 import { runLayerA } from './validate.js';
@@ -29,8 +22,7 @@ import { originRepo } from './gh.js';
 import { DERIVED_CONFIG_FILE } from './yaml-io.js';
 
 export interface RunBuildInput extends MaterializeInput {
-  /** Defaults to a full build (HTML + exports). HTML-only is useful until the pinned
-   *  typst-template release zip exists (exports would 404 fetching it). */
+  /** Defaults to HTML and exports. */
   buildOpts?: BuildOpts;
 }
 
@@ -54,9 +46,8 @@ export async function runBuild(input: RunBuildInput): Promise<RunBuildResult> {
   const { resolvedProject, extendsChain, warnings } = await materializeDerived(
     input,
     (project, { edition }) => {
-      // --- Pre-flight validate (Layer A): the engine's own invariants gate the build ([R21]).
-      // A sentinel/malformed id, broken layout, or (soft) brand issue is caught before the
-      // expensive myst build. Editorial (Layer B) checks are the PR check job's concern.
+      // The structural checks run before the expensive build [R21]; editorial ones are the pull
+      // request check's job.
       const layerA = runLayerA({
         paperRoot,
         instanceRoot,
@@ -65,10 +56,9 @@ export async function runBuild(input: RunBuildInput): Promise<RunBuildResult> {
         engineRoot,
         edition,
       });
-      // Only STRUCTURAL invariants (missing index.md / stray myst.yml) gate the build. Identity
-      // errors (a placeholder/invalid/duplicate id) do NOT stop the build; the id is enforced at
-      // merge via the Journal-checks Check Run, so a fresh repo still renders a preview to look at
-      // (id-gate-relocation). They surface as warnings alongside the brand warns.
+      // Only structural errors stop the build. An id error (placeholder, invalid, duplicate) is
+      // enforced at merge by the Journal checks, so a new repository still builds a preview; it
+      // is reported as a warning.
       const blocking = layerA.filter((f) => f.severity === 'error' && f.klass === 'structural');
       if (blocking.length) {
         throw new Error(
@@ -98,14 +88,9 @@ export interface RunStartInput extends MaterializeInput {
 }
 
 /**
- * `oak start`: compose exactly as `oak build` does, then hand the DERIVED config to myst's
- * dev server. The point is that a local preview and the CI build read the same file: an author
- * previewing with a bare `myst start` sees their own myst.yml, without the journal's branding,
- * edition or export settings, and only finds out at PR time.
- *
- * No Layer-A pre-flight here, unlike `runBuild`: a preview is for looking at work in progress,
- * and a placeholder id or a missing thumbnail must not stand between an author and their draft.
- * `oak validate` is the verb that judges; the PR check is the gate.
+ * `oak start`: composes as `oak build` does and serves the derived config, so a local preview
+ * matches the CI build. It skips the structural checks, so a placeholder id does not block
+ * previewing a draft; `oak validate` and the pull request check do the judging.
  */
 export async function runStart(input: RunStartInput): Promise<MaterializeResult> {
   const { paperRoot, startOpts = {}, edge } = input;

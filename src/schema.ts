@@ -1,17 +1,9 @@
 /**
- * schema.ts: the engine's data contracts (zod).
- *
- * Scope discipline (design §12, decisions 12/24):
- *  - We validate ONLY the engine-owned coordinates: the `oaktree-sapling` key inside
- *    myst's `project.options` passthrough, plus the two engine-owned instance files
- *    (`journal.yml`, `registry/papers.yml`) and the CI/local pins (`pins.yml`).
- *  - We NEVER model the myst config shape. myst is the config oracle (loadConfig).
- *  - Engine-owned instance files are parsed ADDITIVE-ONLY (unknown keys ignored, never
- *    rejected) so a newer instance-config field can't break a paper pinned to an older
- *    engine ([R42], [R197]). `.loose()` (zod v4) = passthrough of unknown keys.
- *
- * These schemas are the single source of truth reused by `oak validate`, by compose,
- * and exported to JSON Schema for author-editor autocomplete (see `toJsonSchemas`).
+ * The data oak owns, as zod schemas: the `oaktree-sapling` key in a paper's `project.options`,
+ * `journal.yml`, `registry/papers.yml` and `pins.yml`. The rest of the myst config is myst's to
+ * check (through loadConfig) [R185]. Unknown keys are ignored (`.loose()`), so a newer journal
+ * field cannot break a paper pinned to an older oak [R197]. `oak validate`,
+ * compose and the JSON Schema export (`toJsonSchemas`) all use these.
  */
 import * as msg from './messages.js';
 import { z } from 'zod';
@@ -20,36 +12,30 @@ import { z } from 'zod';
  * 1. The engine coordinate: project.options["oaktree-sapling"]
  * ------------------------------------------------------------------------ */
 
-/** An edition id, which is a FILENAME SEGMENT (`editions/<id>.yml`) in compose's extends chain,
- *  in validate's layer list and in what `oak bootstrap` writes, so it may not carry a path
- *  ([R141]). Author-controlled on a fork PR. */
+/** An edition id. It names a file (`editions/<id>.yml`), so it may not carry a path [R141]. A
+ *  fork pull request controls it. */
 export const EDITION_ID = z
   .string()
   .min(1)
   .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/, 'must be a plain name (letters, digits, . _ -)');
 
 /**
- * The one knob (design §6). Rides in myst's untyped `options` passthrough at
- * `project.options["oaktree-sapling"]`, so it coexists with sibling option keys
- * a paper already uses (e.g. `options.youtube`, live in suheylgulenc); we validate
- * this subkey without touching its siblings (finding 3). `.loose()` tolerates future
- * engine option keys on a paper pinned to a newer engine.
+ * The key under myst's `project.options`. It sits beside keys a paper already uses (such as
+ * `options.youtube`), which are left alone. `.loose()` accepts keys from a newer oak [design §6].
  */
 export const OaktreeSaplingOptions = z
   .object({
-    /** Engine ref: a released tag (`vX.Y.Z`), the engine default branch, a SHA, or
-     *  a `refs/pull/N/merge` (the last two gated to non-fork/allowlist, see ref.ts). */
+    /** A release tag (`vX.Y.Z`), the default branch, a SHA or `refs/pull/N/merge`. The last two
+     *  run only from a same-repository pull request or with the maintainer override (ref.ts). */
     version: z.string().min(1),
-    /** Per-paper edition coordinate ([R195]): selects `editions/<edition>.yml`.
-     *  Required in the repo=paper (n=1) path we build first; a repo=journal build
-     *  reads the version from `journal.yml` but still carries `edition` per paper. */
+    /** Selects `editions/<edition>.yml` [R195]. */
     edition: EDITION_ID,
   })
   .loose();
 export type OaktreeSaplingOptions = z.infer<typeof OaktreeSaplingOptions>;
 
-/** Pull + validate the engine key out of a myst `project.options` bag without
- *  disturbing sibling keys. Returns the parsed coordinate; throws on a bad/missing key. */
+/** Parses the key out of `project.options` without touching its siblings. Throws when it is
+ *  missing or invalid. */
 export function readEngineOptions(
   projectOptions: Record<string, unknown> | undefined,
 ): OaktreeSaplingOptions {
@@ -66,8 +52,8 @@ export function readEngineOptions(
 
 export const PreviewConfig = z
   .object({
-    /** 'cloudflare' | 'artifact': 'artifact' degrades to a build-artifact link when
-     *  the tenant has no Cloudflare secrets ([R6], the hidden 4th human-floor item). */
+    /** 'artifact' links the build artifact instead, for a journal without Cloudflare secrets
+     *  [R6]. */
     provider: z.enum(['cloudflare', 'artifact']).default('artifact'),
     cf_project_name: z.string().optional(),
     /** Preview branch naming; `{repo}` / `{pr}` placeholders ([R27]). */
@@ -80,19 +66,15 @@ export const ZenodoConfig = z
   .object({
     /** Optional Zenodo community identifier; a fresh tenant has none ([R19]). */
     community: z.string().optional(),
-    /** Optional description paragraph appended to every deposit ([R19]); the ISP
-     *  "created as part of the Neuromatch Impact Scholars Program" blurb lived
-     *  hardcoded in zenodo-deposit.py:207 and moves here. */
+    /** Optional paragraph appended to every deposit's description [R19]. */
     description_blurb: z.string().optional(),
   })
   .loose();
 export type ZenodoConfig = z.infer<typeof ZenodoConfig>;
 
 /**
- * A journal-selected check (slice 4 "Layer B"). The JOURNAL picks which editorial checks run
- * (by id) + per-check options; the paper author cannot weaken the set (it lives in
- * instance-config, a repo the author doesn't control). `optional: true` -> advisory: annotates
- * but never gates merge. `.loose()` carries per-check option keys.
+ * An editorial check the journal turns on, by id, with its options. It lives in the journal
+ * repository, which authors cannot change. `optional: true` reports without blocking a merge.
  */
 export const Check = z
   .object({
@@ -106,38 +88,33 @@ export const JournalConfig = z
   .object({
     name: z.string().min(1),
     url: z.string().optional(),
-    /** Granularity tier (design §9). Only 'paper' is built now; the field is a
-     *  forward contract so a repo=journal instance is detected, not assumed. */
+    /** Only 'paper' is built. The field exists so a journal-level instance is detected, not
+     *  assumed [design §9]. */
     tier: z.enum(['paper', 'edition', 'journal']).default('paper'),
-    /** The template's placeholder `id:` that `oak validate` must reject on real
-     *  papers (finding 1: the sentinel is instance-defined, not a global constant:
-     *  ISP's is `isp-micropublication-template`). */
+    /** The template's placeholder `id:`, which `oak validate` rejects on a real paper. Set per
+     *  journal. */
     id_sentinel: z.string().optional(),
-    /** Anchored regex a paper `id:` must match (SciPy-style id-pattern, [R7]). */
+    /** Anchored regex a paper `id:` must match [R7]. */
     id_pattern: z.string().optional(),
-    /** The journal's own typst template ([R76]), `name | path | URL`, where only a
-     *  `./`/`../` value is a path relative to the instance-config root. Sits between the
-     *  author's own `exports[].template` (which outranks it, with a warning) and the
-     *  engine's default. Absent → the engine's template, as before. */
+    /** The journal's typst template [R76]: a name, a path (only a `./` or `../` value, relative
+     *  to the journal repository) or a URL. The author's own template outranks it, with a
+     *  warning; oak's is the default. */
     typst_template: z.string().optional(),
     preview: PreviewConfig.prefault({}),
     zenodo: ZenodoConfig.prefault({}),
-    /** Journal-selected editorial checks run by `oak validate` (slice 4 Layer B). */
+    /** The editorial checks `oak validate` runs. */
     checks: z.array(Check).default([]),
   })
   .loose();
 export type JournalConfig = z.infer<typeof JournalConfig>;
 
 /* --------------------------------------------------------------------------
- * 3. registry/papers.yml: the paper registry (engine-owned, additive-only)
+ * 3. registry/papers.yml: the paper registry (additive-only)
  *
- * Finding 1: `id`, `slug`, and `location` are THREE distinct coordinates, not one.
- * Real ids are `isp-`-prefixed and sometimes semantic (suheylgulenc →
- * `isp-micropublication-decisive-times`), never the repo slug. Today's gallery
- * conflates all three into the repo name (paper-gallery.mjs:12); the target splits:
- *   - id       → the deposit/dedup key (myst-native project.id) ([R7])
- *   - slug     → the `/<slug>/` URL path + thumbnail location
- *   - location → {repo, path} where the paper actually lives (multi-per-repo, §9)
+ * Three separate coordinates:
+ *   - id       → the deposit and dedup key, myst's project.id [R7]
+ *   - slug     → the `/<slug>/` URL path and thumbnail location
+ *   - location → {repo, path}, where the paper lives [design §9]
  * ------------------------------------------------------------------------ */
 
 export const PaperLocation = z
@@ -157,11 +134,9 @@ export const RegistryEntry = z
     /** Concept DOI; absent until the paper is deposited. */
     doi: z.string().optional(),
     /**
-     * Where the paper is PUBLISHED, when it isn't where we'd guess. The gallery
-     * (`plugins/gallery.mjs`) otherwise derives `https://<owner>.github.io/<name>` from
-     * `location.repo`; set this for a custom domain or non-Pages hosting. Optional and
-     * additive ([R197]): the registry stays a thin pointer list ([S4]), so display
-     * metadata (title, keywords) is still fetched per paper, never cached here.
+     * Where the paper is published, when that is not `https://<owner>.github.io/<name>`, which
+     * the gallery otherwise derives from `location.repo`. Display data such as the title is
+     * still fetched from the paper, never stored here [R197].
      */
     site_url: z.string().optional(),
     edition: EDITION_ID,
@@ -173,8 +148,8 @@ export const Registry = z.array(RegistryEntry);
 export type Registry = z.infer<typeof Registry>;
 
 /* --------------------------------------------------------------------------
- * 4. pins.yml: the trust boundary (design §6a, [R194], [R37])
- * Read by BOTH the CI shim (yq) and local `oak`, so they can't drift.
+ * 4. pins.yml: the repositories oak and the journal come from [R194]
+ * Read by both the engine action and local `oak`.
  * ------------------------------------------------------------------------ */
 
 export const Pins = z
@@ -188,21 +163,19 @@ export const Pins = z
 export type Pins = z.infer<typeof Pins>;
 
 /* --------------------------------------------------------------------------
- * 5. Paper-id validation (design [R193], two checks, different locality)
+ * 5. Paper-id checks [R193]
  * ------------------------------------------------------------------------ */
 
 export type IdCheckResult =
   { ok: true } | { ok: false; severity: 'error' | 'warn'; message: string };
 
-/** The id the engine's own paper template ships, rejected whatever the journal says: a
- *  tenant's `id_sentinel` widens this contract and cannot switch it off ([R119]a). Kept in
- *  step with `templates/paper/myst.yml` by a test. */
+/** The id oak's own paper template ships. It is always rejected: a journal's `id_sentinel` adds
+ *  to it and cannot turn it off [R119]. A test keeps it in step with `templates/paper/myst.yml`. */
 export const ENGINE_ID_SENTINEL = 'CHANGE-ME-template-placeholder';
 
 /**
- * Check A: sentinel + id-pattern. A pure function of the paper's own id and the
- * journal's policy; hard-fails everywhere, needs no registry. This is the check
- * that catches the live geetha bug (`id: isp-micropublication-template`, [R12]).
+ * Check A: the placeholder id and the id pattern. Needs only the paper's id and the journal's
+ * settings, and fails everywhere [R12].
  */
 export function checkIdShape(
   id: string,
@@ -229,10 +202,8 @@ export function checkIdShape(
 }
 
 /**
- * Check B: registry uniqueness. Needs `registry/papers.yml`, so it hard-fails in
- * CI and any local build (instance present) and soft-warns in a bare local validate
- * with no instance ([R193]). `self` is the paper's own registry slug, excluded so a
- * paper doesn't collide with its own entry.
+ * Check B: the id is unique in the registry. Fails when the registry is present, and only warns
+ * without one, as in a bare local validate [R193]. `self` excludes the paper's own entry.
  */
 export function checkIdUniqueness(
   id: string,
@@ -249,10 +220,8 @@ export function checkIdUniqueness(
   }
   const clash = registry.find((e) => e.id === id && e.slug !== self?.slug);
   if (clash) {
-    // Self-exclusion keys off the paper's repo (findSelf). Without a repo context, an
-    // offline/local build with no GITHUB_REPOSITORY and a temp or non-origin checkout, we
-    // cannot tell our OWN registry entry from a real duplicate, so we must not hard-gate:
-    // downgrade to a warning. CI always sets GITHUB_REPOSITORY, so the gate stays hard there.
+    // Without the repository (no GITHUB_REPOSITORY, a checkout with no matching origin) the
+    // paper's own entry cannot be told from a duplicate, so this only warns. CI always sets it.
     if (opts.selfIdentifiable === false) {
       return {
         ok: false,
@@ -270,7 +239,7 @@ export function checkIdUniqueness(
 }
 
 /* --------------------------------------------------------------------------
- * 6. JSON Schema export (author-editor autocomplete, design §12)
+ * 6. JSON Schema export, for editor autocomplete
  * ------------------------------------------------------------------------ */
 
 export function toJsonSchemas() {

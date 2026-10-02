@@ -1,9 +1,7 @@
 /**
- * materialize.ts: what `oak build` and `oak validate` must agree on before they diverge. The
- * myst edge, the input both verbs feed it, and the two-pass write of `myst.oak.yml`.
- *
- * Its own module because both need it: sharing it from `build.ts` ([R82]) made the two verbs
- * import each other, since build also needs validate's `runLayerA` between the passes ([R21]).
+ * What `oak build` and `oak validate` share: the myst interface and the two-pass write of
+ * `myst.oak.yml`. A module of its own because build also needs validate's `runLayerA` between
+ * the passes, and sharing through build.ts made the two import each other [R82] [R21].
  */
 import { join } from 'node:path';
 import type { ISession } from 'myst-cli';
@@ -22,12 +20,11 @@ import {
 export interface BuildOpts {
   all?: boolean;
   html?: boolean;
-  /** Build only the typst export, no HTML site, the offline canary path (site HTML
-   *  needs a network theme zip; validated live in CI instead). */
+  /** Only the typst export, no site. Works offline, since the site needs the theme zip. */
   exportsOnly?: boolean;
 }
 
-/** The `myst start` options `oak start` passes through (myst's own names, `cli/start.js`). */
+/** The `myst start` options `oak start` passes through, under myst's names. */
 export interface StartOpts {
   port?: number;
   serverPort?: number;
@@ -38,30 +35,21 @@ export interface StartOpts {
 }
 
 /**
- * The seam to mystmd (myst.ts implements it with the bundled myst-cli).
- *
- * `configFile` selects WHICH config in `dir` myst reads, via `new Session({ configFiles })`
- * ([R71]). Omitted → myst's default (`myst.yml`/`myst.yaml`), i.e. the author's own config,
- * which is only what a DEGRADED `oak validate` reads (nothing to compose, [R82]). `build` and a
- * composed `validate` both pass the derived config. Sessions are cached per config name in the
- * real edge.
+ * The interface to myst, implemented in myst.ts. `configFile` picks the config myst reads
+ * [R71]; without it myst reads the author's `myst.yml`, which only a `validate` with nothing to
+ * compose wants [R82].
  */
 export interface MystEdge {
-  /** loadConfig(session, dir).project, the resolved project frontmatter. */
+  /** The project as myst resolves it. */
   loadProject(dir: string, configFile?: string): Promise<ResolvedProject>;
-  /** build(session, [], opts) from within `dir`. */
+  /** Builds from within `dir`. */
   build(dir: string, opts: BuildOpts, configFile?: string): Promise<void>;
-  /**
-   * startServer(session, opts) from within `dir`, the dev server behind `oak start`.
-   * Resolves once the server is UP (myst's own contract) and leaves it running, so the
-   * caller must not let the process exit afterwards.
-   */
+  /** Starts the dev server from within `dir` and resolves once it is up. The caller must keep
+   *  the process alive. */
   start(dir: string, opts: StartOpts, configFile?: string): Promise<void>;
   /**
-   * Load AND process the project at `dir` (config + current-project pointer + mdast), then run
-   * `fn` against the myst Session with the current project set, so the curvenote Layer-B checks
-   * can read the store (`selectCurrentProjectConfig` needs the pointer, [R59]; `abstract-exists`
-   * reads processed mdast). Frontmatter/abstract checks need this, NOT a full build/export.
+   * Loads and processes the project, then runs `fn` with the session, for the editorial checks
+   * [R59]. They need processed mdast, not a build.
    */
   withProjectSession<T>(
     dir: string,
@@ -81,29 +69,25 @@ export interface MaterializeInput {
 }
 
 export interface MaterializeResult {
-  /** The pass-1 resolved project: the author's config with the `extends:` chain merged in.
-   *  It carries every layer-declared field (`thumbnail`, venue, license…) but NOT compose's
-   *  pass-2 stamps; those live in the derived FILE, which is what a myst session reads. */
+  /** The author's config merged with its `extends:` chain. It holds every field the layers
+   *  declare, but not compose's additions, which are only in the derived file. */
   resolvedProject: ResolvedProject;
-  /** The derived config on disk (`<paperRoot>/myst.oak.yml`), point myst at it. */
+  /** `<paperRoot>/myst.oak.yml`, the file myst reads. */
   derivedPath: string;
   extendsChain: string[];
-  /** The edition read RAW from the author's config (pre-extends, the shim's `yq` read). */
+  /** The edition, read from the author's config before the merge, as the engine action does. */
   edition: string;
-  /** compose's warnings (which include `extendsChainFor`'s --no-instance warning). */
+  /** compose's warnings, including the one for building without a journal. */
   warnings: string[];
 }
 
 /**
- * The two-pass derived-config materialization ([R71]), shared by `oak build` and
- * `oak validate` ([R82]) so neither can drift from what actually ships. Writes
- * `<paperRoot>/myst.oak.yml` and leaves it there (myst's `process.exit(0)` defeats cleanup;
- * the frozen paper template gitignores it).
+ * Writes `<paperRoot>/myst.oak.yml` in two passes [R71], for both `oak build` and `oak validate`
+ * [R82]. The file stays: myst exits the process on success, and the paper template gitignores
+ * it.
  *
- * `preflight` runs BETWEEN the passes, on the pass-1 resolved project, and may throw:
- * `oak build` gates itself there ([R21]) so a structurally broken paper never reaches compose
- * or pass 2. Keeping the hook inside rather than after preserves exactly which error a
- * doubly-broken paper reports: compose throws too (the R36 coordinate cross-check).
+ * `preflight` runs between the passes and may throw; `oak build` uses it to stop a broken paper
+ * before compose [R21], so a paper broken in both ways reports the same error as before.
  */
 export async function materializeDerived(
   input: MaterializeInput,
@@ -111,21 +95,18 @@ export async function materializeDerived(
 ): Promise<MaterializeResult> {
   const { paperRoot, engineRoot, instanceRoot, engineRepo, baseUrl, assetOverrides, edge } = input;
 
-  // The author's config is an INPUT: read, never written ([R71]). Everything the engine
-  // injects goes to the DERIVED config beside it, which is what myst is pointed at.
+  // The author's config is read, never written [R71].
   const authorPath = join(paperRoot, 'myst.yml');
   const derivedPath = join(paperRoot, DERIVED_CONFIG_FILE);
   const doc = readDoc(authorPath);
 
-  // Raw, pre-extends read of the engine coordinate (the local `yq` equivalent, §6a). The path
-  // goes in so a missing coordinate names the file the author has to edit.
+  // The version and edition, read before the merge [design §6a]. The path names the file in the
+  // error.
   const { version: engineVersion, edition } = readEngineCoordinateRaw(doc, authorPath);
 
-  // --- Pass 1: materialize author config + extends chain into the derived config -----
-  // The author's frontmatter lands in the derived file's BASE slot, where myst's base-wins is
-  // deterministic; the engine layers stay `extends:`. Deriving by `extends:`-ing the author's
-  // myst.yml instead would demote it to a racing sibling ([R72]) and make author-overrides-venue
-  // precedence non-deterministic.
+  // Pass 1. The author's config fills the derived file's base, where myst's merge is predictable,
+  // and the engine layers stay `extends:`. Extending the author's myst.yml instead would make its
+  // precedence over the edition unpredictable [R72].
   const { extendsChain } = extendsChainFor({ engineRoot, instanceRoot, edition });
   setExtends(doc, extendsChain);
   writeDerivedDoc(derivedPath, doc);
@@ -134,14 +115,14 @@ export async function materializeDerived(
 
   preflight?.(resolvedProject, { edition });
 
-  // Raw brand asset fields ([R62]), read from brand.yml directly (not the merged config)
-  // so compose absolutizes only brand-declared assets against `<instanceRoot>/brand`.
+  // Read from brand.yml itself, so compose resolves only the brand's own assets against
+  // `brand/` [R62].
   const brandAssets = instanceRoot ? readBrandAssetOptions(instanceRoot) : undefined;
 
-  // The tenant's own typst template ([R76]), same raw-lift discipline, from journal.yml.
+  // The journal's typst template, read the same way from journal.yml [R76].
   const tenantTypstTemplate = instanceRoot ? readTenantTypstTemplate(instanceRoot) : undefined;
 
-  // --- compose over the resolved config (runs the R36 cross-check) -------------------
+  // compose, including the version cross-check [R36].
   const result = compose({
     paperRoot,
     engineRoot,
@@ -156,10 +137,8 @@ export async function materializeDerived(
     tenantTypstTemplate,
   });
 
-  // --- Pass 2: apply the engine override to the derived config ----------------------
-  // This is the pass that stamps `template` AND `output` ([R71-out]); without it a myst
-  // session reading the derived config would resolve the export to myst's default path,
-  // derived from the DECLARING file, which the build never writes.
+  // Pass 2 sets the export's `template` and `output` [R71-out]. Without it, myst would take the
+  // output path from the file that declares the export, a path the build never writes.
   applyOwnOverride(doc, result.ownOverride);
   writeDerivedDoc(derivedPath, doc);
 
