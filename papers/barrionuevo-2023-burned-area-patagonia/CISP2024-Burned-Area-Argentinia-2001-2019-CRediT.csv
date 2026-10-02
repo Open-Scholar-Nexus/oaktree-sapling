@@ -1,0 +1,6 @@
+Order in publication,Firstname,Surname,Conceptualization,Formal analysis,Investigation,Methodology,Software,Visualization,Writing - original draft,Writing - review & editing
+1,Franco,Barrionuevo,TRUE,TRUE,TRUE,TRUE,TRUE,TRUE,TRUE,TRUE
+2,Raphael ,Rocha,TRUE,TRUE,TRUE,TRUE,FALSE,TRUE,TRUE,TRUE
+3,Luciana ,Rojas,FALSE,TRUE,TRUE,FALSE,FALSE,FALSE,TRUE,TRUE
+4,Ricardo ,Rengifo,FALSE,TRUE,TRUE,FALSE,FALSE,FALSE,TRUE,TRUE
+5,Cristian ,Farfan,FALSE,TRUE,FALSE,FALSE,FALSE,FALSE,TRUE,TRUE

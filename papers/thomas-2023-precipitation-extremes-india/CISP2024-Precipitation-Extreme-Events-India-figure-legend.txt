@@ -1,0 +1,9 @@
+Figure 1: Mann-Kendall Trend for Extreme Precipitation in Northwest India
+
+Figure 2: Mann-Kendall Trend for Extreme Precipitation in Northeast India
+
+Figure 3: Mann-Kendall Trend for Extreme Precipitation in Central India
+
+Figure 4: Mann-Kendall Trend for Extreme Precipitation in South Peninsular India
+
+Figure 5: Time Series of Extreme Precipitation from 1901 to 2023 (with trendline)

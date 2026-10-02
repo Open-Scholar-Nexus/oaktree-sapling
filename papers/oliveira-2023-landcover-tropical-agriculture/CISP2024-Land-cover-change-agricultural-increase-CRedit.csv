@@ -1,0 +1,7 @@
+Order in publication,Firstname,Middle name,Surname,Conceptualization,Data curation,Formal analysis,Investigation,Methodology,Resources,Software,Validation,Visualization,Writing - original draft,Writing - review & editing,Email address,Primary affiliation,Secondary affiliation,ORCID iD,Corresponding author?
+1,Sofia,,Corradi Oliveira,TRUE,TRUE,TRUE,TRUE,TRUE,FALSE,FALSE,TRUE,TRUE,TRUE,TRUE,sofiacorradio@gmail.com,"Federal University of Minas Gerais, Brazil",,0000-0001-8644-9674 ,TRUE
+2,Andres,Fernando,Figueroa Curo,TRUE,TRUE,TRUE,TRUE,TRUE,FALSE,TRUE,FALSE,TRUE,TRUE,FALSE,,National Agrarian University of La Molina,Water Research and Technology Center (UTEC),0009-0008-4778-1381,FALSE
+4,Magnolia,,Song,TRUE,FALSE,FALSE,TRUE,FALSE,FALSE,FALSE,FALSE,FALSE,TRUE,TRUE,,Monash University,,0000-0003-4123-7170,FALSE
+3,Manojna,,Polisetty,TRUE,TRUE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,,World Resource Institute India,,0009-0002-2666-5855,FALSE
+5,Daniela,,Velasquez Gushiken,TRUE,FALSE,TRUE,TRUE,FALSE,TRUE,TRUE,FALSE,FALSE,FALSE,TRUE,,National Agrarian University of La Molina,,0009-0002-0092-4599,FALSE
+6,Maryann,Alessandra,Alata Chambilla,TRUE,FALSE,TRUE,TRUE,FALSE,TRUE,FALSE,FALSE,FALSE,TRUE,FALSE,,National Agrarian University of La Molina,,0009-0002-0198-5553,FALSE

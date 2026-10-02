@@ -1,0 +1,36 @@
+version: 1
+extends:
+- https://raw.githubusercontent.com/Open-Scholar-Nexus/oaktree-sapling/v0.1.0/nexus.yml
+- https://raw.githubusercontent.com/Open-Scholar-Nexus/oaktree-sapling-config/v0.1.0/climatematch-2023.yml
+
+project:
+  doi: 10.5281/zenodo.11069131
+  date: 2024-04-26
+  authors:
+  - name: Sthitapragya Ray
+    orcid: 0000-0003-0331-5596
+    affiliations:
+    - Indian Institute of Technology Bhubaneswar, Bhubaneswar, India
+  - name: Elizaveta Baranova-Parfenova
+    affiliations:
+    - Graduate Institute of Mind, Brain and Consciousness, Taipei Medical University, Taipei, Taiwan
+  - name: Andrea A. Cabrera
+    affiliations:
+    - Globe Institute, University of Copenhagen, Copenhagen, Denmark
+  - name: Diana Guzmán
+    affiliations:
+    - Department of Geosciences, National University of Colombia, Bogotá, Colombia
+  - name: Daria Proklova
+    affiliations:
+    - Independent Researcher, Berlin, Germany
+
+  toc:
+  - file: index.md
+
+  id: enso-upwelling-northwest-africa
+  title: Influence of ENSO on the Coastal Upwelling along Northwest Africa
+  keywords:
+  - ENSO
+  - Coastal Upwelling
+  - Modoki El Niño
+  github: https://github.com/Open-Scholar-Nexus/ray-2023-enso-upwelling-africa

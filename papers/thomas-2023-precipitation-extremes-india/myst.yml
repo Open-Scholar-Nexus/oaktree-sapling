@@ -1,0 +1,44 @@
+version: 1
+extends:
+- https://raw.githubusercontent.com/Open-Scholar-Nexus/oaktree-sapling/v0.1.0/nexus.yml
+- https://raw.githubusercontent.com/Open-Scholar-Nexus/oaktree-sapling-config/v0.1.0/climatematch-2023.yml
+
+project:
+  doi: 10.5281/zenodo.11077309
+  date: 2024-04-27
+  authors:
+  - name: Stefy Thomas
+    email: stefythomas@cusat.ac.in
+    affiliations:
+    - Cochin University of Science and Technology
+    corresponding: true
+  - name: Khushi Dani
+    affiliations:
+    - IIT Bombay
+  - name: Sattiki Ganguly
+    affiliations:
+    - Arthan
+  - name: Pandurang Choudhari
+    affiliations:
+    - University of Mumbai
+  - name: Risa Madoff
+    affiliations:
+    - University of North Dakota
+
+  toc:
+  - file: index.md
+
+  id: precipitation-extreme-events-india
+  title: Assessing Spatio-Temporal Precipitation Variability and Extreme Events in India
+  keywords:
+  - India
+  - Extreme Weather
+  - CHIRPS Data
+  github: https://github.com/Open-Scholar-Nexus/thomas-2023-precipitation-extremes-india
+  bibliography:
+  - bib.bib
+  downloads:
+  - file: CISP2024-Precipitation-Extreme-Events-India-code.zip
+    title: Code
+  - file: CISP2024-Precipitation-Extreme-Events-India-supplementary-figures.docx
+    title: Supplementary figures

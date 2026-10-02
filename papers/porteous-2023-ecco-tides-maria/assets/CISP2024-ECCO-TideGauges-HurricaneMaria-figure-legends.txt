@@ -1,0 +1,8 @@
+﻿A. The first image shows a map of Puerto Rico with TGs which were active during Hurricane Maria; The second image shows the SSH time series for ECCO and all TGs a month before, during the dates of, and a month after Hurricane Maria.
+B. Bland Altman plots showing the agreement of SSH data between ECCO and TG sources for Arecibo, Esperanza, Isabel Segunda and Mayaguez TGs.
+C. SSH data time series where ECCO and TGs intersect for the entire period when the TGs were active.
+D. SSH rolling mean of the time series for each TG and ECCO
+E. SSH rolling standard deviation of the time series for each TG and ECCO
+F. Pearson's correlation coefficients and P-values obtained from the SSH time series rolling mean and rolling standard deviation between ECCO and TG, for each TG
+
+

@@ -1,0 +1,9 @@
+Order in publication,Firstname,Middle name,Surname,Conceptualization,Data curation,Formal analysis,Funding acquisition,Investigation,Methodology,Project administration,Resources,Software,Supervision,Validation,Visualization,Writing - original draft,Writing - review & editing,Email address,Primary affiliation,Secondary affiliation,Funding,ORCID iD,Corresponding author?,Notes
+1,James,,Hartzell,TRUE,TRUE,TRUE,FALSE,TRUE,TRUE,TRUE,FALSE,TRUE,FALSE,FALSE,TRUE,TRUE,TRUE,james.hartzell@gmail.com,CISP/CMA,none,,0000-0003-1901-7016,TRUE,
+2,Magda,,Altman,TRUE,TRUE,TRUE,FALSE,TRUE,TRUE,TRUE,FALSE,TRUE,FALSE,FALSE,TRUE,TRUE,TRUE,magda.altman@gmail.com,none,,,0009-0002-0976-6427,TRUE,
+3,Rajiv,,Srivastava,TRUE,TRUE,TRUE,FALSE,FALSE,TRUE,TRUE,FALSE,FALSE,FALSE,FALSE,FALSE,TRUE,TRUE,rajurajiv2009@gmail.com,"University of Hohenheim, Stuttgart",none,,0000-0002-5314-7634,FALSE,
+4,Pratik,,Bhandari,TRUE,TRUE,TRUE,FALSE,TRUE,FALSE,TRUE,FALSE,FALSE,FALSE,FALSE,TRUE,FALSE,TRUE,cma@pratikb.com,Independent researcher,CMA,,0000-0001-5486-3352,FALSE,
+5,Jeffrey,N. A.,Aryee,TRUE,TRUE,TRUE,FALSE,FALSE,FALSE,FALSE,FALSE,TRUE,TRUE,FALSE,FALSE,FALSE,FALSE,jnaaryee@knust.edu.gh,"Kwame Nkrumah University of Science and Technology, Ghana",CMA,,0000-0002-4481-1441,FALSE,
+6,Surajit,Deb,Berman,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,,,,,,FALSE,
+7,Lorenzo,,Pierini,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,,,,,,FALSE,
+8,Masoumeh,,Bahri,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,,,,,,FALSE,

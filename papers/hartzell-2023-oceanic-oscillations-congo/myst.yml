@@ -1,0 +1,39 @@
+version: 1
+extends:
+- https://raw.githubusercontent.com/Open-Scholar-Nexus/oaktree-sapling/v0.1.0/nexus.yml
+- https://raw.githubusercontent.com/Open-Scholar-Nexus/oaktree-sapling-config/v0.1.0/climatematch-2023.yml
+
+project:
+  doi: 10.5281/zenodo.12192494
+  date: 2024-06-20
+  authors:
+  - name: James Hartzell
+    orcid: 0000-0003-1901-7016
+  - name: Magda Altman
+    orcid: 0009-0002-0976-6427
+  - name: Dr. Rajiv Kumar Srivastava
+    affiliations:
+    - University of Hohenheim
+    orcid: 0000-0002-5314-7634
+  - name: Pratik Bhandari
+    orcid: 0000-0001-5486-3352
+  - name: Jeffrey N. A. Aryee
+    affiliations:
+    - Kwame Nkrumah University of Science and Technology
+    orcid: 0000-0002-4481-1441
+
+  toc:
+  - file: index.md
+
+  id: oceanic-oscillations-and-congo-river-basin-climatology
+  title: Oceanic Oscillations and Congo River Basin Climatology
+  keywords:
+  - Tides
+  - Congo
+  - Climate Change
+  github: https://github.com/Open-Scholar-Nexus/hartzell-2023-oceanic-oscillations-congo
+  bibliography:
+  - bib.bib
+  downloads:
+  - file: assets/Fortepiano, Hesperosaurus_bon.CSIP.zip
+    title: Code
