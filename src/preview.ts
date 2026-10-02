@@ -1,10 +1,9 @@
 /**
- * preview.ts: the `deploy-preview` + `notify` verbs ([R16]/[R26]/[R27]).
- *
- * deploy-preview NEVER fails the run ([R16]): no secrets, a CF outage, or a bad journal.yml all
- * degrade to an artifact-link comment. It runs in trusted Stage 2, which holds the
- * `pull-requests: write` a fork-PR Stage 1 does not, so the new-version reminder rides here too.
- * Cloudflare and git/gh are injected seams (real impls in gh.ts); no myst-cli import.
+ * `oak deploy-preview` and `oak notify` [R16] [R26] [R27]. deploy-preview never fails the run
+ * [R16]: missing secrets, a Cloudflare outage or a bad journal.yml all fall back to a comment
+ * linking the build artifact. It runs in the trusted `workflow_run` job, which can write to the
+ * pull request, so the new-version reminder runs there too. Cloudflare, git and gh are
+ * injected; the real ones are in gh.ts.
  */
 import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
@@ -15,11 +14,11 @@ import { annotate, firstLine, stickyMarker, UserError } from './messages.js';
 import { JournalConfig, type PreviewConfig } from './schema.js';
 
 /* --------------------------------------------------------------------------
- * Seams (implemented by gh.ts)
+ * Injected; the real ones are in gh.ts
  * ------------------------------------------------------------------------ */
 
 export interface PagesDeployer {
-  /** Deploy a built site dir to Cloudflare Pages; resolves the deployment URL (impl in gh.ts). */
+  /** Deploys a built site to Cloudflare Pages; resolves the deployment URL. */
   deploy(opts: {
     dir: string;
     accountId: string;
@@ -30,7 +29,7 @@ export interface PagesDeployer {
 }
 
 export interface GhPr {
-  /** Upsert a sticky comment (keyed by `header`) on a PR, create, else edit in place. */
+  /** Creates or updates a sticky comment, keyed by `header`, on a pull request. */
   sticky(repoRoot: string, prNumber: string, header: string, body: string): void;
   /** Add a label to a PR, creating the label first if it does not exist. */
   addLabel(
@@ -39,13 +38,13 @@ export interface GhPr {
     label: string,
     opts?: { color?: string; description?: string },
   ): void;
-  /** `v*` tags via `gh api repos/{repo}/tags` ([R23]); the Stage-2 checkout is shallow.
-   *  `repo` null ⇒ no tags. */
+  /** `v*` tags through `gh api` [R23], since this job's checkout is shallow. `repo` null means
+   *  no tags. */
   versionTags(repoRoot: string, repo: string | null): string[];
 }
 
 /* --------------------------------------------------------------------------
- * Result envelope (mirrors zenodo.ts, the workflows' `status` contract)
+ * Result envelope, as in zenodo.ts: the `status` the workflows read
  * ------------------------------------------------------------------------ */
 
 export interface Outcome {
@@ -62,22 +61,23 @@ const err = (exitCode: number, message: string, fields: Record<string, unknown> 
 });
 
 /* --------------------------------------------------------------------------
- * Sticky-comment headers + labels (stable identifiers, do not rename)
+ * Sticky comment headers and labels. Do not rename: GitHub stores them
  * ------------------------------------------------------------------------ */
 
 export const STICKY_PREVIEW = 'oak-preview';
 export const STICKY_NEWVERSION = 'zenodo-newversion-reminder';
 export const LABEL_EDITOR_ACTION = 'editor-action-needed';
-/** Here, not beside its issue, so `oak bootstrap` provisions the name `openFailureIssue` uses ([R127]). */
+/** Here rather than beside its issue, so `oak bootstrap` creates the label `openFailureIssue`
+ *  uses [R127]. */
 export const LABEL_ZENODO_FAILED = 'zenodo-publish-failed';
 
 /* --------------------------------------------------------------------------
- * journal.yml → tenant preview config ([R27]), mirrors loadJournalZenodo
+ * journal.yml `preview:` settings [R27], read as loadJournalZenodo reads `zenodo:`
  * ------------------------------------------------------------------------ */
 
-/** Read `preview:` from `<instanceRoot>/journal.yml`; absent or no instance ⇒ schema defaults.
- *  A parse failure is the tenant's fault and degrades rather than failing ([R16]/[R140]):
- *  `problem` carries the reason into the comment. */
+/** Reads `preview:` from `<instanceRoot>/journal.yml`, with the schema defaults when absent. A
+ *  file that fails to parse is the journal's mistake, so it falls back and `problem` says why
+ *  in the comment [R16] [R140]. */
 export function loadJournalPreview(instanceRoot: string | null): {
   preview: PreviewConfig;
   problem?: string;
@@ -100,8 +100,8 @@ export function loadJournalPreview(instanceRoot: string | null): {
 /** PR-number shape: the file is untrusted and the value reaches a `gh api` path ([R136]). */
 const PR_NUMBER = /^[0-9]{1,10}$/;
 
-/** Read and DELETE `.pr-number` ([R26]). null when absent (push/non-PR run); a present but
- *  malformed file throws, as a hostile artifact rather than an absent one ([R136]). */
+/** Reads and deletes `.pr-number` [R26]. null when absent (a push, not a pull request); a
+ *  malformed file throws, since it was tampered with rather than missing [R136]. */
 export function takePrNumber(siteDir: string): string | null {
   const f = join(siteDir, '.pr-number');
   if (!existsSync(f)) return null;
@@ -238,11 +238,11 @@ export interface DeployPreviewInput {
   siteDir: string;
   repoRoot: string;
   instanceRoot: string | null;
-  /** GITHUB_REPOSITORY (owner/repo), GITHUB_SERVER_URL, used for the degrade link + labels. */
+  /** GITHUB_REPOSITORY and GITHUB_SERVER_URL, for the fallback link and labels. */
   repo: string | null;
   serverUrl: string;
-  /** The Paper CI run id (workflow_run.id) holding the paper-build artifact, deep-links the
-   *  degrade comment straight to that run, not the whole Actions tab. */
+  /** The Paper CI run holding the build artifact (`workflow_run.id`), so the fallback comment
+   *  links to that run. */
   artifactRunId?: string;
   cf: { apiToken?: string; accountId?: string };
   /** myst.yml path in base context (for the notify DOI read). */
@@ -254,9 +254,9 @@ export interface PreviewDeps {
   gh: GhPr;
 }
 
-/** `oak deploy-preview <site>` ([R16]): serve the inert Stage-1 artifact at a preview URL (or
- *  degrade to an artifact-link comment) and post it to the PR. Never fails the run; a missing
- *  `.pr-number` no-ops. Observable behaviour: DOCS.deployPreview. */
+/** `oak deploy-preview <site>` [R16]: deploys the build artifact to a preview URL, or falls
+ *  back to a link to it, and comments on the pull request. Never fails the run; without
+ *  `.pr-number` it does nothing. Documented at DOCS.deployPreview. */
 export async function cmdDeployPreview(
   input: DeployPreviewInput,
   deps: PreviewDeps,
@@ -296,9 +296,8 @@ export async function cmdDeployPreview(
       deps.gh.sticky(repoRoot, pr, STICKY_PREVIEW, previewComment(url));
       outcome = { preview: 'cloudflare', url, branch: plan.branch };
     } catch (e) {
-      // The one [R16] degrade: a CF failure still leaves the reviewer the artifact link. Not
-      // error-swallowing, it posts a different useful comment; a gh failure below is NOT degraded,
-      // it throws.
+      // The one fallback [R16]: a Cloudflare failure still gives the reviewer the artifact link.
+      // A gh failure below is not caught; it throws.
       const failure = (e as Error).message;
       process.stderr.write(annotate('warning', msg.workflow.cloudflareDegraded(failure)) + '\n');
       deps.gh.sticky(
@@ -317,7 +316,7 @@ export async function cmdDeployPreview(
     outcome = { preview: 'artifact', reason: plan.reason };
   }
 
-  // The new-version reminder rides here (base context holds pull-requests: write, [R16]); its
+  // The new-version reminder runs here, where the job can write to the pull request [R16]; its
   // failure propagates.
   const notify = runNewVersionReminder({ repoRoot, mystPath, repo, pr }, deps.gh);
   return {
@@ -334,9 +333,9 @@ export interface NotifyInput {
   pr: string;
 }
 
-/** The new-version reminder ([R16]/[R23]): on an already-published paper, post a sticky reminder
- *  + label. First deposit (no tags) no-ops. A `v*` tag with an absent or unparseable DOI is
- *  "published but unlinked" and stays a hard error (exit 1), not papered over. */
+/** The new-version reminder [R16] [R23]: on a paper already published, posts a sticky reminder
+ *  and a label. Before the first deposit (no tags) it does nothing. A `v*` tag with no readable
+ *  DOI means published but unlinked, and fails (exit 1). */
 export function runNewVersionReminder(input: NotifyInput, gh: GhPr): Outcome {
   const { repoRoot, mystPath, repo, pr } = input;
   let tags: string[];

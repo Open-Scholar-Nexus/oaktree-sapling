@@ -1,14 +1,10 @@
 /**
- * checks.ts: the journal-controlled editorial check layer (slice 4 "Layer B").
+ * The editorial checks a journal turns on in `journal.yml` `checks:`, from the MIT-licensed
+ * `@curvenote/check-implementations` and `@curvenote/check-definitions` (credited in README.md).
+ * The journal picks the set and an author cannot weaken it, which is why MyST's `error_rules`,
+ * which the author controls, cannot be the gate.
  *
- * The editorial checks themselves are provided by the MIT-licensed
- * `@curvenote/check-implementations` (the runnable catalog) + `@curvenote/check-definitions`
- * (the contract types + check definitions), a dependency, credited in engine/README.md.
- *
- * This module supplies the journal-driven RUNNER (`runChecks`, the journal's `journal.yml`
- * `checks:` selects which catalog checks run + marks them optional; the paper author cannot
- * weaken the set) and the GitHub Check-Run REPORTER (`toCheckRun`, pure). MyST `error_rules`
- * is NOT used for the gate: it is author-overridable, so it can't be the journal's contract.
+ * `runChecks` runs them; `toCheckRun` turns the results into a GitHub Check Run.
  */
 import { basename, isAbsolute, relative } from 'node:path';
 import { DERIVED_CONFIG_FILE } from './yaml-io.js';
@@ -24,11 +20,8 @@ import {
   type CheckTags,
 } from '@curvenote/check-definitions';
 
-// The RUNNABLE catalog (`@curvenote/check-implementations`) transitively loads myst-cli, which
-// crashes unbundled on Node 24 (the docx interop bug, [R51]). So it is imported DYNAMICALLY, only
-// when checks actually run (through the esbuild bundle), keeping the pure reporter + Layer-A unit
-// tests free of the toolchain, exactly as `@curvenote/check-definitions` (types + ids) is safe to
-// import statically.
+// Imported only when checks run, inside the bundle: the catalog loads myst-cli, which crashes
+// unbundled on Node 24 [R51]. The definitions package is safe to import statically.
 type CheckInterface = CheckDefinition & {
   validate: (
     session: ISession,
@@ -40,15 +33,14 @@ async function curvenoteChecks(): Promise<CheckInterface[]> {
   return mod.checks as CheckInterface[];
 }
 
-// Re-export the curvenote contract so the rest of the engine has one import site for the shape.
+// One import site for curvenote's types.
 export { CheckStatus };
 export type { Check, CheckDefinition, CheckResult, CheckTags };
 
-/** Their `CheckResult` carries no `id` (it is keyed by the check that produced it); we stamp
- *  the journal-selected id on so the reporter can render + group results. */
+/** curvenote's result carries no id; we add the journal's, so the report can group results. */
 export type EngineCheckResult = CheckResult & { id: string };
 
-/** The ids the engine can run: the full curvenote catalog (a journal selects any subset). */
+/** The ids oak can run: the whole curvenote catalog. */
 export const CHECK_CATALOG_IDS = CURVENOTE_DEFINITIONS.map((c) => c.id);
 
 export interface JournalCheck {
@@ -58,12 +50,9 @@ export interface JournalCheck {
 }
 
 /**
- * Run the journal's selected curvenote checks against a loaded+processed myst Session (see
- * `MystEdge.withProjectSession`). For each journal check `{id, optional?, ...options}` we find
- * the matching `CheckInterface` in their catalog, `await validate(session, check)`, flatten the
- * results, stamp the id (and `optional` when the journal marked it so, an optional fail never
- * gates). An unknown id surfaces as a `status:'error'` result (a journal misconfig, surfaced,
- * not silently skipped).
+ * Runs the journal's checks against a processed myst session (`MystEdge.withProjectSession`).
+ * Each result gets the check's id, and `optional` when the journal set it. An unknown id becomes
+ * an error result, so a misconfigured journal shows up in the report.
  */
 export async function runChecks(
   session: ISession,
@@ -91,7 +80,7 @@ export async function runChecks(
 }
 
 /* --------------------------------------------------------------------------
- * Reporting: the GitHub Check-Run payload (pure, OURS). The CI step POSTs this via gh.ts.
+ * Reporting: the GitHub Check Run payload, posted by gh.ts.
  * ------------------------------------------------------------------------ */
 
 export interface CheckRunAnnotation {
@@ -113,18 +102,14 @@ export interface CheckRun {
 const GITHUB_MAX_ANNOTATIONS = 50;
 
 /**
- * Map check results → a GitHub Check-Run payload. A non-optional fail/error → `failure`
- * conclusion (gates merge); optional findings annotate as warnings and never gate. Results
- * carrying `file`+`position` become inline annotations (capped at 50).
+ * Maps results to a GitHub Check Run. A failure or error in a required check concludes `failure`
+ * and blocks the merge; an optional check's findings are warnings. A result with a file and a
+ * position becomes an inline annotation, up to 50.
  *
- * GitHub keys annotations off repo-relative paths and 422s a batch it cannot resolve, so
- * `pathBase` (the checkout root, `GITHUB_WORKSPACE`, else the paper root) relativizes only the
- * absolute paths curvenote emits; already-relative ones pass through untouched.
- *
- * A finding anchored to the DERIVED config never annotates: since [R82] the session reads the
- * generated, gitignored `myst.oak.yml`, which GitHub cannot resolve and whose line numbers are
- * not the author's, so its inline pin is dropped while the finding still shows in the summary
- * and sticky comment.
+ * GitHub rejects an annotation batch with a path it cannot resolve, so absolute paths are made
+ * relative to `pathBase` (`GITHUB_WORKSPACE`, else the paper root). A finding in the derived
+ * `myst.oak.yml` gets no annotation, since that file is gitignored and its lines are not the
+ * author's [R82]; it still shows in the summary.
  */
 export function toCheckRun(
   results: EngineCheckResult[],
@@ -148,8 +133,7 @@ export function toCheckRun(
     )
     .join('\n');
   const table = `${messages.pr.checkTableHeader}\n${rows}`;
-  // Notes report HOW the run happened, never WHETHER it passed: they must not touch
-  // `conclusion`, but must stay visible, so they render above the table where reviewers look.
+  // Notes describe the run itself and never change `conclusion`; they render above the table.
   const summary = notes.length
     ? `${notes.map((n) => `> ⚠️ ${n}`).join('\n>\n')}\n\n${table}`
     : table;
@@ -169,35 +153,28 @@ export function toCheckRun(
 }
 
 /* --------------------------------------------------------------------------
- * Stage-2 PR write-back: the sticky comment + Check Run poster (slice 4b).
- *
- * PR write-back runs in the trusted Stage-2 `workflow_run` job (base context): the untrusted
- * `pull_request` job that runs `oak validate` over fork content holds no write token. Stage 1
- * writes the report file; Stage 2 runs `oak check-post`, which reads that precomputed report
- * and posts BOTH a first-class Check Run (gates + annotates) AND an always-on sticky PR comment
- * (authors rarely click the Check Run "Details"). Never re-runs validate or rebuilds content.
+ * Posting to the pull request. The `pull_request` job that runs `oak validate` on the pull
+ * request's code holds no write token, so it only writes the report. The trusted `workflow_run`
+ * job then runs `oak check-post`, which posts the report as a Check Run and as a sticky comment,
+ * since authors rarely open a Check Run's details. It never reruns validate.
  * ------------------------------------------------------------------------ */
 
-/** Sticky-comment header for the journal-checks PR comment (stable identifier, do not rename;
- *  the upsert key `<!-- oak-sticky: oak-journal-checks -->` is baked into posted comments). */
+/** The sticky comment's header. Do not rename: posted comments carry it in their upsert key
+ *  `<!-- oak-sticky: oak-journal-checks -->`. */
 export const STICKY_CHECKS = 'oak-journal-checks';
 
-/** The `oak validate --report` payload check-post reads. Only `checkRun` is load-bearing here
- *  (the rest of the validate envelope is carried for completeness / debugging). */
+/** The `oak validate --report` payload. check-post only uses `checkRun`. */
 export interface ChecksReport {
   status?: 'ok' | 'error';
   checkRun: CheckRun;
-  /** `oak validate`'s info-level notes ([R82]), for anything reading the report directly. Stage
-   *  2 does not re-render them: `toCheckRun` already embedded them in `checkRun.summary`, so a
-   *  degraded run reads differently in the PR UI without check-post knowing notes exist. */
+  /** `oak validate`'s notes [R82], already part of `checkRun.summary`. */
   notes?: string[];
   [k: string]: unknown;
 }
 
 /**
- * Render the always-on sticky PR comment from a checks report (pure). Opens with the sticky
- * marker so `sticky()` upserts it in place; a headline from the Check-Run conclusion + title
- * ("N passed, M failed"), then the same markdown table the Check Run carries, then a footer.
+ * The sticky comment for a report: the sticky marker, a headline from the Check Run's
+ * conclusion and title, the same table, and a footer.
  */
 export function checksComment(report: ChecksReport, shimTouched: string[] = []): string {
   const { conclusion, title, summary } = report.checkRun;
@@ -213,18 +190,17 @@ export function checksComment(report: ChecksReport, shimTouched: string[] = []):
   ].join('\n');
 }
 
-/** Gated paths (design §6a): everything under `.github/`, `CODEOWNERS` and `paper-environment.yml`. A PR that
- *  touches any of these can change how the checks themselves run, so a report produced under it
- *  cannot be fully trusted: check-post surfaces that as an advisory ([R83]). */
+/** The gated paths [design §6a]: `.github/`, `CODEOWNERS` and `paper-environment.yml`. A pull
+ *  request that changes them can change how the checks run, so check-post warns that its report
+ *  cannot be fully trusted [R83]. */
 export function frozenPathsTouched(changed: string[]): string[] {
   return changed.filter(
     (p) => p === 'CODEOWNERS' || p === 'paper-environment.yml' || p.startsWith('.github/'),
   );
 }
 
-/** The advisory banner for a PR that edits the frozen shim: a warning, not a gate (it never
- *  changes the Check-Run conclusion): legitimate engine-upgrade PRs edit these files too, so
- *  blocking would be wrong. Renders in both the sticky comment and the Check-Run summary. */
+/** The warning for a pull request that edits the gated files. It never changes the conclusion,
+ *  since upgrade pull requests edit these files too. Shown in the comment and the Check Run. */
 export function shimWarning(touched: string[]): string {
   const shown = touched
     .slice(0, 5)
@@ -234,8 +210,8 @@ export function shimWarning(touched: string[]): string {
   return messages.pr.shimWarning(shown, more);
 }
 
-/** Seams for `cmdCheckPost`: structurally satisfied by `gh.realCheckRun` and
- *  `gh.realGhPr.sticky`, injected as fakes in unit tests. */
+/** Injected so tests can use fakes. The real ones are `gh.realCheckRun` and
+ *  `gh.realGhPr.sticky`. */
 export interface CheckPostDeps {
   checkRun: { create(repo: string, headSha: string, name: string, run: CheckRun): void };
   sticky(repoRoot: string, prNumber: string, header: string, body: string): void;
@@ -249,10 +225,8 @@ export interface CheckPostOutcome {
 }
 
 /**
- * `oak check-post` orchestration: post the precomputed report's Check Run on the PR HEAD sha
- * and, when a PR number is given, upsert the always-on sticky comment. Best-effort: each post
- * is guarded so a failing seam (e.g. a read-only token) degrades to a `::warning::` and never
- * crashes the Stage-2 job. Posting needs `GH_TOKEN` in the real `gh` seams.
+ * `oak check-post`: posts the report's Check Run on the pull request's head commit and, given a
+ * pull request number, updates the sticky comment. Posting needs `GH_TOKEN`.
  */
 export function cmdCheckPost(
   input: { report: ChecksReport; repo: string; sha: string; pr?: string; shimTouched?: string[] },
@@ -264,9 +238,8 @@ export function cmdCheckPost(
   let checkRunPosted = false;
   let commentPosted = false;
 
-  // Advisory only: prefix the Check-Run title + summary so the warning is visible on the check
-  // itself, but leave `conclusion` untouched; this must not gate merge (legit upgrade PRs edit
-  // the shim too; CODEOWNERS is the real gate). [R83]
+  // Shown on the check itself, but `conclusion` stays: upgrade pull requests edit these files
+  // too, and CODEOWNERS is the gate [R83].
   const checkRunToPost = shimTouched.length
     ? {
         ...report.checkRun,
@@ -295,8 +268,8 @@ export function cmdCheckPost(
     }
   }
 
-  // The Check Run IS the merge gate, so failing to post it leaves the PR blocked with nothing
-  // said. A comment failure stays cosmetic: the check carries the verdict ([R144]).
+  // The Check Run is the merge gate, so failing to post it is an error: the pull request would
+  // stay blocked with no explanation. A failed comment only warns [R144].
   return {
     status: checkRunPosted ? 'ok' : 'error',
     checkRunPosted,
