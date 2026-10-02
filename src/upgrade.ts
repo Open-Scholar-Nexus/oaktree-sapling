@@ -1,20 +1,16 @@
 /**
- * upgrade.ts: `oak upgrade` (slice 5). Render-and-compare lifecycle: pick a repo, render the
- * frozen `.github/` at a target engine tag from the repo's own answers, 2-way diff against the
- * files on disk, and offer {bump the logic ref only / resync the drifted frozen files / both}
- * as a PR. No stored `template_version` marker and no 3-way merge: the frozen files are fully
- * reconstructable from `pins.yml` + `CODEOWNERS`, and they are policy-never-edited, so any
- * divergence is reset to the template render (a deliberate hand-edit still shows in the PR).
+ * `oak upgrade`: renders a paper's gated files at a target version from the repository's own
+ * settings (`pins.yml`, `CODEOWNERS`), compares them with the files on disk, and opens a pull
+ * request. Gated files are never edited by hand, so any difference is reset to the template;
+ * a deliberate edit still shows in the pull request. Nothing records a template version.
  *
- *  - **version-only** bumps `project.options.oaktree-sapling.version` → target in `myst.yml`
- *    (YAML round-trip, never sed). Data, not CODEOWNERS-gated.
- *  - **files-only** overwrites the drifted frozen files with the target render. Touched paths
- *    are all under `/.github/` (+ `/CODEOWNERS`), so the PR lands on the CODEOWNERS gate.
+ *  - **version-only** sets `project.options.oaktree-sapling.version` in `myst.yml`. Not gated.
+ *  - **files-only** overwrites the gated files that differ, so the pull request needs a
+ *    CODEOWNERS review.
  *  - **both** does both.
  *
- * Output is always a PR (reusing openDoiPr's branch→commit-as-bot→push→gh-pr-create shape),
- * never a silent push; a clean repo with no requested bump opens nothing. SEAMS (target
- * resolution, template materialization, the PR) are injected, faked in tests. No myst-cli.
+ * A repository that is up to date gets no pull request. Finding the target, getting the
+ * template and opening the pull request are injected, so tests use fakes.
  */
 import { existsSync, readFileSync, writeFileSync, mkdirSync, copyFileSync } from 'node:fs';
 import { join, dirname, posix } from 'node:path';
@@ -28,33 +24,33 @@ import {
 } from './bootstrap.js';
 import * as msg from './messages.js';
 
-/** Exported so `conformance reset` sweeps the same prefix it opens ([R117]). */
+/** Exported so `conformance reset` removes the branches this opens [R117]. */
 export const UPGRADE_BRANCH_PREFIX = 'oak/upgrade-';
 
 const PINS_REL = posix.join('.github', 'actions', 'engine', 'pins.yml');
 const CODEOWNERS_REL = 'CODEOWNERS';
 
 /* --------------------------------------------------------------------------
- * Answers read back from the repo (pins.yml + CODEOWNERS + myst.yml)
+ * Settings read back from the repository (pins.yml, CODEOWNERS, myst.yml)
  * ------------------------------------------------------------------------ */
 
-/** The CODEOWNERS owner column of the first gated line, or a safe default. The WHOLE column,
- *  not its last token: a tenant may gate a path on more than one owner ([R126]). */
+/** The owner column of the first gated line in CODEOWNERS, or a default. The whole column: a
+ *  path may have more than one owner [R126]. */
 export function ownerFromCodeowners(src: string): string {
   const first = Object.values(codeownersColumns(src))[0];
   return first ?? '@owner';
 }
 
-/** The tenant's own owner column per gated path, so an owner they added survives a resync
- *  ([R126]). A repo with no CODEOWNERS yields {}, and every line renders with the answer. */
+/** The repository's owner column per gated path, so an owner added by hand survives a resync
+ *  [R126]. Empty without a CODEOWNERS file. */
 function codeownersOnDisk(repoRoot: string): Record<string, string> {
   const co = join(repoRoot, CODEOWNERS_REL);
   return existsSync(co) ? codeownersColumns(readFileSync(co, 'utf8')) : {};
 }
 
 export function readAnswers(repoRoot: string): TemplateAnswers {
-  // A non-paper directory has no pins.yml; an absent file is the same answer as an empty one
-  // ("no engine pin here"), which cmdUpgrade turns into a sentence rather than an ENOENT stack.
+  // A missing pins.yml means no oak pin here; cmdUpgrade reports that in a sentence rather than an
+  // ENOENT stack.
   const pinsPath = join(repoRoot, PINS_REL);
   const pins = existsSync(pinsPath) ? readDoc(pinsPath) : null;
   const engineRepo = String(pins?.get('engine_repo') ?? '');
@@ -73,11 +69,11 @@ export function readAnswers(repoRoot: string): TemplateAnswers {
 }
 
 /* --------------------------------------------------------------------------
- * Drift (pure): render each frozen file at target, 2-way diff vs disk
+ * Differences: each gated file rendered at the target, compared with the file on disk
  * ------------------------------------------------------------------------ */
 
-/** The frozen files scanned for drift: everything under `.github/` plus `CODEOWNERS`. The
- *  author content (myst.yml/index.md/bib.bib) is NOT frozen and never resynced. */
+/** The gated files: everything under `.github/`, and `CODEOWNERS`. The paper's own content
+ *  (`myst.yml`, `index.md`, `bib.bib`) is not gated and never reset. */
 function frozenFiles(templateAtTarget: string): string[] {
   const out: string[] = [];
   const walk = (dir: string, prefix: string): void => {
@@ -92,8 +88,8 @@ function frozenFiles(templateAtTarget: string): string[] {
   return out.sort();
 }
 
-/** Render a single frozen file at the target with the repo's answers. `owners` carries the
- *  repo's own CODEOWNERS columns ({@link codeownersOnDisk}). */
+/** Renders one gated file at the target with the repository's settings, keeping its own
+ *  CODEOWNERS columns ({@link codeownersOnDisk}). */
 export function renderFrozenFile(
   templateAtTarget: string,
   rel: string,
@@ -111,11 +107,9 @@ export function renderFrozenFile(
 }
 
 /**
- * Frozen-path files ON DISK that the target template does not ship ([R143]).
- *
- * Reported, never deleted: this path also holds a tenant's own additions (a `dependabot.yml`,
- * their own workflow), and with no stamped manifest the engine cannot tell those from a
- * workflow it shipped and later retired. So the human decides, with the list in front of them.
+ * Files under the gated paths that the target template does not ship [R143]. They are reported,
+ * not deleted: they may be the repository's own additions (a `dependabot.yml`), and nothing
+ * records which files oak once shipped, so a person decides.
  */
 export function extraFrozenFiles(repoRoot: string, templateAtTarget: string): string[] {
   const shipped = new Set(frozenFiles(templateAtTarget));
@@ -134,8 +128,8 @@ export function extraFrozenFiles(repoRoot: string, templateAtTarget: string): st
 }
 
 /**
- * Drift = frozen files whose target render differs from the on-disk file (or that are absent
- * on disk). 2-way, reset-to-template semantics. Returns the changed relative paths, sorted.
+ * The gated files whose render at the target differs from the file on disk, or that are
+ * missing. Returns their relative paths, sorted.
  */
 export function computeDrift(
   repoRoot: string,
@@ -153,11 +147,11 @@ export function computeDrift(
 }
 
 /* --------------------------------------------------------------------------
- * Seams
+ * Injected, so tests use fakes
  * ------------------------------------------------------------------------ */
 
 export interface UpgradePr {
-  /** branch → add `paths` → commit as bot → push → `gh pr create`; returns the PR URL. */
+  /** Branch, commit as the bot, push, open the pull request; returns its URL. */
   open(
     repoRoot: string,
     opts: { branch: string; title: string; body: string; paths: string[] },
@@ -165,9 +159,9 @@ export interface UpgradePr {
 }
 
 export interface UpgradeDeps {
-  /** Latest engine release tag for `engineRepo` (used when --to is absent). */
+  /** The latest release tag of `engineRepo`, used when `--to` is absent. */
   resolveTarget(engineRepo: string): string;
-  /** Materialize `templates/paper/` of `engineRepo` at `tag`; returns its path. */
+  /** Gets `templates/paper/` of `engineRepo` at `tag`; returns its path. */
   materializeTemplate(engineRepo: string, tag: string): string;
   pr: UpgradePr;
   log(msg: string): void;
@@ -187,7 +181,7 @@ export interface Outcome {
   result: Record<string, unknown>;
 }
 
-/** Write the target version into myst.yml's engine coordinate (YAML round-trip). */
+/** Writes the target version into `myst.yml`. */
 function bumpVersion(repoRoot: string, target: string): void {
   const myst = join(repoRoot, 'myst.yml');
   const doc = readDoc(myst);
@@ -195,7 +189,7 @@ function bumpVersion(repoRoot: string, target: string): void {
   writeDoc(myst, doc);
 }
 
-/** Overwrite the drifted frozen files on disk with their target render. */
+/** Overwrites the gated files that differ with their render at the target. */
 function resyncFiles(
   repoRoot: string,
   templateAtTarget: string,
@@ -219,8 +213,8 @@ export async function cmdUpgrade(input: UpgradeInput, deps: UpgradeDeps): Promis
       result: { status: 'error', message: msg.upgrade.notAPaperRepo(PINS_REL) },
     };
   }
-  // A target we picked must say so (same rule as bootstrap): "--to v1.2.3" and "whatever is
-  // newest right now" are different promises, and only one of them is reproducible.
+  // A target oak picked is printed, as in bootstrap: `--to v1.2.3` is reproducible, "the newest
+  // right now" is not.
   const targetGiven = Boolean(input.to);
   const target = input.to ?? deps.resolveTarget(answers.engineRepo);
   const wantVersion = mode === 'version-only' || mode === 'both';
@@ -228,8 +222,7 @@ export async function cmdUpgrade(input: UpgradeInput, deps: UpgradeDeps): Promis
 
   const versionChanged = wantVersion && answers.version !== target;
 
-  // Only materialize + diff the template when a files resync is requested (the frequent
-  // version-only bump needs no clone).
+  // The template is only fetched for a files resync; a version-only bump needs none.
   let drift: string[] = [];
   let extra: string[] = [];
   let templateAtTarget: string | null = null;
@@ -242,8 +235,8 @@ export async function cmdUpgrade(input: UpgradeInput, deps: UpgradeDeps): Promis
 
   if (!versionChanged && !filesChanged) {
     deps.log(msg.upgrade.upToDate(target, answers.engineRepo, targetGiven));
-    // Still say what the target does not ship: "up to date" must not imply "nothing to look at"
-    // when a retired workflow is sitting there running ([R143]).
+    // Report files the target no longer ships even when up to date: a retired workflow may
+    // still be running [R143].
     if (extra.length) deps.log(msg.upgrade.planExtraFiles(extra));
     return {
       exitCode: 0,

@@ -1,28 +1,15 @@
 /**
- * compose.ts: the pure heart of the engine (design §3, §12).
+ * Works out what a paper's build needs beyond its own config: the `extends:` chain
+ * (local paths, no network) and the additions matched to the oak version. It is pure: reading
+ * config, writing files and building happen at the CLI edge, so tests need no toolchain.
  *
- * Wires the engine/edition/brand `extends:` chain (all LOCAL paths, no network at
- * build) and computes the version-matched asset overrides the committed files never
- * carry. myst resolves the rest. This function is PURE: (paper, engine, instance, env,
- * resolved-project) → a plan. All IO (loadConfig, the two working-tree YAML round-trips,
- * running the build) lives at the CLI edge, so this stays unit-testable against the
- * fixtures with no toolchain.
+ * MyST merges `exports` by id, whole entries only, and the base config wins [R52]. The derived
+ * config's base is predictable, while the order between `extends:` entries is not, since they
+ * load in parallel. So compose's additions go into the base as `ownOverride`, and its typst
+ * export is complete: the edition's `articles` plus oak's `template:`.
  *
- * MECHANISM (corrected against the mystmd oracle, [R52]). MyST merges `exports` by
- * `id`, whole-entry, with `base` winning and NO field-level merge
- * (myst-frontmatter fillPageFrontmatter.ts:241-250). In `loadConfig` the paper's OWN
- * config is the final `base` (deterministic), but extends-vs-extends precedence runs
- * under `Promise.all` (config.ts:207-231) → non-deterministic. So we do NOT emit a
- * trailing `_composed.yml` extends fragment (design §3 step 4 would race the edition's
- * same-id typst export). Instead compose emits `ownOverride`, merged into the paper's
- * OWN working-tree config, where base-wins is deterministic. Because exports don't
- * field-merge, the engine's typst entry must be COMPLETE: it carries `articles` (read
- * from the resolved edition export) alongside the engine-pinned `template:` (finding 2:
- * the engine owns the template; the migrated edition config drops it).
- *
- * Two-pass at the edge: (1) write `extends:` = extendsChain → loadConfig → resolved
- * exports (now carry the edition's `articles`); (2) compose(resolved) → ownOverride →
- * write into the working-tree own project/site → build. Neither write is committed.
+ * The CLI runs it in two passes: write the chain and resolve the project, then write
+ * `ownOverride` over it and build. Neither write is committed.
  */
 import * as msg from './messages.js';
 import { isAbsolute, join } from 'node:path';
@@ -30,69 +17,46 @@ import { readEngineOptions } from './schema.js';
 import { typstTemplateUrl, themeZipUrl } from './assets.js';
 
 /**
- * Where the typst PDF is written, relative to the paper root (myst resolves a relative
- * `output` against the DECLARING config's directory, `collectExportOptions.js:250`).
- *
- * Pinned because myst's default path is derived from the export's declaring file, which for a
- * project-config export is the config itself. That made both the directory
- * (`_build/exports/<slug(config)>_typst/`) and (for MULTI-ARTICLE exports) the filename
- * (`resolveOutput` falls back to `sourceFile` when `articles` has more than one entry) depend on
- * an engine-internal filename, so renaming the derived config silently moved every paper's
- * artifact. An explicit `output` decouples them: one documented path for every paper.
- *
- * The extension is load-bearing: WITH one myst treats the value as the exact output file;
- * without one it is a folder, which would leave the multi-article filename still derived.
+ * Where the typst PDF is written, relative to the paper root. Without it, myst derives the path
+ * from the file that declares the export, here the derived config, so renaming that file moved
+ * every paper's PDF. The extension matters: with one, myst treats the value as the file; without,
+ * as a folder, and a multi-article export would still be named after the config.
  */
 export const TYPST_OUTPUT = '_build/exports/paper.pdf';
 
-/** Brand asset fields that carry a PATH myst resolves against the PAPER root, not the
- *  declaring brand dir ([R62]), so compose absolutizes them against `<instanceRoot>/brand`.
- *  Split by config namespace, because the two consumers read different places:
- *   - `site.options.*`: the book-theme (HTML): logo/logo_dark/favicon/style.
- *   - `project.options.logo`: the typst PDF watermark. The engine template ships NO
- *     default watermark (design.md:160-161 keep the shared engine neutral); the tenant
- *     supplies `logo-watermark.svg` and it flows into the typst `logo` template option.
- *  Kept as one definition so the edge reader (yaml-io) and compose agree on the keys. */
+/** Brand fields holding a path, which myst resolves against the paper root rather than the
+ *  brand directory [R62], so compose makes them absolute against `<instanceRoot>/brand`. By
+ *  namespace: `site.options.*` for the HTML theme (logo, logo_dark, favicon, style), and
+ *  `project.options.logo` for the PDF watermark, which oak's template has no default for. One
+ *  definition, so yaml-io and compose agree. */
 export const BRAND_ASSET_KEYS = {
   site: ['logo', 'logo_dark', 'favicon', 'style'],
   project: ['logo'],
 } as const;
 
-/** A value that myst can already resolve without help: an absolute local path, or a URL
- *  (the site build fetches+caches URLs via resolveToAbsolute). Only instance-RELATIVE
- *  paths (`./logo.svg`, `logo.svg`) need rewriting, those are what fail through extends.
- *  (A URL is fine for HTML but NOT typst, which can't fetch, so a brand watermark must be
- *  a real file; validating that belongs in `oak validate`, not here.) */
+/** A value myst resolves on its own: an absolute path or a URL. Only paths relative to the
+ *  journal repository need rewriting. A URL works for HTML but not for typst, which cannot
+ *  fetch; `oak validate` is the place to check that. */
 export function isBrandAssetUrl(value: string): boolean {
   return /^[a-zA-Z][\w+.-]*:\/\//.test(value); // matches scheme://…
 }
 
 /**
- * Is a tenant-declared `typst_template:` an INSTANCE-RELATIVE PATH (vs a myst template
- * NAME or a URL)? myst's `template:` accepts all three ([R74] source policy), and a bare
- * string is genuinely ambiguous: `lapreprint-typst` is a valid myst NAME, and it is also
- * a valid relative directory name. The brand-asset predicate can't be reused: it treats
- * every non-URL, non-absolute string as a path, which would silently rewrite a name into
- * `<instanceRoot>/lapreprint-typst` and then 404.
- *
- * So the rule is EXPLICIT rather than filesystem-sniffed: **only `./` and `../` mean "a
- * path in my instance-config"**. Everything else (bare names, absolute paths, URLs) is
- * handed to myst verbatim. One string always means one thing, independent of what happens
- * to exist on disk (the alternative, probing the filesystem the way myst's own
- * `resolveInputs` does, makes a typo'd path silently become a template-name lookup).
- *
- * `oak validate` warns when a bare value shadows a real instance-config directory, so the
- * one case where a tenant would guess wrong is loud rather than mysterious.
+ * Whether a journal's `typst_template:` is a path in the journal repository, rather than a myst
+ * template name or a URL [R74]. A bare string is ambiguous (`lapreprint-typst` is both a valid
+ * name and a valid directory), and the brand-asset rule would take it for a path, so this rule is
+ * explicit: only a `./` or `../` value is a path, and everything else goes to myst unchanged.
+ * Checking the disk instead would turn a mistyped path into a name lookup. `oak validate` warns
+ * when a bare value matches a directory in the journal repository.
  */
 export function isInstanceRelativeTemplate(value: string): boolean {
   return /^\.\.?\//.test(value);
 }
 
-/** Resolve a tenant-declared template value against the instance-config root (where
- *  `journal.yml` lives, NOT `<instanceRoot>/brand`, which is where the brand-asset
- *  helper rebases). Only `./`/`../` values are rewritten; see
- *  {@link isInstanceRelativeTemplate}. Exported so `oak validate` checks the same path
- *  compose will emit (the [R62] discipline). */
+/** Makes a journal's template path absolute against the journal repository root, where
+ *  `journal.yml` lives (brand assets use `brand/`). Only `./` and `../` values change; see
+ *  {@link isInstanceRelativeTemplate}. Exported so `oak validate` checks the path compose emits
+ *  [R62]. */
 export function resolveTenantTemplate(instanceRoot: string, value: string): string {
   return isInstanceRelativeTemplate(value) ? join(instanceRoot, value) : value;
 }
@@ -102,15 +66,15 @@ function needsAbsolutizing(value: string): boolean {
   return !isBrandAssetUrl(value);
 }
 
-/** Resolve one brand asset value the way compose does: instance-relative ->
- *  `<instanceRoot>/brand/<x>`; URLs / absolute paths pass through. Exported so `oak validate`
- *  checks the SAME resolved path compose will emit ([R62]). */
+/** Resolves one brand asset as compose does: a relative value against `<instanceRoot>/brand/`,
+ *  URLs and absolute paths as they are. Exported so `oak validate` checks the path compose emits
+ *  [R62]. */
 export function resolveBrandAssetPath(instanceRoot: string, value: string): string {
   return needsAbsolutizing(value) ? join(instanceRoot, 'brand', value.replace(/^\.\//, '')) : value;
 }
 
-/** Absolutize the instance-relative values among `raw` (the {@link BRAND_ASSET_KEYS}
- *  subset for one namespace) against `<instanceRoot>/brand`. URLs / absolute pass through. */
+/** Makes the relative values in `raw` (one namespace of {@link BRAND_ASSET_KEYS}) absolute
+ *  against `<instanceRoot>/brand`. */
 function absolutizeBrandAssets(
   instanceRoot: string,
   raw: Record<string, string> | undefined,
@@ -126,97 +90,80 @@ function absolutizeBrandAssets(
   return out;
 }
 
-/** The subset of a myst-resolved `project` (from loadConfig) that compose reads.
- *  We depend only on myst's field NAMES, never a shape we define (design §12). */
+/** The fields compose reads from the project myst resolved, by myst's own names [R185]. */
 export interface ResolvedProject {
   id?: string;
   title?: string;
   options?: Record<string, unknown>;
   exports?: Array<Record<string, unknown>>;
-  /** The gallery card's image. Pinned by `paper-base.yml`; validated (never rewritten) by
-   *  `oak validate`: myst resolves it against the paper's source file, not the config that
-   *  declared it, so no absolutizing is needed (unlike brand assets, [R62]). */
+  /** The gallery card's image, set by `paper-base.yml`. myst resolves it against the paper's
+   *  source file, so unlike brand assets it needs no rewriting [R62]; `oak validate` checks it. */
   thumbnail?: string;
 }
 
 export interface ComposeInput {
-  /** Absolute/relative path to the paper project root (holds myst.yml). */
+  /** Path to the paper root, which holds myst.yml. */
   paperRoot: string;
-  /** Path to the checked-out engine root (holds paper-base.yml). */
+  /** Path to oak's checkout, which holds paper-base.yml. */
   engineRoot: string;
-  /** Path to instance-config (cloned sibling or the repo root); null = --no-instance. */
+  /** Path to the journal repository; null with --no-instance. */
   instanceRoot: string | null;
-  /** The paper's myst-resolved project (loadConfig().project), read-only. */
+  /** The project as myst resolved it (`loadConfig().project`). Read only. */
   resolvedProject: ResolvedProject;
-  /** Engine ref + repo, from the raw shim read of pins.yml + options (used for URLs). */
+  /** oak's version and repository, read before the merge; used for URLs. */
   engineRepo: string;
   engineVersion: string;
-  /** Per-paper edition (raw shim read of options); selects editions/<edition>.yml. */
+  /** The paper's edition, read before the merge; selects `editions/<edition>.yml`. */
   edition: string;
-  /** '/<repo>' in CI (Pages subpath) or '' locally / for previews (design §12a). */
+  /** `/<repo>` in CI for GitHub Pages; empty locally and for previews [design §12a]. */
   baseUrl: string;
-  /** Override the version-matched asset URLs. Defaults resolve to the engine tag's
-   *  release zips (which only exist once a tag is cut); dev/CI-from-checkout and tests
-   *  pass local paths, and `siteTemplate: null` omits the override so myst uses its
-   *  default book-theme (needed until the fork release exists). */
+  /** Overrides for the asset URLs. By default they point at the release's zips; checkouts and
+   *  tests pass local paths. */
   assetOverrides?: {
-    /** `--typst-template <path>`: the EXPLICIT dev/CI override. Tops the whole precedence
-     *  chain (it is a deliberate "render with this one" instruction, not a default). */
+    /** `--typst-template <path>`: an explicit override, above every other template. */
     typstTemplate?: string;
-    /** The engine's own template when it exists as a local directory in the checkout
-     *  (`<engineRoot>/templates/typst`). The BOTTOM of the chain, a default that tenant
-     *  and author both outrank. Absent → the engine tag's release zip URL. */
+    /** oak's own template as a local directory (`<engineRoot>/templates/typst`), the default
+     *  that journal and author templates outrank. When absent, the release zip URL. */
     engineTypstTemplate?: string;
     /** string → use it; null → omit site.template (myst default); undefined → release zip. */
     siteTemplate?: string | null;
   };
-  /** The tenant's `typst_template:` exactly as declared in `<instanceRoot>/journal.yml`,
-   *  raw-lifted by the edge (yaml-io): the [R68] `readBrandAssetOptions` precedent, adopted
-   *  for the same reason. It CANNOT be declared as `exports[].template` in an extends layer:
-   *  a sibling declaring `exports:` races ([R72]) and trips the disjointness guard, so
-   *  paper-base stays the sole `exports:` declarer. Value accepts name | path | URL; a
-   *  `./`-relative one is absolutized against `<instanceRoot>` ({@link resolveTenantTemplate}). */
+  /** The journal's `typst_template:`, read as written from `journal.yml` [R68]. It cannot be an
+   *  `exports[].template` in an `extends:` layer: a second layer declaring `exports:` makes the
+   *  merge unpredictable [R72], so paper-base stays the only one. A name, path or URL; a `./`
+   *  path is made absolute ({@link resolveTenantTemplate}). */
   tenantTypstTemplate?: string;
-  /** Raw brand asset fields (the {@link BRAND_ASSET_KEYS} subset, per namespace) as
-   *  DECLARED in the instance's `brand/brand.yml`, lifted verbatim by the edge (yaml-io).
-   *  compose absolutizes any instance-relative value against `<instanceRoot>/brand` so it
-   *  resolves through the extends chain ([R62]: myst resolves logo/favicon/watermark against
-   *  the paper root, not the brand dir that declared them). URLs / already-absolute paths
-   *  pass through untouched. Read from brand.yml raw (not the merged config) on purpose:
-   *  these are journal-controlled assets; a paper's OWN relative asset must NOT be
-   *  reinterpreted as brand-relative, and the brand's asset wins deterministically. */
+  /** The brand's asset fields ({@link BRAND_ASSET_KEYS}), read as written from
+   *  `brand/brand.yml`. compose makes relative values absolute against `<instanceRoot>/brand`,
+   *  since myst resolves them against the paper root [R62]. Read from brand.yml itself so a
+   *  paper's own relative asset is never taken for the brand's. */
   brandAssets?: { site?: Record<string, string>; project?: Record<string, string> };
 }
 
 export interface OwnOverride {
-  /** Merged into the working-tree own `project` (deterministic base-wins by id). `options`
-   *  carries the typst watermark (`logo`), the ONE engine/brand-owned project option
-   *  compose sets; written per-key so author sibling options survive (finding 3). */
+  /** Merged into the base `project`. `options` carries only the PDF watermark (`logo`), set key
+   *  by key so the author's other options survive. */
   project?: { exports?: Array<Record<string, unknown>>; options?: Record<string, string> };
-  /** Merged into the working-tree own `site`. `options` carries per-key asset overrides
-   *  ([R62]); site.options merges field-wise base-wins (fillSiteFrontmatter), so setting
-   *  individual keys leaves the brand's other options intact. */
+  /** Merged into the base `site`. `options` carries the asset overrides [R62]; MyST merges
+   *  `site.options` field by field, so the brand's other options survive. */
   site?: { template?: string; options?: Record<string, string> };
 }
 
 export interface ComposeResult {
-  /** Ordered `extends:` entries (local paths) written into the working-tree myst.yml. */
+  /** The `extends:` entries, as local paths, in order. */
   extendsChain: string[];
-  /** Engine overrides merged into the paper's OWN working-tree config ([R52]); wins
-   *  deterministically over the extends chain by myst's base-wins-by-id rule. */
+  /** oak's additions, merged into the base config, which wins over the chain [R52]. */
   ownOverride: OwnOverride;
-  /** Env the build must run with (myst reads BASE_URL from env, not config). */
+  /** Environment for the build: MyST reads BASE_URL from the environment only. */
   env: { BASE_URL: string };
   warnings: string[];
 }
 
-/** The extends chain (local paths): a pure function of the LAYOUT, independent of the
- *  resolved config. The two-pass build (§12a, [R52]) needs the chain BEFORE it can
- *  resolve, so this is split out from compose(). Returns warnings for --no-instance.
+/** The `extends:` chain, from the repository layout alone, so the two-pass build can write it
+ *  before anything is resolved [design §12a] [R52]. Warns without a journal.
  *
- *  There is exactly one kind of engine build: a PAPER. The journal site is a plain myst
- *  project in the instance-config repo with its own single-entry chain ([S1]/[S8], [R80]);
- *  `oak` never runs there, so the engine has no second chain shape to assemble. */
+ *  It is always a paper's chain: the journal website is a plain MyST project with its own
+ *  config, and oak never builds it [R80]. */
 export function extendsChainFor(input: {
   engineRoot: string;
   instanceRoot: string | null;
@@ -249,9 +196,8 @@ export function compose(input: ComposeInput): ComposeResult {
     assetOverrides = {},
   } = input;
 
-  // --- R36 cross-check: the shim reads options RAW (pre-extends via yq); the CLI reads
-  // them RESOLVED (post-extends via loadConfig). A stray project.options in an extended
-  // edition config could make the two disagree, assert they don't. ------------------
+  // The engine action reads the version and edition before the merge, the CLI after it; an
+  // edition config declaring `project.options` could make them differ [R36].
   const resolved = readEngineOptions(resolvedProject.options);
   if (resolved.version !== engineVersion || resolved.edition !== edition) {
     throw new Error(
@@ -261,25 +207,21 @@ export function compose(input: ComposeInput): ComposeResult {
 
   const { extendsChain, warnings } = extendsChainFor({ engineRoot, instanceRoot, edition });
 
-  // --- ownOverride: engine overrides merged into the paper's OWN config ([R52]) -----
+  // ownOverride: oak's additions to the base config [R52].
   const ownOverride: OwnOverride = {};
 
-  // Typst export: stamp `output:` (TYPST_OUTPUT) and `template:` (precedence, [R76], below).
-  // myst merges exports by id WHOLE-ENTRY (no field merge), so the winning entry must be
-  // complete: spread the resolved export (carries the edition's `articles`) and set both
-  // fields, in own config where base-wins is deterministic. Declaring them in paper-base
-  // instead would let a paper's whole-entry override (a multi-article export) silently drop
-  // them, breaking paths for exactly the papers that need them ([R52]/[R53]).
+  // Typst export: set `output:` and `template:` (precedence below [R76]). MyST merges exports
+  // whole, so the entry is complete: the resolved export (with the edition's `articles`) plus
+  // both fields. Declaring them in paper-base would let a multi-article paper's own entry drop
+  // them [R52] [R53].
   const typst = (resolvedProject.exports ?? []).find(
     (e) => e['format'] === 'typst' || e['id'] === 'typst-pdf',
   );
   if (typst) {
-    // --- Template precedence ([R76]): author > tenant > engine -----------------------
-    // A `template:` surviving onto the resolved export can only be the author's own: paper-base
-    // and editions never declare one, so it lands myst-natively in the deterministic base slot
-    // with no [R72] race. Whatever is declared is honoured (name | path | URL, pinned or
-    // floating) and never silently dropped; floating is a validate WARN ([R5]), and DOI
-    // reproducibility rides the deposited RESOLVED bytes (zenodo.ts), not this chain.
+    // Template precedence [R76]: author, then journal, then oak. A `template:` on the resolved
+    // export can only be the author's, since paper-base and editions declare none [R72]. It is
+    // honoured whatever it is; `oak validate` warns when it floats [R5], and the deposit keeps
+    // the resolved template, so a DOI stays reproducible.
     const authorTemplate =
       typeof typst['template'] === 'string' && typst['template']
         ? (typst['template'] as string)
@@ -293,8 +235,8 @@ export function compose(input: ComposeInput): ComposeResult {
     const template =
       assetOverrides.typstTemplate ?? authorTemplate ?? tenantTemplate ?? engineTemplate;
 
-    // An author reskin away from journal identity must be REVIEWABLE in the PR, never forbidden
-    // (the tenant's call, not the engine's) and never silent; `oak validate` mirrors it there.
+    // A paper overriding the journal's template is allowed, but must show in the pull request;
+    // `oak validate` reports it there too.
     if (authorTemplate && tenantTemplate && !assetOverrides.typstTemplate) {
       warnings.push(
         `author template overrides the journal's: this paper declares its own typst ` +
@@ -309,8 +251,7 @@ export function compose(input: ComposeInput): ComposeResult {
     );
   }
 
-  // Theme: the pinned book-theme fork zip (design §7), version-matched to the engine.
-  // `siteTemplate: null` omits the override so myst falls back to its default theme.
+  // The pinned book-theme fork zip [design §7]. `siteTemplate: null` leaves MyST's default theme.
   const site: NonNullable<OwnOverride['site']> = {};
   const siteTemplate =
     assetOverrides.siteTemplate === undefined ? themeZipUrl() : assetOverrides.siteTemplate;
@@ -318,10 +259,9 @@ export function compose(input: ComposeInput): ComposeResult {
     site.template = siteTemplate;
   }
 
-  // Brand assets ([R62]): absolutize instance-relative logo/favicon/watermark against the
-  // brand dir so they resolve through extends (myst would otherwise resolve them against the
-  // paper root, where the instance's files don't exist). Only when an instance is present.
-  // HTML assets land in site.options; the typst watermark in project.options.logo.
+  // Brand assets [R62]: relative values made absolute against `brand/`, since MyST resolves them
+  // against the paper root, where the journal's files are not. HTML assets go in site.options,
+  // the PDF watermark in project.options.logo.
   if (instanceRoot && input.brandAssets) {
     const siteOptions = absolutizeBrandAssets(
       instanceRoot,
