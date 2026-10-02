@@ -1,15 +1,7 @@
 /**
- * docs-links.ts: the tenant-facing documentation link table.
- *
- * Messages, seeded templates and errors reference a SYMBOL here, never a URL string. Two
- * consequences worth keeping: the domain lives in exactly one constant (`DOCS_BASE` in
- * `assets.ts`), and a page move is a one-line edit in this file rather than a hunt through
- * prose.
- *
- * Each value is a TOPIC: a page path, optionally with an anchor. Every anchor names an
- * explicit `(label)=` target written into the page at that spot, never a heading slug,
- * which would move silently when the heading is reworded. `docs/` and this table are
- * therefore edited together; the docs build fails on a label that no longer resolves.
+ * The pages oak links to. Messages and templates name an entry here, so the domain lives only in
+ * `DOCS_BASE` and moving a page is a one-line edit. Anchors are `(label)=` targets, which survive
+ * a reworded heading. `test/docs-links.test.ts` checks that every entry resolves.
  */
 import { DOCS_BASE } from './assets.js';
 
@@ -78,7 +70,7 @@ export const DOCS = {
   bootstrap: 'reference/cli#bootstrap',
   /** `oak upgrade`: render-and-compare against a paper or repo, and the PR it opens. */
   upgrade: 'reference/cli#upgrade',
-  /** `oak conformance <reset|certify>`: the paper-CI harness and its recorded verdict. */
+  /** `oak conformance <reset|certify>`: testing a release on GitHub, and the result it records. */
   conformance: 'reference/cli#conformance',
   /** `journal.yml`. */
   fileJournalYml: 'reference/files#file-journal-yml',
@@ -92,9 +84,7 @@ export const DOCS = {
 
 export type DocsTopic = (typeof DOCS)[keyof typeof DOCS];
 
-/** A topic → the URL to print. `base` is injectable so a fork can point elsewhere; a trailing
- *  slash on an injected base is stripped, since `<base>//<topic>` is a different URL to most
- *  servers and an easy thing to hand us. */
+/** The URL for a topic. `base` lets a fork point elsewhere; a trailing slash on it is dropped. */
 export function docsUrl(topic: string, base: string = DOCS_BASE): string {
   return `${base.replace(/\/+$/, '')}/${topic}`;
 }

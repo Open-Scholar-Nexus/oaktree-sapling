@@ -7,7 +7,8 @@ here="$(cd "$(dirname "$0")" && pwd)"
 engine="$(cd "$here/.." && pwd)"
 verb="${1:-}"
 
-# Only a release tag carries the build, so a missing one means a branch or an unknown ref is pinned [R57].
+# Only a release tag carries the build, so a missing one means a branch or an unknown ref is
+# pinned [R57]. Nothing else rejects a branch pin.
 if [ ! -f "$engine/dist/cli.cjs" ]; then
   echo "::error::this oak version has no build (dist/cli.cjs); pin a release tag, not a branch"
   exit 1
@@ -30,7 +31,8 @@ if [ "$verb" = "build" ] || [ "$verb" = "release" ]; then
   extra+=(--base-url "$base_url")
 fi
 
-# The verbs that read journal settings get a clone of the journal repository [R19] [R27] [R69] [R96].
+# The verbs that read journal settings get a clone of the journal repository [R19] [R27]
+# [R189] [R192].
 # "." means this repository is the journal, and oak finds it on its own.
 if [ "$verb" = "build" ] || [ "$verb" = "release" ] || [ "$verb" = "deploy-preview" ] || [ "$verb" = "validate" ] || [ "$verb" = "deposit" ]; then
   if [ -n "${INSTANCE_REPO:-}" ] && [ "${INSTANCE_REPO}" != "." ]; then
@@ -45,7 +47,7 @@ echo "engine dir : $engine"
 echo "verb       : $verb"
 echo "instance   : ${INSTANCE_REPO:-<co-located>}"
 echo "extra args : ${extra[*]:-<none>}"
-# Whether each secret is set, never its value [R18].
+# Whether each secret is set, never its value.
 echo "GH_TOKEN     : ${GH_TOKEN:+present}"
 echo "ZENODO_TOKEN : ${ZENODO_TOKEN:+present}"
 echo "CLOUDFLARE   : ${CLOUDFLARE_API_TOKEN:+present}"

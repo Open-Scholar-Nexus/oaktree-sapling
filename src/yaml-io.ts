@@ -1,10 +1,6 @@
 /**
- * yaml-io.ts: working-tree myst.yml round-trips (design §12 "no sed/grep", [R3]).
- *
- * The two-pass build injects the `extends:` chain and then the engine `ownOverride` into
- * the paper's working-tree myst.yml. Both are YAML-lib round-trips through the `yaml`
- * Document API, which preserves the author's content, key order, and comments, never a
- * textual patch. Nothing here is committed; CI/local operate on the working tree.
+ * Reads and writes myst config through the `yaml` Document API, which keeps the author's keys,
+ * order and comments; never a text patch [R3].
  */
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -15,17 +11,10 @@ import * as msg from './messages.js';
 import { UserError } from './messages.js';
 
 /**
- * The DERIVED config the engine builds from ([R71]). The author's `myst.yml` is an INPUT,
- * never written, and this file is the engine's output: their config materialized into the
- * base slot plus the engine `extends:` chain and `ownOverride`. mystmd is pointed at it via
- * `new Session({ configFiles: [DERIVED_CONFIG_FILE] })`.
- *
- * It must live at the PAPER ROOT (not `_build/`): myst resolves `toc`/`bibliography`/`index`/
- * `plugins` and the lazily-resolved brand assets relative to the config's own directory.
- *
- * It is NOT cleaned up after the build, myst's HTML build calls `process.exit(0)` on success
- * ([R67.3]), so a `finally`/atexit delete would not run on the success path. It is gitignored
- * by the frozen template instead.
+ * The derived config oak builds from [R71]: the author's `myst.yml` plus the `extends:` chain
+ * and compose's additions. It sits at the paper root because myst resolves `toc`,
+ * `bibliography`, plugins and brand assets relative to the config. It is not deleted after a
+ * build, since myst exits the process on success [R67.3]; the paper template gitignores it.
  */
 export const DERIVED_CONFIG_FILE = 'myst.oak.yml';
 
@@ -42,20 +31,15 @@ export function writeDoc(path: string, doc: Document): void {
   writeFileSync(path, doc.toString());
 }
 
-/** Write the derived config, stamped with a generated-file banner so a tenant who finds it
- *  in a diff or an editor knows immediately what it is and that `myst.yml` is the source. */
+/** Writes the derived config with a banner saying it is generated from `myst.yml`. */
 export function writeDerivedDoc(path: string, doc: Document): void {
   doc.commentBefore = DERIVED_BANNER;
   writeFileSync(path, doc.toString());
 }
 
-/** Raw read of the engine coordinate straight from the paper's own myst.yml, the local
- *  `oak` equivalent of the shim's `yq` read (design §6a): PRE-extends, so it can run
- *  before the engine/instance are even resolved. Mirrors the composite action exactly.
- *
- *  `mystPath` is only for the error message, and the error is a {@link UserError}: a missing
- *  coordinate is a paper that needs a line put back, not an engine fault, so it must reach the
- *  author as one sentence naming the file; the UX test got the raw stack instead. */
+/** Reads the version and edition from the author's myst.yml before any merge, as the engine
+ *  action does, so it works before the journal is resolved [design §6a]. A missing value is the
+ *  author's to fix, so it throws a {@link UserError} naming the file. */
 export function readEngineCoordinateRaw(
   doc: Document,
   mystPath = 'myst.yml',
@@ -68,20 +52,18 @@ export function readEngineCoordinateRaw(
   if (typeof edition !== 'string' || !edition) {
     throw new UserError(msg.build.missingEngineCoordinate('edition', mystPath));
   }
-  // The shape check belongs HERE, not only on the schema: this raw read feeds
-  // `extendsChainFor` a pass before anything validates the resolved config ([R141]).
+  // Checked here too: this value picks a file in `extendsChainFor` before anything validates the
+  // merged config [R141].
   if (!EDITION_ID.safeParse(edition).success) {
     throw new UserError(msg.build.badEdition(edition, mystPath));
   }
   return { version, edition };
 }
 
-/** Raw read of the instance brand's asset fields ({@link BRAND_ASSET_KEYS}) straight from
- *  `<instanceRoot>/brand/brand.yml`, the values compose() absolutizes ([R62]). Read from
- *  brand.yml directly (not the merged config) so only brand-DECLARED assets are treated as
- *  brand-relative; a paper's own relative asset is never reinterpreted. Returns the fields
- *  per namespace (`site.options.*` for HTML, `project.options.logo` for the typst
- *  watermark). Absent file / keys → empty maps (compose emits nothing). */
+/** Reads the asset fields from `<instanceRoot>/brand/brand.yml` itself, not the merged config,
+ *  so only the brand's own assets are resolved against it and a paper's relative path is left
+ *  alone [R62]. Returns `site.options` (HTML) and `project.options.logo` (the PDF watermark);
+ *  empty when absent. */
 export function readBrandAssetOptions(instanceRoot: string): {
   site: Record<string, string>;
   project: Record<string, string>;
@@ -104,14 +86,9 @@ export function readBrandAssetOptions(instanceRoot: string): {
   };
 }
 
-/** Raw read of the tenant's `typst_template:` from `<instanceRoot>/journal.yml`, the
- *  journal's own typst template ([R76]), which compose puts between the author's and the
- *  engine's. Same raw-lift shape as {@link readBrandAssetOptions} and for the same reason,
- *  but from `journal.yml` rather than `brand.yml`: `journal.yml` is engine-read DATA that
- *  never enters myst's extends merge, so the key costs nothing. (`brand.yml` IS a myst
- *  config layer: myst's `validateObjectKeys` accepts only version/site/project/extend and
- *  warns about anything else, so a template key there would emit a myst warning on every
- *  build and read like a myst key that does nothing.) Absent file/key → undefined. */
+/** Reads `typst_template:` from `<instanceRoot>/journal.yml`: the journal's template, between
+ *  the author's and oak's [R76]. It lives in journal.yml, which myst never reads, because
+ *  brand.yml is a myst config layer and myst warns about keys it does not know. */
 export function readTenantTypstTemplate(instanceRoot: string): string | undefined {
   const journalPath = join(instanceRoot, 'journal.yml');
   if (!existsSync(journalPath)) return undefined;
@@ -119,15 +96,9 @@ export function readTenantTypstTemplate(instanceRoot: string): string | undefine
   return typeof value === 'string' && value ? value : undefined;
 }
 
-/** Raw read of the AUTHOR's own typst `template:` straight from `<paperRoot>/myst.yml`:
- *  the paper's own layer of the [R76] precedence chain. Same raw-lift discipline as
- *  {@link readBrandAssetOptions}/{@link readTenantTypstTemplate}, and required for the same
- *  reason once `oak validate` reads the COMPOSED config ([R82]): the override detection rests
- *  on "paper-base and editions never declare `template:`, so a surviving value can only be the
- *  author's" ([R79]), but compose STAMPS one onto the composed export, so on the composed view
- *  every paper would look like an override. Provenance is the point, so it is lifted outside
- *  the merge. Absent file/export/key, or a malformed config → undefined (that is another
- *  check's finding, not this reader's). */
+/** Reads the author's own typst `template:` from `<paperRoot>/myst.yml`. The composed config
+ *  cannot say who set it, since compose always stamps one [R79] [R82], so the override check
+ *  [R76] reads it here. Undefined when absent or unreadable; that is another check's finding. */
 export function readAuthorTypstTemplate(paperRoot: string): string | undefined {
   const authorPath = join(paperRoot, 'myst.yml');
   if (!existsSync(authorPath)) return undefined;
@@ -147,19 +118,16 @@ export function readAuthorTypstTemplate(paperRoot: string): string | undefined {
   return typeof template === 'string' && template ? template : undefined;
 }
 
-/** Pass 1: set the `extends:` chain (replaces any existing; the new-model committed
- *  paper carries none, but a migrating paper may still have URL pins we overwrite). */
+/** Pass 1: replaces any `extends:` with oak's chain. A migrated paper may still carry old URL
+ *  pins. */
 export function setExtends(doc: Document, chain: string[]): void {
   if (chain.length === 0) doc.delete('extends');
   else doc.set('extends', chain);
 }
 
-/** Pass 2: merge the engine `ownOverride` into the working-tree own config. Touches
- *  `project.exports`, `site.template`, and individual `site.options.<asset>` /
- *  `project.options.<asset>` keys ([R62]). Asset keys are set individually (not by
- *  replacing the whole `options` map) so author sibling options, `youtube`, the
- *  `oaktree-sapling` coordinate: survive (finding 3). The only project option compose
- *  ever sets is the brand's typst watermark `logo`, a journal-owned asset. */
+/** Pass 2: merges compose's additions: `project.exports`, `site.template`, and single asset
+ *  keys under `site.options` and `project.options` [R62]. Keys are set one by one so the
+ *  author's other options, and the `oaktree-sapling` key, survive. */
 export function applyOwnOverride(doc: Document, override: OwnOverride): void {
   if (override.project?.exports) {
     doc.setIn(['project', 'exports'], override.project.exports);

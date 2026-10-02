@@ -44,6 +44,7 @@ rm -rf "$tmp_typst"
 export PATH="$PWD/bin:$PATH"
 bin/typst --version
 
+# A bad release breaks every paper that pins it [R181].
 npm ci
 npm run typecheck # vitest does not check types
 npm run bundle
