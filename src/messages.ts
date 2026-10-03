@@ -153,7 +153,7 @@ export const usage = (): string =>
   `  oak deposit status  [--sandbox] [--instance <dir>]\n` +
   `  oak release --tag <vX.Y.Z> [--no-build] [--paper <dir>] [--instance <dir>] [--site-url <url>]\n` +
   `  oak conformance reset   --repo <owner/name>\n` +
-  `  oak conformance certify --repo <owner/name> --tag <vX.Y.Z> [--fork-repo <owner/name>]\n` +
+  `  oak conformance run   --repo <owner/name> --tag <vX.Y.Z> [--fork-repo <owner/name>]\n` +
   `\n` +
   `Any command\n` +
   `  --json      print the full machine-readable result on stdout instead of a summary\n` +
@@ -873,12 +873,11 @@ export const workflow = {
     'set per paper repo: `oak bootstrap paper` accepts the same flags, or set them in the ' +
     "paper repo's environment settings.",
   conformanceResetArgs: 'oak conformance reset: --repo <owner/name> is required',
-  conformanceCertifyArgs:
-    'oak conformance certify: --repo <owner/name> and --tag <vX.Y.Z> are required',
+  conformanceRunArgs: 'oak conformance run: --repo <owner/name> and --tag <vX.Y.Z> are required',
   conformanceUsage:
     'oak conformance: usage:\n' +
-    '  oak conformance reset   --repo <owner/name>\n' +
-    '  oak conformance certify --repo <owner/name> --tag <vX.Y.Z> [--run-id <id>] [--fork-repo <owner/name>] [--record <path>]',
+    '  oak conformance reset --repo <owner/name>\n' +
+    '  oak conformance run   --repo <owner/name> --tag <vX.Y.Z> [--run-id <id>] [--fork-repo <owner/name>] [--record <path>]',
 
   /** Printed while a git/gh call is in flight, then erased; see gh.ts `showWorking`. */
   working: (what: string): string => `  … ${what}`,

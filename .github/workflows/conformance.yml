@@ -25,12 +25,12 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  certify:
+  run:
     runs-on: ubuntu-latest
     if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     environment: conformance
     permissions:
-      contents: write # upload cert.json to the release
+      contents: write # upload conformance.json to the release
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -67,10 +67,10 @@ jobs:
           echo "only_reset=$only_reset" >> "$GITHUB_OUTPUT"
 
       - name: Test the release, or reset
-        id: cert
+        id: test
         env:
           GH_TOKEN: ${{ secrets.CONFORMANCE_PAT }}
-          FIXTURE: ${{ vars.CONFORMANCE_FIXTURE_REPO }}
+          TEST_REPO: ${{ vars.CONFORMANCE_TEST_REPO }}
           TAG: ${{ steps.r.outputs.tag }}
           ONLY_RESET: ${{ steps.r.outputs.only_reset }}
           RUN_ID: ${{ github.run_id }}
@@ -80,30 +80,30 @@ jobs:
           # `oak upgrade` pushes to the test repo over https, and the runner has no credential helper.
           git config --global url."https://x-access-token:${GH_TOKEN}@github.com/".insteadOf "https://github.com/"
           if [ "$ONLY_RESET" = true ] || [ -z "$TAG" ]; then
-            node dist/cli.cjs conformance reset --repo "$FIXTURE"
+            node dist/cli.cjs conformance reset --repo "$TEST_REPO"
             exit 0
           fi
           set +e
           fork=()
           [ -n "$FORK_REPO" ] && fork=(--fork-repo "$FORK_REPO") # an empty value is refused [R134]
-          node dist/cli.cjs conformance certify --repo "$FIXTURE" --tag "$TAG" --run-id "$RUN_ID" "${fork[@]}" --record cert.json
+          node dist/cli.cjs conformance run --repo "$TEST_REPO" --tag "$TAG" --run-id "$RUN_ID" "${fork[@]}" --record conformance.json
           echo "code=$?" >> "$GITHUB_OUTPUT"
 
       - name: Upload the result to the release
-        if: ${{ steps.r.outputs.tag != '' && steps.r.outputs.only_reset != 'true' && hashFiles('cert.json') != '' }}
+        if: ${{ steps.r.outputs.tag != '' && steps.r.outputs.only_reset != 'true' && hashFiles('conformance.json') != '' }}
         env:
           GH_TOKEN: ${{ github.token }} # the PAT cannot write this repo
           TAG: ${{ steps.r.outputs.tag }}
-        run: gh release upload "$TAG" cert.json --clobber
+        run: gh release upload "$TAG" conformance.json --clobber
 
       # Fails on 1 or on no result [R111]; 3 means a third party timed out, which is not oak's fault.
       - name: Fail if the test failed
         if: ${{ steps.r.outputs.tag != '' && steps.r.outputs.only_reset != 'true' }}
         env:
-          CODE: ${{ steps.cert.outputs.code }}
+          CODE: ${{ steps.test.outputs.code }}
         run: |
-          if [ ! -f cert.json ]; then
-            echo "::error::the test wrote no cert.json (exit ${CODE:-none})"
+          if [ ! -f conformance.json ]; then
+            echo "::error::the test wrote no conformance.json (exit ${CODE:-none})"
             exit 1
           fi
           case "$CODE" in

@@ -70,7 +70,7 @@ export const DOCS = {
   bootstrap: 'reference/cli#bootstrap',
   /** `oak upgrade`: render-and-compare against a paper or repo, and the PR it opens. */
   upgrade: 'reference/cli#upgrade',
-  /** `oak conformance <reset|certify>`: testing a release on GitHub, and the result it records. */
+  /** `oak conformance <reset|run>`: testing a release on GitHub, and the result it records. */
   conformance: 'reference/cli#conformance',
   /** `journal.yml`. */
   fileJournalYml: 'reference/files#file-journal-yml',
