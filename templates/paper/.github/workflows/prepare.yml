@@ -40,3 +40,57 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           ZENODO_TOKEN: ${{ secrets.ZENODO_TOKEN }}
           ZENODO_TOKEN_SANDBOX: ${{ secrets.ZENODO_TOKEN_SANDBOX }}
+
+  # GitHub holds the pull_request runs of a pull request github-actions[bot] opens, so the DOI
+  # pull request gets its Journal checks here: main plus the DOI fields, and no secret.
+  doi-pr-checks:
+    needs: prepare
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write # post the "Journal checks" Check Run
+      pull-requests: write # the sticky checks comment
+    steps:
+      - id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          pr=$(gh pr list --repo "$REPO" --head zenodo-doi --state open --json number,headRefOid --jq '.[0] // empty | "\(.number) \(.headRefOid)"')
+          if [ -z "$pr" ]; then
+            echo "::notice::no open DOI pull request; nothing to check"
+            exit 0
+          fi
+          read -r number sha <<< "$pr"
+          if [[ ! "$number" =~ ^[0-9]{1,10}$ || ! "$sha" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::unexpected answer from gh pr list: $pr"
+            exit 1
+          fi
+          echo "number=$number" >> "$GITHUB_OUTPUT"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+      - if: ${{ steps.pr.outputs.sha }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.pr.outputs.sha }}
+
+      # A failing verdict still has to be posted, so only a missing report stops the job.
+      - if: ${{ steps.pr.outputs.sha }}
+        continue-on-error: true
+        uses: ./.github/actions/engine
+        with:
+          args: validate --report report.json
+
+      - if: ${{ steps.pr.outputs.sha }}
+        uses: ./.github/actions/engine
+        with:
+          args: >-
+            check-post
+            --report report.json
+            --repo ${{ github.repository }}
+            --sha ${{ steps.pr.outputs.sha }}
+            --base ${{ github.event.repository.default_branch }}
+            --verified-head ${{ steps.pr.outputs.sha }}
+            --pr ${{ steps.pr.outputs.number }}
+        env:
+          GH_TOKEN: ${{ github.token }}

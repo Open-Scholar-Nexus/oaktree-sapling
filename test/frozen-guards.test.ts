@@ -23,6 +23,7 @@ import { join } from 'node:path';
 import { parseDocument } from 'yaml';
 import { readdirSync } from 'node:fs';
 import { SECRET_MAP } from '../src/bootstrap.js';
+import { ENGINE_ID_SENTINEL } from '../src/schema.js';
 
 const SHIM = 'templates/paper';
 
@@ -112,6 +113,70 @@ describe('the engine action refuses a malformed ref before echoing it ([R155])',
       expect(r.code).toBe(0);
       expect(r.output.trim()).toBe(`ref=${v}`);
     }
+  });
+});
+
+/** Runs `script` in a fresh directory with `tool` on PATH printing `value`, and a real
+ *  GITHUB_OUTPUT file. */
+function stubbedStep(script: string, tool: string, value: string) {
+  const dir = mkdtempSync(join(tmpdir(), 'oak-step-'));
+  const bin = mkdtempSync(join(tmpdir(), 'oak-bin-'));
+  writeFileSync(join(dir, 'myst.yml'), 'project: {}');
+  writeFileSync(join(bin, tool), `#!/bin/sh\nprintf '%s' "$STUB_VALUE"\n`);
+  chmodSync(join(bin, tool), 0o755);
+  const outFile = join(dir, 'gh_output');
+  writeFileSync(outFile, '');
+  const r = run(
+    script,
+    { PATH: `${bin}:${process.env.PATH}`, STUB_VALUE: value, GITHUB_OUTPUT: outFile },
+    dir,
+  );
+  return { ...r, output: readFileSync(outFile, 'utf8') };
+}
+
+describe('Paper CI holds the Pages deploy while the id is the template placeholder', () => {
+  const script = stepScript('.github/workflows/ci.yml', 'id');
+
+  it('marks the starter paper as a placeholder', () => {
+    const r = stubbedStep(script, 'yq', ENGINE_ID_SENTINEL);
+    expect(r.code).toBe(0);
+    expect(r.output.trim()).toBe('placeholder=true');
+  });
+
+  it('lets a real id deploy', () => {
+    const r = stubbedStep(script, 'yq', 'j-2026-alpha');
+    expect(r.code).toBe(0);
+    expect(r.output).toBe('');
+  });
+
+  it('the deploy job reads that output', () => {
+    const doc = parseDocument(
+      readFileSync(join(SHIM, '.github/workflows/ci.yml'), 'utf8'),
+    ).toJS() as { jobs: Record<string, { if?: string }> };
+    expect(doc.jobs['deploy-pages']!.if).toContain("needs.build.outputs.placeholder != 'true'");
+  });
+});
+
+describe('prepare finds the DOI pull request it checks', () => {
+  const script = stepScript('.github/workflows/prepare.yml', 'pr');
+
+  it('passes on the number and head commit', () => {
+    const sha = 'a'.repeat(40);
+    const r = stubbedStep(script, 'gh', `12 ${sha}`);
+    expect(r.code).toBe(0);
+    expect(r.output).toBe(`number=12\nsha=${sha}\n`);
+  });
+
+  it('does nothing when no DOI pull request is open', () => {
+    const r = stubbedStep(script, 'gh', '');
+    expect(r.code).toBe(0);
+    expect(r.output).toBe('');
+  });
+
+  it('refuses an answer that is not a number and a commit', () => {
+    const r = stubbedStep(script, 'gh', '12 main\nsha=evil');
+    expect(r.code).toBe(1);
+    expect(r.output).toBe('');
   });
 });
 

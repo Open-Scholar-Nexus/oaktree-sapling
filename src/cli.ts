@@ -232,6 +232,13 @@ async function cmdStart(argv: string[]): Promise<number> {
   // A journal repo's myst.yml is its website, a plain myst project: `oak build` refuses it
   // ({@link isJournalRepo}), but here myst serves it as it is, as the site workflow builds it.
   if (isJournalRepo(paperRoot)) {
+    if (
+      existsSync(join(paperRoot, 'package.json')) &&
+      !existsSync(join(paperRoot, 'node_modules'))
+    ) {
+      process.stderr.write(annotate('error', msg.start.siteNotInstalled(paperRoot)) + '\n');
+      return 2;
+    }
     process.stderr.write(msg.start.journalSite(paperRoot) + '\n');
     await edge.start(paperRoot, startOpts);
     return await never();
@@ -634,14 +641,10 @@ function validateSummary(out: {
   warnings: Array<{ check: string; message: string }>;
   checks: Array<{ id: string; status: string; message?: string; optional?: boolean }>;
   notes: string[];
+  checkRun: { title: string };
 }): string[] {
-  const passed = out.checks.filter((c) => String(c.status) === 'pass').length;
-  const counts = [
-    out.errors.length ? msg.validate.countErrors(out.errors.length) : '',
-    out.warnings.length ? msg.validate.countWarnings(out.warnings.length) : '',
-    out.checks.length ? msg.validate.countChecks(passed, out.checks.length) : '',
-  ].filter(Boolean);
-  const lines = [msg.validate.verdict(out.status === 'ok', counts)];
+  // The Check Run's title, so the terminal and the pull request give the same counts.
+  const lines = [msg.validate.verdict(out.status === 'ok', [out.checkRun.title])];
   for (const e of out.errors) lines.push(`  ✗ ${e.check}: ${e.message}`);
   for (const w of out.warnings) lines.push(`  ! ${w.check}: ${w.message}`);
   for (const c of out.checks) {

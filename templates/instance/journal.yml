@@ -20,7 +20,7 @@ preview:
 zenodo: {}
   # community: your-zenodo-community
   # description_blurb: >-
-  #   Created as part of the CHANGE-ME Journal.
+  #   Published in CHANGE-ME Journal.
 
 # editorial checks a paper must pass in CI. https://scholar.nexus/oaktree-sapling/guide/checks
 checks:

@@ -34,6 +34,24 @@ describe('toCheckRun (reporting: GitHub Check Run, ours)', () => {
     expect(r.conclusion).toBe('success');
   });
 
+  it('counts an optional failure as a warning, not a failure', () => {
+    const r = toCheckRun([
+      { id: 'x', status: CheckStatus.fail, optional: true },
+      { id: 'y', status: CheckStatus.pass },
+      { id: 'z', status: CheckStatus.fail },
+    ]);
+    expect(r.title).toBe('1 passed, 1 failed, 1 warning');
+    const ok = toCheckRun([
+      { id: 'x', status: CheckStatus.fail, optional: true },
+      { id: 'w', status: CheckStatus.error, optional: true },
+      { id: 'y', status: CheckStatus.pass },
+    ]);
+    expect(ok.title).toBe('1 passed, 0 failed, 2 warnings');
+    expect(checksComment({ checkRun: ok })).toContain(
+      '✅ Journal checks passed: 1 passed, 0 failed, 2 warnings',
+    );
+  });
+
   it('emits inline annotations from file+position (unist), capped at 50', () => {
     const results: EngineCheckResult[] = Array.from({ length: 60 }, (_, i) => ({
       id: `c${i}`,
