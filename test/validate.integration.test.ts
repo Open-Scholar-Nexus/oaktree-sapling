@@ -219,7 +219,7 @@ describe.skipIf(bundleState() === 'absent')(
       expect(written.checkRun.conclusion).toBe('failure');
       // The report must carry the REASON, since it is what Stage 2 posts on the PR.
       expect(written.checkRun.summary).toContain('pins.yml');
-      expect(String(written.errors[0])).toContain('no instance-config resolved');
+      expect(String(written.errors[0])).toContain('no journal repo found');
     }, 60_000);
 
     it('the error names pins.yml and the co-located rule, not just the flag', () => {
