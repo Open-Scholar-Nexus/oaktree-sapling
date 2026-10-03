@@ -1,13 +1,8 @@
 /**
- * gallery.test.ts: the journal site's `paper-cards` plugin ([R80]).
- *
- * The plugin is a standalone `.mjs` myst loads at runtime by URL, not engine TypeScript,
- * so vitest imports it directly. The directive/transform shell is deliberately thin and the
- * decisions are exported as PURE helpers, which is what makes them testable here with no
- * myst session and no network.
- *
- * There is no offline canary for the rendered gallery: an HTML build needs the network theme
- * ([R60]), so "the card actually renders" is a live check, not a unit one.
+ * The journal website's `paper-cards` plugin [R80]. It is a plain `.mjs` that myst loads by URL,
+ * so vitest imports it directly. Its decisions are exported as pure functions, testable without
+ * myst or the network. Whether a card renders needs an HTML build, which needs the theme from
+ * the network [R60], so it is not tested here.
  */
 import { describe, it, expect } from 'vitest';
 import { mkdtempSync, writeFileSync } from 'node:fs';
@@ -44,7 +39,7 @@ describe('selectEntries', () => {
     entry({ slug: 'c', edition: 'ed-2026' }),
   ];
 
-  it('returns EVERY paper when :edition: is omitted (the scaffold single-page case)', () => {
+  it('returns every paper when :edition: is omitted (the single page the template starts with)', () => {
     expect(selectEntries(registry).map((e: { slug: string }) => e.slug)).toEqual(['a', 'b', 'c']);
     expect(selectEntries(registry, {}).map((e: { slug: string }) => e.slug)).toEqual([
       'a',
@@ -59,7 +54,7 @@ describe('selectEntries', () => {
     ).toEqual(['a', 'c']);
   });
 
-  it('preserves REGISTRY FILE ORDER: the editor controls sequence by insertion point', () => {
+  it("keeps the registry's order, which the editor sets", () => {
     const reversed = [...registry].reverse();
     expect(selectEntries(reversed).map((e: { slug: string }) => e.slug)).toEqual(['c', 'b', 'a']);
   });
@@ -75,7 +70,7 @@ describe('paperUrls', () => {
     );
   });
 
-  it('honors site_url (custom domain / non-Pages hosting) without touching the raw URLs', () => {
+  it('honours site_url (a custom domain, or hosting elsewhere) without changing the raw URLs', () => {
     const u = paperUrls(entry({ site_url: 'https://journal.example.org/alpha' }));
     expect(u.siteUrl).toBe('https://journal.example.org/alpha');
     expect(u.configUrl).toBe('https://raw.githubusercontent.com/me/alpha-paper/HEAD/myst.yml');
@@ -91,7 +86,7 @@ describe('paperUrls', () => {
     );
   });
 
-  it('uses HEAD, not main, so a differently-named default branch still resolves', () => {
+  it('uses HEAD, not main, so another default branch name still works', () => {
     expect(paperUrls(entry()).configUrl).toContain('/HEAD/');
     expect(paperUrls(entry()).configUrl).not.toContain('/main/');
   });
@@ -115,15 +110,14 @@ describe('cardFrom', () => {
     expect(card.children[2].children[0].value).toBe('neuro | imaging');
   });
 
-  it('renders the DOI as TEXT, never a link (a DOI link becomes a citation)', () => {
+  it('renders the DOI as text, since a DOI link becomes a citation', () => {
     const card = cardFrom(entry({ doi: '10.5281/zenodo.123' }), config());
     expect(kinds(card)).toContain('footer');
     const node = card.children.at(-1).children[0].children[0];
     expect(node.type).toBe('text');
     expect(node.value).toBe('DOI: 10.5281/zenodo.123');
-    // Regression guard for the first live run: myst turns any link whose url is a DOI into a
-    // `cite` (dois.ts:239-242), which renders a citation label + a bibliography on the card
-    // and costs a rate-limited doi.org fetch per paper; one bad DOI reddens the journal.
+    // myst turns a link to a DOI into a citation, with a label and a bibliography on the card
+    // and a rate-limited doi.org request per paper, so the DOI is plain text.
     expect(JSON.stringify(card)).not.toContain('doi.org');
   });
 
@@ -136,15 +130,15 @@ describe('cardFrom', () => {
     expect(cardFrom(entry(), { project: {} }).children[0].children[0].value).toBe('alpha');
   });
 
-  it('does NOT fetch the thumbnail itself; myst downloads the emitted URL (stage: document)', () => {
-    // The card carries a REMOTE image url; transformImagesToDisk localizes it later, which
-    // is also what makes a broken thumbnail an error-kind warning under --strict.
+  it('does not fetch the thumbnail; myst downloads the URL (stage: document)', () => {
+    // The card has a remote image URL; transformImagesToDisk downloads it later, which is also
+    // what makes a broken thumbnail an error under --strict.
     expect(cardFrom(entry(), config()).children[1].url).toMatch(/^https:\/\//);
   });
 });
 
-describe('fetchPaperConfig: failure is HARD (a broken registry must be fixed)', () => {
-  it('throws with the offending slug AND url; the fix is a registry edit, so name it', async () => {
+describe('fetchPaperConfig: a failure stops the build, since a broken registry must be fixed', () => {
+  it('throws with the slug and the URL, which the registry fix needs', async () => {
     const notFound = async () => ({ ok: false, status: 404, statusText: 'Not Found' });
     await expect(fetchPaperConfig(entry(), notFound)).rejects.toThrow(
       /alpha.*raw\.githubusercontent\.com\/me\/alpha-paper\/HEAD\/myst\.yml.*404/s,
@@ -182,7 +176,7 @@ describe('loadRegistry', () => {
     expect(loadRegistry(file)).toEqual([]);
   });
 
-  it('a missing registry is FATAL, not an empty gallery', () => {
+  it('a missing registry is an error, not an empty gallery', () => {
     expect(() => loadRegistry('/nonexistent/registry/papers.yml')).toThrow(/cannot read/);
   });
 
@@ -194,11 +188,10 @@ describe('loadRegistry', () => {
   });
 });
 
-describe('the plugin name is load-bearing', () => {
+describe('the plugin name is what the site workflow checks', () => {
   it('is exactly what the site workflow greps for', async () => {
-    // The site workflow asserts `Paper Gallery.*loaded` in the build log, because a plugin
-    // that fails to load does not fail `myst build --strict` (verified on a live run, [R80]).
-    // Renaming the plugin silently disarms that guard, so pin the name here.
+    // The site workflow looks for `Paper Gallery.*loaded` in the build log, since a plugin that
+    // fails to load does not fail `myst build --strict` [R80]. The name must match.
     const plugin = (await import('../plugins/gallery.mjs')).default as { name: string };
     expect(plugin.name).toBe('Paper Gallery');
   });

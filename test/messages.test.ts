@@ -1,13 +1,8 @@
 /**
- * messages.test.ts: the guard that keeps `src/messages.ts` worth reviewing.
- *
- * The user reviews the wording in ONE file; that only stays true if new prose cannot quietly
- * appear beside the code that prints it. So this suite scans the tenant-facing modules for a
- * string literal being handed straight to an output sink (a `write`/`log` call, or a `message:`
- * / `error:` / `reason:` field of a result) and fails on any it finds.
- *
- * It is a lint, not a proof: a message assembled from variables slips through. It catches the
- * common case (someone adding `log('  ✓ done')`) which is exactly how the catalog would rot.
+ * Keeps the printed wording in `src/messages.ts`, so it can be reviewed in one file. Fails when
+ * a module hands a string literal straight to output: a `write` or `log` call, or a `message:`,
+ * `error:` or `reason:` field of a result. A message built from variables gets past it; a
+ * `log('  ✓ done')` does not.
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
@@ -17,9 +12,8 @@ import { fileURLToPath } from 'node:url';
 const srcDir = join(fileURLToPath(new URL('..', import.meta.url)), 'src');
 
 /**
- * The modules whose output a tenant or author reads. `conformance.ts` (the maintainer's release
- * harness) and `zenodo.ts` (progress markers + the Zenodo API's own error bodies) are out by the
- * same decision recorded in the messages.ts header.
+ * The modules whose output people read. `conformance.ts` and `zenodo.ts` are left out, as the
+ * messages.ts header says.
  */
 const COVERED = [
   'cli.ts',
@@ -39,20 +33,20 @@ const COVERED = [
 const SINKS =
   /(?:stderr\.write|stdout\.write|\blog|\bwarn|\bemit)\(\s*(['"`])|(?:message|error|reason|title|body|description)\s*:\s*(['"`])/g;
 
-/** Prose = a literal with whitespace in it. `'main'`, `'ok'`, `'v*'` are identifiers. */
+/** Prose is a literal with whitespace in it; `'main'`, `'ok'`, `'v*'` are identifiers. */
 function isProse(quote: string, rest: string): boolean {
   const end = rest.indexOf(quote);
   const literal = end === -1 ? rest : rest.slice(0, end);
   return /\S\s+\S/.test(literal) && literal.length > 12;
 }
 
-/** Literals that are NOT prose for a reader, with the reason each is allowed to stay. */
+/** Literals that are not prose, each with its reason. */
 const ALLOWED = [
-  // an engine fault only reachable when the engine's own package.json is broken
+  // a bug in oak, reached only when oak's own package.json is broken
   'bootstrap: engine package.json declares no myst-cli dependency',
 ];
 
-describe('every tenant-facing string lives in messages.ts', () => {
+describe('every printed string lives in messages.ts', () => {
   for (const file of COVERED) {
     it(`${file} hands no prose literal straight to an output sink`, () => {
       const src = readFileSync(join(srcDir, file), 'utf8');
@@ -71,11 +65,9 @@ describe('every tenant-facing string lives in messages.ts', () => {
     });
   }
 
-  it('no design-doc jargon reaches a tenant (rule 2)', () => {
-    // The file states four output rules and nothing enforced them, so a rule could drift out of
-    // true silently, which is how the header's own workflow list went stale ([R151]).
-    // Comments FIRST: a string regex run over commented source matches across comment
-    // boundaries and reports the `[R#]` in a doc comment as a tenant-facing string.
+  it('no design-doc jargon is printed (rule 2)', () => {
+    // Enforces rule 2 of the messages.ts header [R151]. Comments are removed first, or a
+    // string match could span a comment and report its `[R#]`.
     const src = readFileSync(join(srcDir, 'messages.ts'), 'utf8');
     const code = src
       .split('\n')
@@ -89,8 +81,8 @@ describe('every tenant-facing string lives in messages.ts', () => {
     expect(strings.filter((x) => banned.test(x))).toEqual([]);
   });
 
-  it('names every frozen workflow it claims to name', () => {
-    // The header's list said `preview.yml`, which has never existed, and omitted three that do.
+  it('names every workflow the paper template ships', () => {
+    // The header lists every workflow the paper template ships.
     const src = readFileSync(join(srcDir, 'messages.ts'), 'utf8');
     const header = src.slice(0, src.indexOf('*/'));
     for (const w of readdirSync(join(srcDir, '../templates/paper/.github/workflows'))) {
@@ -98,8 +90,8 @@ describe('every tenant-facing string lives in messages.ts', () => {
     }
   });
 
-  it('messages.ts itself points at the surfaces it cannot hold', () => {
-    // The review is only complete if the file says where the rest of the words are.
+  it('messages.ts names the printed text it does not hold', () => {
+    // The file says where the rest of the printed text lives.
     const src = readFileSync(join(srcDir, 'messages.ts'), 'utf8');
     for (const pointer of [
       'templates/paper/README.md',

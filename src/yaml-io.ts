@@ -89,7 +89,7 @@ export function readBrandAssetOptions(instanceRoot: string): {
 /** Reads `typst_template:` from `<instanceRoot>/journal.yml`: the journal's template, between
  *  the author's and oak's [R76]. It lives in journal.yml, which myst never reads, because
  *  brand.yml is a myst config layer and myst warns about keys it does not know. */
-export function readTenantTypstTemplate(instanceRoot: string): string | undefined {
+export function readJournalTypstTemplate(instanceRoot: string): string | undefined {
   const journalPath = join(instanceRoot, 'journal.yml');
   if (!existsSync(journalPath)) return undefined;
   const value = parseDocument(readFileSync(journalPath, 'utf8')).get('typst_template');

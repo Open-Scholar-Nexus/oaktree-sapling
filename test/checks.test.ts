@@ -12,9 +12,8 @@ import {
   type CheckPostDeps,
 } from '../src/checks.js';
 
-// The editorial checks themselves come from @curvenote/check-implementations and read the myst
-// store, so they can only run against a real (bundled) session, covered end-to-end in
-// validate.integration.test.ts. What stays unit-testable here is our pure Check-Run REPORTER.
+// The editorial checks read myst's processed project, so they run only in a real session, in
+// validate.integration.test.ts. This tests how results become a Check Run.
 
 describe('toCheckRun (reporting: GitHub Check Run, ours)', () => {
   it('fails the conclusion on a non-optional failure', () => {
@@ -23,11 +22,11 @@ describe('toCheckRun (reporting: GitHub Check Run, ours)', () => {
     );
   });
 
-  it('an error status also gates (failure conclusion)', () => {
+  it('an error status also fails the Check Run', () => {
     expect(toCheckRun([{ id: 'x', status: CheckStatus.error }]).conclusion).toBe('failure');
   });
 
-  it('optional failures annotate but do not gate merge', () => {
+  it('optional failures are annotated and do not block the merge', () => {
     const r = toCheckRun([
       { id: 'x', status: CheckStatus.fail, optional: true },
       { id: 'y', status: CheckStatus.pass },
@@ -53,8 +52,8 @@ describe('toCheckRun (reporting: GitHub Check Run, ours)', () => {
   });
 
   it('relativizes an absolute annotation path against pathBase, leaves a relative one alone', () => {
-    // curvenote emits absolute (selectCurrentProjectFile) OR relative (loadProjectFromDisk) paths;
-    // GitHub only resolves repo-relative ones. pathBase = the checkout root.
+    // curvenote gives absolute or relative paths, and GitHub resolves only paths relative to the
+    // repo, so they are made relative to pathBase, the checkout root.
     const r = toCheckRun(
       [
         {
@@ -79,14 +78,14 @@ describe('toCheckRun (reporting: GitHub Check Run, ours)', () => {
   });
 
   it('embeds notes above the table without touching the conclusion ([R82])', () => {
-    // A degraded run must be visibly degraded where people read verdicts. It must NOT become
-    // a failure just for being degraded: the compose finding is what gates, not the note.
+    // An uncomposed run says so in the Check Run, but the note alone does not fail it; the
+    // compose finding does.
     const r = toCheckRun([{ id: 'authors-exist', status: CheckStatus.pass }], undefined, [
-      'ran UNCOMPOSED: the derived config could not be produced (boom).',
+      'ran uncomposed: myst.oak.yml could not be composed (boom).',
     ]);
     expect(r.conclusion).toBe('success');
-    expect(r.summary).toMatch(/^> ⚠️ ran UNCOMPOSED/);
-    expect(r.summary.indexOf('UNCOMPOSED')).toBeLessThan(r.summary.indexOf('| Check |'));
+    expect(r.summary).toMatch(/^> ⚠️ ran uncomposed/);
+    expect(r.summary.indexOf('uncomposed')).toBeLessThan(r.summary.indexOf('| Check |'));
   });
 
   it('says nothing when there are no notes, a composed run stays quiet', () => {
@@ -94,11 +93,10 @@ describe('toCheckRun (reporting: GitHub Check Run, ours)', () => {
     expect(r.summary.startsWith('| Check |')).toBe(true);
   });
 
-  it('never annotates a finding anchored to the DERIVED config ([R82])', () => {
-    // Since validate reads myst.oak.yml, curvenote's config-anchored results name a generated,
-    // gitignored file. GitHub cannot resolve that path (and a batch of unresolvable ones 422s
-    // the POST); rewriting it to myst.yml would pin a confident annotation on a line number
-    // that is not the author's. So the finding stays in the summary, the inline pin goes.
+  it('never annotates a finding in myst.oak.yml [R82]', () => {
+    // Results about the config name myst.oak.yml, which is gitignored: GitHub cannot resolve
+    // the path, and its line numbers are not the author's [R82]. So the finding is in the
+    // summary and gets no annotation.
     const r = toCheckRun(
       [
         {
@@ -119,7 +117,7 @@ describe('toCheckRun (reporting: GitHub Check Run, ours)', () => {
       '/paper',
     );
     expect(r.annotations.map((a) => a.path)).toEqual(['index.md']);
-    // Dropped from the annotations, NOT from the report; it still gates and still shows.
+    // Left out of the annotations only; it still fails the check and still shows.
     expect(r.conclusion).toBe('failure');
     expect(r.summary).toMatch(/no keywords/);
   });
@@ -159,7 +157,7 @@ describe('toCheckRun (reporting: GitHub Check Run, ours)', () => {
 });
 
 /* --------------------------------------------------------------------------
- * Stage-2 write-back: the sticky comment renderer + check-post orchestration.
+ * Posting: the comment, and `oak check-post`.
  * ------------------------------------------------------------------------ */
 
 const report = (over: Partial<CheckRun> = {}): ChecksReport => ({
@@ -178,7 +176,7 @@ const report = (over: Partial<CheckRun> = {}): ChecksReport => ({
   ]),
 });
 
-describe('checksComment (sticky PR-comment renderer)', () => {
+describe('checksComment (the pull request comment)', () => {
   it('renders a success body: sticky marker, ✅ headline, counts, table', () => {
     const body = checksComment(report());
     expect(body.startsWith(`<!-- oak-sticky: ${STICKY_CHECKS} -->`)).toBe(true);
@@ -195,16 +193,16 @@ describe('checksComment (sticky PR-comment renderer)', () => {
     expect(body).toContain('authors-have-orcid');
   });
 
-  it("carries a degraded run's note into the comment ([R82])", () => {
-    // check-post does not know notes exist; they ride inside checkRun.summary, which this
-    // renders. That is the whole fix: the PR UI stops showing a degraded run as a normal one.
+  it("carries an uncomposed run's note into the comment [R82]", () => {
+    // check-post does not handle notes; they are in checkRun.summary, which the comment shows,
+    // so an uncomposed run looks uncomposed on the pull request.
     const body = checksComment({
       status: 'ok',
       checkRun: toCheckRun([{ id: 'abstract-exists', status: CheckStatus.pass }], undefined, [
-        'ran UNCOMPOSED (no engine checkout or instance-config)',
+        'ran uncomposed (no oak checkout or journal repo)',
       ]),
     });
-    expect(body).toContain('⚠️ ran UNCOMPOSED');
+    expect(body).toContain('⚠️ ran uncomposed');
   });
 });
 
@@ -223,8 +221,8 @@ function fakePost(over: Partial<CheckPostDeps> = {}): {
   return { deps, runs, stickies };
 }
 
-describe('cmdCheckPost (Stage-2 orchestration, fake seams)', () => {
-  it('posts the Check Run and upserts the sticky comment when a PR is given', () => {
+describe('cmdCheckPost, with fakes for GitHub', () => {
+  it('posts the Check Run, and creates or updates the comment when a pull request is given', () => {
     const { deps, runs, stickies } = fakePost();
     const out = cmdCheckPost({ report: report(), repo: 'o/r', sha: 'abc', pr: '7' }, deps);
     expect(out.checkRunPosted).toBe(true);
@@ -246,7 +244,7 @@ describe('cmdCheckPost (Stage-2 orchestration, fake seams)', () => {
     expect(out.commentPosted).toBe(false);
   });
 
-  it('a throwing Check-Run seam degrades to a warning, still upserts the comment', () => {
+  it('a failed Check Run post is an error and a warning; the comment is still posted', () => {
     const { deps, stickies } = fakePost({
       checkRun: {
         create: () => {
@@ -259,12 +257,12 @@ describe('cmdCheckPost (Stage-2 orchestration, fake seams)', () => {
     expect(out.commentPosted).toBe(true);
     expect(stickies).toHaveLength(1);
     expect(out.warnings.join(' ')).toContain('Check Run not posted');
-    // The Check Run IS the required merge gate, so its absence is not an 'ok' run ([R144]):
-    // the PR is left blocked by a check that will never arrive.
+    // The Check Run is required to merge, so failing to post it is an error [R144]: the pull
+    // request would wait for a check that never comes.
     expect(out.status).toBe('error');
   });
 
-  it('a throwing sticky seam degrades to a warning (no crash)', () => {
+  it('a failed comment post becomes a warning (no crash)', () => {
     const { deps, runs } = fakePost({
       sticky: () => {
         throw new Error('boom');
@@ -275,12 +273,12 @@ describe('cmdCheckPost (Stage-2 orchestration, fake seams)', () => {
     expect(out.commentPosted).toBe(false);
     expect(runs).toHaveLength(1);
     expect(out.warnings.join(' ')).toContain('comment not posted');
-    // Cosmetic by comparison: the check carries the verdict, so this stays 'ok' ([R144]).
+    // The Check Run carries the result, so a failed comment stays 'ok' [R144].
     expect(out.status).toBe('ok');
   });
 });
 
-describe('frozenPathsTouched (frozen-shim detector)', () => {
+describe('frozenPathsTouched (the gated files)', () => {
   it('matches .github/**, CODEOWNERS and paper-environment.yml, ignores paper content', () => {
     const changed = [
       'index.md',
@@ -297,13 +295,13 @@ describe('frozenPathsTouched (frozen-shim detector)', () => {
       '.github/actions/engine/pins.yml',
     ]);
   });
-  it('a content-only diff touches nothing frozen', () => {
+  it('a change to content only touches no gated file', () => {
     expect(frozenPathsTouched(['index.md', 'myst.yml', 'figures/f1.png'])).toEqual([]);
   });
 });
 
-describe('cmdCheckPost frozen-shim advisory', () => {
-  it('with shimTouched: warns in the comment AND the Check-Run title/summary, conclusion unchanged', () => {
+describe('cmdCheckPost: the gated-files warning', () => {
+  it('with shimTouched: warns in the comment and the Check Run title and summary, with the conclusion unchanged', () => {
     const { deps, runs, stickies } = fakePost();
     const out = cmdCheckPost(
       {
@@ -316,7 +314,7 @@ describe('cmdCheckPost frozen-shim advisory', () => {
       deps,
     );
     expect(out.checkRunPosted).toBe(true);
-    // advisory only: the conclusion is NOT downgraded (must not gate; legit upgrades edit the shim)
+    // a warning only: the conclusion stays, since upgrades edit these files too
     expect(runs[0]!.run.conclusion).toBe(report().checkRun.conclusion);
     expect(runs[0]!.run.title).toContain('CI workflows modified');
     expect(runs[0]!.run.summary).toContain('changes the files that run the checks');
@@ -324,7 +322,7 @@ describe('cmdCheckPost frozen-shim advisory', () => {
     expect(stickies[0]!.body).toContain('`.github/workflows/check.yml`');
   });
 
-  it('no shimTouched: posts the report verbatim, no banner', () => {
+  it('without shimTouched: posts the report as it is, with no warning', () => {
     const { deps, runs, stickies } = fakePost();
     cmdCheckPost({ report: report(), repo: 'o/r', sha: 'abc', pr: '7' }, deps);
     expect(runs[0]!.run.title).toBe(report().checkRun.title);

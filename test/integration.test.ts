@@ -1,12 +1,10 @@
 /**
- * integration.test.ts: the fixture build through the REAL bundled CLI (slice-0
- * release-safety canary, design §12 step 0). Drives `node dist/cli.cjs` rather than
- * importing myst-cli in-process, because unbundled myst-cli crashes on Node 24 (the
- * docx interop bug the esbuild bundle papers over, spike, [R51]). So this exercises
- * the exact artifact the shim runs.
+ * Builds the fixture paper through the bundled CLI before a release is cut [design §12]. It runs
+ * `node dist/cli.cjs`, since myst-cli crashes unbundled on Node 24 [R51], so it runs what the
+ * paper workflows run.
  *
- * Skipped unless the bundle + typst + the in-engine template are all present (so the
- * default `npm test` stays portable). CI bundles first, then this gates the tag.
+ * Skipped unless the bundle, typst and oak's template are all present, so `npm test` runs
+ * anywhere. The release script bundles first, then this must pass.
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { execFileSync } from 'node:child_process';
@@ -33,19 +31,18 @@ function typstPresent(): boolean {
   }
 }
 
-// absent bundle → skip (portable); STALE bundle → hard fail in beforeAll, never a silent
-// pass against old code (bundle-state.ts).
+// No bundle skips; a stale bundle fails in beforeAll (bundle-state.ts).
 const runnable = bundleState() !== 'absent' && existsSync(template) && typstPresent();
 
 describe.skipIf(!runnable)('fixture build through the bundled CLI', () => {
   beforeAll(assertBundleNotStale);
-  it('renders a real PDF with articles preserved and the engine template', () => {
+  it("renders a real PDF with the articles and oak's template", () => {
     const tmp = mkdtempSync(join(tmpdir(), 'oak-int-'));
     for (const f of ['myst.yml', 'index.md', 'bib.bib']) {
       copyFileSync(join(engineDir, 'test', 'fixture-paper', f), join(tmp, f));
     }
 
-    const authorBefore = readFileSync(join(tmp, 'myst.yml')); // raw bytes, pre-build
+    const authorBefore = readFileSync(join(tmp, 'myst.yml')); // the bytes before the build
 
     execFileSync(
       'node',
@@ -56,32 +53,28 @@ describe.skipIf(!runnable)('fixture build through the bundled CLI', () => {
         tmp,
         '--instance',
         join(engineDir, 'test', 'fixture-instance'),
-        // Offline canary: PDF + compose only. The HTML site needs a network theme zip,
-        // so it is validated by the live shim run in CI, not this portable unit test.
+        // Offline: the PDF and compose only. The HTML site needs the theme from the network,
+        // so conformance tests it.
         '--exports-only',
       ],
       { stdio: 'pipe' },
     );
 
-    // a real PDF at the ENGINE-PINNED path. Previously this asserted an `index.pdf` whose
-    // directory myst derived from the declaring config's filename; `output` pins both now, so
-    // the path is asserted exactly and the articles proof moves to the composed entry below.
+    // a real PDF at the path oak sets in `output`
     expect(existsSync(join(tmp, TYPST_OUTPUT))).toBe(true);
-    // and nothing landed at a filename-derived path
+    // and nothing else in exports
     expect(readdirSync(join(tmp, '_build', 'exports'))).toEqual(['paper.pdf']);
 
-    // THE [R71] INVARIANT, through the real bundled CLI: the author's config is untouched.
+    // The author's myst.yml is unchanged [R71].
     expect(readFileSync(join(tmp, 'myst.yml')).equals(authorBefore)).toBe(true);
 
-    // the two-pass wrote the complete typst entry (articles + engine template) to the DERIVED
-    // config, never the author's.
+    // The full typst entry (articles and oak's template) is in myst.oak.yml.
     const doc = parseDocument(readFileSync(join(tmp, DERIVED_CONFIG_FILE), 'utf8'));
     expect(doc.getIn(['project', 'exports', 0, 'template'])).toBe(template);
-    // articles took effect (the [R53] regression this canary exists for), asserted on the
-    // composed entry now that the output filename no longer encodes it
+    // the articles are kept [R53]
     expect(doc.getIn(['project', 'exports', 0, 'articles', 0, 'file'])).toBe('index.md');
     expect(doc.getIn(['project', 'exports', 0, 'output'])).toBe(TYPST_OUTPUT);
-    // the author's sibling option survived the whole pipeline (finding 3)
+    // the author's `youtube` option is kept
     expect(doc.getIn(['project', 'options', 'youtube'])).toBe('https://youtu.be/dQw4w9WgXcQ');
   }, 60_000);
 });

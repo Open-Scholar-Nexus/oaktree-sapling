@@ -17,15 +17,15 @@ describe('decideRef ([R196] / [R41], repo + ref-class trust)', () => {
     expect(d.needsAncestryCheck).toBe(true);
   });
 
-  it('refuses a raw SHA from a fork PR (would run arbitrary engine code)', () => {
+  it('refuses a raw SHA from a fork pull request, which could run any code as oak', () => {
     expect(decideRef('a'.repeat(40), { isFork: true }).allowed).toBe(false);
   });
 
-  it('allows a raw SHA on a same-repo (non-fork) PR for dogfooding', () => {
+  it('allows a raw SHA on a same-repo pull request, for testing oak', () => {
     expect(decideRef('a'.repeat(40), { isFork: false }).allowed).toBe(true);
   });
 
-  it('refuses a PR-merge ref from a fork but allows it when allowlisted', () => {
+  it('refuses a pull request merge ref from a fork, unless allowed', () => {
     expect(decideRef('refs/pull/9/merge', { isFork: true }).allowed).toBe(false);
     expect(decideRef('refs/pull/9/merge', { isFork: true, allowlisted: true }).allowed).toBe(true);
   });

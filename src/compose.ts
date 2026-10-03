@@ -57,7 +57,7 @@ export function isInstanceRelativeTemplate(value: string): boolean {
  *  `journal.yml` lives (brand assets use `brand/`). Only `./` and `../` values change; see
  *  {@link isInstanceRelativeTemplate}. Exported so `oak validate` checks the path compose emits
  *  [R62]. */
-export function resolveTenantTemplate(instanceRoot: string, value: string): string {
+export function resolveJournalTemplate(instanceRoot: string, value: string): string {
   return isInstanceRelativeTemplate(value) ? join(instanceRoot, value) : value;
 }
 
@@ -131,8 +131,8 @@ export interface ComposeInput {
   /** The journal's `typst_template:`, read as written from `journal.yml` [R68]. It cannot be an
    *  `exports[].template` in an `extends:` layer: a second layer declaring `exports:` makes the
    *  merge unpredictable [R72], so paper-base stays the only one. A name, path or URL; a `./`
-   *  path is made absolute ({@link resolveTenantTemplate}). */
-  tenantTypstTemplate?: string;
+   *  path is made absolute ({@link resolveJournalTemplate}). */
+  journalTypstTemplate?: string;
   /** The brand's asset fields ({@link BRAND_ASSET_KEYS}), read as written from
    *  `brand/brand.yml`. compose makes relative values absolute against `<instanceRoot>/brand`,
    *  since myst resolves them against the paper root [R62]. Read from brand.yml itself so a
@@ -226,21 +226,21 @@ export function compose(input: ComposeInput): ComposeResult {
       typeof typst['template'] === 'string' && typst['template']
         ? (typst['template'] as string)
         : undefined;
-    const tenantTemplate =
-      input.tenantTypstTemplate && instanceRoot
-        ? resolveTenantTemplate(instanceRoot, input.tenantTypstTemplate)
-        : input.tenantTypstTemplate;
+    const journalTemplate =
+      input.journalTypstTemplate && instanceRoot
+        ? resolveJournalTemplate(instanceRoot, input.journalTypstTemplate)
+        : input.journalTypstTemplate;
     const engineTemplate =
       assetOverrides.engineTypstTemplate ?? typstTemplateUrl(engineRepo, engineVersion);
     const template =
-      assetOverrides.typstTemplate ?? authorTemplate ?? tenantTemplate ?? engineTemplate;
+      assetOverrides.typstTemplate ?? authorTemplate ?? journalTemplate ?? engineTemplate;
 
     // A paper overriding the journal's template is allowed, but must show in the pull request;
     // `oak validate` reports it there too.
-    if (authorTemplate && tenantTemplate && !assetOverrides.typstTemplate) {
+    if (authorTemplate && journalTemplate && !assetOverrides.typstTemplate) {
       warnings.push(
         `author template overrides the journal's: this paper declares its own typst ` +
-          `template ("${authorTemplate}") in place of the journal's ("${input.tenantTypstTemplate}").`,
+          `template ("${authorTemplate}") in place of the journal's ("${input.journalTypstTemplate}").`,
       );
     }
 

@@ -1,17 +1,12 @@
 /**
- * bundle-state.ts: shared guard for the suites that drive the REAL bundle (`dist/cli.cjs`).
+ * For the tests that run the bundle (`dist/cli.cjs`) [R51]:
  *
- * Both integration suites exercise the bundled artifact rather than importing myst-cli
- * in-process ([R51]). That creates two distinct hazards, which must NOT be treated the same:
+ *   - **absent**: skip. `dist/cli.cjs` is gitignored, so a fresh clone has none, and `npm test`
+ *     should run anywhere.
+ *   - **stale**: fail. A bundle older than the newest file in `src/` runs old code [R71].
  *
- *   - **absent** → SKIP. `dist/cli.cjs` is gitignored, so a fresh clone has none. Skipping keeps
- *     the default `npm test` portable (the property the suite headers and test.yml rely on).
- *   - **stale** → FAIL. A bundle older than the newest `src/**` silently exercises OLD code, so
- *     the suite reports green on changes it never ran. This is not hypothetical: it hid the
- *     export-path change during the [R71] refactor until a manual rebundle.
- *
- * `npm test` bundles first, so the common path is always fresh; this guard covers the paths
- * that do not (`npm run test:watch`, a bare `vitest`, an editor runner).
+ * `npm test` bundles first; this covers runs that do not (`npm run test:watch`, `vitest`, an
+ * editor).
  */
 import { existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
@@ -20,7 +15,7 @@ import { fileURLToPath } from 'node:url';
 const engineDir = fileURLToPath(new URL('..', import.meta.url));
 export const bundlePath = join(engineDir, 'dist', 'cli.cjs');
 
-/** Newest mtime under src/ (recursive). */
+/** The newest modification time under src/. */
 function newestSourceMtime(): number {
   const srcDir = join(engineDir, 'src');
   if (!existsSync(srcDir)) return 0;
@@ -38,10 +33,7 @@ export function bundleState(): BundleState {
   return statSync(bundlePath).mtimeMs < newestSourceMtime() ? 'stale' : 'fresh';
 }
 
-/**
- * Throw when the bundle is stale. Call from a `beforeAll` in bundle-driven suites: a stale
- * bundle must be a loud failure, never a silent pass against old code.
- */
+/** Throws when the bundle is stale. Call it from `beforeAll` in tests that run the bundle. */
 export function assertBundleNotStale(): void {
   if (bundleState() === 'stale') {
     throw new Error(

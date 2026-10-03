@@ -37,7 +37,7 @@ describe('OaktreeSaplingOptions', () => {
 describe('the edition id cannot carry a path ([R141])', () => {
   const opts = (edition: string) => () => OaktreeSaplingOptions.parse({ version: 'v1', edition });
 
-  it('refuses a traversal, which would compose an extends outside the instance root', () => {
+  it('refuses a path, which would point extends outside the journal repo', () => {
     for (const bad of ['../../../etc/shadow', './x', 'a/b', '..', '-lead']) {
       expect(opts(bad), bad).toThrow();
     }
@@ -50,7 +50,7 @@ describe('the edition id cannot carry a path ([R141])', () => {
   });
 });
 
-describe('readEngineOptions (finding 3: sibling options coexist)', () => {
+describe('readEngineOptions (other options are kept)', () => {
   it('extracts the engine key without tripping on a sibling youtube option', () => {
     const projectOptions = {
       youtube: 'https://youtu.be/x',
@@ -121,8 +121,8 @@ describe('checkIdShape (check A: catches the live geetha bug [R12])', () => {
     expect(checkIdShape('fixture-2026-sample-paper', policy).ok).toBe(true);
   });
 
-  it("rejects the engine's own placeholder under an EMPTY policy ([R119]a)", () => {
-    // A tenant deleting id_sentinel + id_pattern must not turn the engine's contract off.
+  it("rejects oak's own placeholder with an empty policy [R119]", () => {
+    // A journal without id_sentinel and id_pattern still has oak's placeholder rejected.
     expect(checkIdShape(ENGINE_ID_SENTINEL, {}).ok).toBe(false);
     expect(checkIdShape(ENGINE_ID_SENTINEL, policy).ok).toBe(false);
     expect(checkIdShape('fixture-2026-sample-paper', {}).ok).toBe(true);
@@ -159,8 +159,8 @@ describe('checkIdUniqueness (check B, needs the registry)', () => {
   });
 
   it('downgrades a clash to a warning when self is not identifiable (no repo context)', () => {
-    // Offline/local build: no GITHUB_REPOSITORY, temp checkout; the paper's own entry
-    // cannot be distinguished from a real duplicate, so it must not hard-gate.
+    // A local run without GITHUB_REPOSITORY cannot tell the paper's own entry from a
+    // duplicate, so it only warns.
     const r = checkIdUniqueness('fixture-2026-sample-paper', registry, undefined, {
       selfIdentifiable: false,
     });
@@ -170,7 +170,7 @@ describe('checkIdUniqueness (check B, needs the registry)', () => {
 });
 
 describe('Pins', () => {
-  it('defaults instance_repo to "." when omitted (co-located repo=journal)', () => {
+  it('defaults instance_repo to "." when omitted (the repo is its own journal)', () => {
     const p = Pins.parse({ engine_repo: 'open-scholar-nexus/oaktree-sapling' });
     expect(p.instance_repo).toBe('.');
   });

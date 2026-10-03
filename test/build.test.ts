@@ -20,7 +20,7 @@ import { TYPST_OUTPUT } from '../src/compose.js';
 
 const fixturePaper = fileURLToPath(new URL('./fixture-paper/myst.yml', import.meta.url));
 
-/** A copy of the fixture paper in a temp dir so the two-pass writes don't mutate it. */
+/** A copy of the fixture paper in a temporary directory, so the build does not change it. */
 function tmpPaper(): string {
   const dir = mkdtempSync(join(tmpdir(), 'oak-build-'));
   copyFileSync(fixturePaper, join(dir, 'myst.yml'));
@@ -28,8 +28,8 @@ function tmpPaper(): string {
   return dir;
 }
 
-/** Fake edge: loadProject returns what loadConfig WOULD return post-extends (typst export
- *  with articles from the edition, youtube sibling), and records the build call. */
+/** A fake edge: loadProject returns what loadConfig would after `extends` (a typst export with
+ *  articles from the edition, and a `youtube` option beside ours), and records the build call. */
 function fakeEdge(): { edge: MystEdge; calls: string[] } {
   const calls: string[] = [];
   const resolved: ResolvedProject = {
@@ -59,7 +59,7 @@ function fakeEdge(): { edge: MystEdge; calls: string[] } {
 }
 
 describe('runBuild: the two-pass orchestrator ([R52])', () => {
-  it('injects extends, then writes the engine override to the OWN config, then builds', async () => {
+  it("writes extends, then oak's settings, into myst.oak.yml, then builds", async () => {
     const paperRoot = tmpPaper();
     const { edge, calls } = fakeEdge();
 
@@ -72,8 +72,8 @@ describe('runBuild: the two-pass orchestrator ([R52])', () => {
       edge,
     });
 
-    // order: resolve (pass 1) BEFORE build (pass 2)
-    // both passes are pointed at the DERIVED config, never the author's ([R71])
+    // pass 1 (resolve) runs before pass 2 (build)
+    // both passes read myst.oak.yml, never the author's myst.yml [R71]
     expect(calls).toEqual([
       `load:${DERIVED_CONFIG_FILE}`,
       `build:true:true:${DERIVED_CONFIG_FILE}`,
@@ -84,17 +84,15 @@ describe('runBuild: the two-pass orchestrator ([R52])', () => {
     expect(doc.getIn(['extends', 0])).toBe('.engine/paper-base.yml');
     expect(doc.getIn(['extends', 1])).toBe('.instance/editions/fixture-edition.yml');
     expect(doc.getIn(['extends', 2])).toBe('.instance/brand/brand.yml');
-    // complete typst entry on own config (release URL, articles carried)
+    // the full typst entry in myst.oak.yml (release URL, articles kept)
     expect(doc.getIn(['project', 'exports', 0, 'template'])).toBe(
       typstTemplateUrl('open-scholar-nexus/oaktree-sapling', 'v0.3.0'),
     );
     expect(doc.getIn(['project', 'exports', 0, 'articles', 0, 'file'])).toBe('index.md');
-    // engine also owns `output`: pinned so the artifact path never depends on the derived
-    // config's filename (myst would otherwise derive it from the declaring file)
+    // oak sets `output` too, so the PDF's path does not depend on the config's filename
     expect(doc.getIn(['project', 'exports', 0, 'output'])).toBe(TYPST_OUTPUT);
-    // theme override + sibling option preserved. NB the author's ORIGINAL youtube
-    // survives: the override pass never touches options, and loadConfig's resolved
-    // value ('…/x') is never written back to the working tree (finding 3).
+    // The theme is set and the author's `youtube` option is kept as written: pass 2 does not
+    // touch options, and loadConfig's resolved value ('…/x') is never written back.
     expect(doc.getIn(['site', 'template'])).toBe(themeZipUrl());
     expect(doc.getIn(['project', 'options', 'youtube'])).toBe('https://youtu.be/dQw4w9WgXcQ');
 
@@ -130,7 +128,7 @@ describe('runBuild: the two-pass orchestrator ([R52])', () => {
       instanceRoot,
       engineRepo: 'x/y',
       baseUrl: '',
-      // the engine's checkout template is present, and must LOSE to the journal's
+      // oak's template is in the checkout, and the journal's wins over it
       assetOverrides: { engineTypstTemplate: '/engine/templates/typst' },
       edge,
     });
@@ -143,7 +141,7 @@ describe('runBuild: the two-pass orchestrator ([R52])', () => {
     expect(res.warnings.join(' ')).not.toMatch(/overrides the journal/);
   });
 
-  it('NEVER writes the author myst.yml: it is byte-identical after a build ([R71])', async () => {
+  it("never writes the author's myst.yml: it is unchanged after a build [R71]", async () => {
     const paperRoot = tmpPaper();
     const authorPath = join(paperRoot, 'myst.yml');
     const before = readFileSync(authorPath); // raw bytes, not a yaml round-trip
@@ -159,7 +157,7 @@ describe('runBuild: the two-pass orchestrator ([R52])', () => {
     });
 
     expect(readFileSync(authorPath).equals(before)).toBe(true);
-    // and the engine's work landed next to it instead
+    // and oak's output is written beside it
     expect(existsSync(join(paperRoot, DERIVED_CONFIG_FILE))).toBe(true);
   });
 
@@ -180,17 +178,15 @@ describe('runBuild: the two-pass orchestrator ([R52])', () => {
     await run();
     const second = readFileSync(join(paperRoot, DERIVED_CONFIG_FILE), 'utf8');
 
-    // Idempotent: pass 1 always re-reads the pristine author config, so a second build
-    // cannot compound injections (the old model re-read its own output).
+    // Pass 1 always reads the author's myst.yml, so a second build gives the same result.
     expect(second).toBe(first);
     expect(first).toContain('GENERATED by `oak build`');
   });
 });
 
-describe('a missing engine coordinate is a SENTENCE, not a stack', () => {
+describe('a missing version key is a sentence, not a stack', () => {
   it('names the file and the line to put back, as a UserError', async () => {
-    // The UX-test crash: the coordinate read threw a bare Error, which reached the top-level
-    // handler and printed five bundle frames at a tenant.
+    // A missing version key is a UserError, printed as a sentence without a stack.
     const paperRoot = tmpPaper();
     const authorPath = join(paperRoot, 'myst.yml');
     writeFileSync(authorPath, readFileSync(authorPath, 'utf8').replace(/\n\s*version: .*/, ''));
@@ -212,7 +208,7 @@ describe('a missing engine coordinate is a SENTENCE, not a stack', () => {
 });
 
 describe('runStart: compose, then hand off to myst', () => {
-  it('composes the SAME derived config as a build and points the server at it', async () => {
+  it('composes the same myst.oak.yml as a build and gives it to the server', async () => {
     const paperRoot = tmpPaper();
     const { edge, calls } = fakeEdge();
 
@@ -226,8 +222,7 @@ describe('runStart: compose, then hand off to myst', () => {
       edge,
     });
 
-    // Pass 1 loaded the derived config, and the handoff named it too: what the author previews
-    // is what CI builds, which is the whole reason `oak start` exists rather than `myst start`.
+    // Pass 1 loaded myst.oak.yml and myst was given it too, so the preview is what CI builds.
     expect(calls).toEqual([
       `load:${DERIVED_CONFIG_FILE}`,
       `start:${paperRoot}:{"port":3210}:${DERIVED_CONFIG_FILE}`,
@@ -240,10 +235,9 @@ describe('runStart: compose, then hand off to myst', () => {
     expect(doc.getIn(['project', 'exports', 0, 'output'])).toBe(TYPST_OUTPUT);
   });
 
-  it('does NOT gate a preview on Layer-A findings the way a build does', async () => {
-    // A placeholder id is exactly what a fresh repo has, and it must not stand between an
-    // author and looking at their draft. (index.md is absent here; the structural class that
-    // DOES block `oak build`.)
+  it('does not stop a preview on Layer A findings, as a build does', async () => {
+    // A new repo has the placeholder id, and that does not stop a preview. (index.md is
+    // absent here, which does block `oak build`.)
     const paperRoot = mkdtempSync(join(tmpdir(), 'oak-start-'));
     copyFileSync(fixturePaper, join(paperRoot, 'myst.yml'));
     const { edge, calls } = fakeEdge();

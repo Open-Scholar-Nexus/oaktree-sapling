@@ -1,15 +1,12 @@
 /**
- * The guard steps in the frozen shim, run as shell against the real YAML ([R99]).
+ * The checks in the paper template's workflows, run as shell from the real YAML [R99]
+ * [R90]. Each test takes a step's `run:` script by id and runs it, so it tests the files that
+ * ship.
  *
- * `template.test.ts` asserts which files are stamped; nothing asserted what any of them DOES,
- * which is how [R90] survived a month of green CI. These extract a step's `run:` script by id
- * and execute it, so the assertion is on the shipped bytes rather than on a copy.
- *
- * ⚑ This is bash, not a GitHub runner: `${{ }}` is already resolved by the time a real step runs,
- * `$GITHUB_OUTPUT` is a real file there, and the shell setup differs. So this covers the SCRIPT
- * logic, plus the one expression-level fault checked statically below (`secrets` in an `if:`,
- * [R172]); a workflow-level fault otherwise passes. Treat a green run here as necessary, not
- * sufficient; the live conformance run is what exercises the real thing.
+ * This is bash, not a GitHub runner: there `${{ }}` is resolved before the step runs,
+ * `$GITHUB_OUTPUT` is a real file, and the shell differs. So it covers the scripts, plus
+ * `secrets` in an `if:`, checked below [R172]; other workflow-level faults pass here, and
+ * conformance is what runs them on GitHub.
  */
 import { describe, it, expect } from 'vitest';
 import { spawnSync } from 'node:child_process';
@@ -29,7 +26,7 @@ import { SECRET_MAP } from '../src/bootstrap.js';
 
 const SHIM = 'templates/paper';
 
-/** The `run:` script of the step with this `id` (or `name`), from a frozen workflow or action. */
+/** The `run:` script of the step with this `id` (or `name`), from a template workflow or action. */
 function stepScript(file: string, id: string | undefined, name?: string): string {
   const doc = parseDocument(readFileSync(join(SHIM, file), 'utf8')).toJS() as {
     runs?: { steps: Array<Record<string, string>> };
@@ -55,7 +52,7 @@ function run(script: string, env: Record<string, string>, cwd?: string) {
 describe('the engine action refuses an untrusted ref class ([R41])', () => {
   const script = stepScript('.github/actions/engine/action.yml', 'refclass');
 
-  it('refuses an unmerged engine PR from a fork', () => {
+  it('refuses an unmerged oak pull request from a fork', () => {
     const r = run(script, { REF: 'refs/pull/7/merge', IS_FORK: 'true' });
     expect(r.code).toBe(1);
     expect(r.out).toContain('unmerged pull request');
@@ -80,7 +77,7 @@ describe('the engine action refuses an untrusted ref class ([R41])', () => {
 describe('the engine action refuses a malformed ref before echoing it ([R155])', () => {
   const script = stepScript('.github/actions/engine/action.yml', 'ref');
 
-  /** Run the ref step with `yq` stubbed to print `value` and a real GITHUB_OUTPUT file. */
+  /** Runs the ref step with `yq` stubbed to print `value`, and a real GITHUB_OUTPUT file. */
   function refStep(value: string) {
     const dir = mkdtempSync(join(tmpdir(), 'oak-ref-'));
     const bin = mkdtempSync(join(tmpdir(), 'oak-bin-'));
@@ -118,10 +115,10 @@ describe('the engine action refuses a malformed ref before echoing it ([R155])',
   });
 });
 
-describe('preview-deploy refuses a PR number the artifact made up ([R136])', () => {
+describe('preview-deploy refuses a forged pull request number [R136]', () => {
   const script = stepScript('.github/workflows/preview-deploy.yml', 'pr-owner');
 
-  /** A site dir plus a `gh` on PATH that answers with `headSha`, so no network. */
+  /** A site directory, and a `gh` on PATH that answers with `headSha`, so no network. */
   function fixture(prNumber: string | null, headSha: string) {
     const dir = mkdtempSync(join(tmpdir(), 'oak-guard-'));
     const bin = mkdtempSync(join(tmpdir(), 'oak-bin-'));
@@ -141,19 +138,19 @@ describe('preview-deploy refuses a PR number the artifact made up ([R136])', () 
     expect(r.out).toContain('is not a number');
   });
 
-  it('refuses a real PR that is not the one this run built', () => {
+  it('refuses a real pull request that is not the one this run built', () => {
     const f = fixture('99', 'other-sha');
     const r = run(script, { ...f.env, REPO: 'o/r', HEAD_SHA: 'deadbeef' }, f.dir);
     expect(r.code).toBe(1);
     expect(r.out).toContain('refusing to comment');
   });
 
-  it('accepts the PR this run actually built', () => {
+  it('accepts the pull request this run built', () => {
     const f = fixture('99', 'deadbeef');
     expect(run(script, { ...f.env, REPO: 'o/r', HEAD_SHA: 'deadbeef' }, f.dir).code).toBe(0);
   });
 
-  it('no-ops on a push build, which has no PR number', () => {
+  it('does nothing on a push build, which has no pull request number', () => {
     const f = fixture(null, 'deadbeef');
     expect(run(script, { ...f.env, REPO: 'o/r', HEAD_SHA: 'deadbeef' }, f.dir).code).toBe(0);
   });
@@ -162,8 +159,8 @@ describe('preview-deploy refuses a PR number the artifact made up ([R136])', () 
 describe('the dispatch step takes args as data, not as script ([R153])', () => {
   const script = stepScript('.github/actions/engine/action.yml', 'dispatch');
 
-  /** The runner resolves `${{ }}` by TEXT substitution before bash sees the script, so deliver
-   *  the payload both ways: whichever shape the action ships, this is what would reach it. */
+  /** The runner substitutes `${{ }}` as text before bash sees the script, so the payload is
+   *  given both ways: either way the action is written, this is what would reach it. */
   function dispatch(args: string) {
     const dir = mkdtempSync(join(tmpdir(), 'oak-dispatch-'));
     mkdirSync(join(dir, '.engine/ci'), { recursive: true });
@@ -196,7 +193,7 @@ describe('the dispatch step takes args as data, not as script ([R153])', () => {
     expect(existsSync(join(d.dir, 'pwned'))).toBe(false);
   });
 
-  it('still word-splits the verb and its flags, which the shim depends on', () => {
+  it('still splits the verb and its flags into words, as the workflows need', () => {
     expect(dispatch('check-post --report journal-checks/report.json --repo o/r').argv).toEqual([
       'check-post',
       '--report',
@@ -213,8 +210,8 @@ describe('the dispatch step takes args as data, not as script ([R153])', () => {
   });
 });
 
-describe('no frozen run: script interpolates an expression ([R153])', () => {
-  /** Every `run:` in the frozen surface, with the file and step that carries it. */
+describe('no template run: script puts an expression in the script [R153]', () => {
+  /** Every `run:` in the template workflows, with its file and step. */
   function runScripts(): Array<{ where: string; script: string }> {
     const files = [
       ...readdirSync(join(SHIM, '.github/workflows')).map((f) => `.github/workflows/${f}`),
@@ -264,7 +261,7 @@ describe('the sandbox-token guard refuses an unset token ([R172])', () => {
 });
 
 describe('workflow expressions', () => {
-  /** Every `if:` in the frozen surface, with the step that carries it. */
+  /** Every `if:` in the template workflows, with its step. */
   function conditions(): Array<{ where: string; expr: string }> {
     const files = [
       ...readdirSync(join(SHIM, '.github/workflows')).map((f) => `.github/workflows/${f}`),
@@ -288,8 +285,8 @@ describe('workflow expressions', () => {
   }
 
   it('no `if:` reads the secrets context', () => {
-    // `secrets` is out of scope in an `if:`, and the whole workflow then fails to parse, so the
-    // file is dead rather than the step ([R172]). Read the secret in `env:` and test it in `run:`.
+    // `secrets` cannot be read in an `if:`, and the whole workflow then fails to parse [R172].
+    // Read the secret in `env:` and test it in `run:`.
     const offenders = conditions().filter((c) => /\bsecrets\./.test(c.expr));
     expect(offenders.map((c) => c.where)).toEqual([]);
   });
@@ -304,7 +301,7 @@ describe('every secret a job reads comes from an environment', () => {
     environment?: string | { name: string };
     steps?: Array<{ uses?: string; with?: Record<string, unknown> }>;
   }
-  /** Every job in the frozen workflows, with the secrets it reads and its environment. */
+  /** Every job in the template workflows, with the secrets it reads and its environment. */
   function jobs(): Array<{ where: string; secrets: string[]; env: string | null; job: Job }> {
     const out = [];
     for (const f of readdirSync(join(SHIM, '.github/workflows'))) {
