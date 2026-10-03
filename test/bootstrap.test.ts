@@ -1,10 +1,9 @@
 /**
- * bootstrap.test.ts: `oak bootstrap` rendering + orchestration (slice 5), through FAKE
- * provisioning seams (no gh/git). Proves: pins.yml/CODEOWNERS/myst.yml render + byte-copy of
- * the rest; the new-model ingest restoring the whole editor-side `.github/`; idempotent
- * GET-then-act; secrets set-if-provided else a printed runbook; org-team vs personal bypass;
- * and the journal external (instance-config ⊎ the journal site, public) vs co-located
- * (shim + starter paper, no site) tiers.
+ * `oak bootstrap`, with a fake provisioner (no gh or git): the rendered pins.yml, CODEOWNERS
+ * and myst.yml, the rest copied as is; `--from` restoring the editor's `.github/`; reruns that
+ * read before they change; secrets set when given, otherwise listed in the runbook; the bypass
+ * for an org team or a personal account; and the two journal setups, `--external` (settings
+ * and website, public) and `--co-located` (the paper workflows and a starter paper, no website).
  */
 import { describe, it, expect } from 'vitest';
 import { mkdtempSync, readFileSync, existsSync } from 'node:fs';
@@ -51,7 +50,7 @@ const answers = (over: Partial<TemplateAnswers> = {}): TemplateAnswers => ({
  * ------------------------------------------------------------------------ */
 
 describe('renderPaperTemplate', () => {
-  it('renders pins.yml + CODEOWNERS + myst.yml and byte-copies the rest', () => {
+  it('renders pins.yml, CODEOWNERS and myst.yml, and copies the rest as is', () => {
     const dest = tmp();
     const written = renderPaperTemplate(PAPER_ROOT, dest, answers());
 
@@ -68,22 +67,22 @@ describe('renderPaperTemplate', () => {
     expect(myst.getIn(['project', 'options', 'oaktree-sapling', 'version'])).toBe('v1.2.3');
     expect(myst.getIn(['project', 'options', 'oaktree-sapling', 'edition'])).toBe('ed-2026');
 
-    // a byte-copied frozen file is identical to source
+    // A copied file is identical to its source.
     const rel = '.github/workflows/ci.yml';
     expect(readFileSync(join(dest, rel), 'utf8')).toBe(readFileSync(join(PAPER_ROOT, rel), 'utf8'));
 
-    // the engine README is NOT stamped; the instance skeleton lives in a separate tree
+    // oak's own README is not copied; the journal template is a separate tree.
     expect(existsSync(join(dest, 'README.md'))).toBe(false);
     expect(existsSync(join(dest, 'journal.yml'))).toBe(false);
     expect(written).toContain('.github/workflows/version-bump.yml');
   });
 
-  it('seeds a LICENSE for the licence the edition asserts ([R127])', () => {
+  it('seeds a LICENSE for the licence the edition states [R127]', () => {
     const dest = tmp();
     const written = renderPaperTemplate(PAPER_ROOT, dest, answers());
     expect(written).toContain('LICENSE');
-    // The seeded edition asserts a licence to readers and to Zenodo; the paper repo must carry
-    // the matching text, and changing one without the other is what this pins.
+    // The seeded edition states a licence to readers and to Zenodo, so the paper repo carries
+    // the matching text.
     const edition = parseDocument(
       readFileSync(join(INSTANCE_ROOT, 'editions/edition.yml'), 'utf8'),
     );
@@ -115,58 +114,58 @@ describe('renderInstanceTemplate', () => {
 });
 
 describe('renderSiteTemplate', () => {
-  it('stamps the four rendered values and byte-copies the rest', () => {
+  it('renders the four values and copies the rest as is', () => {
     const dest = tmp();
     const written = renderSiteTemplate(SITE_ROOT, dest, answers(), MYST_RANGE);
 
     const myst = parseDocument(readFileSync(join(dest, 'myst.yml'), 'utf8'));
     expect(myst.getIn(['project', 'title'])).toBe('Test Journal');
-    // Rendered FROM the constant, not duplicated, so there is no drift to test for.
+    // Rendered from the constant, so the two cannot differ.
     expect(myst.getIn(['site', 'template'])).toBe(themeZipUrl());
     expect(myst.getIn(['project', 'plugins', 0])).toBe(galleryPluginUrl('me/engine', 'v1.2.3'));
-    // The brand stays a LOCAL single-entry extends chain (no siblings to race, [R72]).
+    // The brand is a single local extends entry, so no other entry competes for its keys [R72].
     expect(myst.get('extends')?.toJSON()).toEqual(['./brand/brand.yml']);
 
     const index = readFileSync(join(dest, 'pages/index.md'), 'utf8');
     expect(index).toContain('# Test Journal');
     expect(index).not.toContain('{{');
 
-    // ONE dependency list: MyST is pinned in package.json beside the plugin's js-yaml, so
-    // the workflow needs no version of its own and is byte-copied.
+    // One dependency list: MyST is pinned in package.json beside the plugin's js-yaml, so the
+    // workflow needs no version of its own and is copied as is.
     const pkg = JSON.parse(readFileSync(join(dest, 'package.json'), 'utf8')) as {
       dependencies: Record<string, string>;
     };
     expect(pkg.dependencies['mystmd']).toBe(MYST_RANGE);
-    expect(pkg.dependencies['js-yaml']).toBeTruthy(); // resolvable from THIS repo's node_modules
+    expect(pkg.dependencies['js-yaml']).toBeTruthy(); // resolved from this repo's node_modules
 
-    // Byte-copied: no `{{token}}` of ours survives because there are none left to render.
-    // (It DOES contain `${{ … }}`: those are GitHub Actions expressions, not our tokens.)
+    // Copied as is, so none of our `{{token}}`s are left. Its `${{ … }}` are GitHub Actions
+    // expressions.
     const wf = readFileSync(join(dest, '.github/workflows/site.yml'), 'utf8');
     expect(wf).toBe(readFileSync(join(SITE_ROOT, '.github/workflows/site.yml'), 'utf8'));
     expect(wf).not.toContain('mystmd@');
-    // The install is not optional: a remote plugin is imported from _build/cache/, so its
-    // bare imports resolve against this repo's node_modules.
+    // A remote plugin is imported from _build/cache/, so its bare imports resolve against this
+    // repo's node_modules, which the install provides.
     expect(wf).toContain('npm install');
-    // --strict is the ONLY thing that catches a remote plugin that failed to load.
+    // --strict catches a remote plugin that failed to load.
     expect(wf).toContain('--strict');
-    // BASE_URL from configure-pages: this tier deploys to `<owner>.github.io/<repo>/`, and
-    // without it MyST emits root-absolute asset URLs so every image/CSS/JS 404s (found live).
+    // BASE_URL from configure-pages: the site is served at `<owner>.github.io/<repo>/`, and MyST
+    // needs it to write asset URLs under that path.
     expect(wf).toContain('configure-pages');
     expect(wf).toContain('BASE_URL: ${{ steps.pages.outputs.base_path }}');
-    // A plugin that never loads does NOT fail --strict (verified live): myst logs
-    // "Unknown plugin" + "unknown directive" and exits 0. The workflow must therefore assert
-    // a POSITIVE signal: the plugin's own name in the build log.
+    // A plugin that never loads does not fail --strict: myst logs "Unknown plugin" and
+    // "unknown directive" and exits 0. So the workflow looks for the plugin's own name in the
+    // build log.
     expect(wf).toContain('Paper Gallery.*loaded');
 
-    // Ships as `gitignore`, stamped as `.gitignore`, npm strips the dotted name from every
-    // tarball, so an npm-installed engine would otherwise seed a repo without one.
+    // Ships as `gitignore` and is written as `.gitignore`, since npm leaves `.gitignore` out of
+    // every package.
     expect(readFileSync(join(dest, '.gitignore'), 'utf8')).toBe(
       readFileSync(join(SITE_ROOT, 'gitignore'), 'utf8'),
     );
     expect(existsSync(join(dest, 'README.md'))).toBe(false); // one repo, one README
   });
 
-  it('the stamped plugin URL is pinned to the engine TAG, not a branch', () => {
+  it("the plugin URL is pinned to oak's tag, not a branch", () => {
     const dest = tmp();
     renderSiteTemplate(SITE_ROOT, dest, answers({ version: 'v2.0.0' }), MYST_RANGE);
     const myst = parseDocument(readFileSync(join(dest, 'myst.yml'), 'utf8'));
@@ -177,10 +176,9 @@ describe('renderSiteTemplate', () => {
 });
 
 describe('engineMystRange', () => {
-  it('copies the engine package.json myst-cli range VERBATIM (no parsing/normalizing)', () => {
-    // myst-cli sits in devDependencies (it ships inlined in the bundle, so the published
-    // package installs nothing); npm publishes that block verbatim, so the range is still
-    // there to read. Either block counts; the point is the range is copied, not parsed.
+  it("copies the myst-cli range from oak's package.json as written", () => {
+    // myst-cli is in devDependencies, since it is bundled; npm publishes that block as it is, so
+    // the range can still be read. Either block counts: the range is copied, not parsed.
     const pkg = JSON.parse(readFileSync('package.json', 'utf8')) as {
       dependencies?: Record<string, string>;
       devDependencies?: Record<string, string>;
@@ -191,8 +189,8 @@ describe('engineMystRange', () => {
   });
 });
 
-describe('buildReviewTree (new-model ingest)', () => {
-  it('restores the WHOLE editor-side .github, including pins.yml (author-side dropped)', () => {
+describe('buildReviewTree (--from)', () => {
+  it("restores the editor's whole .github, including pins.yml, and drops the author's", () => {
     const author = {
       'index.md': 'author paper',
       '.github/actions/engine/pins.yml': 'engine_repo: EVIL/attacker',
@@ -205,7 +203,7 @@ describe('buildReviewTree (new-model ingest)', () => {
     };
     const review = buildReviewTree(author, main);
     expect(review['index.md']).toBe('author paper'); // author content survives
-    expect(review['.github/actions/engine/pins.yml']).toBe('engine_repo: me/engine'); // editor-side
+    expect(review['.github/actions/engine/pins.yml']).toBe('engine_repo: me/engine'); // the editor's
     expect(review['.github/workflows/ci.yml']).toBe('frozen ci');
     expect(review['CODEOWNERS']).toBe('/.github/ @alice');
   });
@@ -228,7 +226,7 @@ interface FakeState {
   environments?: Set<string>; // "repo/env"
   reviewers?: EnvironmentReviewer[]; // what the zenodo-publish env already has
   openEnvironments?: Set<string>; // "repo/env" that exist but admit every branch
-  secrets?: Set<string>; // "repo/env/name", or "repo/name" at repository level
+  secrets?: Set<string>; // "repo/env/name", or "repo/name" for a repository secret
 }
 
 function fakeProv(state: FakeState = {}) {
@@ -316,8 +314,8 @@ function deps(prov: Provisioner): BootstrapDeps {
 
 const paperInput = (over: Record<string, unknown> = {}) => ({
   repo: 'me/paper',
-  // Required since the instance-less bootstrap fix: a paper must name the journal it belongs
-  // to, or its pins.yml claims a co-located journal.yml the render never writes.
+  // A paper names its journal, or its pins.yml would point at a journal.yml beside it that
+  // the render never writes.
   instance: 'me/instance-config',
   edition: 'ed-2026',
   engineVersion: 'v1.2.3',
@@ -334,7 +332,7 @@ const paperInput = (over: Record<string, unknown> = {}) => ({
  * ------------------------------------------------------------------------ */
 
 describe('cmdBootstrapPaper', () => {
-  it('bare mode: creates + seeds main, no review/PR, provisions', async () => {
+  it('without --from: creates the repo, seeds main and sets it up, with no review branch', async () => {
     const { prov, calls } = fakeProv();
     const out = await cmdBootstrapPaper(paperInput(), deps(prov));
     expect(out.result.mode).toBe('bare');
@@ -346,10 +344,9 @@ describe('cmdBootstrapPaper', () => {
     expect(calls.enablePages).toHaveLength(1);
   });
 
-  it('refuses an instance-less bootstrap up front instead of shipping pins.yml instance_repo: .', async () => {
-    // The UX-test defect: without --instance the paper seeded `instance_repo: .`, which claims
-    // a co-located journal.yml this render never writes, so the repo bootstrapped "ok" and the
-    // first CI run died on "no instance-config resolved". Fail here, where the flag is.
+  it('refuses a paper without --instance before doing anything', async () => {
+    // Without --instance, pins.yml would say `instance_repo: .` and point at a journal.yml
+    // this render never writes, so the first CI run would fail. It fails here instead.
     const { prov, calls } = fakeProv();
     const out = await cmdBootstrapPaper(paperInput({ instance: undefined }), deps(prov));
     expect(out.exitCode).toBe(2);
@@ -362,24 +359,21 @@ describe('cmdBootstrapPaper', () => {
   });
 
   it('refuses a paper with no --edition instead of inventing one', async () => {
-    // The same class as the missing --instance: `edition` is written into the paper's
-    // myst.yml and must match an editions/<id>.yml the JOURNAL already has, so a default
-    // invented here is a guaranteed CI failure dressed up as a convenience.
+    // As with --instance: `edition` goes into the paper's myst.yml and must match an
+    // editions/<id>.yml the journal already has, so a default would fail in CI.
     const { prov, calls } = fakeProv();
     const out = await cmdBootstrapPaper(paperInput({ edition: undefined }), deps(prov));
     expect(out.exitCode).toBe(2);
     expect(out.result.status).toBe('error');
     expect(String(out.result.error)).toContain('--edition');
     expect(String(out.result.error)).toContain('editions/');
-    // The journal it would have belonged to is named, so the reader knows where to look.
+    // The message names the journal, so the reader knows where to look.
     expect(String(out.result.error)).toContain('me/instance-config');
     expect(calls.createRepo).toHaveLength(0);
     expect(calls.seedBranch).toHaveLength(0);
   });
 
-  it('the plan DECLARES every value the run resolved, before the confirm', async () => {
-    // Nothing the CLI assumes may be silent: the prompt is only consent if the defaults are
-    // on the screen above it. These lines are what the reader is agreeing to.
+  it('the plan shows every value the run will use, before the prompt', async () => {
     const { prov } = fakeProv();
     const plans: string[][] = [];
     const d = deps(prov);
@@ -394,14 +388,14 @@ describe('cmdBootstrapPaper', () => {
     const plan = plans[0]!.join('\n');
     expect(plan).toContain('journal repo   : me/instance-config');
     expect(plan).toContain('edition        : ed-2026');
-    // The auto-resolved ones say so, and say which flag pins them.
+    // A resolved value says so, and names the flag that sets it.
     expect(plan).toMatch(/engine version : v1\.2\.3: the newest engine release right now/);
     expect(plan).toContain('--engine-version');
     expect(plan).toMatch(/engine repo    : me\/engine: built-in default/);
     expect(plan).toMatch(/review owner   : @alice: your own GitHub login/);
   });
 
-  it('a value that WAS passed is declared as passed, not as a default', async () => {
+  it('a value that was passed is shown as passed, not as a default', async () => {
     const { prov } = fakeProv();
     const plans: string[][] = [];
     const d = deps(prov);
@@ -423,7 +417,7 @@ describe('cmdBootstrapPaper', () => {
     expect(plan).not.toContain('no --engine-version given');
   });
 
-  it('--instance . is the explicit co-located opt-in and still bootstraps', async () => {
+  it('--instance . names this repo as the journal, and still bootstraps', async () => {
     const { prov, calls } = fakeProv();
     const out = await cmdBootstrapPaper(paperInput({ instance: '.' }), deps(prov));
     expect(out.exitCode).toBe(0);
@@ -447,9 +441,7 @@ describe('cmdBootstrapPaper', () => {
     expect(pins.get('instance_repo')).toBe('me/journal');
   });
 
-  it('an aborted run says why, and a re-run warns that main will not be re-stamped', async () => {
-    // Two halves of the same UX defect: a bare "aborted" with no reason, printed for a re-run
-    // that would not have changed pins.yml even if confirmed.
+  it('an aborted run says why, and a rerun warns that main will not be rewritten', async () => {
     const { prov } = fakeProv({
       repos: new Set(['me/paper']),
       branches: new Set(['me/paper/main']),
@@ -497,7 +489,7 @@ describe('cmdBootstrapPaper', () => {
     expect(hasJournalCheck(bodyOf(off.calls))).toBe(false);
   });
 
-  it('--from ingest: seeds main, builds review, opens PR', async () => {
+  it('--from: seeds main, builds the review branch, opens a pull request', async () => {
     const { prov, calls } = fakeProv();
     const out = await cmdBootstrapPaper(paperInput({ from: 'https://github.com/a/b' }), deps(prov));
     expect(out.result.mode).toBe('ingest');
@@ -507,7 +499,7 @@ describe('cmdBootstrapPaper', () => {
     expect(out.result.pr).toContain('/pull/');
   });
 
-  it('idempotent re-run: skips existing repo/main/ruleset/pages/policy', async () => {
+  it('a rerun skips the repo, main, rulesets, Pages and policies that exist', async () => {
     const { prov, calls } = fakeProv({
       repos: new Set(['me/paper']),
       branches: new Set(['me/paper/main']),
@@ -543,7 +535,7 @@ describe('cmdBootstrapPaper', () => {
     expect(runbook).not.toContain('zt'); // never the value
   });
 
-  it('allows Actions to open pull requests, or the first DOI write-back fails ([R122])', async () => {
+  it('allows Actions to open pull requests, which the first DOI pull request needs [R122]', async () => {
     const { prov, calls } = fakeProv();
     const out = await cmdBootstrapPaper(paperInput(), deps(prov));
     expect(calls.allowActionsApprovePrs).toEqual(['me/paper']);
@@ -551,10 +543,10 @@ describe('cmdBootstrapPaper', () => {
 
     const already = fakeProv({ actionsCanApprovePrs: true });
     await cmdBootstrapPaper(paperInput(), deps(already.prov));
-    expect(already.calls.allowActionsApprovePrs).toHaveLength(0); // GET-then-act
+    expect(already.calls.allowActionsApprovePrs).toHaveLength(0); // read before changing
   });
 
-  it('names a zenodo-publish reviewer: the team on an org, the owner on an account ([R123])', async () => {
+  it('names a zenodo-publish reviewer: the team in an org, the owner on a personal account [R123]', async () => {
     const org = fakeProv({ ownerType: 'Organization' });
     const orgOut = await cmdBootstrapPaper(
       paperInput({ repo: 'org/paper', owner: '@org/editors' }),
@@ -574,7 +566,7 @@ describe('cmdBootstrapPaper', () => {
     ]);
   });
 
-  it('an org owner naming no team leaves the gate open, and says so ([R123])', async () => {
+  it('an org owner without a team leaves publishing unreviewed, and says so [R123]', async () => {
     const { prov, calls } = fakeProv({ ownerType: 'Organization' });
     const out = await cmdBootstrapPaper(
       paperInput({ repo: 'org/paper', owner: '@org' }),
@@ -585,7 +577,7 @@ describe('cmdBootstrapPaper', () => {
     expect((out.result.runbook as string[]).join('\n')).toContain('settings/environments');
   });
 
-  it('a re-run keeps a zenodo-publish reviewer added by hand ([R123])', async () => {
+  it('a rerun keeps a zenodo-publish reviewer added by hand [R123]', async () => {
     const { prov, calls } = fakeProv({
       environments: new Set(['me/paper/zenodo-publish']),
       reviewers: [{ type: 'User', id: 12 }],
@@ -595,7 +587,7 @@ describe('cmdBootstrapPaper', () => {
     expect((out.result.actions as Record<string, string>).zenodo_reviewers).toBe('already set');
   });
 
-  it('sets every secret on its environments and none at repository level', async () => {
+  it('sets every secret on its environments and none as a repository secret', async () => {
     const { prov, calls } = fakeProv();
     const out = await cmdBootstrapPaper(
       paperInput({
@@ -636,8 +628,8 @@ describe('cmdBootstrapPaper', () => {
   });
 
   it('restricts an environment GitHub auto-created, keeping its reviewers', async () => {
-    // An upgraded launcher can name `preview` before bootstrap re-runs; GitHub then creates it
-    // admitting every branch, and a branch policy cannot be added until that is switched off.
+    // An upgraded workflow can name `preview` before bootstrap reruns. GitHub then creates it
+    // open to every branch, and a branch policy cannot be added until that is switched off.
     const { prov, calls } = fakeProv({
       environments: new Set(['me/paper/preview', 'me/paper/zenodo-publish']),
       openEnvironments: new Set(['me/paper/preview', 'me/paper/zenodo-publish']),
@@ -658,7 +650,7 @@ describe('cmdBootstrapPaper', () => {
     });
   });
 
-  it('deletes a repository-level secret once its environments all hold it', async () => {
+  it('deletes a repository secret once its environments all hold it', async () => {
     const { prov, calls } = fakeProv({
       secrets: new Set([
         'me/paper/ZENODO_TOKEN',
@@ -678,7 +670,7 @@ describe('cmdBootstrapPaper', () => {
     expect(runbook).not.toContain('CLOUDFLARE_ACCOUNT_ID is still');
   });
 
-  it('provisions exactly the labels its consumers ask for ([R127], [R128])', async () => {
+  it('creates the labels the workflows use, and no others [R127] [R128]', async () => {
     const { prov, calls } = fakeProv();
     await cmdBootstrapPaper(paperInput(), deps(prov));
     expect((calls.createLabel as Array<{ n: string }>).map((c) => c.n)).toEqual([
@@ -687,7 +679,7 @@ describe('cmdBootstrapPaper', () => {
     ]);
   });
 
-  it('makes main the default branch of a repo that defaulted elsewhere ([R127])', async () => {
+  it('makes main the default branch of an existing repo [R127]', async () => {
     const moved = fakeProv({ defaultBranch: 'master', repos: new Set(['me/paper']) });
     await cmdBootstrapPaper(paperInput(), deps(moved.prov));
     expect(moved.calls.setDefaultBranch).toEqual([{ r: 'me/paper', b: 'main' }]);
@@ -697,7 +689,7 @@ describe('cmdBootstrapPaper', () => {
     expect(already.calls.setDefaultBranch).toHaveLength(0);
   });
 
-  it('the merge gate is what protect-main says it is ([R128])', async () => {
+  it('the merge rule is what protect-main says it is [R128]', async () => {
     const { prov, calls } = fakeProv();
     await cmdBootstrapPaper(paperInput(), deps(prov));
     const pm = (calls.createRuleset as Array<{ b: any }>).find(
@@ -709,7 +701,7 @@ describe('cmdBootstrapPaper', () => {
     expect(checks.parameters.required_status_checks).toEqual([{ context: 'Journal checks' }]);
   });
 
-  it('the v* tag rule stops a tag being moved or deleted, not only created ([R128])', async () => {
+  it('the v* tag rule stops a tag being moved or deleted, not only created [R128]', async () => {
     const { prov, calls } = fakeProv();
     await cmdBootstrapPaper(paperInput(), deps(prov));
     const vt = (calls.createRuleset as Array<{ b: any }>).find(
@@ -718,7 +710,7 @@ describe('cmdBootstrapPaper', () => {
     expect(vt.rules.map((r: any) => r.type).sort()).toEqual(['creation', 'deletion', 'update']);
   });
 
-  it('a paper repo is public unless the editor asked otherwise ([R128])', async () => {
+  it('a paper repo is public unless the editor asks otherwise [R128]', async () => {
     const open = fakeProv();
     await cmdBootstrapPaper(paperInput(), deps(open.prov));
     expect((open.calls.createRepo[0] as { o: { private: boolean } }).o.private).toBe(false);
@@ -728,7 +720,7 @@ describe('cmdBootstrapPaper', () => {
     expect((closed.calls.createRepo[0] as { o: { private: boolean } }).o.private).toBe(true);
   });
 
-  it('a solo editor may merge their own gated PR, and still cannot push to main ([R127])', async () => {
+  it('a sole editor may merge their own gated pull request, and still cannot push to main [R127]', async () => {
     const personal = fakeProv({ ownerType: 'User' });
     await cmdBootstrapPaper(paperInput(), deps(personal.prov));
     const pm = (personal.calls.createRuleset as Array<{ b: any }>).find(
@@ -738,7 +730,7 @@ describe('cmdBootstrapPaper', () => {
       { actor_id: 5, actor_type: 'RepositoryRole', bypass_mode: 'pull_request' },
     ]);
 
-    // An org team reviews each other, so it gets no bypass on the merge gate.
+    // An org team's members review each other, so it gets no bypass on the merge rule.
     const org = fakeProv({ ownerType: 'Organization' });
     await cmdBootstrapPaper(
       paperInput({ repo: 'org/paper', owner: '@org/editors' }),
@@ -750,7 +742,7 @@ describe('cmdBootstrapPaper', () => {
     expect(orgPm.bypass_actors).toEqual([]);
   });
 
-  it('org owner grants the team + uses a Team bypass; personal uses a repo-admin bypass', async () => {
+  it('an org grants the team and a team bypass; a personal account gets a repo admin bypass', async () => {
     const org = fakeProv({ ownerType: 'Organization' });
     await cmdBootstrapPaper(
       paperInput({ repo: 'org/paper', owner: '@org/editors' }),
@@ -789,7 +781,7 @@ describe('cmdBootstrapJournal', () => {
     return d;
   };
 
-  it('--external: public repo, instance scaffold ⊎ the journal site, Pages, no rulesets/env', async () => {
+  it("--external: a public repo with the journal's settings and website, Pages, no rulesets or environments", async () => {
     const { prov, calls } = fakeProv();
     const seedDirs: string[] = [];
     const out = await cmdBootstrapJournal(
@@ -807,12 +799,12 @@ describe('cmdBootstrapJournal', () => {
     );
     expect((calls.createRepo[0] as { o: { private: boolean } }).o.private).toBe(false);
     expect(calls.seedBranch).toHaveLength(1);
-    expect(calls.createRuleset).toHaveLength(0); // still no rulesets: registry upkeep is [S5]
-    expect(calls.enablePages).toHaveLength(1); // ...but the site needs Pages
+    expect(calls.createRuleset).toHaveLength(0); // no rulesets: a journal repo has no branch rules
+    expect(calls.enablePages).toHaveLength(1); // but the website needs Pages
     expect(out.result.tier).toBe('external');
     expect(out.result.site_url).toBe('https://me.github.io/config/');
 
-    // The union: instance-config data AND the site, in one repo (A′).
+    // The journal's settings and the website, in one repo.
     const seed = seedDirs[0]!;
     expect(existsSync(join(seed, 'journal.yml'))).toBe(true);
     expect(existsSync(join(seed, 'registry/papers.yml'))).toBe(true);
@@ -850,7 +842,7 @@ describe('cmdBootstrapJournal', () => {
     expect(existsSync(join(seed, '.github'))).toBe(false);
   });
 
-  it('--external re-run does not re-enable Pages (GET-then-act)', async () => {
+  it('an --external rerun does not enable Pages again', async () => {
     const { prov, calls } = fakeProv({
       repos: new Set(['me/config']),
       branches: new Set(['me/config/main']),
@@ -871,7 +863,7 @@ describe('cmdBootstrapJournal', () => {
     expect(calls.enablePages ?? []).toHaveLength(0);
   });
 
-  it('--external re-run forces a private repo back to public', async () => {
+  it('an --external rerun makes a private repo public again', async () => {
     const { prov, calls } = fakeProv({
       repos: new Set(['me/config']),
       branches: new Set(['me/config/main']),
@@ -892,7 +884,7 @@ describe('cmdBootstrapJournal', () => {
     expect(calls.setRepoPublic).toHaveLength(1);
   });
 
-  it('--co-located: seeds shim + starter paper + instance-config, provisions', async () => {
+  it("--co-located: seeds the paper workflows, a starter paper and the journal's settings, and sets them up", async () => {
     const { prov, calls } = fakeProv();
     const seedDirs: string[] = [];
     const d = deps(prov);
@@ -915,28 +907,26 @@ describe('cmdBootstrapJournal', () => {
       },
       d,
     );
-    expect(calls.createRuleset).toHaveLength(2); // it IS a build unit
-    // the seed dir carries BOTH the frozen shim and the co-located instance-config,
-    // with pins.yml instance_repo: .
+    expect(calls.createRuleset).toHaveLength(2); // it builds a paper
+    // The seed holds both the paper workflows and the journal's settings, with
+    // `instance_repo: .` in pins.yml.
     const seed = seedDirs[0]!;
     expect(existsSync(join(seed, '.github/workflows/ci.yml'))).toBe(true);
     expect(existsSync(join(seed, 'myst.yml'))).toBe(true);
     expect(existsSync(join(seed, 'journal.yml'))).toBe(true);
     const pins = parseDocument(readFileSync(join(seed, '.github/actions/engine/pins.yml'), 'utf8'));
     expect(pins.get('instance_repo')).toBe('.');
-    // ...and byte-unchanged by the site work: repo=journal's index is the deferred
-    // `assemble()` work ([S7]), so this tier must NOT acquire a site.
+    // No website: an index over papers in one repo is not built yet.
     expect(existsSync(join(seed, 'pages/index.md'))).toBe(false);
     expect(existsSync(join(seed, '.github/workflows/site.yml'))).toBe(false);
     expect(existsSync(join(seed, 'package.json'))).toBe(false);
     const myst = parseDocument(readFileSync(join(seed, 'myst.yml'), 'utf8'));
-    expect(myst.getIn(['project', 'options', 'oaktree-sapling', 'version'])).toBe('v9'); // the PAPER starter
+    expect(myst.getIn(['project', 'options', 'oaktree-sapling', 'version'])).toBe('v9'); // the starter paper's
   });
 
-  it('a defaulted --edition is DECLARED, and names the file it will write', async () => {
-    // The journal path may default the edition (unlike a paper: the same value names the
-    // editions/<id>.yml this very run writes, so it is self-consistent), but the tenant is
-    // told, because every paper will have to spell that id back.
+  it('a default --edition is shown, with the file it will write', async () => {
+    // A journal may default the edition, since the same value names the editions/<id>.yml
+    // this run writes. The plan still says so, because every paper repeats that id.
     const { prov } = fakeProv();
     const seedDirs: string[] = [];
     const plans: string[][] = [];
@@ -965,9 +955,9 @@ describe('cmdBootstrapJournal', () => {
     expect(existsSync(join(seedDirs[0]!, 'editions/edition.yml'))).toBe(true);
   });
 
-  it('the plan does NOT claim a review owner an external journal never uses', async () => {
-    // An external journal repo gets no CODEOWNERS and no team grant. Declaring a value we
-    // do not honour is the same failure as hiding one we do.
+  it('the plan shows no review owner for an external journal, which has none', async () => {
+    // An external journal repo gets no CODEOWNERS and no team grant, so the plan shows no
+    // owner.
     const { prov } = fakeProv();
     const plans: string[][] = [];
     const ext = journalDeps(prov, []);
@@ -991,7 +981,7 @@ describe('cmdBootstrapJournal', () => {
     );
     expect(plans[0]!.join('\n')).not.toContain('review owner');
 
-    // ...but the co-located tier DOES write CODEOWNERS, so there it must be declared.
+    // A co-located journal writes CODEOWNERS, so the plan shows the owner.
     const colo = journalDeps(fakeProv().prov, []);
     colo.confirm = async (plan) => {
       plans.push(plan);
@@ -1014,7 +1004,7 @@ describe('cmdBootstrapJournal', () => {
     expect(plans[1]!.join('\n')).toContain('review owner   : @alice');
   });
 
-  it('--co-located --no-site is a usage ERROR, not a silent no-op', async () => {
+  it('--co-located --no-site is refused', async () => {
     const { prov } = fakeProv();
     const out = await cmdBootstrapJournal(
       {
@@ -1031,18 +1021,16 @@ describe('cmdBootstrapJournal', () => {
       },
       journalDeps(prov, []),
     );
-    // The tier never stamps a site, so a flag reading "turn the site off" must not look
-    // like it did something. Fail with the reason instead.
+    // A co-located journal has no website, so --no-site is refused with the reason.
     expect(out.exitCode).toBe(2);
     expect(out.result.status).toBe('error');
     expect(String(out.result.error)).toContain('--external');
   });
 });
 
-describe('buildReviewTree drops author files under editor-controlled paths ([R121])', () => {
+describe("buildReviewTree drops the author's files under the editor's paths [R121]", () => {
   it('drops an author .github path that main does not have', () => {
-    // The existing fixture gives main a SUPERSET of the author's editor-controlled paths, so the
-    // second loop's overwrite masks a missing filter. This is the author-only case.
+    // Here main lacks the author's path, so restoring main's `.github/` would not cover it.
     const tree = buildReviewTree(
       { 'index.md': 'a', '.github/workflows/evil.yml': 'on: push' },
       { '.github/workflows/ci.yml': 'frozen' },
@@ -1055,10 +1043,9 @@ describe('buildReviewTree drops author files under editor-controlled paths ([R12
  * A failed step is recorded, not thrown ([R125])
  * ------------------------------------------------------------------------ */
 
-describe('a failing provisioning step ([R125])', () => {
+describe('a failing setup step [R125]', () => {
   it('a settings failure is recorded, the other settings still run, and the run reports incomplete', async () => {
-    // A 403 at the first ruleset used to discard the actions map and print a stack, leaving
-    // a repo whose remaining settings were never attempted.
+    // A 403 on the first ruleset is recorded, and the remaining settings are still tried.
     const { prov, calls } = fakeProv();
     prov.createRuleset = () => {
       throw new Error('gh api failed (exit 1): 403 rulesets are not available on private repos');
@@ -1071,7 +1058,7 @@ describe('a failing provisioning step ([R125])', () => {
     expect(actions.main).toBe('seeded');
     expect(actions.protect_main).toMatch(/^failed: .*403/);
     expect(actions.v_tags).toMatch(/^failed: /);
-    // Independent steps are all attempted: the whole picture, not the first exception.
+    // Independent steps are all attempted.
     expect(actions.pages).toBe('enabled');
     expect(calls.enablePages).toHaveLength(1);
     expect(calls.createLabel).toHaveLength(2);
@@ -1081,7 +1068,7 @@ describe('a failing provisioning step ([R125])', () => {
     expect(runbook).toContain('re-run');
   });
 
-  it('a repo that cannot be created stops the run, but in the same envelope, not a stack', async () => {
+  it('a repo that cannot be created stops the run, with the usual result and no stack', async () => {
     const { prov, calls } = fakeProv();
     prov.createRepo = () => {
       throw new Error('gh repo create failed (exit 1): 403 name already taken');
@@ -1095,21 +1082,21 @@ describe('a failing provisioning step ([R125])', () => {
     expect(calls.createRuleset).toHaveLength(0);
   });
 
-  it('a seed failure skips the ingest chain, but the settings are still provisioned', async () => {
+  it('a failed seed skips the --from steps, and the settings are still applied', async () => {
     const { prov, calls } = fakeProv();
     prov.seedBranch = () => {
       throw new Error('git push failed (exit 1): remote hung up');
     };
     const out = await cmdBootstrapPaper(paperInput({ from: 'https://github.com/a/b' }), deps(prov));
     expect(out.result.status).toBe('incomplete');
-    // No main means no base to restore the frozen .github/ from and no PR base.
+    // Without main there is no `.github/` to restore and no base for the pull request.
     expect(calls.ingestReviewBranch).toHaveLength(0);
     expect(calls.openPr).toHaveLength(0);
     expect(calls.createRuleset).toHaveLength(2);
     expect((out.result.actions as Record<string, string>).main).toMatch(/^failed: /);
   });
 
-  it('a secret gh refuses lands in the by-hand list; the others are still set', async () => {
+  it('a secret gh refuses goes in the by-hand list; the others are still set', async () => {
     const { prov } = fakeProv();
     const setCalls: string[] = [];
     prov.setSecret = (_r, env, name) => {
@@ -1127,9 +1114,9 @@ describe('a failing provisioning step ([R125])', () => {
       'preview/CLOUDFLARE_API_TOKEN',
     ]); // the loop carried on
     expect(out.result.secrets_set).toEqual(['CLOUDFLARE_API_TOKEN']);
-    // The BY-HAND list itself, parsed: the step-failure line names the secret too, and
-    // ZENODO_TOKEN is a substring of ZENODO_TOKEN_SANDBOX, so both looser assertions pass
-    // with the refused secret missing from this list.
+    // Parses the by-hand list itself: the step-failure line names the secret too, and
+    // ZENODO_TOKEN is a substring of ZENODO_TOKEN_SANDBOX, so a looser match would pass
+    // without it.
     const byHand = (out.result.runbook as string[]).find((l) =>
       l.includes('settings/environments :'),
     );
@@ -1139,7 +1126,7 @@ describe('a failing provisioning step ([R125])', () => {
     expect(out.result.status).toBe('incomplete');
   });
 
-  it('the external journal tier reports a failed Pages step the same way', async () => {
+  it('an external journal reports a failed Pages step the same way', async () => {
     const { prov } = fakeProv();
     prov.enablePages = () => {
       throw new Error('gh api failed (exit 1): 403');
@@ -1164,7 +1151,7 @@ describe('a failing provisioning step ([R125])', () => {
     expect((out.result.runbook as string[]).join('\n')).toContain("'pages'");
   });
 
-  it('the co-located journal tier: a settings failure still seeds main and reports incomplete', async () => {
+  it('a co-located journal: a failed setting still seeds main and reports incomplete', async () => {
     const { prov, calls } = fakeProv();
     prov.createRuleset = () => {
       throw new Error('gh api failed (exit 1): 403');
@@ -1188,9 +1175,9 @@ describe('a failing provisioning step ([R125])', () => {
     expect((out.result.actions as Record<string, string>).protect_main).toMatch(/^failed: /);
   });
 
-  it('an existing zenodo-publish environment is left alone when there is no reviewer to add ([R127])', async () => {
-    // The PUT carries the whole environment, so re-PUTting it to add nobody cleared any
-    // field a tenant set by hand; the plan invites re-running.
+  it('an existing zenodo-publish environment is left alone with no reviewer to add [R127]', async () => {
+    // The PUT replaces the whole environment, so a rerun with no reviewer to add sends no PUT
+    // and keeps what the journal set by hand.
     const { prov, calls } = fakeProv({
       ownerType: 'Organization',
       environments: new Set(['org/paper/zenodo-publish']),
@@ -1205,7 +1192,7 @@ describe('a failing provisioning step ([R125])', () => {
     expect(out.result.status).toBe('ok'); // no reviewer is a runbook item, not a failure
   });
 
-  it('--private warns in the plan that the settings steps need a paid plan ([R127])', async () => {
+  it('--private warns in the plan that the settings steps need a paid plan [R127]', async () => {
     const { prov } = fakeProv();
     const plans: string[][] = [];
     const d = deps(prov);

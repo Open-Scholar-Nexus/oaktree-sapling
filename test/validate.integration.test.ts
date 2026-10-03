@@ -1,11 +1,8 @@
 /**
- * validate.integration.test.ts: the Layer-B editorial checks (Curvenote's MIT
- * @curvenote/check-implementations) run over the REAL fixture paper through the bundled CLI.
- *
- * Like integration.test.ts, this drives `node dist/cli.cjs` rather than importing myst-cli
- * in-process: the curvenote checks read the myst store (frontmatter + processed mdast), and
- * unbundled myst-cli crashes on Node 24 (the docx interop bug the esbuild bundle papers over,
- * [R51]). So this exercises the exact artifact CI runs. Skipped unless the bundle is present.
+ * The editorial checks (Layer B, from `@curvenote/check-implementations`) over the fixture paper,
+ * through the bundled CLI. Like integration.test.ts, it runs `node dist/cli.cjs`: the checks
+ * read myst's processed project, and myst-cli crashes unbundled on Node 24 [R51]. So this runs
+ * what CI runs. Skipped without the bundle.
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { spawnSync } from 'node:child_process';
@@ -26,14 +23,9 @@ import { bundleState, assertBundleNotStale } from './bundle-state.js';
 const engineDir = fileURLToPath(new URL('..', import.meta.url));
 const bundle = join(engineDir, 'dist', 'cli.cjs');
 /**
- * A PRIVATE copy of the paper fixture, not the shared `test/fixture-paper`.
- *
- * `materializeDerived` writes `myst.oak.yml` INTO the paper root and leaves it there (by
- * design: myst's `process.exit(0)` defeats cleanup, and the frozen paper template gitignores
- * it). Vitest runs test FILES in parallel, and two suites validate this fixture, so pointing
- * both at the shared directory makes them race on that one file: the loser reads the winner's
- * derived config and reports `status: 'error'` where it expects `ok`. That is the intermittent
- * failure `plans/todo-misc.md` carried as unreproduced from 2026-08-25.
+ * A copy of the fixture paper, not the shared `test/fixture-paper`. `materializeDerived` leaves
+ * `myst.oak.yml` in the paper root, and vitest runs test files in parallel; two suites
+ * validating one directory would read each other's `myst.oak.yml`.
  */
 const fixturePaper = mkdtempSync(join(tmpdir(), 'oak-fixture-paper-'));
 cpSync(join(engineDir, 'test', 'fixture-paper'), fixturePaper, {
@@ -43,7 +35,7 @@ cpSync(join(engineDir, 'test', 'fixture-paper'), fixturePaper, {
 const fixtureInstance = join(engineDir, 'test', 'fixture-instance');
 const repo = 'open-scholar-nexus/fixture-sample-paper';
 
-/** Spawn `oak validate --json`, capturing stdout + stderr separately. */
+/** Runs `oak validate --json`, capturing stdout and stderr separately. */
 function spawnValidate(paper: string): { exitCode: number; stdout: string; stderr: string } {
   const r = spawnSync(
     'node',
@@ -53,8 +45,8 @@ function spawnValidate(paper: string): { exitCode: number; stdout: string; stder
   return { exitCode: r.status ?? 1, stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
 }
 
-/** Run and parse the JSON payload. stdout must be PURE JSON, myst's progress logs are routed to
- *  stderr (cmdValidate), so we parse it directly with no slicing; a stray stdout write would throw. */
+/** Runs and parses the JSON. stdout must be only JSON, since cmdValidate sends myst's progress
+ *  to stderr, so a stray write to stdout fails the parse. */
 function runValidate(paper: string): { exitCode: number; out: any } {
   const { exitCode, stdout } = spawnValidate(paper);
   return { exitCode, out: JSON.parse(stdout) };
@@ -64,7 +56,7 @@ describe.skipIf(bundleState() === 'absent')(
   'oak validate, curvenote Layer-B checks (bundled)',
   () => {
     beforeAll(assertBundleNotStale);
-    it('passes the well-formed fixture: the 5 journal-selected checks pass, exit 0, success', () => {
+    it("passes the fixture paper: the journal's 5 checks pass, exit 0", () => {
       const { exitCode, out } = runValidate(fixturePaper);
       expect(exitCode).toBe(0);
       expect(out.status).toBe('ok');
@@ -82,21 +74,21 @@ describe.skipIf(bundleState() === 'absent')(
       expect(out.checks.every((c: any) => c.status === 'pass')).toBe(true);
     }, 60_000);
 
-    it('--json stdout is pure parseable JSON; myst progress logs go to stderr', () => {
+    it("--json stdout is only JSON; myst's progress goes to stderr", () => {
       const { stdout, stderr } = spawnValidate(fixturePaper);
-      // The whole point of the contract: stdout parses as-is, with nothing before the JSON.
+      // stdout parses as it is, with nothing before the JSON.
       expect(stdout.trimStart().startsWith('{')).toBe(true);
       expect(() => JSON.parse(stdout)).not.toThrow();
-      // myst's chatter (the raw `new Session()` console.debug + the `📖/📚 Built` logger lines)
-      // must be diverted off stdout: it belongs on stderr.
+      // myst's output (a `console.debug` in `new Session()` and the `📖/📚 Built` lines) goes to
+      // stderr.
       expect(stdout).not.toMatch(/building myst-cli session|📖 Built|📚 Built/);
       expect(stderr).toMatch(/building myst-cli session with API URL/);
     }, 60_000);
 
-    it('fails a bogus CRediT role + missing abstract: exit 1, failure (taxonomy depth from curvenote)', () => {
+    it('fails a made-up CRediT role and a missing abstract: exit 1', () => {
       const tmp = mkdtempSync(join(tmpdir(), 'oak-val-'));
       copyFileSync(join(fixturePaper, 'bib.bib'), join(tmp, 'bib.bib'));
-      // index.md WITHOUT the abstract part
+      // index.md without the abstract part
       writeFileSync(
         join(tmp, 'index.md'),
         '# A Fixture Paper\n\n## Introduction\n\nNo abstract part here.\n',
@@ -118,7 +110,7 @@ describe.skipIf(bundleState() === 'absent')(
       expect(abstract.status).toBe('fail');
     }, 60_000);
 
-    it('--report writes the full JSON envelope (with checkRun) for Stage-2 check-post', () => {
+    it('--report writes the full JSON, with checkRun, for check-post', () => {
       const tmp = mkdtempSync(join(tmpdir(), 'oak-report-'));
       const reportPath = join(tmp, 'report.json');
       const r = spawnSync(
@@ -140,7 +132,7 @@ describe.skipIf(bundleState() === 'absent')(
       expect(r.status).toBe(0);
       expect(existsSync(reportPath)).toBe(true);
       const written = JSON.parse(readFileSync(reportPath, 'utf8'));
-      // The report always carries the full envelope, checkRun included, regardless of --json.
+      // The report always holds the full JSON, `checkRun` included, with or without --json.
       expect(written.checkRun.conclusion).toBe('success');
       expect(Array.isArray(written.checks)).toBe(true);
       expect(written.status).toBe('ok');
@@ -151,19 +143,18 @@ describe.skipIf(bundleState() === 'absent')(
 describe.skipIf(bundleState() === 'absent')('the COMPOSED view reaches the checks ([R82])', () => {
   beforeAll(assertBundleNotStale);
 
-  it('the thumbnail check FIRES in validate: it could not before ([R81])', () => {
-    // The whole point of [R82]. `paper-base.yml` pins `project.thumbnail`, which exists only
-    // post-`extends`; on the author's own config validate saw nothing and passed silently. The
-    // fixture paper genuinely ships no `thumbnails/`, so a composed run must now say so.
+  it('the thumbnail check reports a missing thumbnail [R81]', () => {
+    // `paper-base.yml` sets `project.thumbnail`, which exists only after `extends`, so only a
+    // composed run sees it [R82]. The fixture paper has no `thumbnails/`, so the run says so.
     const { out } = runValidate(fixturePaper);
     const thumb = out.warnings.find((w: any) => w.check === 'thumbnail');
     expect(thumb).toBeDefined();
     expect(thumb.message).toMatch(/thumbnails\/thumbnail\.png/);
-    // A warn, not an error: it must not gate a paper that is otherwise fine ([R81]).
+    // A warning, not an error: it does not block a paper that is otherwise fine [R81].
     expect(out.status).toBe('ok');
   }, 60_000);
 
-  it('and does NOT fire once the file is there, no false positive', () => {
+  it('and says nothing once the file is there', () => {
     const tmp = mkdtempSync(join(tmpdir(), 'oak-val-thumb-'));
     copyFileSync(join(fixturePaper, 'bib.bib'), join(tmp, 'bib.bib'));
     copyFileSync(join(fixturePaper, 'index.md'), join(tmp, 'index.md'));
@@ -176,8 +167,8 @@ describe.skipIf(bundleState() === 'absent')('the COMPOSED view reaches the check
   }, 60_000);
 
   it('reports no template-override for a paper that declares no template of its own', () => {
-    // Compose STAMPS a template onto the composed export, so this is the regression that
-    // proves the author value is raw-lifted rather than read back off the composed project.
+    // Compose always sets a template on the composed export, so the author's own value is read
+    // from their myst.yml, not from the composed project.
     const { out } = runValidate(fixturePaper);
     expect(out.warnings.some((w: any) => w.check === 'template-override')).toBe(false);
     expect(out.errors.some((e: any) => e.check === 'template-override')).toBe(false);
@@ -185,12 +176,9 @@ describe.skipIf(bundleState() === 'absent')('the COMPOSED view reaches the check
 });
 
 /* --------------------------------------------------------------------------
- * Instance resolution + the "engine crash" failure mode (UX-test bug hunt).
- *
- * Two defects from the same live run: the CI shim leaves `instance_repo: .` to "the CLI's
- * root resolution" (the [R38] co-located rung), which did not exist, and when the resulting
- * usage error fired, `oak validate` exited 2 having written NOTHING, so Stage 1 could only
- * say "produced no valid report (engine crash)".
+ * Finding the journal repo [R38], and the report written when validate cannot run. With
+ * `instance_repo: .` the engine action passes no `--instance`, so validate looks for a
+ * journal.yml beside the paper; when it finds none, it still writes a report.
  * ------------------------------------------------------------------------ */
 describe.skipIf(bundleState() === 'absent')(
   'oak validate, instance resolution + crash reporting',
@@ -205,9 +193,9 @@ describe.skipIf(bundleState() === 'absent')(
       return dir;
     }
 
-    it('writes a FAILING report instead of nothing when no instance resolves', () => {
-      // The Stage-1 guard is `jq -e '.checkRun.conclusion' report.json`. Before the fix that
-      // file did not exist and the author was told "engine crash" and nothing else.
+    it('writes a failing report when no journal repo is found', () => {
+      // The `pull_request` job checks `jq -e '.checkRun.conclusion' report.json`; a missing file
+      // would tell the author only "engine crash".
       const dir = paperOnly();
       const report = join(dir, 'report.json');
       const r = spawnSync('node', [bundle, 'validate', '--paper', dir, '--report', report], {
@@ -217,12 +205,12 @@ describe.skipIf(bundleState() === 'absent')(
       expect(existsSync(report)).toBe(true);
       const written = JSON.parse(readFileSync(report, 'utf8'));
       expect(written.checkRun.conclusion).toBe('failure');
-      // The report must carry the REASON, since it is what Stage 2 posts on the PR.
+      // The report carries the reason, since check-post posts it on the pull request.
       expect(written.checkRun.summary).toContain('pins.yml');
       expect(String(written.errors[0])).toContain('no journal repo found');
     }, 60_000);
 
-    it('the error names pins.yml and the co-located rule, not just the flag', () => {
+    it('the error names pins.yml and what `instance_repo: .` means', () => {
       const r = spawnSync('node', [bundle, 'validate', '--paper', paperOnly()], {
         encoding: 'utf8',
       });
@@ -231,8 +219,8 @@ describe.skipIf(bundleState() === 'absent')(
       expect(r.stderr).toContain('--no-instance');
     }, 60_000);
 
-    it('resolves the CO-LOCATED instance from a journal.yml beside the paper ([R38])', () => {
-      // What `instance_repo: .` means, and what the CI shim assumes the CLI does.
+    it('uses a journal.yml beside the paper as the journal repo [R38]', () => {
+      // What `instance_repo: .` means: the journal.yml sits beside the paper.
       const dir = mkdtempSync(join(tmpdir(), 'oak-val-colo-'));
       for (const f of ['bib.bib', 'index.md', 'myst.yml'])
         copyFileSync(join(fixturePaper, f), join(dir, f));
@@ -246,14 +234,14 @@ describe.skipIf(bundleState() === 'absent')(
       expect(r.status).toBe(0);
       const out = JSON.parse(r.stdout);
       expect(out.checkRun.conclusion).toBe('success');
-      // Composed against the co-located journal.yml: its five selected checks actually ran.
+      // Composed with the journal.yml beside the paper: its five checks ran.
       const ids = new Set(out.checks.map((c: any) => c.id));
       expect(ids.has('abstract-exists')).toBe(true);
-      // ...and it did NOT silently degrade to the author's own config.
+      // It did not fall back to the author's config alone.
       expect((out.notes ?? []).join(' ')).not.toMatch(/uncomposed/i);
     }, 60_000);
 
-    it('--no-instance is still the explicit bare-check opt-out', () => {
+    it('--no-instance still checks the paper on its own', () => {
       const r = spawnSync(
         'node',
         [bundle, 'validate', '--paper', paperOnly(), '--no-instance', '--json'],

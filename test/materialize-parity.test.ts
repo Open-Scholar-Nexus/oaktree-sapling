@@ -1,25 +1,11 @@
 /**
- * materialize-parity.test.ts: the guard that keeps `oak build` and `oak validate` composing
- * from the same inputs.
+ * `oak build`, `oak start` and `oak validate` compose from the same inputs, so they write the
+ * same `myst.oak.yml` [R82]. `readStampedTemplate` (`zenodo.ts`) reads that file as the record
+ * of which template rendered the PDF, so a validate after a build must not change it.
  *
- * [R82] made validate read the COMPOSED config by sharing `materializeDerived` with build, and
- * claimed on that basis that "neither verb can drift from the other". `implementation.md`
- * records that as false as shipped: the FUNCTION was shared, its INPUTS were not. `buildPaper`
- * passed `assetOverrides` (notably `engineTypstTemplate: <engineRoot>/templates/typst`, which
- * exists in every checkout including CI); `cmdValidate` passed none. So validate stamped the
- * release-zip URL where build stamped the local path: two different files under one name.
- * `readStampedTemplate` (`zenodo.ts`) reads that file as the record of what the build rendered
- * with, so a local build then validate then deposit archived the wrong provenance and could
- * throw after a build that did happen. Proven live on the `lai` pilot.
- *
- * The fix was `assetOverridesFrom`, called from both verbs. It shipped without a regression
- * test, and the type checker cannot be one: `MaterializeInput.assetOverrides` is OPTIONAL, so
- * dropping it from a call site compiles cleanly. That is the hole this file covers.
- *
- * It asserts the SOURCE-level invariant rather than the values, because the failure is a call
- * site that stops passing something, not a function returning the wrong thing. Every verb that
- * materializes must build its input from the one shared builder; then a field added for build
- * reaches validate and start whether or not anyone remembers them.
+ * `MaterializeInput.assetOverrides` is optional, so the type checker misses a call site that
+ * leaves it out. This checks the source instead: every verb builds its input with the one
+ * shared builder, so a field added for build reaches the others too.
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
@@ -35,8 +21,7 @@ function callsTo(src: string, name: string): number {
 
 describe('build and validate materialize from the same inputs', () => {
   it('assetOverridesFrom is reached only through the shared builder', () => {
-    // If this drops to 0 the builder stopped passing overrides; if it rises above 1 a verb has
-    // started deriving its own, which is exactly the shape of the shipped bug.
+    // 0 means the builder stopped passing overrides; more than 1 means a verb builds its own.
     expect(callsTo(cli, 'assetOverridesFrom')).toBe(1);
     const builder = cli.slice(cli.indexOf('function materializeInputFrom'));
     expect(builder.slice(0, builder.indexOf('\n}')).includes('assetOverridesFrom(argv)')).toBe(
@@ -45,18 +30,17 @@ describe('build and validate materialize from the same inputs', () => {
   });
 
   it('every verb that materializes spreads the shared builder', () => {
-    // build, start and validate. Spreading rather than re-listing fields is the point: a new
-    // MaterializeInput field is picked up by all three without being remembered three times.
+    // build, start and validate. They spread the builder's result, so a new MaterializeInput
+    // field reaches all three.
     expect(callsTo(cli, 'materializeInputFrom')).toBe(3);
     expect(cli.match(/\.\.\.materializeInputFrom\(argv, paperRoot, /g)?.length).toBe(3);
   });
 
   it('validate does not rebuild the shared fields by hand', () => {
-    // The pre-fix shape: cmdValidate listing paperRoot/engineRoot/engineRepo/assetOverrides
-    // itself. Anything re-listed here can silently diverge from what the build passes.
+    // cmdValidate must not list paperRoot, engineRoot, engineRepo or assetOverrides itself,
+    // since its own list could differ from the build's.
     const call = cli.slice(cli.indexOf('await runValidate('));
-    // Drop the builder call itself: `paperRoot` and `instanceRoot` are its ARGUMENTS there,
-    // not fields validate re-lists.
+    // Leave out the builder call, where `paperRoot` and `instanceRoot` are its arguments.
     const body = call
       .slice(0, call.indexOf('\n      },'))
       .split('\n')

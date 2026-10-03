@@ -1,24 +1,14 @@
 /**
- * template.test.ts: the disjointness invariant for the split template trees.
+ * The template trees that bootstrap writes into one repo share no path. `templates/paper/`,
+ * `templates/instance/` and `templates/site/` are separate trees, and two pairs land in the
+ * same repo:
  *
- * `templates/paper/`, `templates/instance/` and `templates/site/` are independent source
- * trees, and two of the three bootstrap tiers stamp a UNION of two of them into the SAME
- * repo root, back to back. A single flattened tree forbade same-path collisions by
- * construction; the split re-admits the possibility.
+ *   paper + instance   `oak bootstrap journal --co-located`
+ *   site  + instance   `oak bootstrap journal --external`
  *
- * NOT "all roots are disjoint": only the pairs that are actually unioned:
- *
- *   paper ⊎ instance   `oak bootstrap journal --co-located`
- *   site  ⊎ instance   `oak bootstrap journal --external` ([S8] variant A′)
- *
- * `site` vs `paper` is deliberately UNCHECKED: they are never stamped together (the
- * co-located tier gets no site: repo=journal's index is the deferred `assemble()` work,
- * [S7]), and both legitimately own a root `myst.yml` and a `.gitignore`.
- *
- * If a future file legitimately belongs to both roles of a checked pair, this assertion
- * fails loudly and forces a deliberate precedence decision AT THAT MOMENT, rather than a
- * silent overwrite whose winner depends on render order. That is the whole point: the
- * invariant replaces a standing `PAPER_EXCLUDE`-style policy list.
+ * `site` and `paper` are not checked: they never land together, and both have a root `myst.yml`
+ * and `.gitignore`. A file that belongs in both trees of a checked pair fails here, so someone
+ * decides which wins, rather than the write order.
  */
 import { describe, it, expect } from 'vitest';
 import { stampedFiles, listFiles, STAMP_RENAME } from '../src/bootstrap.js';
@@ -34,25 +24,20 @@ const overlap = (a: string, b: string) => {
 };
 
 describe('template disjointness invariant', () => {
-  it('--co-located: the paper and instance stamps write disjoint root-relative paths', () => {
+  it('--co-located: the paper and journal templates write different paths', () => {
     expect(overlap(PAPER_ROOT, INSTANCE_ROOT)).toEqual([]);
   });
 
-  it('--external: the site and instance stamps write disjoint root-relative paths', () => {
+  it('--external: the website and journal templates write different paths', () => {
     expect(overlap(SITE_ROOT, INSTANCE_ROOT)).toEqual([]);
   });
 });
 
 /**
- * npm strips a leading-dot `.gitignore` from every tarball it builds, with no opt-out. A
- * template holding one therefore seeds correctly from a git checkout and silently seeds
- * NOTHING from an npm install: the tenant then commits `_build/` and `node_modules/`.
- * The templates hold `gitignore`; `stampRel` puts the dot back at write time.
- *
- * Stated as "no template file ships under a strippable name", not "no file is called
- * `.gitignore`": the assertion is derived from `STAMP_RENAME` and scans every shipped root
- * at every depth, so it guards the failure MODE. A second strippable name added to the map,
- * or a `.gitignore` added three directories down, is caught without touching this file.
+ * npm leaves `.gitignore` out of every package, so a template holding one would seed a repo
+ * without it when oak comes from npm. The templates hold `gitignore`, and `stampRel` adds the
+ * dot when writing. The names come from `STAMP_RENAME`, and every template is searched at every
+ * depth, so a new name in the map, or a `.gitignore` further down, is caught too.
  */
 describe('templates survive npm packaging', () => {
   const STRIPPED = new Set(Object.values(STAMP_RENAME));

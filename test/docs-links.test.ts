@@ -1,19 +1,12 @@
 /**
- * docs-links.test.ts: the guard that keeps a printed documentation URL resolving.
+ * The documentation URLs oak prints keep resolving, since a printed URL outlives its release.
+ * Neither the type checker nor the docs build sees two ways to break one:
  *
- * `messages.ts` prints these URLs to tenants, and a URL that has been printed is a published
- * interface: the page it names outlives the release that named it. Two things can silently
- * break one, and neither shows up in a type check or in the docs build:
+ *   1. A page or a `(label)=` target in `docs/` is renamed while `docs-links.ts` names the old
+ *      one. The docs build checks only links inside docs/.
+ *   2. A docs URL written as a literal, not through `docsUrl(DOCS.x)`, which check 1 cannot see.
  *
- *   1. A page or a `(label)=` target in `docs/` is renamed, and `docs-links.ts` still names the
- *      old one. The docs build only checks links written INSIDE docs/; it cannot see this
- *      table, so the anchor goes on resolving for MyST while the CLI sends people to a 404.
- *   2. Someone writes a docs URL as a literal instead of going through `docsUrl(DOCS.x)`,
- *      putting the domain back in a second place and escaping check 1 entirely.
- *
- * Both are cheap to assert and expensive to notice in the field, which is the whole argument
- * for this file. It reads the table as source text rather than importing it, so a topic that
- * is not yet referenced by any message is still checked.
+ * The table is read as source, not imported, so a topic no message uses yet is checked too.
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
@@ -33,8 +26,7 @@ describe('every documentation topic resolves', () => {
       const file = join(docsDir, `${page}.md`);
       expect(existsSync(file), `no docs page at docs/${page}.md`).toBe(true);
       if (!anchor) return;
-      // An explicit target, not a heading slug: a heading reworded in a docs-only PR would
-      // otherwise move the anchor with it, and this table would not notice.
+      // An explicit target, not a heading slug, so rewording a heading does not move it.
       const md = readFileSync(file, 'utf8');
       expect(
         md.includes(`(${anchor})=`),
@@ -44,8 +36,7 @@ describe('every documentation topic resolves', () => {
   }
 
   it('the table is the only place a topic path is written', () => {
-    // `docsUrl` is what turns a topic into a URL; a literal that skips it is a second copy of
-    // both the domain and the path, and check 1 above cannot see it.
+    // A literal URL copies the domain and the path, and check 1 cannot see it.
     const offenders: string[] = [];
     for (const name of readdirSync(srcDir)) {
       if (extname(name) !== '.ts' || name === 'docs-links.ts' || name === 'assets.ts') continue;
@@ -60,8 +51,8 @@ describe('every documentation topic resolves', () => {
   });
 
   it('every DOCS.<symbol> named in source is a real key', () => {
-    // A code reference is typechecked; a `DOCS.foo` in a COMMENT is not, so a renamed symbol
-    // leaves the comment pointing at nothing. This is check 1 for the comment side.
+    // A `DOCS.foo` in a comment is not typechecked, so a renamed topic would leave it pointing
+    // at nothing.
     const keys = new Set(Object.keys(DOCS));
     const offenders: string[] = [];
     for (const name of readdirSync(srcDir)) {
@@ -74,9 +65,8 @@ describe('every documentation topic resolves', () => {
     expect(offenders, `no such key in DOCS:\n  ${offenders.join('\n  ')}`).toEqual([]);
   });
 
-  it('every documentation URL seeded into a tenant repo resolves', () => {
-    // A seeded file is copied into a tenant repo and never resynced, so it writes the URL out
-    // in full rather than citing a DOCS symbol.
+  it('every documentation URL written into a new repo resolves', () => {
+    // A seeded file is copied into a repo and never updated, so it writes the URL out in full.
     const offenders: string[] = [];
     const walk = (dir: string): void => {
       for (const name of readdirSync(dir)) {

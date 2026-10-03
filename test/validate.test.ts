@@ -32,8 +32,8 @@ function edgeReturning(project: unknown, checkResults: unknown[] = []): MystEdge
       return project as never;
     },
     async build() {},
-    // The real edge loads+processes a myst session and runs the curvenote checks; the fake just
-    // returns canned Layer-B results so the exit-code/combination logic stays unit-testable.
+    // The real edge processes the project with myst and runs the curvenote checks; the fake
+    // returns fixed Layer B results, so the exit codes and how results combine can be tested.
     async withProjectSession() {
       return checkResults as never;
     },
@@ -45,7 +45,7 @@ describe('checkLayout', () => {
     const probes: FsProbes = { existsProbe: (p) => p.endsWith('myst.yml'), listTree: () => [] };
     expect(checkLayout('/paper', probes).some((r) => r.message.includes('index.md'))).toBe(true);
   });
-  it('flags a stray nested myst.yml', () => {
+  it('flags an extra nested myst.yml', () => {
     const probes: FsProbes = {
       existsProbe: () => true,
       listTree: () => ['myst.yml', 'sub/myst.yml'],
@@ -58,13 +58,13 @@ describe('checkLayout', () => {
     const probes: FsProbes = { existsProbe: () => true, listTree: () => ['myst.yml', 'index.md'] };
     expect(checkLayout('/paper', probes)).toHaveLength(0);
   });
-  it('ignores infra dirs the CI shim drops in (.engine, .git, node_modules)', () => {
+  it('ignores the directories CI adds (.engine, .git, node_modules)', () => {
     const probes: FsProbes = {
       existsProbe: () => true,
       listTree: () => [
         'myst.yml',
         'index.md',
-        '.engine/test/fixture-paper/myst.yml', // engine checkout under the paper root
+        '.engine/test/fixture-paper/myst.yml', // oak's checkout under the paper root
         '.engine/templates/paper/myst.yml',
         '.git/whatever',
         'node_modules/pkg/myst.yml',
@@ -74,7 +74,7 @@ describe('checkLayout', () => {
   });
 });
 
-describe('checkBrandFavicon ([R61])', () => {
+describe('checkBrandFavicon [R61]', () => {
   it('warns when no favicon is declared', () => {
     expect(checkBrandFavicon({ instanceRoot: '/i' }, allTrue).ok).toBe(false);
   });
@@ -91,7 +91,7 @@ describe('checkBrandFavicon ([R61])', () => {
   });
 });
 
-describe('checkBrandWatermark ([R62])', () => {
+describe('checkBrandWatermark [R62]', () => {
   it('warns a URL watermark (typst cannot fetch)', () => {
     expect(checkBrandWatermark({ instanceRoot: '/i', logo: 'https://x/w.svg' }, allTrue).ok).toBe(
       false,
@@ -105,8 +105,8 @@ describe('checkBrandWatermark ([R62])', () => {
   });
 });
 
-describe('checkThumbnail ([R81])', () => {
-  it("passes when no thumbnail is declared (myst's first-image fallback is live)", () => {
+describe('checkThumbnail [R81]', () => {
+  it('passes when no thumbnail is declared (myst uses the first image)', () => {
     expect(checkThumbnail({ paperRoot: '/paper' }, allFalse).ok).toBe(true);
   });
   it('passes a URL thumbnail (myst downloads it for HTML)', () => {
@@ -122,7 +122,7 @@ describe('checkThumbnail ([R81])', () => {
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.severity).toBe('warn');
   });
-  it('passes a resolvable thumbnail, probed against the PAPER root (no rebasing)', () => {
+  it('passes a resolvable thumbnail, looked up from the paper root', () => {
     const seen: string[] = [];
     const probes: FsProbes = {
       existsProbe: (p) => (seen.push(p), true),
@@ -135,13 +135,13 @@ describe('checkThumbnail ([R81])', () => {
   });
 });
 
-describe('checkDepositNames ([R28])', () => {
+describe('checkDepositNames [R28]', () => {
   const depositOf = (...entries: string[]): FsProbes => ({
     existsProbe: () => true,
     listTree: (dir) => (dir.endsWith('deposit') ? entries : []),
   });
 
-  it('errors on a deposit/ file the engine writes itself', () => {
+  it('errors on a deposit/ file oak writes itself', () => {
     const out = checkDepositNames({ paperRoot: '/paper' }, depositOf('data.csv', 'source.zip'));
     expect(out).toHaveLength(1);
     expect(out[0]!.severity).toBe('error');
@@ -160,7 +160,7 @@ describe('checkDepositNames ([R28])', () => {
   });
 
   it('reads the top level only, as the bundle does', () => {
-    // A nested path is not uploaded, and a DIRECTORY of a reserved name is not overwritten.
+    // A nested path is not uploaded, and a directory with a reserved name is not overwritten.
     const out = checkDepositNames(
       { paperRoot: '/paper' },
       depositOf('sub', 'sub/paper.pdf', 'myst.yml', 'myst.yml/notes.txt'),
@@ -178,7 +178,7 @@ describe('checkDepositNames ([R28])', () => {
   });
 });
 
-describe('isFloatingTemplate ([R76], the [R5] hygiene lint, not a remoteness lint)', () => {
+describe('isFloatingTemplate: whether a template can change under the same value [R76] [R5]', () => {
   it('treats pinned remote references as fine', () => {
     expect(isFloatingTemplate('https://github.com/o/r/releases/download/v1.2.3/t.zip')).toBe(false);
     expect(isFloatingTemplate('https://github.com/o/r/archive/refs/tags/v1.2.3.zip')).toBe(false);
@@ -193,25 +193,25 @@ describe('isFloatingTemplate ([R76], the [R5] hygiene lint, not a remoteness lin
     expect(isFloatingTemplate('https://github.com/o/r.git#my-branch')).toBe(true);
   });
 
-  it('treats local paths as bytes, not pointers', () => {
+  it('treats local paths as fixed', () => {
     expect(isFloatingTemplate('./typst-template')).toBe(false);
     expect(isFloatingTemplate('../shared/typst')).toBe(false);
     expect(isFloatingTemplate('/srv/typst-template')).toBe(false);
   });
 
-  it('treats a by-name reference as floating (design §7)', () => {
+  it('treats a template named without a version as unpinned [design §7]', () => {
     expect(isFloatingTemplate('lapreprint-typst')).toBe(true);
   });
 
-  it('stays quiet on an unrecognized remote URL rather than nagging about a pin it cannot see', () => {
+  it('says nothing about a remote URL it cannot judge', () => {
     expect(isFloatingTemplate('https://example.org/templates/mine-v1.zip')).toBe(false);
   });
 });
 
-describe('checkTemplates ([R76])', () => {
+describe('checkTemplates [R76]', () => {
   const ids = (f: ReturnType<typeof checkTemplates>) => f.map((x) => x.check);
 
-  it('flags an author template that overrides the journal’s, as a WARN, never an error', () => {
+  it("warns, without failing, when the author's template overrides the journal's", () => {
     const f = checkTemplates(
       { instanceRoot: '/i', authorTemplate: './mine', journalTemplate: './journal' },
       allFalse,
@@ -227,7 +227,7 @@ describe('checkTemplates ([R76])', () => {
     ).not.toContain('template-override');
   });
 
-  it('warns on a floating template in EITHER layer (symmetric)', () => {
+  it('warns on an unpinned template from either the author or the journal', () => {
     const author = checkTemplates(
       { instanceRoot: '/i', authorTemplate: 'https://github.com/o/r.git' },
       allFalse,
@@ -240,7 +240,7 @@ describe('checkTemplates ([R76])', () => {
     expect(journal.find((x) => x.check === 'template-floating')!.message).toMatch(/journal/);
   });
 
-  it('fires both findings at once on a floating author override (different concerns)', () => {
+  it("reports both findings for an unpinned author template that overrides the journal's", () => {
     const f = checkTemplates(
       {
         instanceRoot: '/i',
@@ -253,19 +253,19 @@ describe('checkTemplates ([R76])', () => {
     expect(f.every((x) => x.severity === 'warn')).toBe(true);
   });
 
-  it('warns when a bare tenant value shadows a real instance-config directory', () => {
+  it("warns when the journal's template name matches a directory in the journal repo", () => {
     const f = checkTemplates({ instanceRoot: '/i', journalTemplate: 'typst-template' }, allTrue);
     const amb = f.find((x) => x.check === 'template-name-ambiguous')!;
     expect(amb.message).toMatch(/write "\.\/typst-template"/);
   });
 
-  it('does not warn about ambiguity when the value is explicitly ./-relative', () => {
+  it('does not warn when the value starts with ./', () => {
     const f = checkTemplates({ instanceRoot: '/i', journalTemplate: './typst-template' }, allTrue);
     expect(ids(f)).not.toContain('template-name-ambiguous');
   });
 });
 
-describe('runValidate: exit codes over the fixture instance', () => {
+describe('runValidate: exit codes with the fixture journal', () => {
   const goodProject = {
     id: 'fixture-2026-sample-paper',
     authors: [{ name: 'Ada Fixture', orcid: '0000-0002-1825-0097', roles: ['software'] }],
@@ -284,7 +284,7 @@ describe('runValidate: exit codes over the fixture instance', () => {
     expect(out.checkRun.conclusion).toBe('success');
   });
 
-  it('fails on the sentinel id + missing editorial fields (exit 1)', async () => {
+  it('fails on the placeholder id and missing editorial fields (exit 1)', async () => {
     const bad = { id: 'fixture-template-placeholder', authors: [], abstract: '', keywords: [] };
     const out = await runValidate(
       { paperRoot: '/paper', instanceRoot, edge: edgeReturning(bad) },
@@ -296,9 +296,9 @@ describe('runValidate: exit codes over the fixture instance', () => {
     expect(out.checkRun.conclusion).toBe('failure');
   });
 
-  it('a bad id (identity) does NOT short-circuit Layer B, editorial checks still run, id still gates (exit 1)', async () => {
-    // id-gate-relocation: an id error is `identity`, not `structural`, so myst can still process
-    // and the author gets the full fix-list, rather than Layer B being skipped on any Layer-A error.
+  it('a bad id still runs Layer B and still fails the run (exit 1)', async () => {
+    // An id error is `identity`, not `structural`, so myst still processes the paper and the
+    // author gets every finding at once.
     const bad = { id: 'fixture-template-placeholder', authors: [], abstract: '', keywords: [] };
     const out = await runValidate(
       {
@@ -312,14 +312,14 @@ describe('runValidate: exit codes over the fixture instance', () => {
       allTrue,
     );
     expect(out.exitCode).toBe(1);
-    // Layer B RAN despite the bad id (the whole point of the relocation):
+    // Layer B ran despite the bad id,
     expect(out.checks.some((c) => c.id === 'abstract-exists')).toBe(true);
-    // and the id finding is an `identity`-class error that still gates the Check Run:
+    // and the id error still fails the Check Run.
     expect(out.errors.find((e) => e.check === 'id-shape')?.klass).toBe('identity');
     expect(out.checkRun.conclusion).toBe('failure');
   });
 
-  it('gates on a colliding deposit/ name, and Layer B still runs ([R28])', async () => {
+  it('fails on a reserved deposit/ name, and Layer B still runs [R28]', async () => {
     const out = await runValidate(
       {
         paperRoot: '/paper',
@@ -339,7 +339,7 @@ describe('runValidate: exit codes over the fixture instance', () => {
     expect(out.checks.some((c) => c.id === 'abstract-exists')).toBe(true);
   });
 
-  it('a blocking Layer-B editorial fail gates the run (exit 1, failure)', async () => {
+  it('a failed required editorial check fails the run (exit 1)', async () => {
     const out = await runValidate(
       {
         paperRoot: '/paper',
@@ -356,7 +356,7 @@ describe('runValidate: exit codes over the fixture instance', () => {
     expect(out.checks.some((c) => c.id === 'authors-have-orcid' && c.status === 'fail')).toBe(true);
   });
 
-  it('an OPTIONAL Layer-B fail annotates but does not gate (exit 0)', async () => {
+  it('a failed optional editorial check is reported without failing the run (exit 0)', async () => {
     const out = await runValidate(
       {
         paperRoot: '/paper',
@@ -372,9 +372,8 @@ describe('runValidate: exit codes over the fixture instance', () => {
     expect(out.checkRun.conclusion).toBe('success');
   });
 
-  // The edge throws when Layer B runs: stands in for `processProject` failing on an unbuildable
-  // project (e.g. a missing index.md). Regression guard for the crash where such a throw took the
-  // whole validator down with no report.
+  // The edge throws when Layer B runs, as `processProject` does on a project that cannot be
+  // processed (a missing index.md, say). Validate still reports.
   const edgeThrowingInLayerB = (project: unknown): MystEdge => ({
     async loadProject() {
       return project as never;
@@ -385,9 +384,9 @@ describe('runValidate: exit codes over the fixture instance', () => {
     },
   });
 
-  it('a blocking Layer-A error short-circuits Layer B instead of crashing (exit 1)', async () => {
-    // index.md missing -> layout error -> Layer B is SKIPPED (its edge would throw). The run must
-    // still resolve with the layout finding reported, not reject.
+  it('a Layer A error that stops Layer B fails the run without crashing (exit 1)', async () => {
+    // A missing index.md is a layout error, so Layer B is skipped (its edge would throw), and
+    // the run resolves with the layout finding.
     const probes: FsProbes = {
       existsProbe: (p) => p.endsWith('myst.yml'),
       listTree: () => ['myst.yml'],
@@ -403,9 +402,9 @@ describe('runValidate: exit codes over the fixture instance', () => {
     expect(out.checkRun.conclusion).toBe('failure');
   });
 
-  it('guards an unexpected Layer-B throw into a reported error (exit 1, not a crash)', async () => {
-    // Layer A clean, but the myst session load throws -> degrade to a reported editorial-checks
-    // error result; the gate must not crash.
+  it('reports an unexpected Layer B throw as an error (exit 1), without crashing', async () => {
+    // Layer A passes but loading the project throws: the editorial checks report an error, and
+    // validate does not crash.
     const out = await runValidate(
       { paperRoot: '/paper', instanceRoot, edge: edgeThrowingInLayerB(goodProject) },
       { repo: 'open-scholar-nexus/fixture-sample-paper' },
@@ -416,7 +415,7 @@ describe('runValidate: exit codes over the fixture instance', () => {
     expect(out.checkRun.conclusion).toBe('failure');
   });
 
-  it('bare --no-instance warns but does not fail; --strict flips it', async () => {
+  it('--no-instance warns without failing; --strict makes it fail', async () => {
     const base = { paperRoot: '/paper', instanceRoot: null, edge: edgeReturning(goodProject) };
     const lax = await runValidate(base, { repo: null }, allTrue);
     expect(lax.exitCode).toBe(0);
@@ -425,9 +424,8 @@ describe('runValidate: exit codes over the fixture instance', () => {
     expect(strict.exitCode).toBe(1);
   });
 
-  it('--strict reports ONE verdict: status and Check Run fail too, not just the exit code ([R119])', async () => {
-    // A strict run that exits 1 while printing status ok and a success Check Run is two
-    // verdicts; whichever a reader trusts, the other lies.
+  it('--strict fails the status and Check Run too, not only the exit code [R119]', async () => {
+    // A strict run that exits 1 also reports a failure in its status and Check Run.
     const base = { paperRoot: '/paper', instanceRoot: null, edge: edgeReturning(goodProject) };
     const lax = await runValidate(base, { repo: null }, allTrue);
     expect(lax.status).toBe('ok');
@@ -439,7 +437,7 @@ describe('runValidate: exit codes over the fixture instance', () => {
   });
 });
 
-describe('checkLayerDisjointness: extends layers must own disjoint keys ([R72])', () => {
+describe('checkLayerDisjointness: extends layers must not share keys [R72]', () => {
   const paperBase = {
     project: { thumbnail: 'thumbnails/thumbnail.png', exports: [{ id: 'typst-pdf' }] },
     site: { options: { hide_toc: true } },
@@ -452,7 +450,7 @@ describe('checkLayerDisjointness: extends layers must own disjoint keys ([R72])'
     project: { options: { logo: './logo-watermark.svg' } },
   };
 
-  it("passes for today's engine layers (they are disjoint)", () => {
+  it("passes for oak's own layers", () => {
     expect(
       checkLayerDisjointness([
         { name: 'paper-base.yml', config: paperBase },
@@ -462,9 +460,9 @@ describe('checkLayerDisjointness: extends layers must own disjoint keys ([R72])'
     ).toEqual([]);
   });
 
-  it('does NOT flag site.options siblings: that map merges field-wise ([R68])', () => {
-    // paper-base owns site.options.hide_toc, brand owns site.options.logo. Comparing
-    // `site.options` as a unit (rather than per leaf) would falsely flag these.
+  it('does not flag different keys under site.options, which merge key by key [R68]', () => {
+    // paper-base sets site.options.hide_toc and brand sets site.options.logo: different keys,
+    // since keys are compared leaf by leaf.
     const out = checkLayerDisjointness([
       { name: 'paper-base.yml', config: paperBase },
       { name: 'brand/brand.yml', config: brand },
@@ -506,7 +504,7 @@ describe('checkLayerDisjointness: extends layers must own disjoint keys ([R72])'
     ]);
   });
 
-  it('tolerates empty / malformed layers', () => {
+  it('accepts empty or malformed layers', () => {
     expect(
       checkLayerDisjointness([
         { name: 'a', config: null },
@@ -518,7 +516,7 @@ describe('checkLayerDisjointness: extends layers must own disjoint keys ([R72])'
   });
 });
 
-describe("a layer's own extends: is followed, not ignored ([R119]b)", () => {
+describe("a layer's own extends: is followed [R119]", () => {
   const realProbes: FsProbes = { existsProbe: (p) => existsSync(p), listTree: () => [] };
 
   /** An engine + instance pair on disk, with whatever extra layer files the case needs. */
@@ -605,11 +603,10 @@ describe("a layer's own extends: is followed, not ignored ([R119]b)", () => {
   });
 });
 
-describe('the author template is RAW-LIFTED, never read from the composed project ([R82])', () => {
-  // The regression this whole mechanism exists to prevent. Once validate reads the COMPOSED
-  // config, the typst export always carries a template, compose stamps `flag ?? author ??
-  // tenant ?? engine`, so digging `authorTemplate` out of `project.exports` would make EVERY
-  // paper look like it overrode the journal's template.
+describe("the author's template is read from their myst.yml, not from the composed project [R82]", () => {
+  // In the composed config the typst export always has a template (compose sets `flag ??
+  // author ?? journal ?? oak`), so read from there every paper would seem to override the
+  // journal's template.
   const composedProject = {
     id: 'j-2026-x',
     exports: [{ format: 'typst', id: 'typst-pdf', template: '/engine/templates/typst' }],
@@ -620,15 +617,15 @@ describe('the author template is RAW-LIFTED, never read from the composed projec
     return dir;
   };
   const journalInstance = () => {
-    // `allTrue` probes claim every path exists, so the instance must really carry the files
-    // runLayerA reads (journal + registry), otherwise the read throws before the assertion.
-    const dir = tmpDir({ 'journal.yml': 'name: J\ntypst_template: ./tenant-template\n' });
+    // `allTrue` says every path exists, so the journal repo must really hold the files
+    // runLayerA reads (journal.yml and the registry), or the read throws first.
+    const dir = tmpDir({ 'journal.yml': 'name: J\ntypst_template: ./journal-template\n' });
     mkdirSync(join(dir, 'registry'), { recursive: true });
     writeFileSync(join(dir, 'registry', 'papers.yml'), '[]\n');
     return dir;
   };
 
-  it('does NOT flag template-override when the paper declares no template of its own', () => {
+  it('does not report template-override when the paper declares no template', () => {
     const paperRoot = tmpDir({ 'myst.yml': 'version: 1\nproject:\n  id: j-2026-x\n' });
     const findings = runLayerA(
       { paperRoot, instanceRoot: journalInstance(), project: composedProject, repo: null },
@@ -637,7 +634,7 @@ describe('the author template is RAW-LIFTED, never read from the composed projec
     expect(findings.some((f) => f.check === 'template-override')).toBe(false);
   });
 
-  it('DOES flag template-override when the author declares one in their own myst.yml', () => {
+  it('reports template-override when the author declares one in their myst.yml', () => {
     const paperRoot = tmpDir({
       'myst.yml':
         'version: 1\nproject:\n  id: j-2026-x\n  exports:\n    - format: typst\n      id: typst-pdf\n      template: ./mine\n',
@@ -650,7 +647,7 @@ describe('the author template is RAW-LIFTED, never read from the composed projec
   });
 });
 
-describe('splitUnrunnableChecks: a check whose precondition is unmet is REPORTED, not run ([R82])', () => {
+describe('splitUnrunnableChecks: a check that cannot run yet is reported, not run [R82]', () => {
   const selected = [{ id: 'authors-exist' }, { id: 'exports-exist' }];
 
   it('holds exports-exist back when there are no build artifacts, with a cause', () => {
@@ -667,19 +664,18 @@ describe('splitUnrunnableChecks: a check whose precondition is unmet is REPORTED
     expect(unrunnable).toEqual([]);
   });
 
-  it('marks it OPTIONAL even when the journal selected it as blocking', () => {
-    // The merge-gate invariant. `_build/exports` is never present in CI (gitignored, fresh
-    // checkout, no build step in check.yml), so a blocking held-back result would fail the
-    // Check Run on every PR of every paper, with nothing an AUTHOR could do, only the tenant
-    // can edit journal.yml. And it would pass locally, where a previous build left the dir.
+  it('marks it optional even when the journal made it required', () => {
+    // `_build/exports` never exists in CI (check.yml has no build step), so a blocking result
+    // here would fail every pull request of every paper, and only the journal could fix it. It
+    // would also pass locally, where an earlier build left the directory.
     const { unrunnable } = splitUnrunnableChecks([{ id: 'exports-exist' }], '/paper', allFalse);
     expect(unrunnable[0]!.optional).toBe(true);
     expect(toCheckRun(unrunnable).conclusion).toBe('success');
   });
 });
 
-describe('runValidate: degrading when there is nothing to compose ([R82])', () => {
-  it('still reports, and SAYS it ran uncomposed', async () => {
+describe('runValidate: when there is nothing to compose [R82]', () => {
+  it('still reports, and says it ran uncomposed', async () => {
     const out = await runValidate(
       {
         paperRoot: '/paper',
@@ -689,25 +685,23 @@ describe('runValidate: degrading when there is nothing to compose ([R82])', () =
       { repo: 'open-scholar-nexus/fixture-sample-paper' },
       allTrue,
     );
-    // No engineRoot → nothing to compose. A silent difference between two runs of the same
-    // command is the [R71] mistake in miniature, so the report says so once.
+    // No engineRoot, so nothing to compose. The report says so once, so two runs of the same
+    // command do not differ silently [R71].
     expect(out.notes.some((n) => /own myst\.yml ONLY/.test(n))).toBe(true);
     expect(out.checkRun).toBeDefined();
-    // ...and it reaches the PR UI, not just stdout.
+    // It reaches the pull request too, not just stdout.
     expect(out.checkRun.summary).toMatch(/⚠️ checked the paper's own myst\.yml ONLY/);
-    // Nothing to compose is an OPERATOR choice (--no-instance / a bare local run), so it
-    // explains without gating. Contrast the compose-FAILURE case below.
+    // Nothing to compose is the user's choice (--no-instance, or a local run), so the note
+    // explains and does not block. A failed compose, below, does block.
     expect(out.errors.some((e) => e.check === 'compose')).toBe(false);
   });
 
-  it('a compose FAILURE is a gating finding, not just a note', async () => {
-    // The merge-gate hole this closes: with an engine checkout AND an instance present,
-    // everything compose needs was supplied, so a throw means the paper's own config broke
-    // composition: a typo'd `edition:`, a missing coordinate, the [R36] cross-check. `oak
-    // build` hits the identical throw, so a green gate here ships a paper that cannot build.
-    // A REAL paper root: materializeDerived reads the author's myst.yml off disk (and needs a
-    // parseable engine coordinate) before the edge is ever consulted, so a fake path would
-    // throw ENOENT and prove nothing about the case we care about.
+  it('a failed compose fails the run, not only a note', async () => {
+    // With oak's checkout and the journal repo both present, a throw means the paper's own
+    // config broke compose: a mistyped `edition:`, a missing version key, the [R36] check.
+    // `oak build` throws the same way, so this blocks the merge.
+    // A real paper root: materializeDerived reads the author's myst.yml from disk, with its
+    // version key, before the edge is used.
     const paperRoot = mkdtempSync(join(tmpdir(), 'oak-compose-fail-'));
     writeFileSync(
       join(paperRoot, 'myst.yml'),
@@ -715,7 +709,7 @@ describe('runValidate: degrading when there is nothing to compose ([R82])', () =
         '    oaktree-sapling:\n      version: v0.0.0-dev.1\n      edition: typo\n',
     );
     const edge: MystEdge = {
-      // Exactly how myst fails on an `extends:` entry that isn't there: the typo'd edition.
+      // How myst fails on a missing `extends:` entry, such as a mistyped edition.
       loadProject: async (_dir: string, configFile?: string) => {
         if (configFile) throw new Error('Cannot find config file: editions/typo.yml');
         return { id: 'fixture-2026-sample-paper' };
@@ -730,19 +724,19 @@ describe('runValidate: degrading when there is nothing to compose ([R82])', () =
     );
     const compose = out.errors.find((e) => e.check === 'compose');
     expect(compose?.severity).toBe('error');
-    expect(compose?.klass).toBe('config'); // not `structural`, layer B still runs
+    expect(compose?.klass).toBe('config'); // not `structural`, so Layer B still runs
     expect(compose?.message).toMatch(/editions\/typo\.yml/);
     expect(out.status).toBe('error');
     expect(out.exitCode).toBe(1);
     expect(out.checkRun.conclusion).toBe('failure');
-    // The note still explains WHY the other results are worth less than they look.
+    // The note says why the other results cover less than usual.
     expect(out.notes.some((n) => /own myst\.yml ONLY/.test(n))).toBe(true);
   });
 });
 
-describe('an unloadable journal policy blocks ([R116])', () => {
+describe('a journal.yml that cannot be read fails the run [R116]', () => {
   // Every rule the gate enforces is read from journal.yml ([R116]).
-  // Denies papers.yml too: loadRegistry readFileSyncs whatever the probe admits ([R119]e).
+  // Denies papers.yml too, since loadRegistry reads whatever the probe admits [R119].
   const noJournal: FsProbes = {
     existsProbe: (p: string) => !p.endsWith('journal.yml') && !p.endsWith('papers.yml'),
     listTree: () => [],
@@ -760,19 +754,19 @@ describe('an unloadable journal policy blocks ([R116])', () => {
       probes,
     );
 
-  it('fails when a resolved instance root carries no journal.yml', () => {
+  it('fails when the journal repo has no journal.yml', () => {
     const f = layerA('/instance', noJournal).find((x) => x.check === 'journal-config');
     expect(f, 'a missing journal.yml must be reported').toBeTruthy();
     expect(f!.severity).toBe('error');
   });
 
-  it('stays silent when there is deliberately no instance', () => {
-    // --no-instance is a tenant choice, not a broken instance.
+  it('says nothing with --no-instance', () => {
+    // --no-instance is the user's choice, not a broken journal repo.
     expect(layerA(null, noJournal).some((x) => x.check === 'journal-config')).toBe(false);
   });
 });
 
-describe('the id policy is not silently tenant-editable ([R119]a)', () => {
+describe('the id policy cannot be turned off by the journal [R119]', () => {
   const journalOf = (yaml: string, dir: string) => {
     writeFileSync(join(dir, 'journal.yml'), yaml);
     return {
@@ -797,7 +791,7 @@ describe('the id policy is not silently tenant-editable ([R119]a)', () => {
     expect(layerA('p-x', dir, probes).some((f) => f.check === 'id-policy')).toBe(false);
   });
 
-  it('says nothing without an instance: there is no policy to have ([R116] precedent)', () => {
+  it('says nothing without a journal repo, which holds the policy [R116]', () => {
     const dir = mkdtempSync(join(tmpdir(), 'oak-idpolicy-'));
     const probes = journalOf('name: J\n', dir);
     expect(layerA('anything-at-all', null, probes).some((f) => f.check === 'id-policy')).toBe(

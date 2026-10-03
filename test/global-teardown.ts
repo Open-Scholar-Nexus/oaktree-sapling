@@ -1,12 +1,8 @@
 /**
- * Remove the temp dirs the suite creates ([R152]).
- *
- * 63 `mkdtempSync` call sites across 13 files, none of which clean up, so a working session
- * accumulated 27,410 dirs and filled a 14G tmpfs; node then fails writes with EDQUOT and dozens
- * of unrelated tests go red. The cost is not the space, it is that a red suite stops being
- * signal. One teardown here beats 63 edits and cannot be forgotten at a new call site.
- *
- * Only dirs modified since the run started, so a concurrent session's dirs survive.
+ * Removes the temporary directories the tests create [R152]. The tests call `mkdtempSync` in
+ * many places without cleaning up, and a full /tmp fails unrelated tests; one teardown covers
+ * every call, including new ones. Only directories changed since the run started are removed,
+ * so another run's survive.
  */
 import { readdirSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';

@@ -1,9 +1,8 @@
 /**
- * zenodo.test.ts: the deposit port's logic, exercised through a FAKE transport (no
- * network) and a FAKE git context (no git/gh). Proves the slice-3 corrections:
- * pagination past 100 ([R20]/[R35.1]), id-first identity ([R7]), tenant bytes from
- * journal.yml ([R19]), the `deposit/` folder + collision guard ([R28]), and the
- * prepare/publish envelope + [R29] env transition.
+ * The deposit logic, with a fake transport (no network) and a fake git context (no git or gh):
+ * pagination past 100 [R20] [R35], finding a deposit by the paper's id first [R7], the
+ * journal's metadata from journal.yml [R19], the `deposit/` folder and its reserved names
+ * [R28], and prepare and publish, including moving from sandbox to production [R29].
  */
 import { describe, it, expect } from 'vitest';
 import { mkdtempSync, writeFileSync, mkdirSync, readFileSync } from 'node:fs';
@@ -67,7 +66,7 @@ const fakeGit: GitContext = {
     return 'deadbeef';
   },
   async gitArchive(_root, outZip) {
-    // A real zip carrying what an engine release ref commits, so `engine.zip` reads as one.
+    // A real zip with what a release of oak commits, so `engine.zip` reads as one.
     const zip = new AdmZip();
     zip.addFile('dist/cli.cjs', Buffer.from('// bundle'));
     zip.addFile('bin/typst', Buffer.from('typst'));
@@ -112,7 +111,7 @@ describe('listMyDepositions pagination', () => {
 });
 
 /* --------------------------------------------------------------------------
- * Identity: id-first, github fallback ([R7])
+ * Finding a deposit: by id first, then by the GitHub repo [R7]
  * ------------------------------------------------------------------------ */
 
 describe('findDeposit', () => {
@@ -133,11 +132,11 @@ describe('findDeposit', () => {
     const api = new ZenodoApi(transport, true, 't');
     const found = await api.findDeposit({ paperId: id, githubUrl: gh });
     expect(found?.id).toBe(7);
-    // the very first query is the id URN, before github
+    // The first query is the id URN, before the GitHub one.
     expect(String(calls[0]!.opts.params?.q)).toContain(paperUrn(id));
   });
 
-  it('falls back to github URL when the id has no hit', async () => {
+  it('falls back to the GitHub URL when the id finds nothing', async () => {
     const byUrl = dep({ id: 9, metadata: { related_identifiers: [{ identifier: gh }] } });
     const { transport } = fakeTransport(({ opts }) => {
       const q = String(opts.params?.q ?? '');
@@ -166,7 +165,7 @@ describe('findDeposit', () => {
 });
 
 /* --------------------------------------------------------------------------
- * Metadata: tenant bytes from journal.yml ([R19]) + id anchor ([R7])
+ * Metadata: the journal's text from journal.yml [R19], and the id [R7]
  * ------------------------------------------------------------------------ */
 
 describe('buildMetadata', () => {
@@ -181,7 +180,7 @@ describe('buildMetadata', () => {
     ],
   };
 
-  it('omits community + blurb for a fresh tenant, and keeps the github + id related ids', () => {
+  it('leaves out community and blurb for a new journal, and keeps the GitHub and id related identifiers', () => {
     const md = buildMetadata({
       project,
       paperId: project.id,
@@ -189,14 +188,14 @@ describe('buildMetadata', () => {
       zenodo: {},
     });
     expect(md.communities).toBeUndefined();
-    // no tenant blurb → the description is just the repo/site lines, no ISP-style sentence
+    // Without a journal blurb the description is only the repo and site lines.
     expect(md.description).not.toContain('Program');
     const related = md.related_identifiers as Array<Record<string, string>>;
     expect(related.map((r) => r.identifier)).toContain(paperUrn(project.id));
     expect(related.map((r) => r.identifier)).toContain('https://github.com/o/r');
   });
 
-  it('injects the tenant blurb + community when journal.yml supplies them', () => {
+  it("adds the journal's blurb and community when journal.yml sets them", () => {
     const md = buildMetadata({
       project,
       paperId: project.id,
@@ -207,7 +206,7 @@ describe('buildMetadata', () => {
     expect(md.description).toContain('Made by the Fixture Journal.');
   });
 
-  it('drops placeholder/invalid ORCIDs but keeps valid ones', () => {
+  it('drops placeholder or invalid ORCIDs and keeps valid ones', () => {
     const md = buildMetadata({ project, githubUrl: 'https://github.com/o/r', zenodo: {} });
     const creators = md.creators as Array<Record<string, string>>;
     expect(creators[0]!.orcid).toBe('0000-0002-1825-0097');
@@ -216,7 +215,7 @@ describe('buildMetadata', () => {
 });
 
 /* --------------------------------------------------------------------------
- * Bundle: deposit/ folder + collision guard ([R28])
+ * Bundle: the deposit/ folder and its reserved names [R28]
  * ------------------------------------------------------------------------ */
 
 describe('buildBundle', () => {
@@ -277,10 +276,10 @@ describe('buildBundle', () => {
     ).rejects.toBeInstanceOf(BundleCollisionError);
   });
 
-  /* ---- the resolved template's bytes ([R76]/[R66]) ---------------------- */
+  /* ---- the template the PDF was rendered with [R76] [R66] --------------- */
 
-  /** A paper root beside a SEPARATE engine checkout, so "is this template already inside
-   *  engine.zip?" is a real question rather than an artifact of the test layout. */
+  /** A paper root beside a separate oak checkout, so whether a template is already inside
+   *  engine.zip depends on the template, not on the test layout. */
   function paperAndEngine(): { paper: string; engine: string; tmp: string } {
     const tmp = mkdtempSync(join(tmpdir(), 'oak-tmpl-'));
     const paper = join(tmp, 'paper');
@@ -292,7 +291,7 @@ describe('buildBundle', () => {
     writeFileSync(join(paper, 'myst.yml'), 'project: {}');
     return { paper, engine, tmp };
   }
-  /** What `oak build` leaves behind: the derived config carrying compose's resolved value. */
+  /** What `oak build` leaves behind: `myst.oak.yml`, with the template compose resolved. */
   function stamp(paper: string, template: string): void {
     writeFileSync(
       join(paper, 'myst.oak.yml'),
@@ -301,7 +300,7 @@ describe('buildBundle', () => {
   }
   const namesIn = (files: string[]) => files.map((p) => p.split('/').pop());
 
-  it('adds no template.zip when the rendered template lives in the engine checkout', async () => {
+  it("adds no template.zip when the template is in oak's checkout", async () => {
     const { paper, engine } = paperAndEngine();
     stamp(paper, join(engine, 'templates', 'typst'));
 
@@ -317,13 +316,13 @@ describe('buildBundle', () => {
     expect(namesIn(files)).toEqual(RESERVED_BUNDLE_NAMES.slice().sort());
   });
 
-  it('archives a TENANT/AUTHOR local template’s bytes as template.zip', async () => {
+  it("archives a journal's or author's local template as template.zip", async () => {
     const { paper, engine, tmp } = paperAndEngine();
-    const tenant = join(tmp, 'instance', 'typst-template');
-    mkdirSync(tenant, { recursive: true });
-    writeFileSync(join(tenant, 'template.yml'), 'kind: typst');
-    writeFileSync(join(tenant, 'template.typ'), '#let x = 1');
-    stamp(paper, tenant);
+    const journalTemplate = join(tmp, 'instance', 'typst-template');
+    mkdirSync(journalTemplate, { recursive: true });
+    writeFileSync(join(journalTemplate, 'template.yml'), 'kind: typst');
+    writeFileSync(join(journalTemplate, 'template.typ'), '#let x = 1');
+    stamp(paper, journalTemplate);
 
     const out = join(paper, '_bundle');
     const files = await buildBundle(out, join(paper, 'paper.pdf'), paper, engine, prov, fakeGit);
@@ -332,10 +331,9 @@ describe('buildBundle', () => {
     expect(entries).toEqual(expect.arrayContaining(['template.yml', 'template.typ']));
   });
 
-  it("archives an author's RELATIVE template, resolved against the paper root", async () => {
-    // Caught by a real end-to-end run, not by construction: myst resolves an author's
-    // `./my-template` against the build cwd (the paper root), but the deposit runs from
-    // wherever `oak` was invoked: probing cwd here refused a perfectly valid deposit.
+  it("archives an author's relative template, resolved against the paper root", async () => {
+    // myst resolves an author's `./my-template` against the paper root, while the deposit runs
+    // from wherever `oak` was started, so the path is resolved against the paper root.
     const { paper, engine } = paperAndEngine();
     mkdirSync(join(paper, 'my-template'));
     writeFileSync(join(paper, 'my-template', 'template.yml'), 'kind: typst');
@@ -349,7 +347,7 @@ describe('buildBundle', () => {
     );
   });
 
-  it('archives a REMOTE template from where myst materialized it', async () => {
+  it('archives a remote template from where myst downloaded it', async () => {
     const { paper, engine } = paperAndEngine();
     const url = 'https://github.com/o/r/releases/download/v1.2.3/typst-template.zip';
     const materialized = join(
@@ -371,11 +369,11 @@ describe('buildBundle', () => {
     );
   });
 
-  it('REFUSES to deposit when a non-engine template’s bytes cannot be found', async () => {
+  it("refuses to deposit when a template that is not oak's cannot be found", async () => {
     const { paper, engine } = paperAndEngine();
-    stamp(paper, 'https://example.org/t.zip'); // never materialized; nothing was built here
+    stamp(paper, 'https://example.org/t.zip'); // never downloaded; nothing was built here
 
-    // A DOI'd PDF nobody can re-render is worse than a failed deposit.
+    // A published PDF that cannot be rendered again is worse than a failed deposit.
     await expect(
       buildBundle(join(paper, '_bundle'), join(paper, 'paper.pdf'), paper, engine, prov, fakeGit),
     ).rejects.toBeInstanceOf(TemplateArchiveError);
@@ -383,7 +381,7 @@ describe('buildBundle', () => {
 });
 
 describe('readStampedTemplate / resolveTemplateDir ([R76])', () => {
-  it('reads what the build actually rendered with (the derived config), not the author input', () => {
+  it("reads the template the build used, from myst.oak.yml, not from the author's myst.yml", () => {
     const root = mkdtempSync(join(tmpdir(), 'oak-stamp-'));
     writeFileSync(
       join(root, 'myst.yml'),
@@ -423,8 +421,8 @@ describe('readStampedTemplate / resolveTemplateDir ([R76])', () => {
     });
 
     it('is not shadowed by a same-named directory carrying no template.yml ([R107])', () => {
-      // myst resolves `lapreprint-typst` from the registry when the local path is not a
-      // template, so archiving the local bytes would archive what did NOT render the PDF.
+      // myst fetches `lapreprint-typst` from its registry when the local path is not a
+      // template, so the local files are not what rendered the PDF.
       const root = mkdtempSync(join(tmpdir(), 'oak-shadow-'));
       mkdirSync(join(root, 'lapreprint-typst'));
       expect(resolveTemplateDir('lapreprint-typst', root)).toBe(
@@ -454,7 +452,7 @@ describe('readStampedTemplate / resolveTemplateDir ([R76])', () => {
 });
 
 /* --------------------------------------------------------------------------
- * prepare / publish: envelope, working-tree write, [R29]
+ * prepare and publish: the result, the myst.yml write, and sandbox to production [R29]
  * ------------------------------------------------------------------------ */
 
 function paperRepo(mystBody: string): string {
@@ -501,7 +499,7 @@ describe('cmdPrepare', () => {
     expect(doc.getIn(['project', 'doi'])).toBe('10.5072/zenodo.5');
     expect(doc.getIn(['project', 'github'])).toBe('https://github.com/o/r');
     expect(doc.getIn(['project', 'date'])).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-    // POST carried prereserve + the id URN
+    // The POST reserves a DOI and carries the id URN.
     const post = calls.find((c) => c.method === 'POST')!;
     const md = (post.opts.json as any).metadata;
     expect(md.prereserve_doi).toBe(true);
@@ -514,7 +512,7 @@ describe('cmdPrepare', () => {
     const withSandboxDoi = paperRepo(BARE_MYST + '  doi: 10.5072/zenodo.5\n');
     const noop = new ZenodoApi(fakeTransport(() => ({ json: [] })).transport, true, 't');
 
-    // sandbox prepare over a committed sandbox DOI → refuse (same env)
+    // A sandbox prepare over a committed sandbox DOI is refused (same environment).
     const same = await cmdPrepare({
       mystPath: withSandboxDoi,
       repo: 'o/r',
@@ -523,7 +521,7 @@ describe('cmdPrepare', () => {
     });
     expect(same.exitCode).toBe(2);
 
-    // prod prepare over a committed sandbox DOI → allowed (mints a fresh prod concept)
+    // A production prepare over a committed sandbox DOI is allowed (a new production concept DOI).
     const prodPath = paperRepo(BARE_MYST + '  doi: 10.5072/zenodo.5\n');
     const { transport } = fakeTransport(({ method }) =>
       method === 'POST' ? { json: dep({ id: 8, conceptrecid: 8 }) } : { json: [] },
@@ -722,11 +720,11 @@ describe('deposit integrity ([R107])', () => {
   });
 });
 
-describe('lookup and precondition regressions ([R100], [R101])', () => {
+describe('finding the deposit, and the checks before it [R100] [R101]', () => {
   const id = 'foo-bar';
   const gh = 'https://github.com/o/r';
 
-  it('scans when a targeted query returns rows that do not MATCH', async () => {
+  it('scans when a targeted query returns rows that do not match', async () => {
     // A phrase match returns a LONGER urn for a query about a shorter one ([R100]).
     const nearMiss = dep({
       id: 1,
@@ -740,7 +738,7 @@ describe('lookup and precondition regressions ([R100], [R101])', () => {
         unfiltered++;
         return { json: [nearMiss, real] };
       }
-      // urn query phrase-matches the near miss; the github query misses (renamed repo, [R7]).
+      // The URN query phrase-matches the near miss; the GitHub query misses (a renamed repo [R7]).
       return { json: String(q).includes(id) ? [nearMiss] : [] };
     });
     const api = new ZenodoApi(transport, true, 't');
@@ -756,7 +754,7 @@ describe('lookup and precondition regressions ([R100], [R101])', () => {
     expect(() => assertBundlePreconditions(root, root)).toThrow(BundleCollisionError);
   });
 
-  it('reports a collision through the envelope, having sent nothing to Zenodo', async () => {
+  it('reports a reserved name in the result, having sent nothing to Zenodo', async () => {
     const root = mkdtempSync(join(tmpdir(), 'oak-envelope-'));
     mkdirSync(join(root, 'deposit'), { recursive: true });
     writeFileSync(join(root, 'deposit', 'source.zip'), 'x');

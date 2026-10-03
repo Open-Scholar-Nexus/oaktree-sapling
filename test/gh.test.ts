@@ -1,7 +1,6 @@
 /**
- * gh.ts shells out, so what these assert is the argument VECTOR: the secret that must not be in
- * argv, the stderr that must not be captured, the validation that must precede `git fetch`.
- * [R103], [R104], [R105].
+ * gh.ts runs commands, so these check the arguments it passes: no secret in argv, no captured
+ * stderr where it would be posted, and validation before `git fetch` [R103] [R104] [R105].
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -20,7 +19,7 @@ import { join } from 'node:path';
 
 const SRC = (f: string) => readFileSync(join(import.meta.dirname, '..', 'src', f), 'utf8');
 
-/** Comments explain the rule and so quote the thing it forbids. Lint the code, not the prose. */
+/** Comments quote what a rule forbids, so the source is checked with comments removed. */
 const codeOnly = (s: string) =>
   s
     .split('\n')
@@ -83,7 +82,7 @@ describe('assertIngestSource', () => {
   });
 });
 
-/** Source lints (the release-resolution.test.ts idiom): these paths need a live token to run. */
+/** Source checks, as in release-resolution.test.ts: these paths need a real token to run. */
 describe('gh.ts argument vectors', () => {
   it('never passes a secret value in argv', () => {
     const src = SRC('gh.ts');
@@ -108,8 +107,8 @@ describe('gh.ts argument vectors', () => {
     expect(guardLine).toBeLessThan(fetchLine);
   });
 
-  it('a versionTags API failure propagates instead of reading as "no tags"', () => {
-    // [] would read as "never published" ([R108]).
+  it('a versionTags API failure throws instead of reading as no tags', () => {
+    // [] would read as never published.
     const vt = /versionTags\([^)]*\)\s*\{([\s\S]*?)\n  \},/.exec(SRC('gh.ts'));
     expect(vt, 'versionTags not found; this lint needs updating').toBeTruthy();
     expect(codeOnly(vt![1])).not.toMatch(/\bcatch\b/);
@@ -124,8 +123,8 @@ describe('labelChildOutput', () => {
 
 describe('ingest restores the editor-side .github ([R121])', () => {
   it('deletes before restoring, so an author-only path cannot survive', () => {
-    // `git checkout <tree> -- .github` overwrites the paths that tree HAS and leaves the rest,
-    // so an author workflow at a path main lacks reached a branch pushed to the base repo.
+    // `git checkout <tree> -- .github` overwrites the paths the tree has and keeps the rest,
+    // so `.github` is deleted first.
     const src = SRC('gh.ts');
     const del = src.indexOf("'rm', '-rqf', '--ignore-unmatch', '--', '.github'");
     const restore = src.indexOf("'checkout', 'origin/main', '--', '.github'");
@@ -136,7 +135,7 @@ describe('ingest restores the editor-side .github ([R121])', () => {
 });
 
 /* --------------------------------------------------------------------------
- * The argument vectors the effects actually build, with `git`/`gh` replaced ([R108], [R109]).
+ * The arguments the real calls build, with `git` and `gh` replaced [R109].
  * ------------------------------------------------------------------------ */
 
 const child = vi.hoisted(() => ({
@@ -169,7 +168,7 @@ const ghCall = (first: string, second?: string) =>
 const argAfter = (args: string[], flag: string) => args[args.indexOf(flag) + 1];
 
 describe('openDoiPr ([R108])', () => {
-  /** Everything the happy path shells out for; `over` replaces one answer. */
+  /** Every command the passing path runs; `over` replaces one answer. */
   const answers =
     (over: (args: string[]) => { status: number; stdout?: string; stderr?: string } | null) =>
     (args: string[]) => {
@@ -207,7 +206,7 @@ describe('openDoiPr ([R108])', () => {
     expect(ghCall('pr', 'create'), 'no PR is opened from a diverged HEAD').toBeUndefined();
   });
 
-  it('is idempotent: a second prepare returns the PR the first one opened', () => {
+  it('a second prepare returns the pull request the first one opened', () => {
     child.respond = answers((args) => {
       if (args[0] === 'pr' && args[1] === 'create')
         return { status: 1, stderr: 'a pull request for branch "zenodo-doi" already exists' };
@@ -236,9 +235,9 @@ describe('the tolerant probes tell absent from forbidden ([R108], [R113])', () =
     expect(() => realConformanceGh.deleteBranch('o/r', 'cert-1')).toThrow(/403/);
   });
 
-  it('treats an absent TAG as already gone, which the refs API spells 422 ([R149])', () => {
-    // Not 404: `DELETE /git/refs/tags/x` on a missing ref answers 422 "Reference does not
-    // exist". Every cert deletes a possibly-absent deposit tag before pushing it.
+  it('treats an absent tag as already gone, which the refs API answers with 422 [R149]', () => {
+    // `DELETE /git/refs/tags/x` on a missing ref answers 422 "Reference does not exist", not
+    // 404, and every conformance run deletes a deposit tag that may not exist [R149].
     child.respond = () => ({
       status: 1,
       stdout: '',
@@ -247,14 +246,13 @@ describe('the tolerant probes tell absent from forbidden ([R108], [R113])', () =
     expect(() => realConformanceGh.deleteTag('o/r', 'v9.9.9')).not.toThrow();
   });
 
-  it('still refuses a 422 that is NOT an absent ref', () => {
+  it('still refuses a 422 that is not an absent ref', () => {
     child.respond = () => ({ status: 1, stdout: '', stderr: 'gh: Validation failed (HTTP 422)' });
     expect(() => realConformanceGh.deleteTag('o/r', 'v9.9.9')).toThrow(/422/);
   });
 
-  it('approving an UNGATED run is a no-op, which GitHub spells 403 ([R150])', () => {
-    // The load-bearing case: live testing settled that fork runs are not gated every time, so
-    // this is the normal path, not the exception.
+  it('approving a run that needs no approval does nothing, though GitHub answers 403 [R150]', () => {
+    // Fork runs are not always held for approval, so this is the usual case [R150].
     child.respond = () => ({
       status: 1,
       stdout: '',
@@ -263,7 +261,7 @@ describe('the tolerant probes tell absent from forbidden ([R108], [R113])', () =
     expect(() => realConformanceGh.approveWorkflowRun('o/r', 9)).not.toThrow();
   });
 
-  it('but a 403 that is NOT about gating still throws', () => {
+  it('but a 403 about anything else still throws', () => {
     child.respond = () => ({
       status: 1,
       stdout: '',
@@ -272,7 +270,7 @@ describe('the tolerant probes tell absent from forbidden ([R108], [R113])', () =
     expect(() => realConformanceGh.approveWorkflowRun('o/r', 9)).toThrow(/403/);
   });
 
-  it('every ref delete tolerates it, not just the one that failed a cert ([R149])', () => {
+  it('every ref delete accepts it [R149]', () => {
     child.respond = () => ({
       status: 1,
       stdout: '',
@@ -289,7 +287,7 @@ describe('list endpoints paginate ([R108])', () => {
     child.respond = () => ({ status: 0, stdout: '', stderr: '' });
   });
 
-  it('the compare behind the frozen-shim advisory', () => {
+  it('the comparison behind the gated-files warning', () => {
     changedFiles('o/r', 'base', 'head');
     expect(ghCall('api')!.args).toContain('--paginate');
   });
@@ -299,7 +297,7 @@ describe('list endpoints paginate ([R108])', () => {
     expect(ghCall('api')!.args).toContain('--paginate');
   });
 
-  it('the cert branch listing', () => {
+  it('the cert- branch listing', () => {
     realConformanceGh.listBranches('o/r', 'cert-');
     expect(ghCall('api')!.args).toContain('--paginate');
   });

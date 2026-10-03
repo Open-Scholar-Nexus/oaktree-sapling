@@ -1,10 +1,7 @@
 /**
- * cli-output.test.ts: the CLI's OUTPUT contract, driven through the real bundle: what a
- * human sees by default, what a machine sees under `--json`, and what an unrecognized word
- * gets told. These are the assertable halves of the UX-test output pass; the rest (plan
- * wording) is asserted where the plans are built, in bootstrap.test.ts.
- *
- * Skipped unless `dist/cli.cjs` is present (bundle-state.ts), like the other bundle suites.
+ * What the CLI prints, through the real bundle: what a person sees by default, what `--json`
+ * gives, and what an unknown command gets. The plan wording is tested where the plans are built,
+ * in bootstrap.test.ts. Skipped without `dist/cli.cjs` (bundle-state.ts).
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { spawnSync } from 'node:child_process';
@@ -16,29 +13,27 @@ import { bundleState, assertBundleNotStale, bundlePath } from './bundle-state.js
 import { labelChildOutput } from '../src/gh.js';
 
 const engineDir = fileURLToPath(new URL('..', import.meta.url));
-/** A PRIVATE copy of the paper fixture: `materializeDerived` writes `myst.oak.yml` into the
- *  paper root, and vitest runs files in parallel, so sharing it races with
- *  `validate.integration.test.ts`. See the longer note there. */
+/** A copy of the fixture paper, as in `validate.integration.test.ts`: `materializeDerived`
+ *  leaves `myst.oak.yml` in the paper root, and the two files run in parallel. */
 const fixturePaper = mkdtempSync(join(tmpdir(), 'oak-fixture-paper-'));
 cpSync(join(engineDir, 'test', 'fixture-paper'), fixturePaper, {
   recursive: true,
   filter: (src) => !src.endsWith('myst.oak.yml'),
 });
 const fixtureInstance = join(engineDir, 'test', 'fixture-instance');
-/** The repo the fixture paper is registered to (id-uniqueness passes only under it). */
+/** The repo the fixture paper is registered to; the id uniqueness check passes only with it. */
 const fixtureRepo = 'open-scholar-nexus/fixture-sample-paper';
 
 /**
- * Run the bundle as a TENANT's terminal sees it. `CI`/`GITHUB_ACTIONS` are cleared deliberately:
- * they switch the output to GitHub annotations, and this suite is the contract for the human
- * side: inheriting them would make these assertions pass locally and fail in our own CI.
+ * Runs the bundle as a terminal sees it. `CI` and `GITHUB_ACTIONS` are cleared, since they turn
+ * the output into GitHub annotations; kept, these tests would pass locally and fail in CI.
  */
 function oak(
   args: string[],
   extraEnv: Record<string, string | undefined> = {},
 ): { code: number; stdout: string; stderr: string } {
   const env = { ...process.env, ...extraEnv };
-  // undefined UNSETS: `??` ignores an empty string, so blanking would not exercise a fallback.
+  // undefined unsets a variable; an empty string would not reach the `??` fallback.
   for (const [k, v] of Object.entries(extraEnv)) if (v === undefined) delete env[k];
   delete env.CI;
   delete env.GITHUB_ACTIONS;
@@ -52,8 +47,7 @@ describe.skipIf(bundleState() === 'absent')(
     beforeAll(assertBundleNotStale);
 
     it('names the word it did not understand and suggests the near miss', () => {
-      // The UX-test complaint: a typo printed the usage block with no message, so it looked
-      // exactly like a bare `oak` and read as "ran, did nothing".
+      // A typo gets an error, so it does not look like a bare `oak` that did nothing.
       const { code, stderr } = oak(['bootstrp']);
       expect(code).toBe(2);
       expect(stderr).toContain("oak: unknown command 'bootstrp'");
@@ -67,7 +61,7 @@ describe.skipIf(bundleState() === 'absent')(
       expect(stderr).not.toContain('did you mean');
     });
 
-    it('a BARE oak is not an error message, just the usage', () => {
+    it('a bare `oak` prints the usage, not an error', () => {
       const { code, stderr } = oak([]);
       expect(code).toBe(2);
       expect(stderr).not.toContain('unknown command');
@@ -85,7 +79,7 @@ describe.skipIf(bundleState() === 'absent')(
       const head = stderr.split('\n').slice(0, 8).join('\n');
       expect(head).toMatch(/^oak: a mystmd-based engine for running a small journal/);
       expect(head).toContain('oak bootstrap journal');
-      // ...and the verb list still comes after, not instead.
+      // The command list still follows.
       expect(stderr).toContain('oak validate');
     });
 
@@ -95,7 +89,7 @@ describe.skipIf(bundleState() === 'absent')(
       expect(stderr).toMatch(/--co-located\s+one repo holds the journal and its single paper/);
     });
 
-    it('documents the two cross-cutting flags this pass introduced', () => {
+    it('documents --json and --verbose', () => {
       const { stderr } = oak([]);
       expect(stderr).toContain('--json');
       expect(stderr).toContain('--verbose');
@@ -114,7 +108,7 @@ describe.skipIf(bundleState() === 'absent')('--json gates the machine envelope',
     return dir;
   }
 
-  it('oak validate: stdout is EMPTY without --json, and the verdict is prose on stderr', () => {
+  it('oak validate: stdout is empty without --json, and the result goes to stderr', () => {
     const { code, stdout, stderr } = oak([
       'validate',
       '--paper',
@@ -129,7 +123,7 @@ describe.skipIf(bundleState() === 'absent')('--json gates the machine envelope',
     expect(stderr).toMatch(/oak validate: PASS/);
   }, 60_000);
 
-  it('oak validate: --json still puts the full envelope, checkRun included, on stdout', () => {
+  it('oak validate: --json puts the full JSON, checkRun included, on stdout', () => {
     const { stdout } = oak([
       'validate',
       '--paper',
@@ -145,18 +139,18 @@ describe.skipIf(bundleState() === 'absent')('--json gates the machine envelope',
     expect(out.checkRun.conclusion).toBe('success');
   }, 60_000);
 
-  it('the human summary lists the findings rather than dropping them', () => {
-    // A shorter summary that hid findings would be a different verdict.
+  it('the summary lists every finding', () => {
+    // Every finding is printed.
     const { stderr } = oak(['validate', '--paper', paperOnly(), '--no-instance']);
     expect(stderr).toMatch(/oak validate: (PASS|FAIL)/);
-    // The fixture has no thumbnail; uncomposed runs also carry a note. Either way, whatever
-    // the envelope holds is on screen: assert one representative warning reaches it.
+    // The fixture has no thumbnail, and an uncomposed run adds a note; either way, one warning
+    // shows that the JSON's findings reach the screen.
     expect(stderr).toMatch(/[✗!→]/);
   }, 60_000);
 
   it('a refusal prints the sentence, not a JSON record', () => {
-    // `oak upgrade --paper <dir>` against a directory that is not a paper repo: a pure local
-    // refusal (no network), and the shape every error result now takes without --json.
+    // `oak upgrade --paper <dir>` on a directory that is not a paper repo: refused locally,
+    // without the network, printed as every error is without --json.
     const { code, stdout, stderr } = oak([
       'upgrade',
       '--paper',
@@ -172,7 +166,7 @@ describe.skipIf(bundleState() === 'absent')('--json gates the machine envelope',
 describe.skipIf(bundleState() === 'absent')('a broken paper gets a sentence, never a stack', () => {
   beforeAll(assertBundleNotStale);
 
-  /** A journal repo: journal.yml + a myst.yml that is the WEBSITE (no engine coordinate). */
+  /** A journal repo: journal.yml, and a myst.yml that is the website (no version key). */
   function journalRepo(): string {
     const dir = mkdtempSync(join(tmpdir(), 'oak-journal-'));
     writeFileSync(join(dir, 'journal.yml'), 'name: A Journal\nid_pattern: ".*"\n');
@@ -183,9 +177,9 @@ describe.skipIf(bundleState() === 'absent')('a broken paper gets a sentence, nev
     return dir;
   }
 
-  it('oak build in the JOURNAL repo says so instead of dying on the engine coordinate', () => {
-    // The UX-test crash, exactly: `oak build` in the journal clone. The co-located rung read
-    // its journal.yml as "the settings are here", so the run reached the paper-only config read.
+  it('oak build in the journal repo says so', () => {
+    // `oak build` in a journal repo: its journal.yml must not be taken for a journal beside a
+    // paper ({@link isJournalRepo}).
     const dir = journalRepo();
     const { code, stderr } = oak(['build', '--paper', dir]);
     expect(code).toBe(2);
@@ -197,7 +191,7 @@ describe.skipIf(bundleState() === 'absent')('a broken paper gets a sentence, nev
     expect(stderr).not.toContain('cli.cjs:');
   });
 
-  it('oak validate in the JOURNAL repo refuses the same way', () => {
+  it('oak validate in the journal repo refuses the same way', () => {
     const { code, stderr } = oak(['validate', '--paper', journalRepo()]);
     expect(code).toBe(2);
     expect(stderr).toContain('is the journal repo, not a paper');
@@ -229,8 +223,8 @@ describe.skipIf(bundleState() === 'absent')('a broken paper gets a sentence, nev
 describe.skipIf(bundleState() === 'absent')('bootstrap preflight ([R110], [R125], [R127])', () => {
   beforeAll(assertBundleNotStale);
 
-  /** Run the bundle with gh unreachable (node by absolute path, PATH a dir without gh), or
-   *  with a gh stub that answers --version but is logged out. */
+  /** Runs the bundle without gh (node by absolute path, PATH a directory without gh), or with
+   *  a gh stub that answers --version but is logged out. */
   function oakOffline(
     args: string[],
     opts: { ghStub?: string; env?: NodeJS.ProcessEnv } = {},
@@ -268,8 +262,8 @@ describe.skipIf(bundleState() === 'absent')('bootstrap preflight ([R110], [R125]
     expect(stderr).toContain('gh');
     expect(stderr).toContain('not on PATH');
     expect(stderr).toContain('gh auth login');
-    // The preflight precedes the engine-release probe, which prints a misleading
-    // "no stable release" when gh is the actual problem.
+    // The gh check comes before the release lookup, which would otherwise report "no stable
+    // release" when gh is the problem.
     expect(stderr).not.toContain('no stable release');
     expect(stderr).not.toMatch(/\bat \w+ \(/);
   });
@@ -299,7 +293,7 @@ describe.skipIf(bundleState() === 'absent')('bootstrap preflight ([R110], [R125]
     expect(code).toBe(2);
     expect(stderr).toContain('--zenodo-token');
     expect(stderr).toContain('oak bootstrap paper');
-    // The refusal is decidable without the network, so it precedes the preflight.
+    // This refusal needs no network, so it comes before the gh check.
     expect(stderr).not.toContain('not on PATH');
   });
 
@@ -308,7 +302,7 @@ describe.skipIf(bundleState() === 'absent')('bootstrap preflight ([R110], [R125]
       env: { ZENODO_TOKEN: 'zt' },
     });
     expect(code).toBe(2);
-    // It stopped at the preflight, not at a secrets refusal.
+    // It stopped at the gh check, not at a secrets refusal.
     expect(stderr).toContain('not on PATH');
     expect(stderr).not.toContain('--zenodo-token');
   });
@@ -340,8 +334,8 @@ describe('a flag passed without a value is refused', () => {
   });
 
   it('does not fall back to the environment when the value is missing', () => {
-    // The dangerous half: several call sites read `flag(...) ?? process.env.X`, so a value that
-    // vanished (an unquoted empty shell variable) would act on the environment's repo instead.
+    // Several callers read `flag(...) ?? process.env.X`, so a missing value (an unquoted empty
+    // shell variable) would act on the environment's repo.
     const r = oak(['notify', 'new-version', '--pr', '1', '--repo']);
     expect(r.code).toBe(2);
     expect(r.stderr).toContain('--repo needs a value');
@@ -353,16 +347,17 @@ describe('a flag passed without a value is refused', () => {
     expect(r.stderr).not.toContain('needs a value');
   });
 
-  it('refuses an empty --instance, where empty is a mistake not a meaning', () => {
-    // `--instance "$VAR"` with VAR unset: the flag WAS passed, so "pass --instance" was useless.
+  it('refuses an empty --instance', () => {
+    // `--instance "$VAR"` with VAR unset: the flag was passed, so "pass --instance" would not
+    // help.
     const r = oak(['validate', '--paper', fixturePaper, '--instance', '']);
     expect(r.code).toBe(2);
     expect(r.stderr).toContain('--instance needs a value');
   });
 
-  it('ACCEPTS an empty value where empty is the meaning ([R147])', () => {
-    // `ci/run.sh` passes `--base-url ""` on every PR build: empty means served at the root.
-    // Refusing it broke every paper build in the fleet, caught by a live cert.
+  it('accepts an empty value where empty means something [R147]', () => {
+    // `ci/run.sh` passes `--base-url ""` on every pull request build: empty means served at
+    // the root.
     const r = oak(['validate', '--paper', fixturePaper, '--no-instance', '--base-url', '']);
     expect(r.stderr).not.toContain('--base-url needs a value');
   });
@@ -374,7 +369,7 @@ describe('a flag passed without a value is refused', () => {
   });
 });
 
-describe('--repo takes owner/name ([R138])', () => {
+describe('--repo takes owner/name [R138]', () => {
   it('refuses a value gh would read as an option or a foreign URL', () => {
     for (const bad of ['-u', 'https://evil.example/x/y', 'notarepo']) {
       const r = oak(['upgrade', '--repo', bad, '--yes']);
@@ -384,7 +379,7 @@ describe('--repo takes owner/name ([R138])', () => {
   });
 });
 
-describe('check-post refuses a report the artifact made up ([R137])', () => {
+describe('check-post refuses a forged report [R137]', () => {
   const post = (body: string) => {
     const dir = mkdtempSync(join(tmpdir(), 'oak-report-'));
     const f = join(dir, 'report.json');
@@ -410,9 +405,9 @@ describe('check-post refuses a report the artifact made up ([R137])', () => {
     expect(r.stderr).toContain('is not a checks report');
   });
 
-  it('refuses valid JSON that carries no verdict', () => {
-    // Stage 1's own `jq -e .checkRun.conclusion` guard runs in the fork-controlled half, so
-    // Stage 2 cannot lean on it.
+  it('refuses valid JSON without a result', () => {
+    // The `pull_request` job's `jq -e .checkRun.conclusion` check runs on the fork's code, so
+    // check-post checks again.
     for (const body of ['{}', '{"checkRun":{}}', '{"checkRun":{"conclusion":3}}', 'null']) {
       const r = post(body);
       expect(r.code, body).toBe(1);
@@ -420,14 +415,14 @@ describe('check-post refuses a report the artifact made up ([R137])', () => {
     }
   });
 
-  it('refuses to run without the event-sourced --base and --verified-head', () => {
+  it('refuses to run without --base and --verified-head from the event', () => {
     const r = oak(['check-post', '--report', 'r.json', '--repo', 'o/r', '--sha', 'deadbeef']);
     expect(r.code).toBe(2);
     expect(r.stderr).toContain('--verified-head <headsha> are required');
   });
 });
 
-describe('a PR number is a PR number ([R136])', () => {
+describe('a pull request number is a number [R136]', () => {
   it('refuses one that is not, whether it came from a flag or the artifact', () => {
     const r = oak(['notify', 'new-version', '--pr', '1/comments?x=', '--paper', fixturePaper]);
     expect(r.code).toBe(2);
@@ -435,7 +430,7 @@ describe('a PR number is a PR number ([R136])', () => {
   });
 });
 
-describe('a sandbox deposit never reaches for the production token ([R133])', () => {
+describe('a sandbox deposit never uses the production token [R133]', () => {
   it('refuses when only the production token is set', () => {
     const env = { ZENODO_TOKEN: 'production-secret', ZENODO_TOKEN_SANDBOX: undefined };
     const r = oak(['deposit', 'prepare', '--sandbox', '--paper', fixturePaper], env);

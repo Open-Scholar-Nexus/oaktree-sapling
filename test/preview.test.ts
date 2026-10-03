@@ -1,7 +1,7 @@
 /**
- * preview.test.ts: the deploy-preview / notify logic ([R69]), exercised through FAKE seams
- * (no Cloudflare, no git/gh). Proves the degrade-never-fail contract ([R16]), the `.pr-number`
- * strip ([R26]), journal-driven CF config ([R27]), and the new-version reminder ([R23]).
+ * deploy-preview and notify [R69], with fakes for Cloudflare, git and gh: a failed Cloudflare
+ * deploy falls back to an artifact link [R16], `.pr-number` is removed before serving [R26],
+ * Cloudflare settings come from journal.yml [R27], and the new-version reminder [R23].
  */
 import { describe, it, expect } from 'vitest';
 import { mkdtempSync, writeFileSync, existsSync, mkdirSync, readdirSync } from 'node:fs';
@@ -90,7 +90,7 @@ function siteWithPr(pr: string | null): string {
  * ------------------------------------------------------------------------ */
 
 describe('takePrNumber', () => {
-  it('reads and DELETES .pr-number ([R26])', () => {
+  it('reads and deletes .pr-number [R26]', () => {
     const dir = siteWithPr('42');
     expect(takePrNumber(dir)).toBe('42');
     expect(existsSync(join(dir, '.pr-number'))).toBe(false); // stripped before serving
@@ -102,21 +102,21 @@ describe('takePrNumber', () => {
     expect(takePrNumber(siteWithPr('   '))).toBeNull();
   });
 
-  it('refuses a value that is not a PR number ([R136])', () => {
-    // The file comes from the Stage-1 artifact, which runs fork content.
+  it('refuses a value that is not a pull request number [R136]', () => {
+    // The file comes from the `pull_request` job's artifact, which runs the fork's code.
     for (const hostile of ['1/comments?x=', '../../../user/repos', '1 2', 'abc']) {
       expect(() => takePrNumber(siteWithPr(hostile))).toThrow(/not a pull request number/);
     }
   });
 
-  it('still deletes the file it refused, so it cannot be served ([R26])', () => {
+  it('still deletes a refused file, so it cannot be served [R26]', () => {
     const dir = siteWithPr('../../etc');
     expect(() => takePrNumber(dir)).toThrow();
     expect(existsSync(join(dir, '.pr-number'))).toBe(false);
   });
 });
 
-describe('stripPagesControlFiles removes what turns a static upload into an origin ([R154])', () => {
+describe('stripPagesControlFiles removes what would make a static upload run code [R154]', () => {
   it('removes a fork-planted _worker.js', () => {
     const dir = mkdtempSync(join(tmpdir(), 'oak-strip-'));
     writeFileSync(
@@ -149,13 +149,13 @@ describe('stripPagesControlFiles removes what turns a static upload into an orig
   });
 });
 
-describe('previewBranch keeps the PR number ([R139])', () => {
+describe('previewBranch keeps the pull request number [R139]', () => {
   const P = 'paper-{repo}-{pr}';
   const long = 'impact-scholars/karalasingham-2026-nmap-celegans';
 
-  it('does not truncate the PR number off a long paper name', () => {
-    // Every paper in a journal shares one Pages project, so the alias is the only thing
-    // separating them; dropping {pr} made every PR on this paper deploy to one alias.
+  it('keeps the pull request number with a long paper name', () => {
+    // Every paper in a journal shares one Pages project, so the alias, with {pr} in it, is what
+    // keeps each pull request's preview apart.
     expect(previewBranch(P, long, '5')).toMatch(/-5$/);
     expect(previewBranch(P, long, '12')).toMatch(/-12$/);
     expect(previewBranch(P, long, '5')).not.toBe(previewBranch(P, long, '12'));
@@ -173,7 +173,7 @@ describe('previewBranch keeps the PR number ([R139])', () => {
     }
   });
 
-  it('leaves a name that already fits byte-identical', () => {
+  it('leaves a name that already fits unchanged', () => {
     expect(previewBranch(P, 'impact-scholars/geetha-2026-pd', '12')).toBe(
       'paper-geetha-2026-pd-12',
     );
@@ -186,7 +186,7 @@ describe('previewBranch', () => {
       'paper-geetha-2026-pd-9',
     );
   });
-  it('slugifies to a CF-safe alias and truncates', () => {
+  it('makes a Cloudflare-safe alias and shortens it', () => {
     const b = previewBranch('{repo}_{pr}', 'Owner/Weird Name!!', '3');
     expect(b).toMatch(/^[a-z0-9-]+$/);
     expect(b.length).toBeLessThanOrEqual(28);
@@ -204,7 +204,7 @@ describe('planPreview', () => {
       branch: 'paper-r-5',
     });
   });
-  it('degrades when provider is not cloudflare', () => {
+  it('falls back when the provider is not cloudflare', () => {
     const plan = planPreview({
       preview: previewCfg({ provider: 'artifact' }),
       cf,
@@ -213,11 +213,11 @@ describe('planPreview', () => {
     });
     expect(plan).toMatchObject({ mode: 'artifact' });
   });
-  it('degrades when secrets are absent ([R6])', () => {
+  it('falls back without the secrets [R6]', () => {
     const plan = planPreview({ preview: previewCfg(), cf: {}, repo: 'o/r', pr: '5' });
     expect(plan).toMatchObject({ mode: 'artifact', reason: expect.stringContaining('secrets') });
   });
-  it('degrades when cf_project_name is unset', () => {
+  it('falls back when cf_project_name is unset', () => {
     const plan = planPreview({
       preview: previewCfg({ cf_project_name: undefined }),
       cf,
@@ -244,7 +244,7 @@ describe('recordUrlForDoi', () => {
       recordUrl: 'https://zenodo.org/records/999',
     });
   });
-  it('errors on an unrecognized prefix', () => {
+  it('errors on an unknown prefix', () => {
     expect(recordUrlForDoi('10.9999/x')).toHaveProperty('error');
   });
 });
@@ -258,18 +258,18 @@ describe('hasVersionTag', () => {
 });
 
 describe('comment bodies', () => {
-  it('preview comment carries the sticky marker + URL', () => {
+  it('the preview comment has the marker and the URL', () => {
     const b = previewComment('https://x.pages.dev');
     expect(b).toContain(`oak-sticky: ${STICKY_PREVIEW}`);
     expect(b).toContain('https://x.pages.dev');
   });
-  it('artifact comment carries the marker, run URL, and reason', () => {
+  it('the artifact comment has the marker, the run URL and the reason', () => {
     const b = artifactComment('https://gh/o/r/actions', 'no secrets');
     expect(b).toContain(`oak-sticky: ${STICKY_PREVIEW}`);
     expect(b).toContain('https://gh/o/r/actions');
     expect(b).toContain('no secrets');
   });
-  it('new-version comment carries the marker, record URL, and DOI', () => {
+  it('the new-version comment has the marker, the record URL and the DOI', () => {
     const b = newVersionComment('10.5281/zenodo.1', 'https://zenodo.org/records/1');
     expect(b).toContain(`oak-sticky: ${STICKY_NEWVERSION}`);
     expect(b).toContain('https://zenodo.org/records/1');
@@ -277,28 +277,29 @@ describe('comment bodies', () => {
   });
 });
 
-describe('a journal.yml the tenant broke ([R140])', () => {
+describe('a broken journal.yml [R140]', () => {
   const inst = (body: string) => {
     const d = mkdtempSync(join(tmpdir(), 'oak-inst-'));
     writeFileSync(join(d, 'journal.yml'), body);
     return d;
   };
 
-  it('degrades instead of throwing', () => {
+  it('falls back instead of throwing', () => {
     for (const body of ['name: J\npreview:\n  provider: nonsense\n', 'name: [unclosed\n']) {
       expect(() => loadJournalPreview(inst(body)), body).not.toThrow();
       expect(loadJournalPreview(inst(body)).preview.provider, body).toBe('artifact');
     }
   });
 
-  it('names the offending key, not a JSON dump', () => {
-    // The reason rides into the PR comment, so `([)` (a zod message's first line) is no use.
+  it('names the bad key, not a JSON dump', () => {
+    // The reason goes into the pull request comment, so it must not be `([)`, a zod message's
+    // first line.
     const got = loadJournalPreview(inst('name: J\npreview:\n  provider: nonsense\n'));
     expect(got.problem).toContain('journal.yml');
     expect(got.problem).toContain('preview.provider');
   });
 
-  it('a readable one carries no problem', () => {
+  it('a valid one has no problem', () => {
     expect(loadJournalPreview('test/fixture-instance').problem).toBeUndefined();
   });
 });
@@ -323,7 +324,7 @@ const baseInput = (siteDir: string, over: Record<string, unknown> = {}) => ({
   repo: 'o/r',
   serverUrl: 'https://github.com',
   cf: { apiToken: 't', accountId: 'a' },
-  mystPath: join(siteDir, 'no-myst.yml'), // absent ⇒ notify no-DOI path (not reached w/o tags)
+  mystPath: join(siteDir, 'no-myst.yml'), // absent: notify's no-DOI path (not reached without tags)
   ...over,
 });
 
@@ -343,21 +344,21 @@ describe('cmdDeployPreview', () => {
     expect(existsSync(join(dir, '.pr-number'))).toBe(false); // stripped
   });
 
-  it('degrades to an artifact comment when the CF deploy throws, never fails ([R16])', async () => {
+  it('falls back to an artifact comment when the Cloudflare deploy throws [R16]', async () => {
     const dir = siteWithPr('7');
     const { gh, stickies } = fakeGh();
     const out = await cmdDeployPreview(baseInput(dir, { instanceRoot: instanceCf(dir) }), {
       deployer: failDeployer('boom'),
       gh,
     });
-    expect(out.exitCode).toBe(0); // NOT a failure
+    expect(out.exitCode).toBe(0); // not a failure
     expect(out.result.preview).toBe('artifact');
     const c = stickies.find((s) => s.header === STICKY_PREVIEW)!;
     expect(c.body).toContain('boom');
     expect(c.body).toContain('/actions');
   });
 
-  it('degrades to an artifact comment when no CF secrets are present', async () => {
+  it('falls back to an artifact comment without the Cloudflare secrets', async () => {
     const dir = siteWithPr('7');
     const { gh, stickies } = fakeGh();
     const out = await cmdDeployPreview(baseInput(dir, { cf: {} }), { deployer: okDeployer(), gh });
@@ -365,7 +366,7 @@ describe('cmdDeployPreview', () => {
     expect(stickies.some((s) => s.header === STICKY_PREVIEW)).toBe(true);
   });
 
-  it('deep-links the degrade comment to the specific Paper CI run (artifactRunId)', async () => {
+  it('links the fallback comment to its Paper CI run (artifactRunId)', async () => {
     const dir = siteWithPr('7');
     const { gh, stickies } = fakeGh();
     await cmdDeployPreview(baseInput(dir, { cf: {}, artifactRunId: '12345' }), {
@@ -376,7 +377,7 @@ describe('cmdDeployPreview', () => {
     expect(c.body).toContain('/actions/runs/12345');
   });
 
-  it('strips a fork-planted _worker.js before the deployer sees the dir ([R154])', async () => {
+  it('removes a fork-planted _worker.js before deploying [R154]', async () => {
     const dir = siteWithPr('7');
     writeFileSync(
       join(dir, '_worker.js'),
@@ -406,7 +407,7 @@ describe('cmdDeployPreview', () => {
     expect(stickies).toHaveLength(0);
   });
 
-  it('runs the new-version reminder inline ([R16]), posts on an already-published paper', async () => {
+  it('runs the new-version reminder too, posting on a published paper [R16]', async () => {
     const dir = siteWithPr('7');
     const mystPath = join(dir, 'myst.yml');
     writeFileSync(mystPath, 'project:\n  doi: 10.5281/zenodo.55\n');
@@ -420,7 +421,7 @@ describe('cmdDeployPreview', () => {
     expect(labels.some((l) => l.label === LABEL_EDITOR_ACTION)).toBe(true);
   });
 
-  it('propagates a notify failure (published-but-unlinked) even after posting the preview ([R16] is CF-only)', async () => {
+  it('fails on a notify failure (published without a DOI) even after posting the preview', async () => {
     const dir = siteWithPr('7');
     const mystPath = join(dir, 'myst.yml'); // no project.doi
     writeFileSync(mystPath, 'project:\n  title: x\n');
@@ -429,7 +430,7 @@ describe('cmdDeployPreview', () => {
       deployer: okDeployer(),
       gh,
     });
-    expect(out.exitCode).toBe(1); // the run fails loudly
+    expect(out.exitCode).toBe(1); // the run fails
     expect(out.result.status).toBe('error');
     expect(stickies.some((s) => s.header === STICKY_PREVIEW)).toBe(true); // preview still posted
   });
@@ -468,7 +469,7 @@ describe('runNewVersionReminder', () => {
     expect(gh.stickies).toHaveLength(0);
   });
 
-  it('posts + labels when published with a valid DOI', () => {
+  it('posts and labels when published with a valid DOI', () => {
     const { input: i, gh } = input(mystWith('10.5072/zenodo.9'), ['v1.0.0']);
     const out = runNewVersionReminder(i, gh.gh);
     expect(out.result.reminder).toBe('posted');
@@ -476,7 +477,7 @@ describe('runNewVersionReminder', () => {
     expect(gh.labels).toHaveLength(1);
   });
 
-  it('hard-errors (exit 1) when a v* tag exists but the DOI is missing, published but unlinked', () => {
+  it('exits 1 when a v* tag exists but the DOI is missing', () => {
     const { input: i, gh } = input(mystWith(undefined), ['v2.0.0']);
     const out = runNewVersionReminder(i, gh.gh);
     expect(out.exitCode).toBe(1);
@@ -484,14 +485,14 @@ describe('runNewVersionReminder', () => {
     expect(gh.stickies).toHaveLength(0);
   });
 
-  it('hard-errors (exit 1) on an unparseable DOI prefix', () => {
+  it('exits 1 on an unknown DOI prefix', () => {
     const { input: i, gh } = input(mystWith('10.1234/foo'), ['v2.0.0']);
     const out = runNewVersionReminder(i, gh.gh);
     expect(out.exitCode).toBe(1);
     expect(out.result.reminder).toBe('error');
   });
 
-  it('a gh failure reading the tags is an error, not a first-deposit skip ([R108])', () => {
+  it('a gh failure reading the tags is an error, not a first deposit', () => {
     const gh = fakeGh({
       versionTags: () => {
         throw new Error('gh api failed (exit 1): rate limit exceeded');

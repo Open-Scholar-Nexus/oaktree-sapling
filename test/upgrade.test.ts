@@ -1,9 +1,8 @@
 /**
- * upgrade.test.ts: `oak upgrade` drift + orchestration (slice 5), through FAKE seams (no
- * gh/git). Proves: computeDrift's 2-way reset-to-template semantics (clean / changed-template
- * / hand-edited-repo); --version-only writes only myst.yml; --files-only overwrites only the
- * drifted frozen files; --both; a clean repo opens no PR; the PR branch + paths are
- * `/.github/`-gated.
+ * `oak upgrade`, with fakes for gh and git: computeDrift resets to the template (no change, a
+ * changed template, a file edited in the repo); --version-only writes only myst.yml;
+ * --files-only overwrites only the engine-managed files that differ; --both; an up-to-date repo
+ * gets no pull request; and the pull request's branch and paths.
  */
 import { describe, it, expect } from 'vitest';
 import {
@@ -44,7 +43,7 @@ const answers: TemplateAnswers = {
   edition: 'ed-2026',
 };
 
-/** A paper repo on disk (frozen shim + starter content) at version v1.0.0. */
+/** A paper repo on disk (the template's workflows and starter content) at version v1.0.0. */
 function makeRepo(): string {
   const dir = tmp('oak-repo-');
   renderPaperTemplate(TEMPLATE_ROOT, dir, answers);
@@ -56,12 +55,12 @@ function makeRepo(): string {
  * ------------------------------------------------------------------------ */
 
 describe('computeDrift', () => {
-  it('no drift when the repo matches the target render', () => {
+  it('no difference when the repo matches the target', () => {
     const repo = makeRepo();
     expect(computeDrift(repo, TEMPLATE_ROOT, readAnswers(repo))).toEqual([]);
   });
 
-  it('reports a frozen file that changed in the template', () => {
+  it('reports an engine-managed file that changed in the template', () => {
     const repo = makeRepo();
     const target = tmp('oak-tmpl-');
     cpSync(TEMPLATE_ROOT, target, { recursive: true });
@@ -69,17 +68,16 @@ describe('computeDrift', () => {
     expect(computeDrift(repo, target, readAnswers(repo))).toEqual(['.github/workflows/ci.yml']);
   });
 
-  it('keeps a second CODEOWNER the tenant added ([R126])', () => {
+  it('keeps a second code owner the journal added [R126]', () => {
     const repo = makeRepo();
     const co = join(repo, 'CODEOWNERS');
     writeFileSync(co, readFileSync(co, 'utf8').replace(/@alice/g, '@org/editors @alice'));
     expect(computeDrift(repo, TEMPLATE_ROOT, readAnswers(repo))).toEqual([]);
   });
 
-  it('keeps DIFFERENT owners on different paths ([R126])', () => {
-    // The two halves of the fix mask each other when every path has the same owner, so this is
-    // the case that pins the column being path-keyed: an owner added to one gated path must not
-    // be spread onto the others, least of all onto CODEOWNERS itself.
+  it('keeps different owners on different paths [R126]', () => {
+    // With one owner everywhere, keying owners by path would not show. An owner added to one
+    // gated path stays on that path, and is not copied onto the others or onto CODEOWNERS.
     const repo = makeRepo();
     const co = join(repo, 'CODEOWNERS');
     writeFileSync(
@@ -95,9 +93,9 @@ describe('computeDrift', () => {
     expect(after).toMatch(/\/CODEOWNERS\s+@alice$/m);
   });
 
-  it('uses the whole column as the fallback for a path the repo lacks ([R126])', () => {
-    // Live case: every repo seeded before /paper-environment.yml joined the gate has a CODEOWNERS
-    // without that line, so the template's line falls back to the derived owner.
+  it('uses the whole owner column for a path the repo lacks [R126]', () => {
+    // Repos seeded before /paper-environment.yml was gated have no line for it, so the
+    // template's line gets the owner read from the repo.
     const repo = makeRepo();
     const co = join(repo, 'CODEOWNERS');
     const older = readFileSync(co, 'utf8')
@@ -114,7 +112,7 @@ describe('computeDrift', () => {
     expect(rendered).toMatch(/paper-environment\.yml\s+@org\/editors @alice$/m);
   });
 
-  it('a resync does not revert a second CODEOWNER on an unrelated drift ([R126])', async () => {
+  it('a reset of another file keeps a second code owner [R126]', async () => {
     const repo = makeRepo();
     const co = join(repo, 'CODEOWNERS');
     writeFileSync(co, readFileSync(co, 'utf8').replace(/@alice/g, '@org/editors @alice'));
@@ -127,7 +125,7 @@ describe('computeDrift', () => {
     expect(readFileSync(co, 'utf8')).toContain('@org/editors @alice');
   });
 
-  it('reports a hand-edited repo file (reset-to-template)', () => {
+  it('reports a file edited in the repo, to reset to the template', () => {
     const repo = makeRepo();
     appendFileSync(join(repo, '.github/workflows/publish.yml'), '\n# hand edit\n');
     expect(computeDrift(repo, TEMPLATE_ROOT, readAnswers(repo))).toEqual([
@@ -137,7 +135,7 @@ describe('computeDrift', () => {
 });
 
 /* --------------------------------------------------------------------------
- * Fake PR seam + deps
+ * A fake pull request opener, and the deps
  * ------------------------------------------------------------------------ */
 
 function fakePr() {
@@ -165,20 +163,20 @@ function deps(pr: UpgradePr, target: string, materialize: () => string): Upgrade
  * cmdUpgrade
  * ------------------------------------------------------------------------ */
 
-describe('a frozen file the target no longer ships ([R143])', () => {
+describe('an engine-managed file the target no longer ships [R143]', () => {
   const withRetired = () => {
     const repo = makeRepo();
     writeFileSync(join(repo, '.github/workflows/retired.yml'), 'on: push\njobs: {}\n');
     return repo;
   };
 
-  it('is not drift, but IS reported', () => {
+  it('is not a difference, but is reported', () => {
     const repo = withRetired();
     expect(computeDrift(repo, TEMPLATE_ROOT, readAnswers(repo))).toEqual([]);
     expect(extraFrozenFiles(repo, TEMPLATE_ROOT)).toEqual(['.github/workflows/retired.yml']);
   });
 
-  it('reaches the operator even when everything else is up to date', async () => {
+  it('is reported even when everything else is up to date', async () => {
     const repo = withRetired();
     const lines: string[] = [];
     const { pr } = fakePr();
@@ -194,7 +192,7 @@ describe('a frozen file the target no longer ships ([R143])', () => {
     expect(lines.join('\n')).toContain('retired.yml');
   });
 
-  it('leaves it on disk: a tenant may own it', () => {
+  it("leaves it on disk: it may be the repo's own", () => {
     const repo = withRetired();
     const { pr } = fakePr();
     return cmdUpgrade(
@@ -207,7 +205,7 @@ describe('a frozen file the target no longer ships ([R143])', () => {
 });
 
 describe('cmdUpgrade', () => {
-  it('--version-only writes only myst.yml and PRs just that path', async () => {
+  it('--version-only writes only myst.yml, and the pull request has only that path', async () => {
     const repo = makeRepo();
     const before = readFileSync(join(repo, '.github/workflows/ci.yml'), 'utf8');
     const { pr, opened } = fakePr();
@@ -218,12 +216,12 @@ describe('cmdUpgrade', () => {
     expect(out.result.version_bumped).toBe(true);
     const myst = parseDocument(readFileSync(join(repo, 'myst.yml'), 'utf8'));
     expect(myst.getIn(['project', 'options', 'oaktree-sapling', 'version'])).toBe('v2.0.0');
-    expect(readFileSync(join(repo, '.github/workflows/ci.yml'), 'utf8')).toBe(before); // shim untouched
+    expect(readFileSync(join(repo, '.github/workflows/ci.yml'), 'utf8')).toBe(before); // workflows unchanged
     expect(opened[0]!.paths).toEqual(['myst.yml']);
     expect(opened[0]!.branch).toBe('oak/upgrade-v2.0.0');
   });
 
-  it('--files-only overwrites only drifted frozen files, leaves myst.yml, PR is /.github/-gated', async () => {
+  it('--files-only overwrites only the engine-managed files that differ, not myst.yml', async () => {
     const repo = makeRepo();
     const mystBefore = readFileSync(join(repo, 'myst.yml'), 'utf8');
     const target = tmp('oak-tmpl-');
@@ -237,7 +235,7 @@ describe('cmdUpgrade', () => {
     );
     expect(out.result.version_bumped).toBe(false);
     expect(out.result.drift).toEqual(['.github/workflows/ci.yml']);
-    expect(readFileSync(join(repo, 'myst.yml'), 'utf8')).toBe(mystBefore); // version NOT bumped
+    expect(readFileSync(join(repo, 'myst.yml'), 'utf8')).toBe(mystBefore); // version not changed
     expect(readFileSync(join(repo, '.github/workflows/ci.yml'), 'utf8')).toContain('# upgraded'); // resynced
     expect(opened[0]!.paths).toEqual(['.github/workflows/ci.yml']);
     expect(opened[0]!.paths.every((p) => p.startsWith('.github/') || p === 'CODEOWNERS')).toBe(
@@ -245,7 +243,7 @@ describe('cmdUpgrade', () => {
     );
   });
 
-  it('--both bumps version and resyncs drifted files', async () => {
+  it('--both sets the version and resets the files that differ', async () => {
     const repo = makeRepo();
     const target = tmp('oak-tmpl-');
     cpSync(TEMPLATE_ROOT, target, { recursive: true });
@@ -262,8 +260,8 @@ describe('cmdUpgrade', () => {
     expect(opened[0]!.paths).toContain('.github/workflows/ci.yml');
   });
 
-  it('a clean repo already at target opens no PR', async () => {
-    const repo = makeRepo(); // version v1.0.0, shim matches template
+  it('a repo already at the target gets no pull request', async () => {
+    const repo = makeRepo(); // version v1.0.0, workflows match the template
     const { pr, opened } = fakePr();
     const out = await cmdUpgrade(
       { repoRoot: repo, mode: 'both' },

@@ -24,7 +24,7 @@ describe('readEngineCoordinateRaw (local yq equivalent, §6a)', () => {
 
   it('throws clearly when the coordinate is absent, naming the file and the fix', () => {
     const doc = parseDocument('version: 1\nproject:\n  id: x\n');
-    // A tenant-facing sentence (printed without a stack), not a bare internal message.
+    // A UserError, printed as a sentence without a stack.
     expect(() => readEngineCoordinateRaw(doc, '/papers/one/myst.yml')).toThrow(
       /\/papers\/one\/myst\.yml has no engine version/,
     );
@@ -33,9 +33,9 @@ describe('readEngineCoordinateRaw (local yq equivalent, §6a)', () => {
     );
   });
 
-  it('refuses an edition carrying a path, BEFORE it reaches the extends chain ([R141])', () => {
-    // This read runs a pass before anything validates the resolved config, so a shape check on
-    // the schema alone leaves the traversal open: verified by writing the derived file.
+  it('refuses an edition holding a path before it reaches the extends chain [R141]', () => {
+    // This is read before anything validates the merged config, so the schema check alone
+    // would come too late to stop a path in the edition.
     for (const bad of ['../../secret/loot', './x', 'a/b']) {
       const doc = parseDocument(
         `version: 1\nproject:\n  options:\n    oaktree-sapling:\n      version: v1\n      edition: ${bad}\n`,
@@ -69,18 +69,18 @@ describe('working-tree injection preserves author content ([R3])', () => {
       'https://example.org/typst-template.zip',
     );
     expect(out.getIn(['site', 'template'])).toBe('https://example.org/book-theme.zip');
-    // finding 3: the sibling option key is untouched
+    // the author's `youtube` option is kept
     expect(out.getIn(['project', 'options', 'youtube'])).toBe('https://youtu.be/dQw4w9WgXcQ');
-    // and the engine coordinate the shim reads still resolves
+    // and the version key the engine action reads is still there
     expect(readEngineCoordinateRaw(out)).toEqual({
       version: 'v0.3.0',
       edition: 'fixture-edition',
     });
-    // a comment from the original file survived the round-trip
+    // a comment from the original file is kept
     expect(doc.toString()).toContain('# Fixture paper');
   });
 
-  it('applies brand asset overrides as individual site+project option keys, leaving siblings ([R62])', () => {
+  it('sets brand assets key by key under site and project options, keeping the others [R62]', () => {
     const doc = readDoc(fixturePaper);
     applyOwnOverride(doc, {
       project: { options: { logo: '/abs/instance/brand/logo-watermark.svg' } },
@@ -98,29 +98,29 @@ describe('working-tree injection preserves author content ([R3])', () => {
     expect(out.getIn(['project', 'options', 'logo'])).toBe(
       '/abs/instance/brand/logo-watermark.svg',
     );
-    // the author's sibling project options are never clobbered (finding 3)
+    // the author's other project options are kept
     expect(out.getIn(['project', 'options', 'youtube'])).toBe('https://youtu.be/dQw4w9WgXcQ');
     expect(out.getIn(['project', 'options', 'oaktree-sapling', 'version'])).toBe('v0.3.0');
   });
 });
 
 describe('readBrandAssetOptions ([R62])', () => {
-  it('lifts the declared asset fields per namespace from the instance brand.yml', () => {
-    // the fixture brand declares relative site logo/favicon + a typst watermark
+  it("reads the asset fields from the journal's brand.yml, for site and project", () => {
+    // the fixture brand has a relative site logo and favicon, and a typst watermark
     expect(readBrandAssetOptions(fixtureInstance)).toEqual({
       site: { logo: './logo.svg', favicon: './favicon.svg' },
       project: { logo: './logo-watermark.svg' },
     });
   });
 
-  it('returns empty maps when the instance has no brand.yml', () => {
+  it('returns empty maps when the journal repo has no brand.yml', () => {
     expect(readBrandAssetOptions('/no/such/instance')).toEqual({ site: {}, project: {} });
   });
 });
 
 describe('readJournalTypstTemplate ([R76])', () => {
-  /** A throwaway instance-config; the shared fixture deliberately declares NO tenant
-   *  template, so the fixture builds keep rendering with the engine's. */
+  /** A temporary journal repo. The shared fixture sets no journal template, so the fixture
+   *  builds use oak's. */
   function instanceWithJournal(body: string): string {
     const root = mkdtempSync(join(tmpdir(), 'oak-journal-'));
     writeFileSync(join(root, 'journal.yml'), body);
