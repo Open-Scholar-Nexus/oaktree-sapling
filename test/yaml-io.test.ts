@@ -10,7 +10,7 @@ import {
   applyOwnOverride,
   readEngineCoordinateRaw,
   readBrandAssetOptions,
-  readTenantTypstTemplate,
+  readJournalTypstTemplate,
 } from '../src/yaml-io.js';
 
 const fixturePaper = fileURLToPath(new URL('./fixture-paper/myst.yml', import.meta.url));
@@ -118,7 +118,7 @@ describe('readBrandAssetOptions ([R62])', () => {
   });
 });
 
-describe('readTenantTypstTemplate ([R76])', () => {
+describe('readJournalTypstTemplate ([R76])', () => {
   /** A throwaway instance-config; the shared fixture deliberately declares NO tenant
    *  template, so the fixture builds keep rendering with the engine's. */
   function instanceWithJournal(body: string): string {
@@ -129,15 +129,15 @@ describe('readTenantTypstTemplate ([R76])', () => {
 
   it('lifts the journal.yml value raw, never through the extends merge', () => {
     const root = instanceWithJournal('name: J\ntypst_template: ./typst-template\n');
-    expect(readTenantTypstTemplate(root)).toBe('./typst-template');
+    expect(readJournalTypstTemplate(root)).toBe('./typst-template');
   });
 
   it('returns undefined when the journal declares none (the common case)', () => {
-    expect(readTenantTypstTemplate(instanceWithJournal('name: J\n'))).toBeUndefined();
-    expect(readTenantTypstTemplate(fixtureInstance)).toBeUndefined();
+    expect(readJournalTypstTemplate(instanceWithJournal('name: J\n'))).toBeUndefined();
+    expect(readJournalTypstTemplate(fixtureInstance)).toBeUndefined();
   });
 
   it('returns undefined when there is no journal.yml at all', () => {
-    expect(readTenantTypstTemplate('/no/such/instance')).toBeUndefined();
+    expect(readJournalTypstTemplate('/no/such/instance')).toBeUndefined();
   });
 });

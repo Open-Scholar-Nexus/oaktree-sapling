@@ -213,7 +213,7 @@ describe('checkTemplates ([R76])', () => {
 
   it('flags an author template that overrides the journal’s, as a WARN, never an error', () => {
     const f = checkTemplates(
-      { instanceRoot: '/i', authorTemplate: './mine', tenantTemplate: './journal' },
+      { instanceRoot: '/i', authorTemplate: './mine', journalTemplate: './journal' },
       allFalse,
     );
     const override = f.find((x) => x.check === 'template-override')!;
@@ -234,7 +234,7 @@ describe('checkTemplates ([R76])', () => {
     );
     expect(author.find((x) => x.check === 'template-floating')!.message).toMatch(/author/);
     const journal = checkTemplates(
-      { instanceRoot: '/i', tenantTemplate: 'https://github.com/o/r.git' },
+      { instanceRoot: '/i', journalTemplate: 'https://github.com/o/r.git' },
       allFalse,
     );
     expect(journal.find((x) => x.check === 'template-floating')!.message).toMatch(/journal/);
@@ -245,7 +245,7 @@ describe('checkTemplates ([R76])', () => {
       {
         instanceRoot: '/i',
         authorTemplate: 'https://github.com/o/r.git',
-        tenantTemplate: './journal',
+        journalTemplate: './journal',
       },
       allFalse,
     );
@@ -254,13 +254,13 @@ describe('checkTemplates ([R76])', () => {
   });
 
   it('warns when a bare tenant value shadows a real instance-config directory', () => {
-    const f = checkTemplates({ instanceRoot: '/i', tenantTemplate: 'typst-template' }, allTrue);
+    const f = checkTemplates({ instanceRoot: '/i', journalTemplate: 'typst-template' }, allTrue);
     const amb = f.find((x) => x.check === 'template-name-ambiguous')!;
     expect(amb.message).toMatch(/write "\.\/typst-template"/);
   });
 
   it('does not warn about ambiguity when the value is explicitly ./-relative', () => {
-    const f = checkTemplates({ instanceRoot: '/i', tenantTemplate: './typst-template' }, allTrue);
+    const f = checkTemplates({ instanceRoot: '/i', journalTemplate: './typst-template' }, allTrue);
     expect(ids(f)).not.toContain('template-name-ambiguous');
   });
 });
@@ -619,7 +619,7 @@ describe('the author template is RAW-LIFTED, never read from the composed projec
     for (const [name, body] of Object.entries(files)) writeFileSync(join(dir, name), body);
     return dir;
   };
-  const tenantInstance = () => {
+  const journalInstance = () => {
     // `allTrue` probes claim every path exists, so the instance must really carry the files
     // runLayerA reads (journal + registry), otherwise the read throws before the assertion.
     const dir = tmpDir({ 'journal.yml': 'name: J\ntypst_template: ./tenant-template\n' });
@@ -631,7 +631,7 @@ describe('the author template is RAW-LIFTED, never read from the composed projec
   it('does NOT flag template-override when the paper declares no template of its own', () => {
     const paperRoot = tmpDir({ 'myst.yml': 'version: 1\nproject:\n  id: j-2026-x\n' });
     const findings = runLayerA(
-      { paperRoot, instanceRoot: tenantInstance(), project: composedProject, repo: null },
+      { paperRoot, instanceRoot: journalInstance(), project: composedProject, repo: null },
       allTrue,
     );
     expect(findings.some((f) => f.check === 'template-override')).toBe(false);
@@ -643,7 +643,7 @@ describe('the author template is RAW-LIFTED, never read from the composed projec
         'version: 1\nproject:\n  id: j-2026-x\n  exports:\n    - format: typst\n      id: typst-pdf\n      template: ./mine\n',
     });
     const findings = runLayerA(
-      { paperRoot, instanceRoot: tenantInstance(), project: composedProject, repo: null },
+      { paperRoot, instanceRoot: journalInstance(), project: composedProject, repo: null },
       allTrue,
     );
     expect(findings.some((f) => f.check === 'template-override')).toBe(true);

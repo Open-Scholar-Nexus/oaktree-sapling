@@ -223,21 +223,21 @@ export function isFloatingTemplate(value: string): boolean {
  * it is the journal's call.
  */
 export function checkTemplates(
-  input: { instanceRoot: string | null; authorTemplate?: string; tenantTemplate?: string },
+  input: { instanceRoot: string | null; authorTemplate?: string; journalTemplate?: string },
   probes: FsProbes,
 ): NamedFinding[] {
-  const { instanceRoot, authorTemplate, tenantTemplate } = input;
+  const { instanceRoot, authorTemplate, journalTemplate } = input;
   const out: NamedFinding[] = [];
   const warn = (check: string, message: string) =>
     out.push({ check, severity: 'warn', message, klass: 'config' });
 
-  if (authorTemplate && tenantTemplate) {
-    warn('template-override', msg.validate.templateOverride(authorTemplate, tenantTemplate));
+  if (authorTemplate && journalTemplate) {
+    warn('template-override', msg.validate.templateOverride(authorTemplate, journalTemplate));
   }
 
   for (const [layer, value] of [
     ['author', authorTemplate],
-    ['journal', tenantTemplate],
+    ['journal', journalTemplate],
   ] as const) {
     if (!value || !isFloatingTemplate(value)) continue;
     warn('template-floating', msg.validate.templateFloating(layer, value));
@@ -246,10 +246,10 @@ export function checkTemplates(
   // Only `./` or `../` is a path, so a bare `templates/typst` goes to myst as a name and fails
   // later in a confusing way. Warn when a directory with that name exists: then a path was
   // meant.
-  if (tenantTemplate && instanceRoot && !isBrandAssetUrl(tenantTemplate)) {
-    const bare = !isAbsolute(tenantTemplate) && !isInstanceRelativeTemplate(tenantTemplate);
-    if (bare && probes.existsProbe(join(instanceRoot, tenantTemplate))) {
-      warn('template-name-ambiguous', msg.validate.templateNameAmbiguous(tenantTemplate));
+  if (journalTemplate && instanceRoot && !isBrandAssetUrl(journalTemplate)) {
+    const bare = !isAbsolute(journalTemplate) && !isInstanceRelativeTemplate(journalTemplate);
+    if (bare && probes.existsProbe(join(instanceRoot, journalTemplate))) {
+      warn('template-name-ambiguous', msg.validate.templateNameAmbiguous(journalTemplate));
     }
   }
 
@@ -538,7 +538,7 @@ export function runLayerA(
       {
         instanceRoot,
         authorTemplate: readAuthorTypstTemplate(paperRoot),
-        tenantTemplate: journal.typst_template,
+        journalTemplate: journal.typst_template,
       },
       probes,
     ),

@@ -13,7 +13,7 @@ import {
   applyOwnOverride,
   readEngineCoordinateRaw,
   readBrandAssetOptions,
-  readTenantTypstTemplate,
+  readJournalTypstTemplate,
   DERIVED_CONFIG_FILE,
 } from './yaml-io.js';
 
@@ -120,7 +120,7 @@ export async function materializeDerived(
   const brandAssets = instanceRoot ? readBrandAssetOptions(instanceRoot) : undefined;
 
   // The journal's typst template, read the same way from journal.yml [R76].
-  const tenantTypstTemplate = instanceRoot ? readTenantTypstTemplate(instanceRoot) : undefined;
+  const journalTypstTemplate = instanceRoot ? readJournalTypstTemplate(instanceRoot) : undefined;
 
   // compose, including the version cross-check [R36].
   const result = compose({
@@ -134,7 +134,7 @@ export async function materializeDerived(
     baseUrl,
     assetOverrides,
     brandAssets,
-    tenantTypstTemplate,
+    journalTypstTemplate,
   });
 
   // Pass 2 sets the export's `template` and `output` [R71-out]. Without it, myst would take the

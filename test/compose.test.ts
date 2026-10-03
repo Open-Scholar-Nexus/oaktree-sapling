@@ -162,7 +162,7 @@ describe('compose: typst template precedence: author > tenant > engine ([R76])',
   it('tenant template beats the engine default', () => {
     const r = compose(
       base({
-        tenantTypstTemplate: './typst-template',
+        journalTypstTemplate: './typst-template',
         assetOverrides: { engineTypstTemplate: ENGINE_LOCAL },
       }),
     );
@@ -173,7 +173,7 @@ describe('compose: typst template precedence: author > tenant > engine ([R76])',
     const r = compose(
       base({
         resolvedProject: withAuthorTemplate('./my-template'),
-        tenantTypstTemplate: './typst-template',
+        journalTypstTemplate: './typst-template',
         assetOverrides: { engineTypstTemplate: ENGINE_LOCAL },
       }),
     );
@@ -191,7 +191,7 @@ describe('compose: typst template precedence: author > tenant > engine ([R76])',
     const r = compose(
       base({
         resolvedProject: withAuthorTemplate('./my-template'),
-        tenantTypstTemplate: './typst-template',
+        journalTypstTemplate: './typst-template',
         assetOverrides: { typstTemplate: '/explicit/override', engineTypstTemplate: ENGINE_LOCAL },
       }),
     );
@@ -206,7 +206,7 @@ describe('compose: typst template precedence: author > tenant > engine ([R76])',
   });
 
   describe('tenant value: only ./ and ../ are instance-relative paths', () => {
-    const tenant = (v: string) => templateOf(compose(base({ tenantTypstTemplate: v })));
+    const tenant = (v: string) => templateOf(compose(base({ journalTypstTemplate: v })));
 
     it('rebases ./ and ../ against the instance ROOT (journal.yml lives there, not brand/)', () => {
       expect(tenant('./typst-template')).toBe(`${INSTANCE}/typst-template`);
@@ -225,7 +225,7 @@ describe('compose: typst template precedence: author > tenant > engine ([R76])',
     });
 
     it('leaves the value alone when there is no instance (--no-instance)', () => {
-      const r = compose(base({ instanceRoot: null, tenantTypstTemplate: './typst-template' }));
+      const r = compose(base({ instanceRoot: null, journalTypstTemplate: './typst-template' }));
       expect(templateOf(r)).toBe('./typst-template');
     });
   });

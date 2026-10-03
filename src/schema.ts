@@ -64,7 +64,7 @@ export type PreviewConfig = z.infer<typeof PreviewConfig>;
 
 export const ZenodoConfig = z
   .object({
-    /** Optional Zenodo community identifier; a fresh tenant has none ([R19]). */
+    /** Optional Zenodo community identifier; a new journal has none [R19]. */
     community: z.string().optional(),
     /** Optional paragraph appended to every deposit's description [R19]. */
     description_blurb: z.string().optional(),
