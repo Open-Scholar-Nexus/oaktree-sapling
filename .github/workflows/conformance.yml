@@ -1,6 +1,6 @@
 name: conformance
 
-# Tests a release of oak on the test paper repository and uploads the result to the release.
+# Tests a release of oak on the test paper repo and uploads the result to the release.
 # https://scholar.nexus/oaktree-sapling/reference/cli#conformance
 
 on:
@@ -77,7 +77,7 @@ jobs:
           FORK_REPO: ${{ vars.CONFORMANCE_FORK_REPO }} # unset skips the fork preview
           CONFORMANCE_FORK_PAT: ${{ secrets.CONFORMANCE_FORK_PAT }}
         run: |
-          # `oak upgrade` pushes to the test repository over https, and the runner has no credential helper.
+          # `oak upgrade` pushes to the test repo over https, and the runner has no credential helper.
           git config --global url."https://x-access-token:${GH_TOKEN}@github.com/".insteadOf "https://github.com/"
           if [ "$ONLY_RESET" = true ] || [ -z "$TAG" ]; then
             node dist/cli.cjs conformance reset --repo "$FIXTURE"

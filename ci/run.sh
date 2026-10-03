@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Runs oak in a paper's CI. The engine action has already checked out oak at the pinned version
-# and set INSTANCE_REPO; this adds typst, the journal repository and the base URL.
+# and set INSTANCE_REPO; this adds typst, the journal repo and the base URL.
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -31,9 +31,9 @@ if [ "$verb" = "build" ] || [ "$verb" = "release" ]; then
   extra+=(--base-url "$base_url")
 fi
 
-# The verbs that read journal settings get a clone of the journal repository [R19] [R27]
+# The verbs that read journal settings get a clone of the journal repo [R19] [R27]
 # [R189] [R192].
-# "." means this repository is the journal, and oak finds it on its own.
+# "." means this repo is the journal, and oak finds it on its own.
 if [ "$verb" = "build" ] || [ "$verb" = "release" ] || [ "$verb" = "deploy-preview" ] || [ "$verb" = "validate" ] || [ "$verb" = "deposit" ]; then
   if [ -n "${INSTANCE_REPO:-}" ] && [ "${INSTANCE_REPO}" != "." ]; then
     inst_dir="$(mktemp -d)"

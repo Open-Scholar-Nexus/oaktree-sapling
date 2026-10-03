@@ -1,27 +1,8 @@
 /**
- * bootstrap.ts: `oak bootstrap paper` + `oak bootstrap journal` (slice 5). Stands up a
- * paper repo (bare or ingest) or a journal/tenant (external instance-config, or co-located
- * flagship) from the frozen `templates/paper/` + `templates/instance/`. Ports the ISP
- * `create-submission-target.sh`
- * provisioning (idempotent repo create → seed → ingest → rulesets → Pages → env → labels),
- * with the new-model corrections baked in:
- *
- *  - **The paper template is the frozen shim + a starter myst.yml/index.md/bib.bib.** Only
- *    `pins.yml` (engine_repo/instance_repo) and `CODEOWNERS` (owner) are RENDERED; every
- *    other frozen file is byte-copied. The starter `myst.yml` gets the engine coordinate.
- *  - **Ingest restores the ENTIRE `.github/` from `main`**, including
- *    `.github/actions/engine/pins.yml`, not just workflows + CODEOWNERS as the script did.
- *    In the new model `pins.yml` carries the trust-boundary `engine_repo` pin, so author-side
- *    `FETCH_HEAD` content must never supply it. `buildReviewTree` is the pure MODEL of that
- *    invariant; `ingestReviewBranch` (gh.ts) is what actually runs ([R121]).
- *  - **Idempotent, GET-then-act**: every step reads state first, so a re-run repairs a partial
- *    bootstrap. Every mutation is a provisioning call or a PR, never a silent content push
- *    past the CODEOWNERS gate.
- *  - **Secrets are set-if-provided only** ([R25] floor). Absent ones are skipped and the exact
- *    remaining runbook is printed (which secret, where), never a value in a log.
- *
- * SEAMS: all GitHub/git effects go through the injected `Provisioner` (real impl in gh.ts,
- * faked in tests); rendering is pure fs. This module does NOT import myst-cli.
+ * `oak bootstrap paper` and `oak bootstrap journal`: sets up a paper repo (new, or from an
+ * author's repo with `--from`) or a journal repo from the templates. Every step reads
+ * the current state first, so a rerun repairs a partial bootstrap. Content only arrives through a
+ * pull request, and a missing secret is listed in the closing runbook rather than set [R25].
  */
 import * as msg from './messages.js';
 import { firstLine } from './messages.js';
@@ -39,21 +20,22 @@ import { themeZipUrl } from './assets.js';
 import { LABEL_EDITOR_ACTION, LABEL_ZENODO_FAILED } from './preview.js';
 
 /* --------------------------------------------------------------------------
- * Answers + template rendering (pure)
+ * Settings and template rendering (pure)
  * ------------------------------------------------------------------------ */
 
 export interface TemplateAnswers {
-  /** owner/repo the engine is checked out from (pins.yml engine_repo). */
+  /** The repo oak is checked out from (pins.yml `engine_repo`). */
   engineRepo: string;
-  /** owner/repo of instance-config, or '.' when co-located (pins.yml instance_repo). */
+  /** The journal repo, or '.' when this repo is the journal (pins.yml
+   *  `instance_repo`). */
   instanceRepo: string;
-  /** CODEOWNERS owner token: `@user` or `@org/team`. */
+  /** The CODEOWNERS owner: `@user` or `@org/team`. */
   owner: string;
-  /** engine ref (a released tag) written into the starter myst.yml coordinate. */
+  /** The oak release written into the starter myst.yml. */
   version: string;
-  /** edition id written into the starter myst.yml coordinate + the edition filename. */
+  /** The edition, written into the starter myst.yml and used to name the edition file. */
   edition: string;
-  /** journal.yml `name` for the instance-config skeleton. */
+  /** The journal's name, for `journal.yml`. */
   journalName?: string;
 }
 
@@ -62,14 +44,12 @@ const RENDER_CODEOWNERS = 'CODEOWNERS';
 const RENDER_MYST = 'myst.yml';
 const RENDER_SITE_INDEX = posix.join('pages', 'index.md');
 const RENDER_SITE_PKG = 'package.json';
-/** Top-level template entries that are engine-side docs, never stamped into a tenant repo.
- *  Applies to both templates (each ships its own README). Not a role-partition list: the
- *  paper/instance split is now structural (separate source trees), so this is only the
- *  README carve-out, guarded by the disjointness invariant (test/template.test.ts). */
+/** Template files that document the template and are never copied: each template's README. The
+ *  `template disjointness invariant` tests (test/template.test.ts) check the templates write
+ *  disjoint paths. */
 const EXCLUDE_FROM_STAMP = new Set(['README.md']);
 
-/** The three template source roots under the engine checkout. Named + one-liners so
- *  resolution is testable rather than inlined at call sites. */
+/** The three template directories in oak's checkout, named so tests can resolve them. */
 export function paperTemplateRoot(engineRoot: string): string {
   return join(engineRoot, 'templates', 'paper');
 }
@@ -81,27 +61,24 @@ export function siteTemplateRoot(engineRoot: string): string {
 }
 
 /**
- * The engine's own `myst-cli` range, copied VERBATIM (no parsing) into the site scaffold's
- * `package.json` as its `mystmd` dependency ([R80]): the site renders with roughly the myst
- * the engine bundles, so the gallery plugin and theme behave the same in both builds. A caret
- * range is enough, not a resolved-version pin: the site is not the reproducibility anchor, the
- * Zenodo deposit is (design §7).
+ * Extracts the `myst-cli` range from oak's `package.json`. The journal site uses it as its
+ * `mystmd` version [R80], so the gallery plugin and theme behave as in oak's builds. A range is
+ * enough, since the Zenodo deposit, not the site, is what must be reproducible [design §7].
  */
 export function engineMystRange(engineRoot: string): string {
   const pkg = JSON.parse(readFileSync(join(engineRoot, 'package.json'), 'utf8')) as {
     dependencies?: Record<string, string>;
     devDependencies?: Record<string, string>;
   };
-  // myst-cli is a DEV dependency: it ships inlined in `dist/cli.cjs`, so the published package
-  // declares nothing to install ([R51]). npm keeps `devDependencies` in the published
-  // package.json verbatim, so the range is readable from the installed package either way,
-  // and `dependencies` stays accepted so a fork that declares it there still resolves.
+  // myst-cli is a dev dependency, since it is bundled into `dist/cli.cjs` [R51]; npm keeps
+  // `devDependencies` in the published package.json, so the range is readable either way.
+  // `dependencies` is read too, for a fork that declares it there.
   const range = pkg.dependencies?.['myst-cli'] ?? pkg.devDependencies?.['myst-cli'];
   if (!range) throw new Error('bootstrap: engine package.json declares no myst-cli dependency');
   return range;
 }
 
-/** Every path under `dir`, recursive + relative (posix separators), files only. */
+/** Every file under `dir`, recursive and relative, with posix separators. */
 export function listFiles(dir: string, prefix = ''): string[] {
   const out: string[] = [];
   for (const name of readdirSync(dir).sort()) {
@@ -114,17 +91,15 @@ export function listFiles(dir: string, prefix = ''): string[] {
 }
 
 /**
- * Basenames a template file ships under → the basename it is stamped as.
- *
- * npm strips a leading-dot `.gitignore` from EVERY tarball, no opt-out, so an npm-installed
- * engine would seed a tenant repo with no `.gitignore` at all (a git checkout seeds it fine).
- * The templates hold `gitignore`; the stamp puts the dot back. The values are exactly the
- * basenames npm strips, so the `templates survive npm packaging` test reads this one list;
- * keyed on the basename, not the rel path, so a file added in a SUBDIRECTORY is covered too.
+ * Template file names and the names they are written as. npm strips a leading-dot `.gitignore`
+ * from every package, so the templates hold `gitignore` and writing puts the dot back. The
+ * values are exactly the names npm strips, which `templates survive npm packaging`
+ * (test/template.test.ts) reads; keyed on the file name, so a file in a subdirectory is covered
+ * too.
  */
 export const STAMP_RENAME: Record<string, string> = { gitignore: '.gitignore' };
 
-/** A template-source rel path → the rel path it is written to in the tenant's repo. */
+/** A template path and the path it is written to in the new repo. */
 export function stampRel(rel: string): string {
   const parts = rel.split('/');
   const renamed = STAMP_RENAME[parts[parts.length - 1]!];
@@ -133,9 +108,8 @@ export function stampRel(rel: string): string {
   return parts.join('/');
 }
 
-/** The relative paths a render would actually stamp from `root` (all files minus the engine
- *  README), under their STAMPED names. Shared by the disjointness invariant test so it checks
- *  real stamped output, not raw source files. Subpaths are preserved (no basename flatten). */
+/** The paths a render writes from `root` (every file but the README), under their written
+ *  names, with subdirectories kept. The `template disjointness invariant` tests check these. */
 export function stampedFiles(root: string): string[] {
   return listFiles(root)
     .filter((rel) => !EXCLUDE_FROM_STAMP.has(rel.split('/')[0]!))
@@ -148,7 +122,8 @@ function writeRel(destRoot: string, rel: string, contents: string | Buffer): voi
   writeFileSync(abs, contents);
 }
 
-/** pins.yml with engine_repo/instance_repo set via the YAML Document API (comments kept). */
+/** pins.yml with `engine_repo` and `instance_repo` set through the YAML Document API, keeping
+ *  comments. */
 export function renderPins(templateRoot: string, answers: TemplateAnswers): string {
   const doc = readDoc(join(templateRoot, RENDER_PINS));
   doc.set('engine_repo', answers.engineRepo);
@@ -156,7 +131,7 @@ export function renderPins(templateRoot: string, answers: TemplateAnswers): stri
   return doc.toString();
 }
 
-/** A gated CODEOWNERS line: indent + path + spacing (1), the path (2), the owner column (3). */
+/** A gated CODEOWNERS line: indent, path and spacing (1), the path (2), the owner column (3). */
 const CODEOWNERS_LINE = /^(\s*(\S+)\s+)(\S.*)$/;
 
 function gatedLine(line: string): RegExpExecArray | null {
@@ -166,9 +141,8 @@ function gatedLine(line: string): RegExpExecArray | null {
 }
 
 /**
- * The owner column of each gated line, keyed by path. A column is one or more owners, and
- * `oak upgrade` feeds this back through {@link renderCodeowners} so a tenant's second owner
- * survives a resync ([R126]).
+ * The owner column of each gated line, by path. A column may hold several owners, and `oak
+ * upgrade` passes this back to {@link renderCodeowners} so an added owner survives [R126].
  */
 export function codeownersColumns(src: string): Record<string, string> {
   const out: Record<string, string> = {};
@@ -179,9 +153,9 @@ export function codeownersColumns(src: string): Record<string, string> {
   return out;
 }
 
-/** CODEOWNERS with each gated line's owner column set to `existing`'s entry for that path, or
- *  to `owner`. Not a structured config (no YAML), so a line-wise rewrite that keeps the path +
- *  spacing is the safe edit. A column may name several owners ([R126]). */
+/** CODEOWNERS with each gated line's owner column set from `existing` for that path, or to
+ *  `owner`. Edited line by line, keeping path and spacing; a column may hold several owners
+ *  [R126]. */
 export function renderCodeowners(
   src: string,
   owner: string,
@@ -196,7 +170,7 @@ export function renderCodeowners(
     .join('\n');
 }
 
-/** starter myst.yml with the engine coordinate (version/edition) set via the Document API. */
+/** The starter myst.yml with the version and edition set through the Document API. */
 export function renderMyst(templateRoot: string, answers: TemplateAnswers): string {
   const doc = readDoc(join(templateRoot, RENDER_MYST));
   doc.setIn(['project', 'options', 'oaktree-sapling', 'version'], answers.version);
@@ -205,9 +179,8 @@ export function renderMyst(templateRoot: string, answers: TemplateAnswers): stri
 }
 
 /**
- * Render the paper-repo template (frozen shim + starter content) from its own root into
- * `destRoot`. `pins.yml`, `CODEOWNERS`, and `myst.yml` are rendered from answers; every other
- * file is byte-copied. Returns the written relative paths (posix). Excludes the engine README.
+ * Renders the paper template into `destRoot`: `pins.yml`, `CODEOWNERS` and `myst.yml` from the
+ * settings, every other file copied, the README left out. Returns the written paths (posix).
  */
 export function renderPaperTemplate(
   paperRoot: string,
@@ -232,10 +205,9 @@ export function renderPaperTemplate(
 }
 
 /**
- * Render the instance-config skeleton (journal.yml / editions/<edition>.yml / brand/ /
- * registry) from its own root into `destRoot`. `journal.yml` `name` is set from answers; the
- * edition file is renamed to `editions/<edition>.yml`; the rest is byte-copied. Excludes the
- * engine README. Returns written rel paths.
+ * Renders the journal template (`journal.yml`, `editions/<edition>.yml`, `brand/`, the registry)
+ * into `destRoot`: `journal.yml`'s `name` from the settings, the edition file renamed, the rest
+ * copied, the README left out. Returns the written paths.
  */
 export function renderInstanceTemplate(
   instanceRoot: string,
@@ -262,39 +234,34 @@ export function renderInstanceTemplate(
   return written.sort();
 }
 
-/** The engine tag's raw URL for the gallery plugin. It must be REMOTE because it is code:
- *  a `.mjs` body cannot be stamped into YAML, and vendoring a copy is the copy-rot the
- *  engine exists to kill. Pinned to the tag, so the site takes engine updates only when the
- *  tenant bumps it. */
+/** The gallery plugin's URL at the release tag. Remote, since a plugin is code and a copy would
+ *  go stale; pinned to the tag, so the site takes a newer gallery only when the journal bumps
+ *  it. */
 export function galleryPluginUrl(engineRepo: string, engineVersion: string): string {
   return `https://raw.githubusercontent.com/${engineRepo}/${engineVersion}/plugins/gallery.mjs`;
 }
 
-/** The journal site's Pages URL for `owner/repo`, a PROJECT site, hence the subpath ([S8]). */
+/** The journal site's GitHub Pages URL for `owner/repo`, a project site, so under a path. */
 export function siteUrlFor(repo: string): string {
   const [owner, name] = repo.split('/');
   return `https://${owner}.github.io/${name}/`;
 }
 
 /**
- * Render the journal-site scaffold (`templates/site/`) into `destRoot`. Unioned with the
- * instance-config scaffold for `--external`: [S8]'s variant A′ makes the site and the
- * instance-config ONE repo, so the registry PR that adds a paper is also the deploy trigger.
+ * Renders the journal website (`templates/site/`) into `destRoot`, in the same repo as
+ * the journal's settings for `--external`, so the registry pull request that adds a paper also
+ * deploys the site.
  *
- * ONE-SHOT: the tenant owns every byte of this outright ([S3]). It is not frozen, not
- * covered by `oak upgrade`, and the engine re-reads none of it. Exactly FOUR values are
- * rendered; everything else is byte-copied:
+ * Written once: the journal owns every byte, `oak upgrade` never touches it and oak never reads
+ * it back. Four values are rendered and the rest is copied:
  *
- *   1. the gallery plugin URL (engine repo + tag),
- *   2. `site.template` from `themeZipUrl()`, rendered FROM the constant, not duplicated,
- *      so there is nothing for a drift test to catch,
- *   3. the journal name (myst.yml `project.title` + the `pages/index.md` heading),
- *   4. the `myst-cli` range, into the scaffold's `package.json`, where `js-yaml` is pinned
- *      too, so the site has ONE dependency list, not two pinning mechanisms. The workflow
- *      just runs `npm install` + `npx myst` and is byte-copied.
+ *   1. the gallery plugin URL (oak's repo and tag),
+ *   2. `site.template`, from `themeZipUrl()`,
+ *   3. the journal name (myst.yml `project.title` and the `pages/index.md` heading),
+ *   4. the `myst-cli` range, into `package.json`, beside `js-yaml`, so the site has one
+ *      dependency list. The workflow runs `npm install` and `npx myst`, and is copied.
  *
- * No `project.id` (myst doesn't require one, and the engine's id machinery is paper-only),
- * no edition rename, no file-path rewriting.
+ * No `project.id` (myst needs none, and ids are for papers).
  */
 export function renderSiteTemplate(
   siteRoot: string,
@@ -313,8 +280,7 @@ export function renderSiteTemplate(
       doc.setIn(['site', 'template'], themeZipUrl());
       writeRel(destRoot, rel, doc.toString());
     } else if (rel === RENDER_SITE_INDEX || rel === RENDER_SITE_PKG) {
-      // Markdown and package.json: substituted textually, because reformatting either
-      // through a structured writer would be a worse trade than a literal token swap.
+      // Markdown and package.json are edited as text: a structured writer would reformat them.
       const src = readFileSync(join(siteRoot, rel), 'utf8');
       writeRel(
         destRoot,
@@ -338,15 +304,13 @@ function copyFileBytes(src: string, dest: string): void {
 }
 
 /* --------------------------------------------------------------------------
- * Ingest tree (pure): new-model: restore the ENTIRE .github/ from main
+ * The review tree for an author's repo (pure): `.github/` comes from main
  * ------------------------------------------------------------------------ */
 
 /**
- * The review tree = author content with the whole editor-side trust boundary restored from
- * `main`: the entire `.github/` (including `.github/actions/engine/pins.yml`, the engine pin)
- * plus the root `CODEOWNERS`. Author files under those paths are DROPPED and replaced by
- * main's. Pure, so the invariant is unit-testable; the shipped path is `ingestReviewBranch`,
- * which must agree with it ([R121] is what happened when it did not).
+ * The review tree: the author's content, with the whole `.github/` (`pins.yml` included) and the
+ * root `CODEOWNERS` taken from `main`; the author's files at those paths are replaced. Pure, so
+ * the rule is testable; `ingestReviewBranch` must do the same [R121].
  */
 export function buildReviewTree(
   authorFiles: Record<string, string>,
@@ -363,14 +327,14 @@ export function buildReviewTree(
   return out;
 }
 
-/** The paths the editor's `main` owns through the ingest: the `.github/` subtree + CODEOWNERS. */
+/** The paths taken from the editors' `main`: the `.github/` subtree and CODEOWNERS. */
 function isEditorControlled(path: string): boolean {
   const p = path.replace(/^\.\//, '');
   return p === '.github' || p.startsWith('.github/') || p === 'CODEOWNERS';
 }
 
 /* --------------------------------------------------------------------------
- * Provisioner seam (real impl in gh.ts; faked in tests)
+ * Provisioner (injected; the real one is in gh.ts)
  * ------------------------------------------------------------------------ */
 
 /** A required reviewer on a deployment environment: a GitHub team or user, by numeric id. */
@@ -380,19 +344,20 @@ export interface EnvironmentReviewer {
 }
 
 export interface Provisioner {
-  /** 'Organization' | 'User' for an owner login, decides team-grant vs repo-admin bypass. */
+  /** 'Organization' or 'User' for an owner, which decides between a team grant and an admin
+   *  bypass. */
   ownerType(owner: string): 'Organization' | 'User';
   repoExists(repo: string): boolean;
   createRepo(repo: string, opts: { private: boolean; description: string }): void;
   branchExists(repo: string, branch: string): boolean;
-  /** The repo's default branch: a pre-existing repo may not default to `main` ([R127]). */
+  /** The repo's default branch: an existing repo may not use `main` [R127]. */
   defaultBranch(repo: string): string;
   setDefaultBranch(repo: string, branch: string): void;
-  /** Seed `branch` of `repo` as an orphan commit from a prepared local directory, then push. */
+  /** Seeds `branch` of `repo` with one commit from a prepared directory, and pushes. */
   seedBranch(repo: string, branch: string, sourceDir: string, message: string): void;
   /**
-   * Build a `review` branch = author content (from `sourceUrl`@`sourceRef`) with the entire
-   * frozen `.github/` restored from `origin/main`, then push. Requires `main` to be seeded.
+   * Builds a `review` branch: the author's content (`sourceUrl` at `sourceRef`) with the whole
+   * `.github/` from `origin/main`, and pushes it. Needs `main` seeded.
    */
   ingestReviewBranch(
     repo: string,
@@ -400,47 +365,47 @@ export interface Provisioner {
   ): void;
   prExists(repo: string, head: string): boolean;
   openPr(repo: string, opts: { head: string; base: string; title: string; body: string }): string;
-  /** Grant `org/team` write on `repo` (org-owned repos only). */
+  /** Gives `org/team` write access to `repo` (org repos only). */
   grantTeamWrite(repo: string, team: string): void;
-  /** Numeric team id for the `v*` tag-ruleset bypass actor (org path). */
+  /** A team's numeric id, to let it bypass the `v*` tag ruleset (orgs). */
   teamId(team: string): number;
   rulesetExists(repo: string, name: string): boolean;
   createRuleset(repo: string, body: unknown): void;
   pagesEnabled(repo: string): boolean;
   enablePages(repo: string): void;
-  /** Numeric user id for a login, the `zenodo-publish` reviewer on a personal account ([R123]). */
+  /** A user's numeric id, the `zenodo-publish` reviewer on a personal account [R123]. */
   userId(login: string): number;
   /** Whether Actions may create and approve pull requests on `repo` ([R122]). */
   actionsCanApprovePrs(repo: string): boolean;
-  /** Let Actions create + approve pull requests, keeping the default token permission ([R122]). */
+  /** Lets Actions create and approve pull requests, keeping the default token permission [R122]. */
   allowActionsApprovePrs(repo: string): void;
   environmentExists(repo: string, name: string): boolean;
-  /** `name`'s required reviewers, so a re-run never clears one added by hand ([R123]/[R127]). */
+  /** `name`'s required reviewers, so a rerun keeps one added by hand [R123] [R127]. */
   environmentReviewers(repo: string, name: string): EnvironmentReviewer[];
   upsertEnvironment(repo: string, name: string, reviewers: EnvironmentReviewer[]): void;
-  /** Whether `env` admits only the refs its deployment policies name (GitHub's auto-created
-   *  environment admits every branch). */
+  /** Whether `env` admits only the refs its deployment policies name; GitHub creates environments
+   *  open to every branch. */
   customBranchPolicies(repo: string, env: string): boolean;
   branchPolicyExists(repo: string, env: string, name: string): boolean;
   createBranchPolicy(repo: string, env: string, name: string, type: string): void;
   createLabel(repo: string, name: string, opts: { color?: string; description?: string }): void;
   setSecret(repo: string, env: string, name: string, value: string): void;
-  /** Secret names on `env`, or repository-level ones when `env` is omitted; [] if none. */
+  /** Secret names on `env`, or the repo's when `env` is omitted; [] when none. */
   secretNames(repo: string, env?: string): string[];
   deleteRepoSecret(repo: string, name: string): void;
-  /** `owner/repo` visibility (public/private), used to enforce public instance-config. */
+  /** `owner/repo`'s visibility, to require a public journal repo. */
   repoVisibility(repo: string): 'public' | 'private';
   setRepoPublic(repo: string): void;
 }
 
 /* --------------------------------------------------------------------------
- * Ruleset bodies (ported from apply_rulesets_to_repo)
+ * Ruleset bodies
  * ------------------------------------------------------------------------ */
 
 export const RULESET_PROTECT_MAIN = 'protect-main';
 export const RULESET_V_TAGS = 'editors-only-v-tags';
 
-/** GitHub's id for the repository admin role, as a ruleset `RepositoryRole` bypass actor. */
+/** GitHub's id for the repo admin role, as a ruleset `RepositoryRole` bypass actor. */
 const REPO_ROLE_ADMIN = 5;
 
 function protectMainBody(requireChecks: boolean, bypass: unknown[]): unknown {
@@ -456,10 +421,9 @@ function protectMainBody(requireChecks: boolean, bypass: unknown[]): unknown {
       },
     },
   ];
-  // Require the Journal-checks Check Run to pass before merge. This is the gate the id relies
-  // on now that id-shape no longer blocks the build (id-gate-relocation); without it, an
-  // invalid id could merge to main. Default-on; `--no-require-checks` opts out. The bypass
-  // below applies to this rule too, since a ruleset bypass is per-ruleset ([R127]).
+  // The Journal checks must pass before a merge: this is what enforces the paper id, which does
+  // not block the build. On by default; `--no-require-checks` turns it off. The bypass below
+  // applies to this rule too, since a bypass is per ruleset [R127].
   if (requireChecks) {
     rules.push({
       type: 'required_status_checks',
@@ -479,9 +443,9 @@ function protectMainBody(requireChecks: boolean, bypass: unknown[]): unknown {
   };
 }
 
-/** Who may merge a pull request the rules would otherwise block: nobody on an org path, the
- *  repo admin on a personal one, where the code-owner approval is one the sole editor cannot
- *  give themselves. `pull_request` mode, so a direct push to main stays refused ([R127]). */
+/** Who may merge a pull request the rules would block: nobody on an org, the repo
+ *  admin on a personal account, where the sole editor cannot approve as code owner. `pull_request`
+ *  mode, so pushing directly to main stays refused [R127]. */
 function protectMainBypass(team: string | null): unknown[] {
   return team
     ? []
@@ -522,7 +486,7 @@ export const ZENODO_PREPARE_ENV = 'zenodo-prepare';
 /** The environment of the preview deploy: `main` only, no reviewer. */
 export const PREVIEW_ENV = 'preview';
 
-/** Secrets live in environments only: a repository secret reaches every branch ([R207]). */
+/** Secrets live in environments only: a repo secret reaches every branch ([R207]). */
 export const SECRET_MAP: Array<{ key: keyof SecretInputs; name: string; envs: string[] }> = [
   { key: 'zenodoToken', name: 'ZENODO_TOKEN', envs: [ZENODO_ENV, ZENODO_PREPARE_ENV] },
   {
@@ -543,18 +507,19 @@ const MAIN_ONLY_ENVS = [ZENODO_PREPARE_ENV, PREVIEW_ENV];
 
 export interface BootstrapDeps {
   prov: Provisioner;
-  /** `templates/paper/` of the engine checkout, the frozen shim + starter content. */
+  /** `templates/paper/` in oak's checkout. */
   paperTemplateRoot: string;
-  /** `templates/instance/` of the engine checkout, the instance-config scaffold. */
+  /** `templates/instance/` in oak's checkout. */
   instanceTemplateRoot: string;
-  /** `templates/site/` of the engine checkout, the journal-site scaffold ([R80]). */
+  /** `templates/site/` in oak's checkout, the journal website [R80]. */
   siteTemplateRoot: string;
-  /** The engine's own `myst-cli` range, stamped into the site workflow ({@link engineMystRange}). */
+  /** oak's own `myst-cli` range, for the site ({@link engineMystRange}). */
   mystRange: string;
   log(msg: string): void;
-  /** Print the plan + gate execution. Tests pass `() => true`; the CLI enforces --yes/TTY. */
+  /** Prints the plan and asks to proceed. Tests pass `() => true`; the CLI handles --yes and the
+   *  TTY. */
   confirm(plan: string[]): Promise<boolean>;
-  /** Fresh scratch dir for rendering the seed tree (default: os tmpdir). */
+  /** A new temporary directory for rendering the seed (default: the OS temp dir). */
   workdir(): string;
 }
 
@@ -564,10 +529,8 @@ export interface Outcome {
 }
 
 /**
- * Where each value the tenant did NOT type came from, so the plan can say so. The CLI knows
- * this and bootstrap does not: by the time an input arrives here a defaulted value and a
- * typed one are indistinguishable, and a plan that cannot tell them apart cannot declare
- * either.
+ * Where each value the user did not type came from, so the plan can say so. Only the CLI knows:
+ * by the time a value arrives here, a default and a typed value look the same.
  */
 export interface ResolvedFlags {
   engineVersionFrom?: 'flag' | 'latest-release';
@@ -575,23 +538,22 @@ export interface ResolvedFlags {
 }
 
 /**
- * The plan's opening block: every value this run will use, and for each one whether it came
- * from a flag or from us. A default nobody was told about is a decision made on the tenant's
- * behalf, and `Proceed? [y/N]` is only consent if the assumptions are on the screen above it; most of these
- * end up stamped into files that are awkward to change afterwards.
+ * The plan's opening block: every value the run will use, and whether it came from a flag or a
+ * default. `Proceed? [y/N]` is consent only if the defaults are on screen above it, and most end
+ * up in files that are awkward to change later.
  */
 function declaredValues(v: {
   engineVersion: string;
   engineRepo: string;
   owner: string;
   ownerGiven: boolean;
-  /** Whether this run actually USES the owner (an external journal repo gets no CODEOWNERS
-   *  and no team grant, so declaring one there would be a value we do not honour). */
+  /** Whether this run uses the owner: an external journal repo gets no CODEOWNERS and no
+   *  team grant, so showing one there would promise something unused. */
   ownerUsed: boolean;
   edition: string;
   editionGiven: boolean;
-  /** The journal's name: a string when given, `null` on a journal run that did not give one,
-   *  `undefined` when the row does not apply (a paper). */
+  /** The journal's name: a string when given, `null` on a journal run without one, `undefined`
+   *  for a paper. */
   journalName?: string | null;
   instanceRepo?: string;
   resolved?: ResolvedFlags;
@@ -644,7 +606,7 @@ export interface BootstrapPaperInput {
   from?: string; // author url (ingest mode); bare when absent
   sourceRef?: string;
   instance?: string; // owner/instance-config; '.' co-located
-  /** The journal edition this paper belongs to. REQUIRED (see cmdBootstrapPaper). */
+  /** The paper's edition in its journal. Required (see cmdBootstrapPaper). */
   edition?: string;
   engineVersion: string;
   engineRepo: string; // resolved engine repo for pins.yml
@@ -653,16 +615,16 @@ export interface BootstrapPaperInput {
   private: boolean;
   requireChecks: boolean; // add "Journal checks" to protect-main required checks (default true)
   secrets: SecretInputs;
-  /** Provenance of the defaulted values, for the plan's declaration block. */
+  /** Where the defaulted values came from, for the plan. */
   resolved?: ResolvedFlags;
 }
 
-/** owner login (first path segment) of an owner/repo. */
+/** The owner of `owner/repo`. */
 function repoOwner(repo: string): string {
   return repo.split('/')[0]!;
 }
 
-/** Resolve the CODEOWNERS owner token + the org team (if any) from --owner / authed user. */
+/** The CODEOWNERS owner and the team, if any, from --owner or the logged-in user. */
 function resolveOwner(
   input: { owner?: string; authedUser: string; repo: string },
   prov: Provisioner,
@@ -670,18 +632,18 @@ function resolveOwner(
   const login = repoOwner(input.repo);
   const ownerType = prov.ownerType(login);
   const ownerToken = input.owner ?? `@${input.authedUser}`;
-  // A team grant only applies when the owner token names an `@org/team` on an org account.
+  // A team grant needs an `@org/team` owner on an org.
   const team =
     ownerType === 'Organization' && /^@[^/]+\/.+$/.test(ownerToken) ? ownerToken.slice(1) : null;
   return { ownerToken, team, ownerType };
 }
 
 /**
- * Who must approve a `zenodo-publish` deployment ([R123]). An org tenant names its editors
- * team; a personal-account tenant has no team to name, so the CODEOWNERS owner stands in as a
- * user reviewer (GitHub permits self-approval, so a solo editor still gets a deliberate click
- * in front of a token-bearing run). An `@org` owner token with no team names nobody: an org is
- * not a reviewer GitHub accepts, and the caller turns that into a runbook line.
+ * Who approves a `zenodo-publish` deployment [R123]. An org names its editors team; a
+ * personal account has no team, so the CODEOWNERS owner is the reviewer (GitHub allows approving
+ * your own run, so a sole editor still makes a deliberate click before a run holding a token).
+ * An `@org` owner without a team names nobody, and {@link applyProvisioning} adds a runbook
+ * line.
  */
 function zenodoReviewer(
   owner: { ownerToken: string; team: string | null; ownerType: 'Organization' | 'User' },
@@ -693,17 +655,13 @@ function zenodoReviewer(
   return login ? { type: 'User', id: prov.userId(login) } : null;
 }
 
-/**
- * What a partial run leaves behind ([R125]).
- */
+/** What a partial run leaves behind [R125]. */
 export interface StepFailure {
   step: string;
   why: string;
 }
 
-/**
- * Run one step, recording a throw instead of propagating it ([R125]). False when it failed.
- */
+/** Runs one step, recording an error rather than throwing it [R125]. false when it failed. */
 function stepRunner(
   repo: string,
   actions: Record<string, string>,
@@ -726,9 +684,7 @@ function stepRunner(
   };
 }
 
-/**
- * Early return for a fatal step: a partial envelope, not a stack ([R125]).
- */
+/** Returns early from a fatal step with a partial result [R125]. */
 function partial(
   repo: string,
   extra: Record<string, unknown>,
@@ -752,7 +708,8 @@ function partial(
   };
 }
 
-/** Provision the repo settings. Returns runbook lines + the steps that failed ([R125]). */
+/** Sets up the repo's settings. Returns the runbook lines and the steps that failed
+ *  [R125]. */
 function applyProvisioning(
   repo: string,
   owner: { ownerToken: string; team: string | null; ownerType: 'Organization' | 'User' },
@@ -774,9 +731,9 @@ function applyProvisioning(
     });
   }
 
-  // A pre-existing repo may default to another branch: `seedBranch` puts the content on `main`
-  // and leaves `default_branch` alone, so protect-main would guard a branch nothing merges
-  // to ([R127]). Runs before the ruleset that depends on it.
+  // An existing repo may default to another branch: `seedBranch` writes `main` and leaves
+  // `default_branch` alone, so protect-main would guard a branch nothing merges to [R127]. Runs
+  // before the ruleset that depends on it.
   step('default_branch', () => {
     const current = prov.defaultBranch(repo);
     if (current === 'main') {
@@ -824,8 +781,8 @@ function applyProvisioning(
     }
   });
 
-  // Actions may not open a pull request unless the repo says so, and the DOI write-back is a
-  // pull request an Action opens, so without this every first deposit fails ([R122]).
+  // Actions can open a pull request only when the repo allows it, and the DOI write is a
+  // pull request opened by an Action, so every first deposit needs this [R122].
   step('actions_pull_requests', () => {
     if (prov.actionsCanApprovePrs(repo)) {
       actions.actions_pull_requests = 'already allowed';
@@ -837,8 +794,8 @@ function applyProvisioning(
     }
   });
 
-  // Reviewer gate + v* policy ([R123]); GET-then-act so a re-run never clears a hand-added
-  // reviewer ([R127]).
+  // The reviewer and the `v*` policy [R123], read first so a rerun keeps a reviewer added by
+  // hand [R127].
   step('zenodo_reviewers', () => {
     const envThere = prov.environmentExists(repo, ZENODO_ENV);
     const existingReviewers = envThere ? prov.environmentReviewers(repo, ZENODO_ENV) : [];
@@ -854,14 +811,14 @@ function applyProvisioning(
       log(msg.bootstrap.logZenodoReviewerSet(owner.team ?? owner.ownerToken));
       return;
     }
-    // Create on a first run (the v* policy needs it), but never re-PUT: the PUT carries the
-    // whole environment ([R127]).
+    // Created on a first run, since the `v*` policy needs it; never PUT again, since the PUT
+    // replaces the whole environment [R127].
     if (!envThere) prov.upsertEnvironment(repo, ZENODO_ENV, []);
     actions.zenodo_reviewers = 'none';
     log(msg.bootstrap.logZenodoNoReviewer);
     runbook.push(msg.bootstrap.runbookZenodoReviewer(repo, ZENODO_ENV));
   });
-  // GitHub auto-creates a named environment open to all branches; the PUT keeps reviewers ([R127]).
+  // GitHub creates a named environment open to every branch; the PUT keeps reviewers [R127].
   const restrict = (env: string) => {
     if (!prov.environmentExists(repo, env)) prov.upsertEnvironment(repo, env, []);
     else if (!prov.customBranchPolicies(repo, env))
@@ -903,8 +860,8 @@ function applyProvisioning(
   return { runbook, failed };
 }
 
-/** Set secrets on their environments, then delete repository copies all their environments
- *  hold; any other copy is kept, as its value cannot be read back ([R25] floor). */
+/** Sets secrets on their environments, then deletes the repo-level copies those
+ *  environments now hold; any other copy is kept, since its value cannot be read back [R25]. */
 function applySecrets(
   repo: string,
   secrets: SecretInputs,
@@ -926,7 +883,7 @@ function applySecrets(
     if (!value) continue;
     let all = true;
     for (const env of envs) {
-      // Per secret and environment: one refusal must not swallow the rest ([R125]).
+      // Per secret and environment, so one refusal does not stop the rest [R125].
       const ok = step(`secret_${env}_${name}`, () => {
         prov.setSecret(repo, env, name, value);
         deps.log(msg.bootstrap.logSecretSet(name, env));
@@ -971,15 +928,11 @@ export async function cmdBootstrapPaper(
   const { repo } = input;
   const mode = input.from ? 'ingest' : 'bare';
 
-  // A paper has no meaning without the journal it is a paper OF, and the ONLY place that
-  // link is recorded is `pins.yml`'s `instance_repo`. Defaulting a missing `--instance` to
-  // `.` (co-located) silently claimed "the journal.yml is in this repo" about a repo the
-  // very same render gives no journal.yml: the CI shim then clones nothing, `oak validate`
-  // and `oak build` hit the no-instance usage error, and the tenant learns about it from a
-  // red Stage 1 minutes after a bootstrap that printed `"status": "ok"`. Ask up front.
-  // `--instance .` stays available as the EXPLICIT co-located opt-in (repo=journal, the
-  // tier `oak bootstrap journal --co-located` stands up, which renders the paper template
-  // itself and never comes through here).
+  // `--instance` is required: `pins.yml`'s `instance_repo` is the only record of a paper's
+  // journal, and with `.` the engine action clones nothing, so `oak validate` and `oak build`
+  // would fail in CI with no journal. `--instance .` stays the explicit choice for a repo
+  // that is its own journal (`oak bootstrap journal --co-located` renders the paper template
+  // itself and does not come through here).
   if (!input.instance) {
     return {
       exitCode: 2,
@@ -990,11 +943,10 @@ export async function cmdBootstrapPaper(
       },
     };
   }
-  // Same shape as --instance, and for the same reason. The edition id is written into the
-  // paper's myst.yml, and the journal must already have an `editions/<id>.yml` under that
-  // exact name, so a defaulted literal `edition` is not a convenience, it is a guaranteed
-  // failure the tenant meets in CI rather than here. (`bootstrap journal` may default it:
-  // there the SAME value names the edition file it writes, so it is self-consistent.)
+  // `--edition` is required for the same reason: it is written into the paper's myst.yml, and the
+  // journal must already have `editions/<id>.yml` under that name, so a default would only fail
+  // later in CI. (`bootstrap journal` may default it: there the same value names the edition
+  // file it writes.)
   if (!input.edition) {
     return {
       exitCode: 2,
@@ -1016,7 +968,7 @@ export async function cmdBootstrapPaper(
     edition: input.edition,
   };
 
-  // ---- GET-then-act state reads (idempotency) ----
+  // ---- Read the current state, so a rerun is safe ----
   const repoThere = prov.repoExists(repo);
   const mainThere = repoThere && prov.branchExists(repo, 'main');
   const reviewThere = repoThere && mode === 'ingest' && prov.branchExists(repo, 'review');
@@ -1036,12 +988,11 @@ export async function cmdBootstrapPaper(
       resolved: input.resolved,
     }),
     repoThere ? msg.bootstrap.planRepoExists : msg.bootstrap.planCreateRepo(input.private),
-    // Last chance to say so before content exists ([R127]).
+    // The last point to say so before content exists [R127].
     ...(input.private ? [msg.bootstrap.planPrivate] : []),
     mainThere ? msg.bootstrap.planMainSeeded : msg.bootstrap.planSeedPaper,
-    // Idempotency has a sharp edge worth naming: a re-run to CHANGE an answer (a different
-    // --instance, a different --engine-version) does not re-seed, so the earlier pins.yml
-    // survives and the re-run appears to succeed while fixing nothing.
+    // A rerun does not seed again, so rerunning with a different answer (`--instance`,
+    // `--engine-version`) keeps the earlier pins.yml and changes nothing.
     ...(mainThere ? [msg.bootstrap.planAlreadySeededPaper(instanceRepo)] : []),
     ...(mode === 'ingest'
       ? [
@@ -1074,7 +1025,7 @@ export async function cmdBootstrapPaper(
   const contentFailed: StepFailure[] = [];
   const step = stepRunner(repo, actions, contentRunbook, contentFailed, log);
 
-  // Content is a dependency chain, settings are independent ([R125]).
+  // Content steps depend on each other; settings steps do not [R125].
   if (!repoThere) {
     const created = step('repo', () => {
       prov.createRepo(repo, {
@@ -1084,11 +1035,11 @@ export async function cmdBootstrapPaper(
       actions.repo = 'created';
       log(msg.bootstrap.logCreated(repo));
     });
-    // Nothing else can act on a repo that does not exist, so this one is fatal ([R125]).
+    // Fatal: nothing else can act on a repo that does not exist [R125].
     if (!created) return partial(repo, { mode }, actions, contentRunbook, contentFailed, log);
   } else actions.repo = 'exists';
 
-  // Render the paper seed (frozen shim + starter content) once; reused for main seeding.
+  // Render the paper seed once; it is used to seed main.
   const seedDir = deps.workdir();
   renderPaperTemplate(deps.paperTemplateRoot, seedDir, answers);
 
@@ -1102,8 +1053,8 @@ export async function cmdBootstrapPaper(
   } else actions.main = 'exists';
 
   let prUrl: string | undefined;
-  // No main means no base to restore the frozen `.github/` from, and no base to open a PR
-  // against; the settings still get provisioned below.
+  // Without main there is no `.github/` to restore and no base for a pull request; the settings
+  // are still set below.
   if (mode === 'ingest' && mainSeeded) {
     let reviewReady = reviewThere;
     if (!reviewThere) {
@@ -1158,31 +1109,27 @@ export async function cmdBootstrapPaper(
   };
 }
 
-/** The placeholder edition id when `--edition` is not given. Self-consistent (it also names
- *  the `editions/<id>.yml` this run writes) and declared in the plan, unlike the paper path,
- *  where the same default would name an edition file some OTHER repo has to already have. */
+/** The edition when `--edition` is not given. Consistent, since it also names the
+ *  `editions/<id>.yml` this run writes, and shown in the plan. */
 const DEFAULT_EDITION = 'edition';
 
 export interface BootstrapJournalInput {
   repo: string; // owner/name
   tier: 'external' | 'co-located';
   name?: string;
-  /** Defaults to {@link DEFAULT_EDITION}, declared in the plan. */
+  /** Defaults to {@link DEFAULT_EDITION}, shown in the plan. */
   edition?: string;
   engineVersion: string;
   engineRepo: string;
   owner?: string;
   authedUser: string;
   requireChecks: boolean; // add "Journal checks" to protect-main required checks (default true)
-  /** `--external` only: also stamp the journal site + enable Pages. Default true;
-   *  `--no-site` opts out for a tenant who wants a config repo with no website (the
-   *  design keeps the site optional, §2). Passing `site: false` with `--co-located` is a
-   *  usage ERROR, not a no-op: that tier never gets a site (repo=journal's index is the
-   *  deferred `assemble()` work, [S7]), so a flag that reads as "turn the site off" would
-   *  be silently meaningless, and silently meaningless flags teach the wrong model. */
+  /** `--external` only: also write the journal website and turn on Pages. Default true; `--no-site`
+   *  gives a settings repo with no website [design §2]. `site: false` with `--co-located`
+   *  is a usage error: that kind never gets a site, so the flag would do nothing. */
   site?: boolean;
   secrets: SecretInputs;
-  /** Provenance of the defaulted values, for the plan's declaration block. */
+  /** Where the defaulted values came from, for the plan. */
   resolved?: ResolvedFlags;
 }
 
@@ -1226,8 +1173,8 @@ export async function cmdBootstrapJournal(
       engineRepo: input.engineRepo,
       owner: owner.ownerToken,
       ownerGiven: Boolean(input.owner),
-      // An external journal repo gets no CODEOWNERS file and no team grant; nothing here
-      // consumes the owner, so the plan must not claim it does.
+      // An external journal repo gets no CODEOWNERS and no team grant, so the plan shows no
+      // owner.
       ownerUsed: !external,
       edition,
       editionGiven: Boolean(input.edition),
@@ -1245,8 +1192,8 @@ export async function cmdBootstrapJournal(
         ? msg.bootstrap.planPages(siteUrlFor(repo))
         : msg.bootstrap.planNoSite
       : msg.bootstrap.planProvisioningCoLocated,
-    // Same sharp edge as the paper path: a re-run never re-seeds, so a changed --name /
-    // --edition / --engine-version does not reach an already-seeded main.
+    // As for papers, a rerun does not seed again, so a changed `--name`, `--edition` or
+    // `--engine-version` does not reach a seeded main.
     ...(mainThere ? [msg.bootstrap.planAlreadySeededJournal] : []),
   ];
   if (!(await deps.confirm(plan)))
@@ -1276,12 +1223,12 @@ export async function cmdBootstrapJournal(
       actions.repo = 'created (public)';
       log(msg.bootstrap.logCreatedPublic(repo));
     });
-    // Nothing else can act on a repo that does not exist, so this one is fatal ([R125]).
+    // Fatal: nothing else can act on a repo that does not exist [R125].
     if (!created)
       return partial(repo, { tier: input.tier }, actions, contentRunbook, contentFailed, log);
   } else {
     actions.repo = 'exists';
-    // Instance-config repos must be public ([R32], [R189]); enforce on a re-run too.
+    // Journal repos must be public [R32] [R189]; checked on a rerun too.
     step('visibility', () => {
       if (prov.repoVisibility(repo) === 'private') {
         prov.setRepoPublic(repo);
@@ -1294,12 +1241,13 @@ export async function cmdBootstrapJournal(
   const seedDir = deps.workdir();
   if (external) {
     renderInstanceTemplate(deps.instanceTemplateRoot, seedDir, answers);
-    // A′ ([S8]): the site FOLDS into instance-config. The two roots write disjoint paths
-    // (enforced by test/template.test.ts), so the union is a plain back-to-back render.
+    // The website shares the repo with the journal's settings. The two templates write
+    // different paths (`template disjointness invariant` in test/template.test.ts), so they are
+    // rendered one after the other.
     if (withSite) renderSiteTemplate(deps.siteTemplateRoot, seedDir, answers, deps.mystRange);
   } else {
-    renderPaperTemplate(deps.paperTemplateRoot, seedDir, answers); // shim + starter paper (instance_repo: .)
-    renderInstanceTemplate(deps.instanceTemplateRoot, seedDir, answers); // co-located instance-config
+    renderPaperTemplate(deps.paperTemplateRoot, seedDir, answers); // the paper, `instance_repo: .`
+    renderInstanceTemplate(deps.instanceTemplateRoot, seedDir, answers); // its journal settings
   }
 
   if (!mainThere) {
@@ -1332,10 +1280,9 @@ export async function cmdBootstrapJournal(
   }
 
   // --- external -------------------------------------------------------------------
-  // Deliberately NOT provisioned: rulesets / branch protection on instance-config.
-  // Registry upkeep is a manual editorial PR ([S5]) into a repo only editors can write;
-  // adding protection is a tenant policy call, the same stance as `--no-require-checks`
-  // on papers. Named in the runbook, not imposed.
+  // No rulesets or branch protection on the journal repo: adding a paper to the registry
+  // is a pull request into a repo only editors can write, and protecting it is the
+  // journal's call, as with `--no-require-checks` for papers. The runbook mentions it.
   const runbook: string[] = [
     msg.bootstrap.runbookStartHere(repo),
     msg.bootstrap.runbookNoProtection,
@@ -1358,7 +1305,7 @@ export async function cmdBootstrapJournal(
     };
   }
 
-  // Pages, through the same GET-then-act seams the paper path uses (idempotent re-run).
+  // Pages, through the same read-first calls the paper path uses.
   step('pages', () => {
     if (prov.pagesEnabled(repo)) {
       actions.pages = 'already enabled';

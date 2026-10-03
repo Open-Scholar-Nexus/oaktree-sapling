@@ -57,7 +57,7 @@ export async function runBuild(input: RunBuildInput): Promise<RunBuildResult> {
         edition,
       });
       // Only structural errors stop the build. An id error (placeholder, invalid, duplicate) is
-      // enforced at merge by the Journal checks, so a new repository still builds a preview; it
+      // enforced at merge by the Journal checks, so a new repo still builds a preview; it
       // is reported as a warning.
       const blocking = layerA.filter((f) => f.severity === 'error' && f.klass === 'structural');
       if (blocking.length) {

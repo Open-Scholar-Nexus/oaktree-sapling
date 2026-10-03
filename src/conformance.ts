@@ -1,7 +1,7 @@
 /**
- * `oak conformance`: tests a release of oak on GitHub. It moves a paper repository kept for
- * testing (the test repository) onto the release and checks every path its CI takes: build and
- * GitHub Pages, the editorial checks, a same-repository preview, the Zenodo deposit and,
+ * `oak conformance`: tests a release of oak on GitHub. It moves a paper repo kept for
+ * testing (the test repo) onto the release and checks every path its CI takes: build and
+ * GitHub Pages, the editorial checks, a same-repo preview, the Zenodo deposit and,
  * optionally, a preview from a fork. Passing all of them is what "certified" means here; `npm
  * test` cannot cover these, since they only run on GitHub.
  *
@@ -9,8 +9,8 @@
  * so each run starts clean, and it is idempotent.
  *
  * GitHub calls are injected (`ConformanceGh`; the real one is in gh.ts) so tests run offline.
- * This holds only a token for the test repository; the Cloudflare and Zenodo secrets stay in the
- * test repository and are used by its own runs.
+ * This holds only a token for the test repo; the Cloudflare and Zenodo secrets stay in the
+ * test repo and are used by its own runs.
  */
 import { STICKY_PREVIEW } from './preview.js';
 import { stickyMarker } from './messages.js';
@@ -21,7 +21,7 @@ import { UPGRADE_BRANCH_PREFIX } from './upgrade.js';
  *  requests from the fork, whose branch names it does not know. */
 export const CONFORMANCE_LABEL = 'conformance';
 
-/** Prefix of the branches a run creates in the test repository. */
+/** Prefix of the branches a run creates in the test repo. */
 export const CERT_BRANCH_PREFIX = 'cert-';
 
 /** Marks a run's throwaway tags (`reset` removes `*-cert-*`). The deposit tag cannot use it:
@@ -29,11 +29,11 @@ export const CERT_BRANCH_PREFIX = 'cert-';
 export const CERT_TAG_MARKER = '-cert-';
 
 /** The deposit tag. `oak release` takes only `vX.Y.Z`, so a reserved version that cannot clash
- *  with the test repository's real ones is pushed, published, checked and deleted, every run.
- *  The deposit draft is keyed by the repository, not the tag, so reusing the version is fine. */
+ *  with the test repo's real ones is pushed, published, checked and deleted, every run.
+ *  The deposit draft is keyed by the repo, not the tag, so reusing the version is fine. */
 export const CERT_DEPOSIT_TAG = 'v0.0.0';
 
-/** The GitHub calls, injected. `repo` is always the test repository (`owner/name`). */
+/** The GitHub calls, injected. `repo` is always the test repo (`owner/name`). */
 export interface ConformanceGh {
   /** Open pull requests carrying `label`; [] when the label does not exist yet. */
   listOpenPrs(repo: string, label: string): { number: number; headRef: string }[];
@@ -60,7 +60,7 @@ export interface ConformanceGh {
   /** Check Runs on commit `sha`, such as the Journal checks one check-post posts. */
   checkRunsForCommit(repo: string, sha: string): CheckRunRef[];
 
-  // --- a same-repository pull request and its preview ---
+  // --- a same-repo pull request and its preview ---
   /** Opens a pull request from `branch` off `main` with a harmless change (a MyST comment
    *  carrying `marker`), through the Contents API. Returns its number and head commit. */
   openCertPr(repo: string, branch: string, marker: string): { number: number; headSha: string };
@@ -68,10 +68,10 @@ export interface ConformanceGh {
   listIssueComments(repo: string, prNumber: number): string[];
 
   // --- the deposit (the publish half) ---
-  /** `project.doi` from the test repository's `myst.yml` on the default branch, or null. The
+  /** `project.doi` from the test repo's `myst.yml` on the default branch, or null. The
    *  deposit test needs a sandbox DOI there. */
   committedDoi(repo: string): string | null;
-  /** The oak version pinned in the test repository's `myst.yml`, or null. */
+  /** The oak version pinned in the test repo's `myst.yml`, or null. */
   committedEngineVersion(repo: string): string | null;
   /** The head commit of `main`, where the deposit tag goes. */
   defaultBranchSha(repo: string): string;
@@ -89,9 +89,9 @@ export interface ConformanceGh {
   /** Deletes `<prefix>*` branches on the fork (with the fork's token), left by a crashed run.
    *  Returns their names. */
   sweepForkBranches(forkRepo: string, forkToken: string, prefix: string): string[];
-  /** Opens a pull request from the fork: branches off the test repository's `main` on the fork
+  /** Opens a pull request from the fork: branches off the test repo's `main` on the fork
    *  (fork token) and pins the oak version to `tag`, so the build really uses the release, then
-   *  opens the pull request on the test repository (main token). Returns its number and the
+   *  opens the pull request on the test repo (main token). Returns its number and the
    *  fork branch's head commit. */
   openForkPr(
     baseRepo: string,
@@ -104,7 +104,7 @@ export interface ConformanceGh {
   /** Deletes the run's branch on the fork (fork token); fine if already gone. */
   deleteForkBranch(forkRepo: string, forkToken: string, branch: string): void;
   /** Approves a run waiting for first-time-contributor approval. The approval is on the test
-   *  repository, so it uses the main token. Does nothing when no approval is needed. */
+   *  repo, so it uses the main token. Does nothing when no approval is needed. */
   approveWorkflowRun(repo: string, runId: number): void;
 }
 
@@ -149,13 +149,13 @@ export interface Outcome {
 }
 
 export interface ResetInput {
-  /** The test repository, `owner/name`. Pull requests from the fork show up here too; `reset`
+  /** The test repo, `owner/name`. Pull requests from the fork show up here too; `reset`
    *  never touches the fork itself. */
   repo: string;
 }
 
 /**
- * Removes what earlier runs left in the test repository. Closes labelled pull requests first,
+ * Removes what earlier runs left in the test repo. Closes labelled pull requests first,
  * so the list is clean even if a branch deletion is refused, then deletes `cert-*` branches and
  * `*-cert-*` tags. Anything already gone is skipped.
  */
@@ -315,7 +315,7 @@ function runOutcome(
   return run;
 }
 
-/** The GitHub Pages URL of a repository (`owner.github.io/name/`). */
+/** The GitHub Pages URL of a repo (`owner.github.io/name/`). */
 export function pagesUrlFor(repo: string): string {
   const [owner, name] = repo.split('/');
   return `https://${owner}.github.io/${name}/`;
@@ -338,7 +338,7 @@ function extractPreviewUrl(commentBody: string): string | null {
 }
 
 /**
- * Tests a release: moves the test repository onto it through an upgrade pull request, lets the
+ * Tests a release: moves the test repo onto it through an upgrade pull request, lets the
  * required Journal checks pass before merging (which also tests check and check-post), then
  * checks each result itself, not only run conclusions: Paper CI passed, Pages serves 200, and
  * the Journal checks Check Run was posted on main. The preview, deposit and fork phases follow.
@@ -396,7 +396,7 @@ export async function cmdConformanceCertify(
     log(`merged PR #${prNumber} → ${mergeSha}`);
 
     // The pin is written by the upgrade under test, so check it: a bug there would pass this
-    // release while the test repository ran another [R113].
+    // release while the test repo ran another [R113].
     const pinned = gh.committedEngineVersion(repo);
     if (pinned !== tag) {
       throw new Error(`fixture pins ${pinned ?? 'no engine version'} after the merge, not ${tag}`);
@@ -430,7 +430,7 @@ export async function cmdConformanceCertify(
 
     log(`push→main CERTIFIED for ${tag}`);
 
-    // ---- A same-repository pull request: Cloudflare preview and comment ----
+    // ---- A same-repo pull request: Cloudflare preview and comment ----
     phase = 'preview-same-repo';
     const branch = `${CERT_BRANCH_PREFIX}${runId}`;
     const previewPr = gh.openCertPr(repo, branch, runId);
@@ -476,12 +476,12 @@ export async function cmdConformanceCertify(
 
     // ---- The deposit: publish.yml and `oak release` ----
     // The tag push, the required reviewer, and the five deposit files on the tag's release [R24].
-    // Reserving a DOI is not tested: the test repository already has a sandbox DOI and `oak
+    // Reserving a DOI is not tested: the test repo already has a sandbox DOI and `oak
     // deposit prepare` refuses when one is set. This holds no Zenodo token, so it checks the
     // deposit by the release's file names.
     phase = 'deposit';
 
-    // 1. The test repository's myst.yml must carry a sandbox DOI (10.5072/...).
+    // 1. The test repo's myst.yml must carry a sandbox DOI (10.5072/...).
     const doi = gh.committedDoi(repo);
     if (!doi || !doi.startsWith('10.5072/')) {
       throw new Error(
@@ -520,7 +520,7 @@ export async function cmdConformanceCertify(
       },
       { sleep, log },
     );
-    // Only when there is a reviewer: a repository set up before [R123], or an organisation
+    // Only when there is a reviewer: a repo set up before [R123], or an org
     // whose --owner named no team, has none.
     if (publishRun.status === 'waiting') {
       gh.approveDeployment(repo, publishRun.id, 'zenodo-publish');
@@ -556,7 +556,7 @@ export async function cmdConformanceCertify(
 
     // ---- A pull request from a fork (optional) ----
     // The pull request comes from a fork owned by a second account, so the `pull_request` job
-    // builds without secrets and the `workflow_run` job deploys from the test repository. Skipped
+    // builds without secrets and the `workflow_run` job deploys from the test repo. Skipped
     // when no fork is set up. Calls on the fork use its token, the rest the main one.
     if (fork) {
       phase = 'preview-fork';

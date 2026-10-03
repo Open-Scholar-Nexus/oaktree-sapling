@@ -26,7 +26,7 @@ export const EDITION_ID = z
 export const OaktreeSaplingOptions = z
   .object({
     /** A release tag (`vX.Y.Z`), the default branch, a SHA or `refs/pull/N/merge`. The last two
-     *  run only from a same-repository pull request or with the maintainer override (ref.ts). */
+     *  run only from a same-repo pull request or with the maintainer override (ref.ts). */
     version: z.string().min(1),
     /** Selects `editions/<edition>.yml` [R195]. */
     edition: EDITION_ID,
@@ -74,7 +74,7 @@ export type ZenodoConfig = z.infer<typeof ZenodoConfig>;
 
 /**
  * An editorial check the journal turns on, by id, with its options. It lives in the journal
- * repository, which authors cannot change. `optional: true` reports without blocking a merge.
+ * repo, which authors cannot change. `optional: true` reports without blocking a merge.
  */
 export const Check = z
   .object({
@@ -97,7 +97,7 @@ export const JournalConfig = z
     /** Anchored regex a paper `id:` must match [R7]. */
     id_pattern: z.string().optional(),
     /** The journal's typst template [R76]: a name, a path (only a `./` or `../` value, relative
-     *  to the journal repository) or a URL. The author's own template outranks it, with a
+     *  to the journal repo) or a URL. The author's own template outranks it, with a
      *  warning; oak's is the default. */
     typst_template: z.string().optional(),
     preview: PreviewConfig.prefault({}),
@@ -148,7 +148,7 @@ export const Registry = z.array(RegistryEntry);
 export type Registry = z.infer<typeof Registry>;
 
 /* --------------------------------------------------------------------------
- * 4. pins.yml: the repositories oak and the journal come from [R194]
+ * 4. pins.yml: the repos oak and the journal come from [R194]
  * Read by both the engine action and local `oak`.
  * ------------------------------------------------------------------------ */
 
@@ -220,7 +220,7 @@ export function checkIdUniqueness(
   }
   const clash = registry.find((e) => e.id === id && e.slug !== self?.slug);
   if (clash) {
-    // Without the repository (no GITHUB_REPOSITORY, a checkout with no matching origin) the
+    // Without the repo (no GITHUB_REPOSITORY, a checkout with no matching origin) the
     // paper's own entry cannot be told from a duplicate, so this only warns. CI always sets it.
     if (opts.selfIdentifiable === false) {
       return {

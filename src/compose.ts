@@ -35,25 +35,25 @@ export const BRAND_ASSET_KEYS = {
 } as const;
 
 /** A value myst resolves on its own: an absolute path or a URL. Only paths relative to the
- *  journal repository need rewriting. A URL works for HTML but not for typst, which cannot
+ *  journal repo need rewriting. A URL works for HTML but not for typst, which cannot
  *  fetch; `oak validate` is the place to check that. */
 export function isBrandAssetUrl(value: string): boolean {
   return /^[a-zA-Z][\w+.-]*:\/\//.test(value); // matches scheme://…
 }
 
 /**
- * Whether a journal's `typst_template:` is a path in the journal repository, rather than a myst
+ * Whether a journal's `typst_template:` is a path in the journal repo, rather than a myst
  * template name or a URL [R74]. A bare string is ambiguous (`lapreprint-typst` is both a valid
  * name and a valid directory), and the brand-asset rule would take it for a path, so this rule is
  * explicit: only a `./` or `../` value is a path, and everything else goes to myst unchanged.
  * Checking the disk instead would turn a mistyped path into a name lookup. `oak validate` warns
- * when a bare value matches a directory in the journal repository.
+ * when a bare value matches a directory in the journal repo.
  */
 export function isInstanceRelativeTemplate(value: string): boolean {
   return /^\.\.?\//.test(value);
 }
 
-/** Makes a journal's template path absolute against the journal repository root, where
+/** Makes a journal's template path absolute against the journal repo root, where
  *  `journal.yml` lives (brand assets use `brand/`). Only `./` and `../` values change; see
  *  {@link isInstanceRelativeTemplate}. Exported so `oak validate` checks the path compose emits
  *  [R62]. */
@@ -106,11 +106,11 @@ export interface ComposeInput {
   paperRoot: string;
   /** Path to oak's checkout, which holds paper-base.yml. */
   engineRoot: string;
-  /** Path to the journal repository; null with --no-instance. */
+  /** Path to the journal repo; null with --no-instance. */
   instanceRoot: string | null;
   /** The project as myst resolved it (`loadConfig().project`). Read only. */
   resolvedProject: ResolvedProject;
-  /** oak's version and repository, read before the merge; used for URLs. */
+  /** oak's version and repo, read before the merge; used for URLs. */
   engineRepo: string;
   engineVersion: string;
   /** The paper's edition, read before the merge; selects `editions/<edition>.yml`. */
@@ -159,7 +159,7 @@ export interface ComposeResult {
   warnings: string[];
 }
 
-/** The `extends:` chain, from the repository layout alone, so the two-pass build can write it
+/** The `extends:` chain, from the repo layout alone, so the two-pass build can write it
  *  before anything is resolved [design §12a] [R52]. Warns without a journal.
  *
  *  It is always a paper's chain: the journal website is a plain MyST project with its own

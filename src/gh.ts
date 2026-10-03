@@ -1,13 +1,7 @@
 /**
- * gh.ts: the git / GitHub side effects for the deposit verbs, kept out of zenodo.ts so the
- * deposit logic stays a pure, network-free unit under test. Implements `GitContext` (used by
- * the publish bundle) with plain `git` + `gh api`, and exposes the CLI-level GitHub effects
- * the port inherits from the workflows: the DOI PR ([R3]/§1d), the release bundle asset
- * ([R24]/§1e), the commit comment, and the failure issue.
- *
- * All of these shell out to `git`/`gh`. They are best-effort at the CLI edge: when `gh`/token
- * are absent (a local sandbox rehearsal), the caller degrades to just the Zenodo work + a
- * working-tree myst.yml write, which is enough for the slice-3 acceptance (a sandbox record).
+ * Everything oak does through `git` and `gh`, so the other modules can be tested without either:
+ * the real implementations of their injected interfaces, plus the DOI pull request [R3], the
+ * release assets [R24], the commit comment and the failure issue.
  */
 import * as msg from './messages.js';
 import { UserError } from './messages.js';
@@ -24,22 +18,16 @@ import type { UpgradePr } from './upgrade.js';
 import type { ConformanceGh } from './conformance.js';
 
 /**
- * All git/gh chatter is CAPTURED, not inherited. `execFileSync` otherwise forwards the child's
- * stderr straight to ours, and the result was a bootstrap transcript where "Cloning into
- * '/tmp/oak-seed-…'", "warning: You appear to have cloned an empty repository" and our own
- * plan lines were indistinguishable: the reader cannot tell what the tool did from what a
- * tool it called said about itself.
- *
- * So: quiet on success, and on FAILURE the captured text is replayed with the tool's name in
- * front of every line, because that is exactly when it is the most useful thing on screen.
- * `--verbose` (via `OAK_VERBOSE`) replays it on success too, and CI is verbose by default:
- * a workflow log is read after the fact, by someone who cannot re-run it with a flag.
+ * git and gh output is captured, so the user can tell what oak did from what a tool it called
+ * printed ("Cloning into '/tmp/oak-seed-...'"). It stays quiet on success; on failure the
+ * captured text is replayed with the tool's name on every line.
+ * `--verbose` (`OAK_VERBOSE`) replays it on success too; CI always does for logs.
  */
 function verboseChildren(): boolean {
   return Boolean(process.env.OAK_VERBOSE || process.env.CI);
 }
 
-/** Replay a child's captured output with its provenance on every line. */
+/** Replays a child's captured output with its name on every line. */
 export function labelChildOutput(tool: string, text: unknown): string {
   return String(text ?? '')
     .split('\n')
@@ -54,15 +42,9 @@ function echoChild(tool: string, text: unknown): void {
 }
 
 /**
- * Show what is running while it runs, then take the line back.
- *
- * Capturing the children's output ([R85]) bought a clean screen and paid for it in silence:
- * creating a repo, cloning, resolving the newest release are each seconds of nothing, and the
- * UX test read that as a hang. `spawnSync` blocks the event loop, so a spinner cannot animate,
- * but a line printed BEFORE the call and erased after needs no timer, and says the true thing.
- *
- * TTY only: erasing with `\r` in a redirected log or a workflow log would leave the marker
- * stranded mid-line, and CI already prints every child's output anyway.
+ * Prints what is running, then erases the line [R85]: cloning or creating a repo takes seconds,
+ * and silence reads as a hang. No spinner, since `spawnSync` blocks the event loop. Only on a
+ * TTY: a log would keep the half-erased line, and CI prints child output anyway.
  */
 function showWorking(tool: string, args: string[]): () => void {
   if (!process.stderr.isTTY || verboseChildren()) return () => {};
@@ -78,9 +60,8 @@ function showWorking(tool: string, args: string[]): () => void {
 }
 
 /**
- * Run `git`/`gh` with both streams captured. `quiet` means "not even on failure", for the
- * probes that treat a non-zero exit as a valid answer (does this ruleset exist?), where the
- * child's complaint is noise about a question we already answered.
+ * Runs `git` or `gh` with both streams captured. `quiet` skips the replay even on failure, for
+ * probes where a non-zero exit is an answer (does this ruleset exist?).
  */
 function run(
   tool: 'git' | 'gh',
@@ -88,8 +69,7 @@ function run(
   opts: { input?: string; cwd?: string; quiet?: boolean; env?: NodeJS.ProcessEnv } = {},
 ): string {
   const done = showWorking(tool, args);
-  // spawnSync, not execFileSync: capturing stderr AND being able to replay it needs the
-  // stream back in hand, which execFileSync only gives us on the failure path.
+  // spawnSync hands back stderr on success too, which the replay needs.
   const r = spawnSync(tool, args, {
     encoding: 'utf8',
     input: opts.input,
@@ -121,7 +101,7 @@ function git(repoRoot: string, args: string[], opts: { quiet?: boolean } = {}): 
   return run('git', ['-C', repoRoot, ...args], opts);
 }
 
-/** git without a `-C` (clone / raw), optionally in `cwd`. */
+/** git without `-C`, run in `cwd`. */
 function gitRaw(args: string[], cwd?: string): string {
   return run('git', args, { cwd });
 }
@@ -130,18 +110,16 @@ function gh(args: string[], opts: { input?: string; cwd?: string; quiet?: boolea
   return run('gh', args, opts);
 }
 
-/** An absent git ref: the refs API says 422 "Reference does not exist" where most endpoints
- *  say 404, so EVERY ref delete passes it to {@link ghOk} ([R149]). */
+/** An absent ref: the refs API answers 422 "Reference does not exist" where most endpoints say
+ *  404, so every ref delete passes this to {@link ghOk} [R149]. */
 export const ABSENT_REF = /Reference does not exist/i;
 
-/** An approve on a run that has no gate: normal, not a fault ([R150]). */
+/** The answer when approving a run that needs no approval [R150]. */
 export const NOT_GATED = /not waiting for approval/i;
 
 /**
- * true when `gh <args>` returns 2xx, false when the target is definitively ABSENT (404, plus
- * whatever `alsoAbsent` the caller knows means the same on its endpoint). Anything else (403,
- * 5xx, no `gh`) throws: read as absence, a forbidden DELETE becomes a teardown that never
- * happened ([R108]/[R113]).
+ * true when `gh <args>` returns 2xx, false when the target is absent (404, or `alsoAbsent`).
+ * Anything else (403, 5xx, no `gh`) throws, so a refused DELETE never passes for a cleanup.
  */
 function ghOk(args: string[], env?: NodeJS.ProcessEnv, alsoAbsent?: RegExp): boolean {
   const r = spawnSync('gh', args, { encoding: 'utf8', ...(env ? { env } : {}) });
@@ -153,9 +131,7 @@ function ghOk(args: string[], env?: NodeJS.ProcessEnv, alsoAbsent?: RegExp): boo
   throw new Error(`gh ${args[0] ?? ''} failed (exit ${r.status}): ${stderr.trim().split('\n')[0]}`);
 }
 
-/** `gh` run under a DIFFERENT token (the fork account's PAT), same shape as `gh()`, but the
- *  child sees `GH_TOKEN=token`. The conformance fork phase owns a second-account fork; base-repo
- *  ops keep using `gh()` (the ambient primary token), fork-repo ops use `ghAs(forkToken, …)`. */
+/** `gh()` with `GH_TOKEN` set to `token`. Conformance uses it for calls on the fork. */
 function ghAs(
   token: string,
   args: string[],
@@ -164,13 +140,13 @@ function ghAs(
   return run('gh', args, { ...opts, env: { ...process.env, GH_TOKEN: token } });
 }
 
-/** The fork-token twin of {@link ghOk}, with the same 404-only tolerance. */
+/** {@link ghOk} with `GH_TOKEN` set to `token`. */
 function ghOkAs(token: string, args: string[], alsoAbsent?: RegExp): boolean {
   return ghOk(args, { ...process.env, GH_TOKEN: token }, alsoAbsent);
 }
 
 /** `owner/name`, the shape every verb's usage line promises. Checked because the value reaches
- *  `gh` positionally, where the callee's own option parser reads a leading dash ([R138]). */
+ *  `gh` as a positional argument, where a leading dash is read as an option [R138]. */
 const REPO_NAME = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/;
 
 export function assertRepoName(repo: string): string {
@@ -179,10 +155,10 @@ export function assertRepoName(repo: string): string {
 }
 
 /**
- * Both reach `git fetch` positionally, and git parses options positionally, so a ref of
- * `--upload-pack=<command>` RUNS it ([R103]). Hence an allowlist of the two transports we
- * support, not a screen for `-`: `ext::` spells the same attack. Userinfo is refused rather than
- * stripped because `--from` is copied into a public commit message.
+ * Both reach `git fetch` as positional arguments, which git still parses as options, so a ref
+ * of `--upload-pack=<command>` runs the command [R103]. Only the two supported transports pass;
+ * screening for `-` would miss `ext::`, which does the same. Credentials in the URL are refused,
+ * since `--from` is copied into a public commit message.
  */
 const INGEST_URL =
   /^(https:\/\/github\.com\/|git@github\.com:)[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+(\.git)?\/?$/;
@@ -195,7 +171,7 @@ export function assertIngestSource(sourceUrl: string, sourceRef: string): void {
   }
 }
 
-/** Commit-as-bot identity flags (a CI runner has no git identity; see openDoiPr). */
+/** Identity flags for committing as the bot; a CI runner has no git identity. */
 const BOT_ID = [
   '-c',
   'user.name=github-actions[bot]',
@@ -203,7 +179,7 @@ const BOT_ID = [
   'user.email=41898282+github-actions[bot]@users.noreply.github.com',
 ];
 
-/** The real git/gh context injected into `cmdPublish`. */
+/** The real `GitContext` for `cmdPublish`. */
 export const realGitContext: GitContext = {
   async headSha(repoRoot) {
     return git(repoRoot, ['rev-parse', 'HEAD']);
@@ -212,14 +188,12 @@ export const realGitContext: GitContext = {
     git(repoRoot, ['archive', '--format=zip', '-o', outZip, 'HEAD']);
   },
   async reviewPr(repoRoot, sha) {
-    // [R35.2]: read the PR associated with the tagged commit via the API, NOT a commit-subject
-    // `#\d+` regex (any stray `#123` misattributes a value that gets deposited into provenance).
+    // The tagged commit's pull request, from the API [R35.2].
     const repo = originRepo(repoRoot);
     if (!repo) return null;
     try {
-      // NOT quiet: "commit has no PR" exits 0 with empty output, so this catch is reached only
-      // on a genuine gh failure (auth / network / rate limit), and review_pr is deposited into
-      // provenance, so that failure must stay visible rather than silently becoming null.
+      // Not quiet: a commit without a pull request exits 0 with no output, so only a real
+      // failure lands here, and the log should explain a review_pr missing from the provenance.
       const out = gh(['api', `repos/${repo}/commits/${sha}/pulls`, '--jq', '.[0].number // empty']);
       return out || null;
     } catch {
@@ -240,18 +214,17 @@ export function originRepo(repoRoot: string): string | null {
 }
 
 /**
- * Open the reviewable DOI PR over the working-tree myst.yml write ([R3], replacing the
- * peter-evans action). Creates a branch, commits just myst.yml, pushes, and `gh pr create`s.
- * Returns the PR URL. Requires `GH_TOKEN`/`gh` auth (the §1d job supplies it).
+ * Opens the DOI pull request for the myst.yml write [R3]: a branch, a commit of myst.yml only,
+ * a push and `gh pr create`. Returns its URL. Needs `gh` with a token.
  */
 export function openDoiPr(repoRoot: string, opts: { conceptDoi: string }): string {
-  // Version-agnostic branch: prepare only reserves the concept DOI (the version is the tag,
-  // applied later at publish). Re-prepares force-push over the same branch.
+  // One branch name for every version: prepare reserves the concept DOI, and the version comes
+  // from the tag at publish. Preparing again force-pushes the same branch.
   const branch = 'zenodo-doi';
   const repo = originRepo(repoRoot);
   const base = repo ? defaultBranch(repo) : 'main';
-  // The branch is cut from HEAD, so a HEAD carrying commits the base lacks would put them all
-  // in a PR whose body says it stamps one field ([R108]).
+  // The branch starts at HEAD, so HEAD must be on the base, or the pull request would carry
+  // more than the myst.yml change.
   git(repoRoot, ['fetch', 'origin', base, '--quiet']);
   try {
     git(repoRoot, ['merge-base', '--is-ancestor', 'HEAD', `origin/${base}`], { quiet: true });
@@ -260,12 +233,10 @@ export function openDoiPr(repoRoot: string, opts: { conceptDoi: string }): strin
   }
   git(repoRoot, ['checkout', '-B', branch]);
   git(repoRoot, ['add', 'myst.yml']);
-  // A CI runner has no git identity, so an inline one is required or `commit` fails with
-  // "Author identity unknown" (the actions/checkout runner sets no user.name/email).
   git(repoRoot, [...BOT_ID, 'commit', '-m', `chore: reserve Zenodo DOI ${opts.conceptDoi}`]);
   git(repoRoot, ['push', '-u', 'origin', branch, '--force']);
-  // `--repo`, because the git calls are `-C repoRoot` while `gh` would otherwise read the
-  // CURRENT directory's repo ([R108]); `realUpgradePr` solves the same thing with `cwd`.
+  // `--repo`: the git calls use `-C repoRoot`, while `gh` would read the current directory's
+  // repo. `realUpgradePr` uses `cwd` for the same.
   const scope = repo ? ['--repo', repo] : [];
   const create = [
     'pr',
@@ -283,20 +254,20 @@ export function openDoiPr(repoRoot: string, opts: { conceptDoi: string }): strin
   try {
     return gh(create);
   } catch (e) {
-    // Re-running prepare is idempotent (§13), and `gh pr create` refuses a second PR for a
-    // branch that already has one ([R108]).
+    // Preparing again is allowed [design §13], and `gh pr create` refuses a second pull request
+    // for a branch, so return the open one.
     const existing = openPrUrl(repo, branch);
     if (existing) return existing;
     throw e;
   }
 }
 
-/** The repo's default branch, the base every one-file engine PR targets. */
+/** The repo's default branch, the base every DOI or upgrade pull request targets. */
 function defaultBranch(repo: string): string {
   return gh(['api', `repos/${repo}`, '--jq', '.default_branch']) || 'main';
 }
 
-/** The open PR for `branch`, or null when there is none. */
+/** The open pull request for `branch`, or null. */
 function openPrUrl(repo: string | null, branch: string): string | null {
   try {
     return (
@@ -319,8 +290,8 @@ function openPrUrl(repo: string | null, branch: string): string | null {
   }
 }
 
-/** Attach the deposit bundle files to the tag's GitHub Release ([R24], durable past the
- *  30-day artifact retention, and puts the exact deposited bytes next to the tag). */
+/** Attaches the deposit files to the tag's GitHub release [R24]: they outlast the 30-day
+ *  artifact retention, and the deposited bytes sit next to the tag. */
 export function uploadReleaseAsset(repoRoot: string, tag: string, files: string[]): void {
   const repo = originRepo(repoRoot);
   const base = ['release', ...(repo ? ['--repo', repo] : [])];
@@ -332,14 +303,14 @@ export function uploadReleaseAsset(repoRoot: string, tag: string, files: string[
   gh([...base, 'upload', tag, ...files, '--clobber']);
 }
 
-/** Sticky commit comment on the tagged commit (publish success). */
+/** A comment on the tagged commit when publishing succeeds. */
 export function postCommitComment(repoRoot: string, sha: string, body: string): void {
   const repo = originRepo(repoRoot);
   if (!repo) return;
   gh(['api', `repos/${repo}/commits/${sha}/comments`, '-f', `body=${body}`]);
 }
 
-/** Open a failure issue (publish error), labelled for editor attention. */
+/** Opens a failure issue when publishing fails, labelled for the editors. */
 export function openFailureIssue(repoRoot: string, title: string, body: string): void {
   const repo = originRepo(repoRoot);
   const base = ['issue', 'create', ...(repo ? ['--repo', repo] : [])];
@@ -347,19 +318,17 @@ export function openFailureIssue(repoRoot: string, title: string, body: string):
 }
 
 /* --------------------------------------------------------------------------
- * preview.ts seams: the deploy-preview / notify GitHub effects ([R69])
+ * For preview.ts: deploy-preview and notify [R69]
  * ------------------------------------------------------------------------ */
 
-/** The real git/gh PR context injected into `cmdDeployPreview` / the new-version reminder.
- *  Sticky comments are keyed on a hidden HTML marker so re-runs edit in place, not pile up. */
+/** The real pull request calls for `cmdDeployPreview` and the new-version reminder. A sticky
+ *  comment carries a hidden HTML marker, so a rerun edits it in place. */
 export const realGhPr: GhPr = {
   sticky(repoRoot, prNumber, header, body) {
-    // Throws rather than returns: a silent no-op reaches check-post as `commentPosted: true`,
-    // the green-check-no-comment failure [R69] refuses ([R108]).
+    // Throws on failure, so check-post never reports a comment it did not post [R69].
     const repo = originRepo(repoRoot);
     if (!repo) throw new Error(msg.workflow.noOriginRepo(repoRoot));
     const marker = msg.stickyMarker(header);
-    // Find an existing sticky (its body opens with the marker) and edit it; else create.
     let existingId = '';
     try {
       existingId = gh([
@@ -370,7 +339,7 @@ export const realGhPr: GhPr = {
         `[.[] | select(.body | startswith("${marker}"))] | last | .id // empty`,
       ]);
     } catch {
-      /* no comments / no read access: fall through to create */
+      /* no comments or no read access: create one */
     }
     if (existingId) {
       gh(
@@ -401,15 +370,14 @@ export const realGhPr: GhPr = {
       if (opts.description) create.push('--description', opts.description);
       gh(create);
     } catch {
-      /* label already exists: fine */
+      /* the label already exists */
     }
     gh(['pr', 'edit', prNumber, ...scope, '--add-label', label]);
   },
 
   versionTags(_repoRoot, repo) {
-    // The Stage-2 checkout is shallow, so `git tag --merged origin/main` sees no history,
-    // read tags from the API instead ([R23]). `v*` filtered client-side. A failure
-    // propagates: [] here would read as "never published" ([R108]).
+    // From the API, since this job's checkout is shallow [R23]. A failure throws: [] would read
+    // as never published.
     if (!repo) return [];
     const out = gh(['api', `repos/${repo}/tags`, '--paginate', '--jq', '.[].name']);
     return out
@@ -419,21 +387,18 @@ export const realGhPr: GhPr = {
   },
 };
 
-/** The real Cloudflare Pages deployer injected into `cmdDeployPreview`. Drives the CF Pages
- *  direct-upload protocol via wrangler (the same tool today's `wrangler-action` wraps) and
- *  parses the deployment URL from its output. Any failure throws; the caller degrades to an
- *  artifact-link comment rather than failing the run ([R16]). */
-/** Pinned like every other third-party executable here (actions by commit SHA, typst by
- *  `typst.version`): `wrangler@latest` resolved whatever npm served into the job holding
- *  `CLOUDFLARE_API_TOKEN` and `GH_TOKEN` ([R109]). */
+/** Pinned [R109]. */
 const WRANGLER_VERSION = '4.127.1';
+
+/** The real Cloudflare Pages deployer for `cmdDeployPreview`: a wrangler direct upload, with the
+ *  deployment URL read from its output. Any failure throws, and `cmdDeployPreview` falls back to
+ *  an artifact link [R16]. */
 
 export const realPagesDeployer: PagesDeployer = {
   async deploy(opts) {
-    // stderr inherited, not captured: a captured child's stderr joins the error message, which
-    // preview.ts posts publicly, and wrangler's names the account id ([R104]).
-    // An empty cwd: from the paper root, its `.npmrc` or `node_modules/wrangler` would pick
-    // which wrangler runs with the token.
+    // stderr is passed through, not captured: captured stderr joins the error message, which
+    // preview.ts posts publicly, and wrangler's names the account id [R104]. An empty cwd, so a
+    // `.npmrc` or `node_modules/wrangler` in the paper cannot pick which wrangler runs.
     const cwd = mkdtempSync(join(tmpdir(), 'oak-wrangler-'));
     let out: string;
     try {
@@ -471,19 +436,18 @@ export const realPagesDeployer: PagesDeployer = {
 };
 
 /* --------------------------------------------------------------------------
- * checks.ts seam: the GitHub Check-Run reporter (slice 4). Posts the journal-check results
- * as a first-class Check Run: summary table + inline diff annotations (reporting option 2).
- * Needs `checks: write` (a trusted/base CI context, like the sticky comment).
+ * For checks.ts: posting the journal check results as a Check Run, with a summary table and
+ * inline annotations. Needs `checks: write`, so only the trusted `workflow_run` job.
  * ------------------------------------------------------------------------ */
 
 export interface CheckRunPoster {
   create(repo: string, headSha: string, name: string, run: CheckRun): void;
 }
 
-/** Files changed between `base` and `head` per the compare API. Called from check-post in
- *  trusted base context, with `head` taken from `github.event.workflow_run.head_sha` (GitHub-set,
- *  not the fork-controlled artifact) so the frozen-shim advisory cannot be dodged. Best-effort:
- *  returns [] on any error so the advisory never fails the post. */
+/** Files changed between `base` and `head`, from the compare API. check-post passes `head` from
+ *  `github.event.workflow_run.head_sha`, which GitHub sets and the fork's artifact cannot, so
+ *  the gated-files warning cannot be dodged. Returns [] on any error, so the warning never
+ *  fails the post. */
 export function changedFiles(repo: string, base: string, head: string): string[] {
   try {
     const out = gh(
@@ -510,9 +474,8 @@ export const realCheckRun: CheckRunPoster = {
 };
 
 /* --------------------------------------------------------------------------
- * bootstrap.ts seam: the GitHub/git provisioning (slice 5). Idempotent shells over
- * `gh api`/`git`, ported from create-submission-target.sh's `apply_rulesets_to_repo` +
- * repo-create/seed/ingest. Every mutation GET-then-acts; effects are injectable for tests.
+ * For bootstrap.ts: creating and setting up repos through `gh api` and `git`. Every
+ * change reads the current state first, so a rerun is safe.
  * ------------------------------------------------------------------------ */
 
 export const realProvisioner: Provisioner = {
@@ -544,8 +507,8 @@ export const realProvisioner: Provisioner = {
     return ghOk(['api', `repos/${repo}/branches/${branch}`]);
   },
   seedBranch(repo, branch, sourceDir, message) {
-    // Clone the (empty) repo via gh so origin + auth come from the user's gh config (no
-    // hardcoded transport), then bring the locally-rendered tree in, commit, and push.
+    // Clone the empty repo through gh, so the remote and auth come from the user's gh
+    // config, then copy in the rendered tree, commit and push.
     const tmp = mkdtempSync(join(tmpdir(), 'oak-seed-'));
     gh(['repo', 'clone', repo, tmp]);
     cpSync(sourceDir, tmp, { recursive: true });
@@ -563,16 +526,16 @@ export const realProvisioner: Provisioner = {
     gitRaw(['checkout', '-B', 'review', 'origin/main'], tmp);
     gitRaw(['rm', '-rf', '.'], tmp);
     gitRaw(['checkout', 'FETCH_HEAD', '--', '.'], tmp);
-    // DELETE then restore. `git checkout <tree> -- .github` overwrites the paths that tree has
-    // and leaves the rest, so an author file at a path main lacks survived onto a branch pushed
-    // to the BASE repo with our credentials ([R121]).
+    // Delete, then restore: `git checkout <tree> -- .github` overwrites the paths the tree has and
+    // keeps the rest, so an author's file at a path main lacks would reach a branch pushed to the
+    // base repo with our credentials [R121].
     gitRaw(['rm', '-rqf', '--ignore-unmatch', '--', '.github'], tmp);
     gitRaw(['checkout', 'origin/main', '--', '.github'], tmp);
     if (ghOk(['api', `repos/${repo}/contents/CODEOWNERS`])) {
       try {
         gitRaw(['checkout', 'origin/main', '--', 'CODEOWNERS'], tmp);
       } catch {
-        /* CODEOWNERS may live under .github/, already restored above */
+        /* CODEOWNERS may be under .github/, restored above */
       }
     }
     gitRaw(['add', '-A'], tmp);
@@ -656,8 +619,8 @@ export const realProvisioner: Provisioner = {
     );
   },
   allowActionsApprovePrs(repo) {
-    // The PUT replaces the whole settings object, so the current default token permission is
-    // read back and sent with it; omitting it silently resets a tenant's choice to 'read'.
+    // The PUT replaces the whole settings object, so the current default token permission is read
+    // and sent back with it; leaving it out resets a journal's choice to 'read'.
     const current = gh([
       'api',
       `repos/${repo}/actions/permissions/workflow`,
@@ -694,7 +657,7 @@ export const realProvisioner: Provisioner = {
     }
   },
   upsertEnvironment(repo, name, reviewers) {
-    // `--input`, not repeated `--field`: an array of reviewer objects has no flat spelling.
+    // `--input`: an array of reviewer objects has no `--field` spelling.
     gh(['api', '-X', 'PUT', `repos/${repo}/environments/${name}`, '--input', '-'], {
       input: JSON.stringify({
         deployment_branch_policy: { protected_branches: false, custom_branch_policies: true },
@@ -742,12 +705,12 @@ export const realProvisioner: Provisioner = {
     const args = ['label', 'create', name, '--repo', repo, '--force'];
     if (opts.color) args.push('--color', opts.color);
     if (opts.description) args.push('--description', opts.description);
-    // No catch: `--force` already covers the label existing, so what is left is a real failure,
-    // and the step runner records it rather than losing it ([R127]).
+    // `--force` covers an existing label, so any error is real, and the step runner records it
+    // [R127].
     gh(args);
   },
   setSecret(repo, env, name, value) {
-    // stdin, never `--body`: argv is world-readable in /proc ([R104]).
+    // stdin: argv is world-readable in /proc [R104].
     gh(['secret', 'set', name, '--repo', repo, '--env', env], { input: value });
   },
   secretNames(repo, env) {
@@ -771,7 +734,7 @@ export const realProvisioner: Provisioner = {
 };
 
 /* --------------------------------------------------------------------------
- * upgrade.ts seams: target resolution, template materialization, the gated resync PR.
+ * For upgrade.ts: the target version, the template, the upgrade pull request
  * ------------------------------------------------------------------------ */
 
 /** The authenticated gh user login (`gh api user`). */
@@ -779,7 +742,7 @@ export function authedUser(): string {
   return gh(['api', 'user', '--jq', '.login']);
 }
 
-/** `oak bootstrap` preflight: gh missing or logged out is a sentence, not a stack ([R110]). */
+/** `oak bootstrap`'s check that gh is installed and logged in, reported as a sentence [R110]. */
 export function assertGhReady(): void {
   try {
     gh(['--version'], { quiet: true });
@@ -793,7 +756,7 @@ export function assertGhReady(): void {
   }
 }
 
-/** Full clone of `repo` into a temp dir (origin set) for an in-repo upgrade. */
+/** A full clone of `repo` into a temporary directory, for an upgrade. */
 export function tempClone(repo: string): string {
   const tmp = mkdtempSync(join(tmpdir(), 'oak-upgrade-'));
   gh(['repo', 'clone', repo, tmp]);
@@ -801,20 +764,11 @@ export function tempClone(repo: string): string {
 }
 
 /**
- * Latest STABLE engine release tag for `engineRepo`.
- *
- * Deliberately the `releases/latest` API and not `gh release list --limit 1`: the latter sorts
- * by date and includes pre-releases, so every dev cut became what `oak bootstrap` handed new
- * papers and what the scheduled `oak upgrade --version-only` floated existing ones onto. That
- * silently contradicted RELEASING.md ("marked pre-release, so `version: latest` never resolves
- * to one") and pointed tenants at dev tags the same document says will be DELETED when pruned.
- *
- * `releases/latest` is GitHub's own definition of the invariant, newest non-draft,
- * non-prerelease, so the rule now lives in one place instead of being reimplemented here.
- * A pre-release stays reachable, but only by naming it: `--engine-version` / `--to`.
- *
- * 404 when the repo has no stable release at all (only dev cuts, or none); that is an answer,
- * not a failure, so the probe is quiet and the caller gets a message that says how to proceed.
+ * The latest stable release tag of `engineRepo`, from the `releases/latest` API: the newest
+ * release that is neither a draft nor a pre-release, so `oak bootstrap` and the weekly upgrade
+ * never pick a pre-release (RELEASING.md). One is used only when named (`--engine-version`,
+ * `--to`). A 404 means no stable release yet: the probe is quiet, and `oak bootstrap` and
+ * `oak upgrade` say how to proceed.
  */
 export function latestEngineRelease(engineRepo: string): string {
   let tag = '';
@@ -827,32 +781,31 @@ export function latestEngineRelease(engineRepo: string): string {
   return tag;
 }
 
-/** Shallow-clone `engineRepo` at `tag` and return its `templates/paper/` path. `oak upgrade`
- *  only resyncs the frozen shim (`.github/` + `CODEOWNERS`), which lives in the paper template;
- *  instance-config data is tenant-owned and never resynced, so one root suffices. */
+/** Shallow-clones `engineRepo` at `tag` and returns its `templates/paper/` path: `oak upgrade`
+ *  resets only the paper's gated files, and the journal repo is never reset. */
 export function materializeTemplate(engineRepo: string, tag: string): string {
   const tmp = mkdtempSync(join(tmpdir(), 'oak-tmpl-'));
   gh(['repo', 'clone', engineRepo, tmp, '--', '--depth', '1', '--branch', tag]);
   return join(tmp, 'templates', 'paper');
 }
 
-/** The gated upgrade/resync PR: openDoiPr's branch→commit-as-bot→push→gh-pr-create shape. */
+/** The upgrade pull request, opened like the DOI one: branch, commit as the bot, push, create. */
 export const realUpgradePr: UpgradePr = {
   open(repoRoot, opts) {
     git(repoRoot, ['checkout', '-B', opts.branch]);
     git(repoRoot, ['add', ...opts.paths]);
     git(repoRoot, [...BOT_ID, 'commit', '-m', opts.title]);
     git(repoRoot, ['push', '-u', 'origin', opts.branch, '--force']);
-    // Run `gh` inside the clone so it infers the target repo from origin (in CI the CWD is
-    // already the repo; locally `oak upgrade` clones to a tmp dir, so pass cwd explicitly).
+    // Run `gh` inside the clone so it finds the repo from the remote: in CI the cwd is
+    // already the repo, while a local `oak upgrade` works in a temporary clone.
     return gh(['pr', 'create', '--title', opts.title, '--body', opts.body, '--head', opts.branch], {
       cwd: repoRoot,
     });
   },
 };
 
-/** A value from the fixture's committed `myst.yml`, read off the default branch through the
- *  Contents API (base64) so the harness needs no clone. Null when absent or unreadable. */
+/** A value from the test repo's `myst.yml` on the default branch, read through the
+ *  Contents API, so no clone is needed. null when absent or unreadable. */
 function committedMystValue(repo: string, path: string[]): string | null {
   let content: string;
   try {
@@ -866,17 +819,16 @@ function committedMystValue(repo: string, path: string[]): string | null {
   return value != null ? String(value) : null;
 }
 
-/** Head-ref names from a `git/matching-refs/heads/<prefix>` listing, `refs/heads/` stripped. */
+/** Branch names from a `git/matching-refs/heads/<prefix>` listing, without `refs/heads/`. */
 function matchingHeadRefs(out: string): string[] {
   return out ? out.split('\n').map((r) => r.replace(/^refs\/heads\//, '')) : [];
 }
 
-/** The real GitHub seam for `oak conformance` (slice C0: reset). Drives the fixture repos via
- *  the fixture-scoped PAT (gh reads GH_TOKEN). Deletes are DELETE-ref calls wrapped so an
- *  already-absent target is a no-op, not a throw. */
+/** The real GitHub calls for `oak conformance`, run with the test repo's token (gh reads
+ *  GH_TOKEN). Deleting something already gone is fine. */
 export const realConformanceGh: ConformanceGh = {
   listOpenPrs(repo, label) {
-    // A not-yet-provisioned label makes `gh pr list --label` error; treat as no PRs.
+    // `gh pr list --label` fails when the label does not exist yet: no pull requests.
     let out: string;
     try {
       out = gh(
@@ -907,7 +859,7 @@ export const realConformanceGh: ConformanceGh = {
     gh(['pr', 'close', String(prNumber), '--repo', repo]);
   },
   listBranches(repo, prefix) {
-    // matching-refs returns refs whose name starts with the given path (empty [] when none).
+    // matching-refs returns refs whose name starts with the path ([] when none).
     const out = gh([
       'api',
       `repos/${repo}/git/matching-refs/heads/${prefix}`,
@@ -921,13 +873,11 @@ export const realConformanceGh: ConformanceGh = {
     ghOk(['api', '-X', 'DELETE', `repos/${repo}/git/refs/heads/${branch}`], undefined, ABSENT_REF);
   },
   listTags(repo, marker) {
-    // No "contains" ref filter: list tags and match the middle marker in JS.
+    // The API cannot filter by substring, so tags are listed and matched here.
     const out = gh(['api', `repos/${repo}/tags`, '--paginate', '--jq', '.[].name']);
     return out ? out.split('\n').filter((t) => t.includes(marker)) : [];
   },
   deleteTag(repo, tag) {
-    // The refs API answers an ABSENT ref with 422 "Reference does not exist", not 404, so
-    // ghOk's 404-only tolerance would throw on the very case this is tolerant of ([R149]).
     ghOk(['api', '-X', 'DELETE', `repos/${repo}/git/refs/tags/${tag}`], undefined, ABSENT_REF);
   },
   labelPr(repo, prNumber, label) {
@@ -979,8 +929,8 @@ export const realConformanceGh: ConformanceGh = {
     return out ? (JSON.parse(out) as import('./conformance.js').CheckRunRef[]) : [];
   },
   openCertPr(repo, branch, marker) {
-    // Branch off main, then a trivial always-valid content change (a MyST `%` comment appended
-    // to index.md) via the Contents API, no clone, so no git-credential dependency in CI.
+    // Branch off main, then append a MyST `%` comment to index.md through the Contents API: no
+    // clone, so no git credentials needed in CI.
     const mainSha = gh(['api', `repos/${repo}/git/ref/heads/main`, '--jq', '.object.sha']);
     gh([
       'api',
@@ -1040,8 +990,8 @@ export const realConformanceGh: ConformanceGh = {
     return { number, headSha };
   },
   listIssueComments(repo, prNumber) {
-    // A cert PR won't approach one page of comments, so no --paginate (which would concatenate
-    // per-page JSON arrays into invalid JSON).
+    // These pull requests stay far below a page of comments; `--paginate` would join the pages'
+    // JSON arrays into invalid JSON.
     const out = gh(['api', `repos/${repo}/issues/${prNumber}/comments`, '--jq', '[.[].body]']);
     return out ? (JSON.parse(out) as string[]) : [];
   },
@@ -1067,8 +1017,8 @@ export const realConformanceGh: ConformanceGh = {
     ]);
   },
   approveDeployment(repo, runId, environment) {
-    // GET the pending deployments, pick the environment id matching `environment`, then POST the
-    // approval. A missing/empty pending list (already approved, or no gate) is a tolerated no-op.
+    // Get the pending deployments, take the one for `environment`, and approve it. Nothing
+    // pending (already approved, or no reviewer) is fine.
     let envId: string;
     try {
       envId = gh(
@@ -1098,7 +1048,7 @@ export const realConformanceGh: ConformanceGh = {
     ]);
   },
   releaseAssets(repo, tag) {
-    // `gh release view` errors when the release doesn't exist yet, treat that as no assets.
+    // `gh release view` fails when there is no release yet: no assets.
     try {
       const out = gh(
         ['release', 'view', tag, '-R', repo, '--json', 'assets', '--jq', '[.assets[].name]'],
@@ -1110,14 +1060,14 @@ export const realConformanceGh: ConformanceGh = {
     }
   },
   deleteRelease(repo, tag) {
-    // `--cleanup-tag` also removes the underlying tag. Tolerant: an absent release is a no-op.
+    // `--cleanup-tag` also deletes the tag. A missing release is fine.
     ghOk(['release', 'delete', tag, '-R', repo, '-y', '--cleanup-tag']);
   },
 
-  // --- fork-PR preview path (optional, lab-tier) ---------------------------------------
+  // --- a pull request from a fork and its preview (optional) ---
   sweepForkBranches(forkRepo, forkToken, prefix) {
-    // Idempotency: clear stale cert branches on the fork left by a crashed run (mirrors the
-    // base-repo listBranches/deleteBranch sweep, but on the fork under the fork token).
+    // Remove branches a crashed run left on the fork, as on the test repo, with the
+    // fork's token.
     const out = ghAs(forkToken, [
       'api',
       `repos/${forkRepo}/git/matching-refs/heads/${prefix}`,
@@ -1135,7 +1085,7 @@ export const realConformanceGh: ConformanceGh = {
     return branches;
   },
   openForkPr(baseRepo, forkRepo, forkToken, branch, tag, marker) {
-    // Off base main, not the fork's: a PR conflicting with base triggers no workflow.
+    // Off the test repo's main: a pull request that conflicts with it starts no workflow.
     const forkOwner = forkRepo.split('/')[0];
     const headSha = gh(['api', `repos/${baseRepo}/git/ref/heads/main`, '--jq', '.object.sha']);
     ghAs(forkToken, [
@@ -1175,8 +1125,8 @@ export const realConformanceGh: ConformanceGh = {
       `branch=${branch}`,
     ]);
 
-    // Open the cross-fork PR on the BASE repo with the PRIMARY token, `--head owner:branch`
-    // targets the fork's head branch.
+    // Open the pull request on the test repo with the main token; `--head owner:branch`
+    // names the fork's branch.
     const url = gh([
       'pr',
       'create',
@@ -1192,7 +1142,7 @@ export const realConformanceGh: ConformanceGh = {
       'Automated conformance fork-PR preview probe; opened and closed by the harness.',
     ]);
     const number = Number(url.split('/').pop());
-    // Re-read the fork branch head sha post-commit (the PUT advanced it).
+    // Read the fork branch's head again: the PUT moved it.
     const postSha = ghAs(forkToken, [
       'api',
       `repos/${forkRepo}/git/ref/heads/${branch}`,
@@ -1209,9 +1159,8 @@ export const realConformanceGh: ConformanceGh = {
     );
   },
   approveWorkflowRun(repo, runId) {
-    // The fork-PR first-time-contributor gate is on the BASE repo, so approve with the PRIMARY
-    // token. An ungated run answers 403 "not waiting for approval", which is the normal case,
-    // not a fault: live testing settled that fork runs are NOT gated every time ([R150]).
+    // First-time-contributor approval is on the test repo, so it uses the main token. Fork runs
+    // are not always held [R150].
     ghOk(
       ['api', '-X', 'POST', `repos/${repo}/actions/runs/${runId}/approve`],
       undefined,

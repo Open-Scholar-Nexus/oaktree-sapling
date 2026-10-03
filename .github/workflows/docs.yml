@@ -1,6 +1,6 @@
 name: docs
 
-# Builds the docs site. main deploys to GitHub Pages; a pull request from this repository
+# Builds the docs site. main deploys to GitHub Pages; a pull request from this repo
 # gets a preview on Cloudflare Pages.
 
 on:

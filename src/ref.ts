@@ -1,7 +1,7 @@
 /**
- * Classifies an oak ref and decides whether a pull request may run it. A public repository's
+ * Classifies an oak ref and decides whether a pull request may run it. A public repo's
  * `refs/pull/N/merge` also resolves inside it, so trust depends on the kind of ref, not only on
- * the repository [R196] [R41].
+ * the repo [R196] [R41].
  *
  * Nothing calls this [R41]: the engine action's `refclass` step enforces the rule before the
  * checkout, since oak cannot judge the ref it was checked out at.
@@ -37,7 +37,7 @@ export interface RefDecision {
 
 /**
  * Tags and branches pass here but still need CI's ancestry check. A SHA or a PR merge ref runs
- * only from a same-repository pull request or with the maintainer override, never from a fork
+ * only from a same-repo pull request or with the maintainer override, never from a fork
  * [R196].
  */
 export function decideRef(ref: string, ctx: RefContext): RefDecision {
