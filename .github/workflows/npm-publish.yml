@@ -1,0 +1,82 @@
+name: npm-publish
+
+# Publishes a release tag to npm with trusted publishing (no token). See RELEASING.md.
+# vX.Y.Z goes to `latest` once conformance passed on it; vX.Y.Z-dev.N goes to `next`.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag: vX.Y.Z or vX.Y.Z-dev.N'
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: npm-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write # trusted publishing
+    steps:
+      - name: Check the release
+        id: r
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          if [[ $TAG =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            dist_tag=latest
+          elif [[ $TAG =~ ^v[0-9]+\.[0-9]+\.[0-9]+-dev\.[0-9]+$ ]]; then
+            dist_tag=next
+          else
+            echo "::error::not a release tag: $TAG"
+            exit 1
+          fi
+          gh release view "$TAG" -R "$GITHUB_REPOSITORY" --json tagName >/dev/null
+          if [ "$dist_tag" = latest ]; then
+            gh release download "$TAG" -R "$GITHUB_REPOSITORY" -p conformance.json -O conformance.json
+            status=$(jq -r .status conformance.json)
+            if [ "$status" != ok ]; then
+              echo "::error::conformance on $TAG is '$status', not ok"
+              exit 1
+            fi
+          fi
+          echo "dist_tag=$dist_tag" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ inputs.tag }}
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+          registry-url: https://registry.npmjs.org
+
+      # Trusted publishing needs npm 11.5.1 or newer.
+      - run: |
+          npm --version
+          node -e 'const [a,b,c]=process.argv[1].split(".").map(Number); process.exit(a>11||(a==11&&(b>5||(b==5&&c>=1)))?0:1)' "$(npm --version)" \
+            || { echo "::error::npm is older than 11.5.1"; exit 1; }
+
+      - run: npm ci
+
+      # The package version is the tag, and provenance needs `repository` to name this repo.
+      - name: Set version and repository
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          npm version "${TAG#v}" --no-git-tag-version --allow-same-version
+          npm pkg set repository.url="git+https://github.com/${GITHUB_REPOSITORY}.git"
+
+      # prepack runs the typecheck and the bundle. Provenance is added by trusted publishing.
+      - run: npm publish --tag "$DIST_TAG"
+        env:
+          DIST_TAG: ${{ steps.r.outputs.dist_tag }}
