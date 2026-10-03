@@ -92,6 +92,25 @@ describe('renderPaperTemplate', () => {
     );
   });
 
+  it('ships the thumbnail paper-base.yml declares, so the journal gallery finds an image', () => {
+    const dest = tmp();
+    const written = renderPaperTemplate(PAPER_ROOT, dest, answers());
+    const base = parseDocument(readFileSync('paper-base.yml', 'utf8'));
+    const thumb = String(base.getIn(['project', 'thumbnail']));
+    expect(written).toContain(thumb);
+    const png = readFileSync(join(dest, thumb));
+    expect(png.subarray(1, 4).toString('latin1')).toBe('PNG');
+  });
+
+  it('sets project.github to the new repo, after the title, so a starter paper links its source', () => {
+    const dest = tmp();
+    renderPaperTemplate(PAPER_ROOT, dest, answers({ repo: 'me/paper' }));
+    const myst = parseDocument(readFileSync(join(dest, 'myst.yml'), 'utf8'));
+    expect(myst.getIn(['project', 'github'])).toBe('https://github.com/me/paper');
+    const keys = (myst.toJS() as { project: Record<string, unknown> }).project;
+    expect(Object.keys(keys).slice(0, 3)).toEqual(['id', 'title', 'github']);
+  });
+
   it('co-located writes instance_repo: .', () => {
     const dest = tmp();
     renderPaperTemplate(PAPER_ROOT, dest, answers({ instanceRepo: '.' }));
@@ -110,6 +129,31 @@ describe('renderInstanceTemplate', () => {
     expect(existsSync(join(dest, 'editions/edition.yml'))).toBe(false);
     expect(existsSync(join(dest, 'brand/logo.svg'))).toBe(true);
     expect(existsSync(join(dest, 'registry/papers.yml'))).toBe(true);
+  });
+
+  it('--name reaches the brand, the edition venue and the Zenodo blurb, not only journal.yml', () => {
+    const dest = tmp();
+    renderInstanceTemplate(INSTANCE_ROOT, dest, answers({ journalName: 'Acta: Tests #1' }));
+    const brand = parseDocument(readFileSync(join(dest, 'brand/brand.yml'), 'utf8'));
+    expect(brand.getIn(['site', 'options', 'logo_text'])).toBe('Acta: Tests #1');
+    const edition = parseDocument(readFileSync(join(dest, 'editions/ed-2026.yml'), 'utf8'));
+    expect(edition.getIn(['project', 'venue'])).toBe('Acta: Tests #1');
+    const journal = readFileSync(join(dest, 'journal.yml'), 'utf8');
+    expect(parseDocument(journal).get('name')).toBe('Acta: Tests #1');
+    expect(journal).toContain('Published in Acta: Tests #1.');
+    for (const f of ['journal.yml', 'brand/brand.yml', 'editions/ed-2026.yml'])
+      expect(readFileSync(join(dest, f), 'utf8'), f).not.toContain('CHANGE-ME Journal');
+  });
+
+  it('without --name the files keep their placeholder as shipped', () => {
+    const dest = tmp();
+    renderInstanceTemplate(INSTANCE_ROOT, dest, answers({ journalName: undefined }));
+    expect(readFileSync(join(dest, 'brand/brand.yml'), 'utf8')).toBe(
+      readFileSync(join(INSTANCE_ROOT, 'brand/brand.yml'), 'utf8'),
+    );
+    expect(readFileSync(join(dest, 'editions/ed-2026.yml'), 'utf8')).toBe(
+      readFileSync(join(INSTANCE_ROOT, 'editions/edition.yml'), 'utf8'),
+    );
   });
 });
 
@@ -342,6 +386,34 @@ describe('cmdBootstrapPaper', () => {
     expect(calls.openPr).toHaveLength(0);
     expect(calls.createRuleset).toHaveLength(2); // protect-main + v-tags
     expect(calls.enablePages).toHaveLength(1);
+  });
+
+  it('a new paper ends by saying what to fill in, and its myst.yml links the repo', async () => {
+    const { prov } = fakeProv();
+    const seeds: string[] = [];
+    const d = deps(prov);
+    d.workdir = () => {
+      const dir = tmp('oak-seed-');
+      seeds.push(dir);
+      return dir;
+    };
+    const out = await cmdBootstrapPaper(paperInput(), d);
+    const runbook = out.result.runbook as string[];
+    expect(runbook[0]).toMatch(/^Next: .*myst\.yml: project\.id .*title.*authors/);
+    const myst = parseDocument(readFileSync(join(seeds[0]!, 'myst.yml'), 'utf8'));
+    expect(myst.getIn(['project', 'github'])).toBe('https://github.com/me/paper');
+
+    // An imported paper brings the author's myst.yml, and a rerun has seeded nothing.
+    const ingest = await cmdBootstrapPaper(
+      paperInput({ from: 'https://github.com/author/paper' }),
+      deps(fakeProv().prov),
+    );
+    expect((ingest.result.runbook as string[]).join('\n')).not.toContain('Next: ');
+    const rerun = await cmdBootstrapPaper(
+      paperInput(),
+      deps(fakeProv({ repos: new Set(['me/paper']), branches: new Set(['me/paper/main']) }).prov),
+    );
+    expect((rerun.result.runbook as string[]).join('\n')).not.toContain('Next: ');
   });
 
   it('refuses a paper without --instance before doing anything', async () => {
@@ -697,6 +769,8 @@ describe('cmdBootstrapPaper', () => {
     )!.b;
     const pr = pm.rules.find((r: any) => r.type === 'pull_request');
     expect(pr.parameters.require_code_owner_review).toBe(true);
+    // Off, or the DOI pull request a bot opens would wait for a review nobody asked for.
+    expect(pr.parameters.require_extra_approval_for_unattributed_changes).toBe(false);
     const checks = pm.rules.find((r: any) => r.type === 'required_status_checks');
     expect(checks.parameters.required_status_checks).toEqual([{ context: 'Journal checks' }]);
   });
@@ -893,7 +967,7 @@ describe('cmdBootstrapJournal', () => {
       seedDirs.push(dir);
       return dir;
     };
-    await cmdBootstrapJournal(
+    const out = await cmdBootstrapJournal(
       {
         repo: 'me/journal',
         tier: 'co-located',
@@ -922,6 +996,10 @@ describe('cmdBootstrapJournal', () => {
     expect(existsSync(join(seed, 'package.json'))).toBe(false);
     const myst = parseDocument(readFileSync(join(seed, 'myst.yml'), 'utf8'));
     expect(myst.getIn(['project', 'options', 'oaktree-sapling', 'version'])).toBe('v9'); // the starter paper's
+    expect(myst.getIn(['project', 'github'])).toBe('https://github.com/me/journal');
+    const brand = parseDocument(readFileSync(join(seed, 'brand/brand.yml'), 'utf8'));
+    expect(brand.getIn(['site', 'options', 'logo_text'])).toBe('J');
+    expect((out.result.runbook as string[])[0]).toMatch(/^Next: /);
   });
 
   it('a default --edition is shown, with the file it will write', async () => {

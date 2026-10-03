@@ -90,8 +90,8 @@ export function checkLayout(
   return out;
 }
 
-/** Warns when the brand has no favicon that resolves: a missing one makes the HTML prerender
- *  fail on /favicon.ico [R61]. A URL resolves for HTML, so it passes. */
+/** Warns when the brand has no favicon that resolves [R61]: the site still renders, with a
+ *  default icon. A URL resolves for HTML, so it passes. */
 export function checkBrandFavicon(
   input: { instanceRoot: string | null; favicon?: string },
   probes: FsProbes,

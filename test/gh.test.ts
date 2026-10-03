@@ -12,6 +12,7 @@ import {
   realGhPr,
   realPagesDeployer,
   realProvisioner,
+  uploadReleaseAsset,
 } from '../src/gh.js';
 import { UserError } from '../src/messages.js';
 import { readFileSync } from 'node:fs';
@@ -206,6 +207,14 @@ describe('openDoiPr', () => {
     expect(ghCall('pr', 'create'), 'no PR is opened from a diverged HEAD').toBeUndefined();
   });
 
+  it('the body tells the editor what GitHub holds back on a bot pull request', () => {
+    openDoiPr('/paper', { conceptDoi: '10.5072/zenodo.5' });
+    const body = argAfter(ghCall('pr', 'create')!.args, '--body')!;
+    expect(body).toContain('10.5072/zenodo.5');
+    expect(body).toContain('close and reopen');
+    expect(body).toContain('approving review');
+  });
+
   it('a second prepare returns the pull request the first one opened', () => {
     child.respond = answers((args) => {
       if (args[0] === 'pr' && args[1] === 'create')
@@ -216,6 +225,27 @@ describe('openDoiPr', () => {
     });
     expect(openDoiPr('/paper', { conceptDoi: '10.5072/zenodo.5' })).toBe(
       'https://github.com/o/r/pull/7',
+    );
+  });
+});
+
+describe('uploadReleaseAsset', () => {
+  it('creates a missing release without printing the probe failure', () => {
+    child.calls.length = 0;
+    child.respond = (args) =>
+      args[0] === 'release' && args.includes('view')
+        ? { status: 1, stdout: '', stderr: 'release not found' }
+        : { status: 0, stdout: 'https://github.com/o/r.git', stderr: '' };
+    const write = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    try {
+      uploadReleaseAsset('/paper', 'v1.0.0', ['paper.pdf']);
+      const printed = write.mock.calls.map((c) => String(c[0])).join('');
+      expect(printed).not.toContain('release not found');
+    } finally {
+      write.mockRestore();
+    }
+    expect(child.calls.some((c) => c.args[0] === 'release' && c.args.includes('create'))).toBe(
+      true,
     );
   });
 });

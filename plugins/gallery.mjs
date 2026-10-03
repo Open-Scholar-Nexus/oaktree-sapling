@@ -29,16 +29,17 @@
  * third case is caught in the site workflow by asserting this plugin's `name` appears in the
  * build log, which is why the name below is load-bearing: do not rename it casually.
  *
- * The THUMBNAIL is deliberately not fetched here. This transform runs at `stage: 'document'`
- * (`process/mdast.ts:224`), i.e. BEFORE `transformImagesToDisk` (`:438`), so the remote URL
- * emitted below is picked up by `saveImageInStaticFolder` → `downloadAndSaveImage`
- * (`transforms/images.ts:115-117`) and written into the site's public folder under a content
- * hash. Three consequences: the published site serves a LOCAL copy rather than hotlinking
- * `raw.githubusercontent.com`; a broken thumbnail is already an error-kind warning
- * (`RuleId.imageDownloads`, `images.ts:82-88`, including the HTML-error-page content-type
- * case), so `--strict` fails the build on it with no extra check here; and caching titles in
- * the registry could never make the site build hermetic, because N thumbnail downloads would
- * remain either way.
+ * The THUMBNAIL is the one per-paper failure that degrades: a paper with no
+ * `thumbnails/thumbnail.png` (a new paper, a renamed file) gets a card with no image, since
+ * one missing picture is no reason to stop publishing the rest of the journal.
+ * `thumbnailAvailable` probes the URL with a HEAD request; when it serves an image, the card
+ * carries the remote URL and myst downloads it. This transform runs at `stage: 'document'`
+ * (`process/mdast.ts:224`), i.e. BEFORE `transformImagesToDisk` (`:438`), so the URL is picked
+ * up by `saveImageInStaticFolder` → `downloadAndSaveImage` (`transforms/images.ts:115-117`) and
+ * written into the site's public folder under a content hash, so the published site serves its
+ * own copy. Left in the card unprobed, a 404 is an
+ * error-kind warning (`RuleId.imageDownloads`, `images.ts:82-88`) and `--strict` fails the whole
+ * build on it.
  */
 import { readFileSync } from 'node:fs';
 import yaml from 'js-yaml';
@@ -118,17 +119,18 @@ export function paperUrls(entry) {
  * One card node, PURE: (registry entry, that paper's fetched myst config) → mdast. Title and
  * keywords come from the paper (the registry stays a thin pointer list, [S4]); the DOI comes
  * from the registry, since that is the one display field the registry actually owns.
+ * `opts.thumbnail: false` leaves the image out (see `thumbnailAvailable`).
  */
-export function cardFrom(entry, config) {
+export function cardFrom(entry, config, opts = {}) {
   const { siteUrl, thumbUrl } = paperUrls(entry);
   const project = config?.project ?? {};
   const title = project.title || entry.slug || entry.id;
   const keywords = project.keywords ?? [];
 
-  const children = [
-    { type: 'header', children: [{ type: 'text', value: title }] },
-    { type: 'image', url: thumbUrl, alt: title, width: '100%' },
-  ];
+  const children = [{ type: 'header', children: [{ type: 'text', value: title }] }];
+  if (opts.thumbnail !== false) {
+    children.push({ type: 'image', url: thumbUrl, alt: title, width: '100%' });
+  }
   if (keywords.length > 0) {
     children.push({ type: 'paragraph', children: [{ type: 'text', value: keywords.join(' | ') }] });
   }
@@ -170,6 +172,20 @@ export async function fetchPaperConfig(entry, fetchImpl = fetch) {
   return yaml.load(await response.text());
 }
 
+/** Whether the paper's thumbnail URL serves an image. A 404 from raw.githubusercontent.com is a
+ *  `text/plain` body, which myst refuses as an image, so any non-image answer or network error
+ *  is false and the card goes without one. */
+export async function thumbnailAvailable(entry, fetchImpl = fetch) {
+  const { thumbUrl } = paperUrls(entry);
+  try {
+    const response = await fetchImpl(thumbUrl, { method: 'HEAD' });
+    const type = response.headers?.get?.('content-type') ?? '';
+    return Boolean(response.ok) && type.startsWith('image/');
+  } catch {
+    return false;
+  }
+}
+
 const paperCardsDirective = {
   name: 'paper-cards',
   doc: 'A gallery of cards, one per registered paper.',
@@ -203,8 +219,17 @@ function paperCardsTransform(opts, utils) {
     await Promise.all(
       nodes.map(async (node) => {
         const { entry } = node;
-        const config = await fetchPaperConfig(entry);
-        const card = cardFrom(entry, config);
+        const [config, thumbnail] = await Promise.all([
+          fetchPaperConfig(entry),
+          thumbnailAvailable(entry),
+        ]);
+        if (!thumbnail) {
+          console.warn(
+            `paper-cards: no image at ${paperUrls(entry).thumbUrl} for ` +
+              `"${entry.slug ?? entry.id}"; its card has no picture.`,
+          );
+        }
+        const card = cardFrom(entry, config, { thumbnail });
         delete node.entry;
         Object.assign(node, card);
       }),

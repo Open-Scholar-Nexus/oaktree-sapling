@@ -20,6 +20,7 @@ project:
   # keywords:
   #   - keyword one
   #   - keyword two
+  # thumbnails/thumbnail.png is the picture on the journal's paper list; replace the grey one.
   bibliography:
   - bib.bib
   options:

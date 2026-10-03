@@ -123,7 +123,13 @@ export function toCheckRun(
   const passed = results.filter((r) => r.status === CheckStatus.pass);
 
   const conclusion: CheckRun['conclusion'] = blocking.length ? 'failure' : 'success';
-  const title = messages.pr.checkRunTitle(passed.length, failed.length);
+  // The one count of a run: `oak validate` prints this title too, and the comment's headline
+  // repeats it. An optional finding is a warning.
+  const title = messages.pr.checkRunTitle(
+    passed.length,
+    blocking.length,
+    failed.length - blocking.length,
+  );
 
   const esc = (s: string) => s.replace(/\|/g, '\\|');
   const rows = results

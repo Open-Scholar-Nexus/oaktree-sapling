@@ -140,6 +140,15 @@ describe.skipIf(bundleState() === 'absent')('--json gates the machine envelope',
     expect(stderr).toMatch(/oak validate: PASS/);
   }, 60_000);
 
+  it('oak validate prints the same counts as the Check Run it reports', () => {
+    const args = ['validate', '--paper', fixturePaper, '--instance', fixtureInstance];
+    const { stderr } = oak([...args, '--repo', fixtureRepo]);
+    const { stdout } = oak([...args, '--repo', fixtureRepo, '--json']);
+    const title = JSON.parse(stdout).checkRun.title as string;
+    expect(title).toMatch(/^\d+ passed, \d+ failed/);
+    expect(stderr).toContain(`oak validate: PASS (${title})`);
+  }, 60_000);
+
   it('oak validate: --json puts the full JSON, checkRun included, on stdout', () => {
     const { stdout } = oak([
       'validate',
@@ -214,6 +223,15 @@ describe.skipIf(bundleState() === 'absent')('a broken paper gets a sentence, nev
     expect(stderr).toContain('is the journal repo, not a paper');
     expect(stderr).not.toContain('::error::');
   });
+
+  it('oak start in a journal repo with no npm install says to run it first', () => {
+    const dir = journalRepo();
+    writeFileSync(join(dir, 'package.json'), '{"dependencies":{"js-yaml":"^4.1.0"}}\n');
+    const { code, stderr } = oak(['start', '--paper', dir]);
+    expect(code).toBe(2);
+    expect(stderr).toContain('npm install');
+    expect(stderr).not.toContain('::error::');
+  }, 60_000);
 
   it('a paper whose myst.yml lost its engine version names the file and the fix', () => {
     const dir = mkdtempSync(join(tmpdir(), 'oak-nocoord-'));

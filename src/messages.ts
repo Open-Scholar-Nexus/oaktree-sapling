@@ -211,8 +211,8 @@ export const declared = {
 
   journalNameGiven: (name: string): string => `${name} (--name)`,
   journalNameDefault:
-    'not given; journal.yml keeps its "CHANGE-ME Journal" placeholder (set it now with ' +
-    '--name "Your Journal")',
+    'not given; journal.yml, brand/brand.yml and the edition file keep the "CHANGE-ME ' +
+    'Journal" placeholder (set it now with --name "Your Journal")',
 
   editionGiven: (edition: string): string => `${edition} (--edition)`,
   editionDefault: (edition: string): string =>
@@ -427,6 +427,11 @@ export const bootstrap = {
     `The '${step}' step failed (${why}); ${repo} keeps everything else this run set. Fix the ` +
     `cause and re-run the same command: steps that already succeeded are skipped.`,
 
+  runbookFillPaper: (repo: string): string =>
+    `Next: in a pull request to https://github.com/${repo}, fill in myst.yml: project.id ` +
+    `(unique in the journal, in the shape its id_pattern asks for), the title and the authors. ` +
+    `Until the id is set the Journal checks fail and GitHub Pages is not deployed.`,
+
   runbookForkApproval:
     `The first time someone opens a pull request from their own fork, GitHub asks an editor to ` +
     `approve the workflow run before it starts: one click in the repo's Actions tab, per new ` +
@@ -588,6 +593,12 @@ export const start = {
     `needs it.\n` +
     `Press Ctrl-C to stop.`,
 
+  /** A journal website with a package.json and no node_modules: the gallery plugin's imports
+   *  would fail to resolve. */
+  siteNotInstalled: (root: string): string =>
+    `oak start: ${root} has a package.json but no node_modules, so the paper gallery cannot ` +
+    `load. Run \`npm install\` in this repo once, then \`oak start\` again.`,
+
   recomposed: 'oak start: myst.yml changed; recomposed, the preview will reload.',
 
   recomposeFailed: (message: string): string =>
@@ -610,10 +621,6 @@ export const validate = {
 
   verdict: (pass: boolean, counts: string[]): string =>
     `oak validate: ${pass ? 'PASS' : 'FAIL'}${counts.length ? ' (' + counts.join(', ') + ')' : ''}`,
-  countErrors: (n: number): string => `${n} error(s)`,
-  countWarnings: (n: number): string => `${n} warning(s)`,
-  countChecks: (passed: number, total: number): string =>
-    `${passed}/${total} editorial checks passed`,
 
   // ── layout / identity ──────────────────────────────────────────────────────────────────
   missingFile: (file: string): string => `missing required file "${file}" at the paper root`,
@@ -623,7 +630,7 @@ export const validate = {
 
   // ── brand ──────────────────────────────────────────────────────────────────────────────
   brandNoFavicon:
-    'brand declares no favicon: the built site fails to render its pages without one; set ' +
+    'brand declares no favicon, so browser tabs show a default icon; set ' +
     '`favicon` in brand.yml (' +
     docsUrl(DOCS.branding) +
     ')',
@@ -763,7 +770,9 @@ export const pr = {
   checksHeadline: (pass: boolean, title: string): string =>
     `### ${pass ? '✅' : '❌'} ${pass ? 'Journal checks passed' : 'Journal checks failed'}: ${title}`,
   checksFooter: `[What these checks are](${docsUrl(DOCS.checks)}) · _Updated on every push to this pull request._`,
-  checkRunTitle: (passed: number, failed: number): string => `${passed} passed, ${failed} failed`,
+  checkRunTitle: (passed: number, failed: number, warnings: number): string =>
+    `${passed} passed, ${failed} failed` +
+    (warnings ? `, ${warnings} warning${warnings === 1 ? '' : 's'}` : ''),
   checkRunTitleShimTouched: (title: string): string => `⚠️ CI workflows modified: ${title}`,
   unknownCheckId: (id: string): string =>
     `unknown check id "${id}"; the ids the journal can ask for, and how to change the set: ` +
@@ -809,6 +818,25 @@ export const workflow = {
   depositDoiPrOpened: (url: string): string => `deposit prepare: opened DOI PR ${url}`,
   depositDoiPrFailed: (message: string): string =>
     `deposit prepare: DOI PR not opened (${message})`,
+
+  /** The DOI pull request `gh.openDoiPr` opens. GitHub holds the workflow runs of a pull
+   *  request a bot opens, so the body says what the editor clicks. */
+  doiPrTitle: 'Reserve Zenodo DOI',
+  doiPrBody: (conceptDoi: string): string =>
+    [
+      `Stamps the reserved concept DOI \`${conceptDoi}\` into \`myst.yml\`. Merge before tagging.`,
+      '',
+      'The Journal checks for this pull request are posted by the "Prepare Zenodo deposit" run ' +
+        'that opened it. GitHub holds the workflow runs of a pull request a bot opens, so the ' +
+        'Paper CI and Journal checks runs here wait for approval; neither is needed to merge. ' +
+        'To run them anyway, approve them in the Actions tab, or close and reopen this pull ' +
+        'request.',
+      '',
+      'If merging still asks for an approving review, an editor approves it. A repo ' +
+        'bootstrapped before oak turned this off asks for one on every pull request a bot ' +
+        'opens: the "protect-main" ruleset\'s extra approval for unattributed changes, in ' +
+        'Settings > Rules.',
+    ].join('\n'),
 
   // release
   releaseNoTag: 'oak release: --tag vX.Y.Z is required',

@@ -15,6 +15,7 @@ import {
   readFileSync,
 } from 'node:fs';
 import { join, dirname, posix } from 'node:path';
+import { isMap, isScalar } from 'yaml';
 import { readDoc } from './yaml-io.js';
 import { themeZipUrl } from './assets.js';
 import { LABEL_EDITOR_ACTION, LABEL_ZENODO_FAILED } from './preview.js';
@@ -35,9 +36,15 @@ export interface TemplateAnswers {
   version: string;
   /** The edition, written into the starter myst.yml and used to name the edition file. */
   edition: string;
-  /** The journal's name, for `journal.yml`. */
+  /** The journal's name, for `journal.yml`, the brand's `logo_text` and the edition's `venue`. */
   journalName?: string;
+  /** The repo being bootstrapped (`owner/name`), written as the starter paper's
+   *  `project.github`. */
+  repo?: string;
 }
+
+/** The journal name the templates ship, replaced by `--name`. */
+const JOURNAL_NAME_PLACEHOLDER = 'CHANGE-ME Journal';
 
 const RENDER_PINS = posix.join('.github', 'actions', 'engine', 'pins.yml');
 const RENDER_CODEOWNERS = 'CODEOWNERS';
@@ -170,11 +177,20 @@ export function renderCodeowners(
     .join('\n');
 }
 
-/** The starter myst.yml with the version and edition set through the Document API. */
+/** The starter myst.yml with the version, the edition and `project.github` set through the
+ *  Document API. `github` goes right after `title`, where an author looks for it. */
 export function renderMyst(templateRoot: string, answers: TemplateAnswers): string {
   const doc = readDoc(join(templateRoot, RENDER_MYST));
   doc.setIn(['project', 'options', 'oaktree-sapling', 'version'], answers.version);
   doc.setIn(['project', 'options', 'oaktree-sapling', 'edition'], answers.edition);
+  if (answers.repo) {
+    const url = `https://github.com/${answers.repo}`;
+    const project = doc.get('project');
+    if (isMap(project) && !project.has('github')) {
+      const at = project.items.findIndex((p) => isScalar(p.key) && p.key.value === 'title');
+      project.items.splice(at + 1, 0, doc.createPair('github', url));
+    } else doc.setIn(['project', 'github'], url);
+  }
   return doc.toString();
 }
 
@@ -206,24 +222,41 @@ export function renderPaperTemplate(
 
 /**
  * Renders the journal template (`journal.yml`, `editions/<edition>.yml`, `brand/`, the registry)
- * into `destRoot`: `journal.yml`'s `name` from the settings, the edition file renamed, the rest
- * copied, the README left out. Returns the written paths.
+ * into `destRoot`: the journal name from the settings into `journal.yml` (`name` and the
+ * commented Zenodo blurb), the brand's `logo_text` and the edition's `venue`; the edition file
+ * renamed, the rest copied, the README left out. Returns the written paths.
  */
 export function renderInstanceTemplate(
   instanceRoot: string,
   destRoot: string,
   answers: TemplateAnswers,
 ): string[] {
+  const name = answers.journalName;
   const written: string[] = [];
   for (const rel of listFiles(instanceRoot)) {
     if (EXCLUDE_FROM_STAMP.has(rel.split('/')[0]!)) continue;
     if (rel === 'journal.yml') {
       const doc = readDoc(join(instanceRoot, rel));
-      if (answers.journalName) doc.set('name', answers.journalName);
+      if (name) doc.set('name', name);
+      // What is left of the placeholder is in comments (the Zenodo blurb), so it is replaced as
+      // text, on one line.
+      const out = doc.toString();
+      writeRel(
+        destRoot,
+        rel,
+        name ? out.replaceAll(JOURNAL_NAME_PLACEHOLDER, name.replace(/\s+/g, ' ')) : out,
+      );
+    } else if (rel === posix.join('brand', 'brand.yml') && name) {
+      const doc = readDoc(join(instanceRoot, rel));
+      doc.setIn(['site', 'options', 'logo_text'], name);
       writeRel(destRoot, rel, doc.toString());
     } else if (rel === posix.join('editions', 'edition.yml')) {
       const dest = posix.join('editions', `${answers.edition}.yml`);
-      copyFileBytes(join(instanceRoot, rel), join(destRoot, dest));
+      if (name) {
+        const doc = readDoc(join(instanceRoot, rel));
+        doc.setIn(['project', 'venue'], name);
+        writeRel(destRoot, dest, doc.toString());
+      } else copyFileBytes(join(instanceRoot, rel), join(destRoot, dest));
       written.push(dest);
       continue;
     } else {
@@ -269,7 +302,7 @@ export function renderSiteTemplate(
   answers: TemplateAnswers,
   mystRange: string,
 ): string[] {
-  const journalName = answers.journalName ?? 'CHANGE-ME Journal';
+  const journalName = answers.journalName ?? JOURNAL_NAME_PLACEHOLDER;
   const written: string[] = [];
   for (const rel of listFiles(siteRoot)) {
     if (EXCLUDE_FROM_STAMP.has(rel.split('/')[0]!)) continue;
@@ -418,6 +451,9 @@ function protectMainBody(requireChecks: boolean, bypass: unknown[]): unknown {
         dismiss_stale_reviews_on_push: true,
         require_last_push_approval: false,
         required_review_thread_resolution: false,
+        // GitHub defaults this on, which asks for an approving review of a pull request no person
+        // authored, such as the DOI pull request `oak deposit prepare` opens.
+        require_extra_approval_for_unattributed_changes: false,
       },
     },
   ];
@@ -966,6 +1002,7 @@ export async function cmdBootstrapPaper(
     owner: owner.ownerToken,
     version: input.engineVersion,
     edition: input.edition,
+    repo,
   };
 
   // ---- Read the current state, so a rerun is safe ----
@@ -1089,7 +1126,10 @@ export async function cmdBootstrapPaper(
     runbook: secretRunbook,
     failed: secretFailed,
   } = applySecrets(repo, input.secrets, deps, actions);
-  const runbook = [...contentRunbook, ...prov_.runbook, ...secretRunbook];
+  // The starter myst.yml holds placeholders; an ingested paper brings the author's own.
+  const fill =
+    mode === 'bare' && actions.main === 'seeded' ? [msg.bootstrap.runbookFillPaper(repo)] : [];
+  const runbook = [...fill, ...contentRunbook, ...prov_.runbook, ...secretRunbook];
   const failed = [...contentFailed, ...prov_.failed, ...secretFailed];
   for (const line of runbook) log(`  → ${line}`);
   if (failed.length) log(msg.bootstrap.logPartial(failed.map((f) => f.step).join(', ')));
@@ -1161,6 +1201,7 @@ export async function cmdBootstrapJournal(
     version: input.engineVersion,
     edition,
     journalName: input.name,
+    repo,
   };
 
   const repoThere = prov.repoExists(repo);
@@ -1261,7 +1302,8 @@ export async function cmdBootstrapJournal(
   if (!external) {
     const settings = applyProvisioning(repo, owner, deps, actions, input.requireChecks);
     const secrets = applySecrets(repo, input.secrets, deps, actions);
-    const runbook = [...contentRunbook, ...settings.runbook, ...secrets.runbook];
+    const fill = actions.main === 'seeded' ? [msg.bootstrap.runbookFillPaper(repo)] : [];
+    const runbook = [...fill, ...contentRunbook, ...settings.runbook, ...secrets.runbook];
     const failed = [...contentFailed, ...settings.failed, ...secrets.failed];
     for (const line of runbook) log(`  → ${line}`);
     if (failed.length) log(msg.bootstrap.logPartial(failed.map((f) => f.step).join(', ')));

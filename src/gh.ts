@@ -245,9 +245,9 @@ export function openDoiPr(repoRoot: string, opts: { conceptDoi: string }): strin
     '--base',
     base,
     '--title',
-    'Reserve Zenodo DOI',
+    msg.workflow.doiPrTitle,
     '--body',
-    `Stamps the reserved concept DOI \`${opts.conceptDoi}\` into \`myst.yml\`. Merge before tagging.`,
+    msg.workflow.doiPrBody(opts.conceptDoi),
     '--head',
     branch,
   ];
@@ -295,8 +295,9 @@ function openPrUrl(repo: string | null, branch: string): string | null {
 export function uploadReleaseAsset(repoRoot: string, tag: string, files: string[]): void {
   const repo = originRepo(repoRoot);
   const base = ['release', ...(repo ? ['--repo', repo] : [])];
+  // Quiet: no release yet is the usual case, and the create below answers it.
   try {
-    gh([...base, 'view', tag]);
+    gh([...base, 'view', tag], { quiet: true });
   } catch {
     gh([...base, 'create', tag, '--title', tag, '--notes', 'Automated deposit bundle.']);
   }

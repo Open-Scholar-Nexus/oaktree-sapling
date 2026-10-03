@@ -1,6 +1,6 @@
 name: Paper CI
 
-# Stage 1 of the preview, no secrets; preview-deploy.yml deploys. A push also deploys Pages.
+# Stage 1 of the preview, no secrets; preview-deploy.yml deploys. A push also deploys Pages, once myst.yml has a real id.
 # https://scholar.nexus/oaktree-sapling/design/paper-ci#design-paper-ci-two-stages
 
 on:
@@ -20,8 +20,17 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      placeholder: ${{ steps.id.outputs.placeholder }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # The starter paper is not deployed to Pages until myst.yml has a real id.
+      - id: id
+        run: |
+          if [ "$(yq '.project.id // ""' myst.yml)" = "CHANGE-ME-template-placeholder" ]; then
+            echo "placeholder=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::project.id in myst.yml is still the template placeholder; GitHub Pages is not deployed until it is set"
+          fi
       - uses: ./.github/actions/engine
         with:
           args: build
@@ -42,7 +51,7 @@ jobs:
           include-hidden-files: true
 
   deploy-pages:
-    if: ${{ github.event_name != 'pull_request' }}
+    if: ${{ github.event_name != 'pull_request' && needs.build.outputs.placeholder != 'true' }}
     needs: build
     permissions: # never at workflow level, or build holds them
       pages: write
