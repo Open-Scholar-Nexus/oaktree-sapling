@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   cmdConformanceReset,
-  cmdConformanceCertify,
+  cmdConformanceRun,
   pagesUrlFor,
   CONFORMANCE_LABEL,
   CERT_BRANCH_PREFIX,
@@ -138,7 +138,7 @@ describe('cmdConformanceReset', () => {
 });
 
 /* --------------------------------------------------------------------------
- * cmdConformanceCertify (C1: install V + push→main)
+ * cmdConformanceRun (C1: install V + push→main)
  * ------------------------------------------------------------------------ */
 
 const TAG = 'v0.0.0-dev.9';
@@ -165,7 +165,7 @@ const SUCCESS_CHECK: CheckRunRef[] = [{ name: 'Journal checks', conclusion: 'suc
 const PREVIEW_COMMENT =
   '<!-- oak-sticky: oak-preview -->\n**Preview deployed** 🚀\n\nhttps://cert-x.oaktree-sapling-test.pages.dev\n';
 
-/** Full seam for certify. Reset methods are inert (a certify run resets a clean fixture in
+/** Full seam for `run`. Reset methods are inert (a run resets a clean fixture in
  *  tests); the C1/C2/C3 methods are driven by `over`. Records label/merge/close/tag/approve/
  *  release calls. The default publish run on the deposit tag sha ('main-sha') is observed
  *  `waiting` on the first poll (the required-reviewer gate) then `completed`/`success` after,
@@ -250,7 +250,7 @@ function fakeCertGh(
     },
     workflowRunsForCommit: (_r, sha) => (over.workflowRuns ?? defaultWorkflowRuns)(sha),
     checkRunsForCommit: (_r, sha) => (over.checkRuns ?? (() => SUCCESS_CHECK))(sha),
-    openCertPr: (_r, _b, _m) => ({ number: 21, headSha: 'preview-head-sha' }),
+    openPreviewPr: (_r, _b, _m) => ({ number: 21, headSha: 'preview-head-sha' }),
     listIssueComments: (_r, pr) => (over.comments ?? (() => [PREVIEW_COMMENT]))(pr),
     committedDoi: () => (over.committedDoi ?? (() => '10.5072/zenodo.562233'))(),
     committedEngineVersion: () => (over.committedEngineVersion ?? (() => TAG))(),
@@ -274,7 +274,7 @@ function fakeCertGh(
 
 const FORK = { repo: 'second/fixture-paper-repo', token: 'fork-tok' };
 
-const certDeps = (
+const runDeps = (
   gh: ConformanceGh,
   over: Partial<Pick<ConformanceDeps, 'probe' | 'installEngine' | 'fork'>> = {},
 ): ConformanceDeps => ({
@@ -292,10 +292,10 @@ const certDeps = (
   fork: 'fork' in over ? over.fork : null,
 });
 
-describe('cmdConformanceCertify', () => {
+describe('cmdConformanceRun', () => {
   it('CERTIFIES push→main, the same-repo preview, and the deposit chain end to end', async () => {
     const gh = fakeCertGh();
-    const out = await cmdConformanceCertify({ repo: REPO, tag: TAG, runId: '42' }, certDeps(gh));
+    const out = await cmdConformanceRun({ repo: REPO, tag: TAG, runId: '42' }, runDeps(gh));
 
     expect(out.exitCode).toBe(0);
     expect(out.result).toMatchObject({
@@ -330,9 +330,9 @@ describe('cmdConformanceCertify', () => {
 
   it('CERTIFIES the fork-PR preview path when a fork is configured', async () => {
     const gh = fakeCertGh();
-    const out = await cmdConformanceCertify(
+    const out = await cmdConformanceRun(
       { repo: REPO, tag: TAG, runId: '42' },
-      certDeps(gh, { fork: FORK }),
+      runDeps(gh, { fork: FORK }),
     );
 
     expect(out.exitCode).toBe(0);
@@ -360,9 +360,9 @@ describe('cmdConformanceCertify', () => {
             ]
           : [PREVIEW_COMMENT],
     });
-    const out = await cmdConformanceCertify(
+    const out = await cmdConformanceRun(
       { repo: REPO, tag: TAG, runId: '42' },
-      certDeps(gh, { fork: FORK }),
+      runDeps(gh, { fork: FORK }),
     );
     expect(out.exitCode).toBe(1);
     expect(out.result).toMatchObject({ status: 'failed', path: 'preview-fork' });
@@ -398,9 +398,9 @@ describe('cmdConformanceCertify', () => {
         return runs;
       },
     });
-    const out = await cmdConformanceCertify(
+    const out = await cmdConformanceRun(
       { repo: REPO, tag: TAG, runId: '42' },
-      certDeps(gh, { fork: FORK }),
+      runDeps(gh, { fork: FORK }),
     );
     expect(out.exitCode).toBe(1);
     expect(out.result).toMatchObject({ status: 'failed', path: 'preview-fork' });
@@ -409,9 +409,9 @@ describe('cmdConformanceCertify', () => {
 
   it('fails without merging when the fixture is already at V (no upgrade PR)', async () => {
     const gh = fakeCertGh();
-    const out = await cmdConformanceCertify(
+    const out = await cmdConformanceRun(
       { repo: REPO, tag: TAG },
-      certDeps(gh, {
+      runDeps(gh, {
         installEngine: async () => ({ upToDate: true, prNumber: null, prUrl: null }),
       }),
     );
@@ -433,7 +433,7 @@ describe('cmdConformanceCertify', () => {
         },
       ],
     });
-    const out = await cmdConformanceCertify({ repo: REPO, tag: TAG }, certDeps(gh));
+    const out = await cmdConformanceRun({ repo: REPO, tag: TAG }, runDeps(gh));
     expect(out.exitCode).toBe(1);
     expect(out.result).toMatchObject({ status: 'failed', path: 'push-main' });
     expect(out.result.failure).toContain('Paper CI');
@@ -442,9 +442,9 @@ describe('cmdConformanceCertify', () => {
   it('fails the cert when Pages does not serve 200 (green-but-empty guard)', async () => {
     const gh = fakeCertGh();
     // Only the /fixture-paper-repo/ Pages URL should 404; the pages.dev preview stays 200.
-    const out = await cmdConformanceCertify(
+    const out = await cmdConformanceRun(
       { repo: REPO, tag: TAG },
-      certDeps(gh, { probe: async (url) => (url === pagesUrlFor(REPO) ? 404 : 200) }),
+      runDeps(gh, { probe: async (url) => (url === pagesUrlFor(REPO) ? 404 : 200) }),
     );
     expect(out.exitCode).toBe(1);
     expect(out.result).toMatchObject({ status: 'failed', path: 'push-main' });
@@ -457,7 +457,7 @@ describe('cmdConformanceCertify', () => {
         '<!-- oak-sticky: oak-preview -->\n**Preview build ready** 📦\nartifact link, no live preview',
       ],
     });
-    const out = await cmdConformanceCertify({ repo: REPO, tag: TAG }, certDeps(gh));
+    const out = await cmdConformanceRun({ repo: REPO, tag: TAG }, runDeps(gh));
     expect(out.exitCode).toBe(1);
     expect(out.result).toMatchObject({ status: 'failed', path: 'preview-same-repo' });
     expect(gh.merged).toEqual([7]); // push→main still happened; preview is the failing phase
@@ -465,9 +465,9 @@ describe('cmdConformanceCertify', () => {
 
   it('is INCONCLUSIVE (not failed) when the preview URL persistently 5xxs, a third-party outage', async () => {
     const gh = fakeCertGh();
-    const out = await cmdConformanceCertify(
+    const out = await cmdConformanceRun(
       { repo: REPO, tag: TAG },
-      certDeps(gh, { probe: async (url) => (url.includes('pages.dev') ? 503 : 200) }),
+      runDeps(gh, { probe: async (url) => (url.includes('pages.dev') ? 503 : 200) }),
     );
     expect(out.exitCode).toBe(3); // inconclusive, not a red; 3 not 2 ([R111])
     expect(out.result).toMatchObject({ status: 'inconclusive', path: 'preview-same-repo' });
@@ -487,7 +487,7 @@ describe('cmdConformanceCertify', () => {
         },
       ],
     });
-    const out = await cmdConformanceCertify({ repo: REPO, tag: TAG }, certDeps(gh));
+    const out = await cmdConformanceRun({ repo: REPO, tag: TAG }, runDeps(gh));
     expect(out.exitCode).toBe(3);
     expect(out.result).toMatchObject({ status: 'inconclusive', path: 'push-main' });
     expect(out.result.reason).toContain('timed out');
@@ -497,9 +497,9 @@ describe('cmdConformanceCertify', () => {
     // A missing scope or `permissions:` block answers 403. Calling that a third party's fault
     // made the cert green on exactly the defect it exists to catch.
     const gh = fakeCertGh();
-    const out = await cmdConformanceCertify(
+    const out = await cmdConformanceRun(
       { repo: REPO, tag: TAG },
-      certDeps(gh, {
+      runDeps(gh, {
         installEngine: () => {
           throw new Error(
             'gh api failed (exit 1): gh: Resource not accessible by integration (HTTP 403)',
@@ -513,9 +513,9 @@ describe('cmdConformanceCertify', () => {
 
   it('a rate limit still is not ours ([R113] still holds)', async () => {
     const gh = fakeCertGh();
-    const out = await cmdConformanceCertify(
+    const out = await cmdConformanceRun(
       { repo: REPO, tag: TAG },
-      certDeps(gh, {
+      runDeps(gh, {
         installEngine: () => {
           throw new Error('gh api failed (exit 1): gh: API rate limit exceeded (HTTP 403)');
         },
@@ -527,18 +527,18 @@ describe('cmdConformanceCertify', () => {
 
   it('runs teardown (reset) on both success and failure', async () => {
     const ok = fakeCertGh();
-    await cmdConformanceCertify({ repo: REPO, tag: TAG, runId: '42' }, certDeps(ok));
+    await cmdConformanceRun({ repo: REPO, tag: TAG, runId: '42' }, runDeps(ok));
     expect(ok.resetSweeps).toBeGreaterThanOrEqual(2); // reset-at-start + always-run teardown
 
     const bad = fakeCertGh({ committedDoi: () => null }); // fails at the deposit phase
-    const out = await cmdConformanceCertify({ repo: REPO, tag: TAG }, certDeps(bad));
+    const out = await cmdConformanceRun({ repo: REPO, tag: TAG }, runDeps(bad));
     expect(out.result.status).toBe('failed');
     expect(bad.resetSweeps).toBeGreaterThanOrEqual(2); // teardown still ran on failure
   });
 
   it('fails at the deposit phase when the fixture carries no committed sandbox DOI', async () => {
     const gh = fakeCertGh({ committedDoi: () => null });
-    const out = await cmdConformanceCertify({ repo: REPO, tag: TAG }, certDeps(gh));
+    const out = await cmdConformanceRun({ repo: REPO, tag: TAG }, runDeps(gh));
     expect(out.exitCode).toBe(1);
     expect(out.result).toMatchObject({ status: 'failed', path: 'deposit' });
     expect(out.result.failure).toContain('sandbox DOI');
@@ -548,7 +548,7 @@ describe('cmdConformanceCertify', () => {
 
   it('fails at the deposit phase when the committed DOI is production, not sandbox', async () => {
     const gh = fakeCertGh({ committedDoi: () => '10.5281/zenodo.999999' });
-    const out = await cmdConformanceCertify({ repo: REPO, tag: TAG }, certDeps(gh));
+    const out = await cmdConformanceRun({ repo: REPO, tag: TAG }, runDeps(gh));
     expect(out.exitCode).toBe(1);
     expect(out.result).toMatchObject({ status: 'failed', path: 'deposit' });
     expect(gh.pushedTags).toEqual([]);
@@ -558,7 +558,7 @@ describe('cmdConformanceCertify', () => {
     const gh = fakeCertGh({
       releaseAssets: () => RESERVED_BUNDLE_NAMES.filter((n) => n !== 'engine.zip'),
     });
-    const out = await cmdConformanceCertify({ repo: REPO, tag: TAG }, certDeps(gh));
+    const out = await cmdConformanceRun({ repo: REPO, tag: TAG }, runDeps(gh));
     expect(out.exitCode).toBe(1);
     expect(out.result).toMatchObject({ status: 'failed', path: 'deposit' });
     expect(out.result.failure).toContain('engine.zip');
@@ -571,7 +571,7 @@ describe('cmdConformanceCertify', () => {
     // An absent Check Run and a slow one are the same `null`; the runs having finished is what
     // tells them apart ([R113]).
     const gh = fakeCertGh({ checkRuns: () => [] });
-    const out = await cmdConformanceCertify({ repo: REPO, tag: TAG }, certDeps(gh));
+    const out = await cmdConformanceRun({ repo: REPO, tag: TAG }, runDeps(gh));
     expect(out.exitCode).toBe(1);
     expect(out.result).toMatchObject({ status: 'failed', path: 'push-main' });
     expect(String(out.result.failure)).toContain('never appeared');
@@ -582,16 +582,16 @@ describe('cmdConformanceCertify', () => {
       checkRuns: () => [],
       workflowRuns: () => SUCCESS_CI.map((r) => ({ ...r, status: 'in_progress' })),
     });
-    const out = await cmdConformanceCertify({ repo: REPO, tag: TAG }, certDeps(gh));
+    const out = await cmdConformanceRun({ repo: REPO, tag: TAG }, runDeps(gh));
     expect(out.exitCode).toBe(3);
     expect(out.result).toMatchObject({ status: 'inconclusive' });
   });
 
   it('attributes a GitHub API fault to GitHub, not to the engine', async () => {
     const gh = fakeCertGh();
-    const out = await cmdConformanceCertify(
+    const out = await cmdConformanceRun(
       { repo: REPO, tag: TAG },
-      certDeps(gh, {
+      runDeps(gh, {
         installEngine: async () => {
           throw new Error('gh api failed (exit 1): gh: Bad gateway (HTTP 502)');
         },
@@ -603,21 +603,18 @@ describe('cmdConformanceCertify', () => {
 
   it('fails when the merged fixture is not pinned to the version under test', async () => {
     const gh = fakeCertGh({ committedEngineVersion: () => 'v0.0.0-dev.8' });
-    const out = await cmdConformanceCertify({ repo: REPO, tag: TAG }, certDeps(gh));
+    const out = await cmdConformanceRun({ repo: REPO, tag: TAG }, runDeps(gh));
     expect(out.exitCode).toBe(1);
     expect(out.result).toMatchObject({ status: 'failed', path: 'push-main' });
     expect(String(out.result.failure)).toContain('v0.0.0-dev.8');
   });
 
   it('names the phase it skipped in the verdict, not only in the log', async () => {
-    const withoutFork = await cmdConformanceCertify(
-      { repo: REPO, tag: TAG },
-      certDeps(fakeCertGh()),
-    );
+    const withoutFork = await cmdConformanceRun({ repo: REPO, tag: TAG }, runDeps(fakeCertGh()));
     expect(withoutFork.result.skipped).toEqual(['preview-fork']);
-    const withFork = await cmdConformanceCertify(
+    const withFork = await cmdConformanceRun(
       { repo: REPO, tag: TAG },
-      certDeps(fakeCertGh(), { fork: FORK }),
+      runDeps(fakeCertGh(), { fork: FORK }),
     );
     expect(withFork.result.skipped).toEqual([]);
   });
@@ -638,7 +635,7 @@ describe('cmdConformanceCertify', () => {
             ]
           : SUCCESS_CI,
     });
-    const out = await cmdConformanceCertify({ repo: REPO, tag: TAG }, certDeps(gh));
+    const out = await cmdConformanceRun({ repo: REPO, tag: TAG }, runDeps(gh));
     expect(out.exitCode).toBe(1);
     expect(out.result).toMatchObject({ status: 'failed', path: 'deposit' });
     expect(out.result.failure).toContain('Publish Zenodo deposit');
@@ -648,7 +645,7 @@ describe('cmdConformanceCertify', () => {
 
 describe('reset sweeps what the run creates ([R117])', () => {
   it('deletes the upgrade branch, not just cert-*', async () => {
-    // Sweeping only cert-* made certify once-per-tag ([R117]).
+    // Sweeping only cert-* made a run once-per-tag ([R117]).
     const branches = ['cert-123', 'oak/upgrade-v0.0.2', 'main'];
     const deleted: string[] = [];
     const out = await cmdConformanceReset(
@@ -685,10 +682,10 @@ describe('the release gate cannot pass without a verdict', () => {
   const read = (p: string) => readFileSync(join(import.meta.dirname, '..', p), 'utf8');
 
   it('does not reuse the CLI usage exit code for a verdict', () => {
-    // certify with a missing --repo exits 2, the CLI's generic UserError code ([R111]).
+    // `run` with a missing --repo exits 2, the CLI's generic UserError code ([R111]).
     const wf = read('.github/workflows/conformance.yml');
     expect(wf).not.toContain('[ "$CODE" = "1" ] && exit 1 || exit 0');
-    expect(wf, 'a missing record must redden the run').toContain('if [ ! -f cert.json ]');
+    expect(wf, 'a missing record must redden the run').toContain('if [ ! -f conformance.json ]');
     expect(wf, 'only a real inconclusive verdict may stay green').toMatch(/^\s*3\)/m);
   });
 

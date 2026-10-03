@@ -928,7 +928,7 @@ export const realConformanceGh: ConformanceGh = {
     ]);
     return out ? (JSON.parse(out) as import('./conformance.js').CheckRunRef[]) : [];
   },
-  openCertPr(repo, branch, marker) {
+  openPreviewPr(repo, branch, marker) {
     // Branch off main, then append a MyST `%` comment to index.md through the Contents API: no
     // clone, so no git credentials needed in CI.
     const mainSha = gh(['api', `repos/${repo}/git/ref/heads/main`, '--jq', '.object.sha']);

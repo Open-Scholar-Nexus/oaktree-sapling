@@ -31,7 +31,7 @@ A stable `vX.Y.Z` is `latest` as soon as it is released, and conformance runs af
 
 ## Conformance
 
-`conformance.yml` tests a release on the test paper repository named by the `CONFORMANCE_FIXTURE_REPO` variable, with `oak conformance` ([what it runs](https://scholar.nexus/oaktree-sapling/reference/cli#conformance)), and uploads the result to the release as `cert.json`. It starts on the newest release after every successful `cut-engine-release` run, and can be started by hand from Actions with a tag, or with no tag to only reset the test repository.
+`conformance.yml` tests a release on the test paper repository named by the `CONFORMANCE_TEST_REPO` variable, with `oak conformance` ([what it runs](https://scholar.nexus/oaktree-sapling/reference/cli#conformance)), and uploads the result to the release as `conformance.json`. It starts on the newest release after every successful `cut-engine-release` run, and can be started by hand from Actions with a tag, or with no tag to only reset the test repository.
 
 It reads two secrets from the `conformance` environment: `CONFORMANCE_PAT`, a fine-grained token for the test repository, and `CONFORMANCE_FORK_PAT`, for the account that owns the fork named by the `CONFORMANCE_FORK_REPO` variable. With that variable unset, the fork preview is not tested. The environment has a required reviewer, so every run waits for an approval, including the one after a release. The test repository keeps its own Cloudflare and Zenodo (sandbox only) secrets.
 

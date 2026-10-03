@@ -992,7 +992,7 @@ async function cmdUpgrade(argv: string[]): Promise<number> {
   return out.exitCode;
 }
 
-/** `oak conformance <reset|certify>`: tests a release on GitHub; `reset` removes what earlier
+/** `oak conformance <reset|run>`: tests a release on GitHub; `reset` removes what earlier
  *  runs left and is idempotent. Documented at DOCS.conformance. */
 async function cmdConformance(argv: string[]): Promise<number> {
   const sub = argv[0];
@@ -1012,18 +1012,18 @@ async function cmdConformance(argv: string[]): Promise<number> {
     return out.exitCode;
   }
 
-  if (sub === 'certify') {
+  if (sub === 'run') {
     const repo = flag(rest, 'repo');
     const tag = flag(rest, 'tag');
     if (!repo || !tag) {
-      process.stderr.write(msg.workflow.conformanceCertifyArgs + '\n');
+      process.stderr.write(msg.workflow.conformanceRunArgs + '\n');
       return 2;
     }
     const upgrade = await import('./upgrade.js');
     // The fork preview runs only when the fork repo and its token are both set.
     const forkRepo = flag(rest, 'fork-repo') ?? process.env.CONFORMANCE_FORK_REPO;
     const forkToken = process.env.CONFORMANCE_FORK_PAT;
-    const out = await conformance.cmdConformanceCertify(
+    const out = await conformance.cmdConformanceRun(
       { repo, tag, runId: flag(rest, 'run-id') },
       {
         ...deps,

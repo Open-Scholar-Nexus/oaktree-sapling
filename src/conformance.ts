@@ -2,8 +2,8 @@
  * `oak conformance`: tests a release of oak on GitHub. It moves a paper repo kept for
  * testing (the test repo) onto the release and checks every path its CI takes: build and
  * GitHub Pages, the editorial checks, a same-repo preview, the Zenodo deposit and,
- * optionally, a preview from a fork. Passing all of them is what "certified" means here; `npm
- * test` cannot cover these, since they only run on GitHub.
+ * optionally, a preview from a fork. A release passes when all of them do; `npm test` cannot
+ * cover these, since they only run on GitHub.
  *
  * Every run works on its own branches, pull requests and a throwaway tag. `reset` removes them,
  * so each run starts clean, and it is idempotent.
@@ -63,7 +63,7 @@ export interface ConformanceGh {
   // --- a same-repo pull request and its preview ---
   /** Opens a pull request from `branch` off `main` with a harmless change (a MyST comment
    *  carrying `marker`), through the Contents API. Returns its number and head commit. */
-  openCertPr(repo: string, branch: string, marker: string): { number: number; headSha: string };
+  openPreviewPr(repo: string, branch: string, marker: string): { number: number; headSha: string };
   /** Comment bodies on pull request #n, to find the preview comment. */
   listIssueComments(repo: string, prNumber: number): string[];
 
@@ -321,7 +321,7 @@ export function pagesUrlFor(repo: string): string {
   return `https://${owner}.github.io/${name}/`;
 }
 
-export interface CertifyInput {
+export interface RunInput {
   repo: string;
   tag: string; // engine version V under test
   runId?: string; // namespaces the cert-<runId> preview branch; defaults to a timestamp
@@ -343,10 +343,7 @@ function extractPreviewUrl(commentBody: string): string | null {
  * checks each result itself, not only run conclusions: Paper CI passed, Pages serves 200, and
  * the Journal checks Check Run was posted on main. The preview, deposit and fork phases follow.
  */
-export async function cmdConformanceCertify(
-  input: CertifyInput,
-  deps: ConformanceDeps,
-): Promise<Outcome> {
+export async function cmdConformanceRun(input: RunInput, deps: ConformanceDeps): Promise<Outcome> {
   const { gh, log, sleep, probe, installEngine, fork } = deps;
   const { repo, tag } = input;
   const runId = input.runId ?? String(Date.now());
@@ -373,7 +370,7 @@ export async function cmdConformanceCertify(
           status: 'failed',
           tag,
           path: 'install',
-          failure: `no upgrade PR: the fixture pin already equals ${tag}. Cut a fresh dev tag so push→main has a change to certify.`,
+          failure: `no upgrade PR: the test repo already pins ${tag}. Cut a fresh dev tag so push→main has a change to test.`,
         },
       };
     }
@@ -399,9 +396,11 @@ export async function cmdConformanceCertify(
     // release while the test repo ran another [R113].
     const pinned = gh.committedEngineVersion(repo);
     if (pinned !== tag) {
-      throw new Error(`fixture pins ${pinned ?? 'no engine version'} after the merge, not ${tag}`);
+      throw new Error(
+        `the test repo pins ${pinned ?? 'no engine version'} after the merge, not ${tag}`,
+      );
     }
-    log(`fixture pinned to ${pinned}`);
+    log(`test repo pinned to ${pinned}`);
 
     // 5. Paper CI (build and Pages deploy) succeeded on the merge commit.
     await pollUntil(
@@ -433,7 +432,7 @@ export async function cmdConformanceCertify(
     // ---- A same-repo pull request: Cloudflare preview and comment ----
     phase = 'preview-same-repo';
     const branch = `${CERT_BRANCH_PREFIX}${runId}`;
-    const previewPr = gh.openCertPr(repo, branch, runId);
+    const previewPr = gh.openPreviewPr(repo, branch, runId);
     gh.labelPr(repo, previewPr.number, CONFORMANCE_LABEL);
     log(`same-repo preview PR #${previewPr.number} (${branch})`);
 
@@ -464,7 +463,7 @@ export async function cmdConformanceCertify(
     const previewUrl = extractPreviewUrl(previewBody);
     if (!previewUrl)
       throw new Error(
-        'preview comment posted but carries no Cloudflare URL; degraded to artifact (fixture CF secrets missing?)',
+        'preview comment posted but carries no Cloudflare URL; degraded to artifact (test repo Cloudflare secrets missing?)',
       );
     await assertServes200({ probe, sleep }, previewUrl, 'preview');
     log(`preview 200: ${previewUrl}`);
@@ -485,11 +484,11 @@ export async function cmdConformanceCertify(
     const doi = gh.committedDoi(repo);
     if (!doi || !doi.startsWith('10.5072/')) {
       throw new Error(
-        `C3 needs a committed sandbox DOI on the fixture (found ${doi ?? 'none'}); ` +
+        `the deposit test needs a committed sandbox DOI on the test repo (found ${doi ?? 'none'}); ` +
           `prepare-from-scratch coverage is deferred.`,
       );
     }
-    log(`fixture sandbox DOI: ${doi}`);
+    log(`test repo sandbox DOI: ${doi}`);
 
     // 2. Push the deposit tag at main's head. Delete a stale one first (after a crash), so the
     //    push and the release creation start clean.
