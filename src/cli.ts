@@ -1,8 +1,7 @@
 #!/usr/bin/env node
 /**
- * cli.ts: the `oak` entry point (bundled to dist/cli.cjs per tag; CI calls it directly via
- * ci/run.sh). Every verb below is implemented. The myst edge is imported lazily inside `build`
- * so `oak` with no/other args stays light and the dep only loads when actually building.
+ * The `oak` entry point, bundled to dist/cli.cjs at each release; CI calls it through ci/run.sh.
+ * The myst side is imported only by the verbs that build, so other verbs start fast.
  */
 import { join, resolve } from 'node:path';
 import {
@@ -22,9 +21,8 @@ import type { MaterializeInput, StartOpts } from './materialize.js';
 import * as msg from './messages.js';
 import { annotate, UserError } from './messages.js';
 
-// dist/cli.cjs is an esbuild CJS bundle ([R51]): `__dirname` is the bundle dir, and `oak` only
-// ever runs bundled (ci/run.sh and local both invoke dist/cli.cjs), so no import.meta.url dance.
-// @types/node declares __dirname globally, keeping tsc happy under NodeNext.
+// oak only runs as the CJS bundle [R51] (ci/run.sh and local runs both call dist/cli.cjs), so
+// `__dirname` is the bundle's directory; @types/node declares it for tsc.
 declare const __dirname: string;
 
 type Verb =
@@ -40,8 +38,8 @@ type Verb =
   | 'upgrade'
   | 'conformance';
 
-/** engineRoot = the dir holding paper-base.yml. When run as dist/cli.cjs it is one level
- *  up from the bundle; in dev (tsx/src) it is two up from src/. Detect by probing. */
+/** oak's root, the directory holding paper-base.yml: one up from the bundle, or two up from
+ *  src/ in development. Found by probing. */
 function engineRoot(): string {
   for (const up of ['..', '.']) {
     const cand = resolve(__dirname, up);
@@ -51,13 +49,12 @@ function engineRoot(): string {
 }
 
 /**
- * Returns the value after `--name`, or undefined if absent. A flag with NO value (trailing, or
- * followed by another `--flag`) throws: several call sites read `flag(...) ?? process.env.X`, and
- * undefined must refuse rather than fall through to the environment.
+ * The value after `--name`, or undefined when absent. A flag with no value (last, or followed by
+ * another `--flag`) throws, since several callers read `flag(...) ?? process.env.X` and a
+ * missing value must not fall through to the environment.
  *
- * An EMPTY value is returned as-is ([R147]): `??` is nullish so `''` skips the env fallback, and
- * empty is legitimate for some flags (`--base-url ""` = served at the root). Flags where empty is
- * wrong check for it themselves.
+ * An empty value is returned as it is [R147]: `??` keeps `''`, and some flags mean something by
+ * it (`--base-url ""` serves at the root). Flags where empty is wrong check it themselves.
  */
 function flag(argv: string[], name: string): string | undefined {
   const i = argv.indexOf(`--${name}`);
@@ -70,9 +67,8 @@ function has(argv: string[], name: string): boolean {
   return argv.includes(`--${name}`);
 }
 
-/** engine_repo pin, for asset URLs; falls back to the interim home ([R56]; canonical
- *  open-scholar-nexus/oaktree-sapling later). Real repos carry pins.yml, so this is only
- *  a last resort. */
+/** The `engine_repo` pin, for asset URLs. Repos carry pins.yml; the fallback is oak's own
+ *  repo. */
 function readEngineRepo(paperRoot: string): string {
   const pins = join(paperRoot, '.github', 'actions', 'engine', 'pins.yml');
   if (existsSync(pins)) {
@@ -83,14 +79,12 @@ function readEngineRepo(paperRoot: string): string {
 }
 
 /**
- * Dev/CI-from-checkout asset resolution. `--typst-template` is the EXPLICIT override (tops
- * compose's precedence chain); the checkout's local `templates/typst` is the BOTTOM fallback
- * ([R76]), beating the not-yet-existent release zip but yielding to a tenant's or an author's
- * template. `--no-site-template` uses myst's default theme (compose siteTemplate: null).
+ * Asset overrides from the checkout. `--typst-template` beats every other template; the
+ * checkout's own `templates/typst` is the default, which a journal's or author's template
+ * outranks [R76]. `--no-site-template` uses myst's default theme.
  *
- * Shared by `oak build` and `oak validate` so both feed `materializeDerived` the SAME overrides
- * ([R82]): a validate that computed different ones would stamp a different `myst.oak.yml` than the
- * build in the same tree, which `readStampedTemplate` (zenodo.ts) then reads as what was rendered.
+ * Shared by `oak build` and `oak validate` so both write the same `myst.oak.yml` [R82], which
+ * `readStampedTemplate` (zenodo.ts) reads as what was rendered.
  */
 function assetOverridesFrom(argv: string[]): ComposeInput['assetOverrides'] {
   const localTypst = join(engineRoot(), 'templates', 'typst');
@@ -103,15 +97,11 @@ function assetOverridesFrom(argv: string[]): ComposeInput['assetOverrides'] {
 }
 
 /**
- * The [R38] instance-root chain, minus the deferred pins-based clone: an explicit `--instance` ›
- * the CO-LOCATED root (a `journal.yml` beside the paper) › the explicit `--no-instance` opt-out.
+ * Where the journal repo is [R38]: none with `--no-instance`, else `--instance`, else this repo
+ * when a `journal.yml` sits beside the paper. The last case serves a repo that is its own
+ * journal, where the engine action passes no `--instance` (`instance_repo: .`).
  *
- * The co-located rung is load-bearing: when `pins.yml` says `instance_repo: .` the shim clones
- * nothing and passes no `--instance`, so without it every co-located repo's CI died on the usage
- * error below ([R38]).
- *
- * Returns a root or an error STRING; it never exits, so `oak validate` can turn the failure into a
- * report instead of a crash.
+ * Returns a root or an error string and never exits, so `oak validate` can report the error.
  */
 function resolveInstanceRoot(
   argv: string[],
@@ -120,8 +110,7 @@ function resolveInstanceRoot(
 ): { root: string | null } | { error: string } {
   if (has(argv, 'no-instance')) return { root: null };
   const explicit = flag(argv, 'instance');
-  // Empty here is a mistake, not a meaning: falling through would tell the operator to pass the
-  // flag they just passed ([R147]).
+  // Refused, since the error below would ask for the flag that was just passed [R147].
   if (explicit === '') throw new UserError(msg.flagNeedsValue('instance'));
   if (explicit) return { root: resolve(explicit) };
   if (existsSync(join(paperRoot, 'journal.yml'))) return { root: paperRoot };
@@ -129,11 +118,10 @@ function resolveInstanceRoot(
 }
 
 /**
- * Is this directory the JOURNAL repo rather than a paper? Discriminates on the ENGINE COORDINATE,
- * not `journal.yml`: a co-located repo is both a journal and a paper and carries both, while the
- * journal repo's `myst.yml` is the WEBSITE and carries no `project.options.oaktree-sapling`. A
- * `--no-site` journal has no myst.yml at all. A myst.yml we cannot parse is NOT called a journal
- * (returns false): that is a different error, allowed to speak for itself downstream.
+ * Whether this directory is a journal repo. Decided by the version key: a journal's
+ * `myst.yml` is its website and has no `project.options.oaktree-sapling`, while a repo
+ * that is both journal and paper has one. A `--no-site` journal has no myst.yml at all. An
+ * unparseable myst.yml returns false and fails later with its own error.
  */
 function isJournalRepo(root: string): boolean {
   if (!existsSync(join(root, 'journal.yml'))) return false;
@@ -152,8 +140,8 @@ function isJournalRepo(root: string): boolean {
   }
 }
 
-/** Everything `materializeDerived` needs except the myst edge, shared by build and start so a
- *  preview cannot compose from different inputs than the build it is previewing. */
+/** Everything `materializeDerived` needs but the myst side, shared by build and start so a
+ *  preview composes from the same inputs as the build. */
 function materializeInputFrom(
   argv: string[],
   paperRoot: string,
@@ -169,8 +157,8 @@ function materializeInputFrom(
   };
 }
 
-/** Run the two-pass build for a paper; shared by `oak build` and `oak release`. Returns the
- *  resolved paper root (its `_build/exports` now holds the PDF `release` deposits). */
+/** Runs the two-pass build for a paper, for `oak build` and `oak release`. Returns the paper
+ *  root, whose `_build/exports` then holds the PDF `release` deposits. */
 async function buildPaper(argv: string[]): Promise<{ paperRoot: string; resolvedId?: string }> {
   const paperRoot = resolve(flag(argv, 'paper') ?? '.');
   if (isJournalRepo(paperRoot)) {
@@ -187,8 +175,7 @@ async function buildPaper(argv: string[]): Promise<{ paperRoot: string; resolved
   const { createMystEdge } = await import('./myst.js');
   const res = await runBuild({
     ...materializeInputFrom(argv, paperRoot, resolved.root),
-    // --exports-only builds just the typst PDF (offline canary; no network theme).
-    // --no-exports builds HTML only (until the typst-template release zip exists).
+    // --exports-only builds only the typst PDF, offline; --no-exports only the HTML.
     buildOpts: has(argv, 'exports-only')
       ? { exportsOnly: true }
       : has(argv, 'no-exports')
@@ -200,15 +187,14 @@ async function buildPaper(argv: string[]): Promise<{ paperRoot: string; resolved
   return { paperRoot, resolvedId: res.resolvedProject.id };
 }
 
-/** `oak build`: the two-pass compose+build of a paper, driving {@link buildPaper}.
- *  Observable behaviour: DOCS.build. */
+/** `oak build`: builds a paper ({@link buildPaper}). Documented at DOCS.build. */
 async function cmdBuild(argv: string[]): Promise<number> {
   const { resolvedId } = await buildPaper(argv);
   process.stderr.write(msg.build.done(resolvedId ?? '?') + '\n');
   return 0;
 }
 
-/** The `myst start` flags `oak start` forwards (myst's own names and meanings). */
+/** The `myst start` flags `oak start` passes through, under myst's names. */
 function startOptsFrom(argv: string[]): StartOpts {
   const num = (name: string) => {
     const raw = flag(argv, name);
@@ -232,24 +218,19 @@ function startOptsFrom(argv: string[]): StartOpts {
 }
 
 /**
- * `oak start`: compose, then hand off to myst's dev server (the same one `myst start` runs).
- *
- * Never returns: myst's `startServer` resolves once the server is UP, and `main()`'s return
- * would exit the process out from under it. The wait is what keeps the server alive; Ctrl-C
- * ends it.
- *
- * Observable behaviour: DOCS.start.
+ * `oak start`: composes, then runs myst's dev server, the one `myst start` runs. Never returns:
+ * `startServer` resolves once the server is up, and returning from `main()` would exit under
+ * it. Ctrl-C ends it. Documented at DOCS.start.
  */
 async function cmdStart(argv: string[]): Promise<number> {
   const paperRoot = resolve(flag(argv, 'paper') ?? '.');
-  // Parsed before any resolution or compose: a typo must not cost a build ([R131]).
+  // Parsed before anything else, so a typo costs no build [R131].
   const startOpts = startOptsFrom(argv);
   const { createMystEdge } = await import('./myst.js');
   const edge = createMystEdge();
 
-  // The journal repo is a plain myst project (its website): no engine layers, no derived config,
-  // myst reads its own myst.yml as the site workflow does. Same shape check as `oak build`,
-  // opposite conclusion: here there IS something to show.
+  // A journal repo's myst.yml is its website, a plain myst project: `oak build` refuses it
+  // ({@link isJournalRepo}), but here myst serves it as it is, as the site workflow builds it.
   if (isJournalRepo(paperRoot)) {
     process.stderr.write(msg.start.journalSite(paperRoot) + '\n');
     await edge.start(paperRoot, startOpts);
@@ -269,10 +250,9 @@ async function cmdStart(argv: string[]): Promise<number> {
   const first = await runStart({ ...input, startOpts });
   for (const w of first.warnings) process.stderr.write(annotate('warning', w) + '\n');
 
-  // myst watches the DERIVED config (that is the one it was pointed at), so an edit to the
-  // author's `myst.yml` would otherwise change nothing on screen until the next `oak start`:
-  // the one file an author edits most. Recomposing rewrites `myst.oak.yml`, which myst's own
-  // watcher then picks up: the reload path stays myst's, we only refresh its input.
+  // myst watches the derived config, so an edit to the author's `myst.yml` would show nothing
+  // until the next `oak start`. Recomposing on change rewrites `myst.oak.yml`, and myst's own
+  // watcher reloads it.
   watchFile(join(paperRoot, 'myst.yml'), { interval: 500 }, (curr, prev) => {
     if (curr.mtimeMs === prev.mtimeMs) return;
     materializeDerived(input).then(
@@ -285,7 +265,7 @@ async function cmdStart(argv: string[]): Promise<number> {
   return await never();
 }
 
-/** Hand the process to the running server: resolve never, so `main()` never exits. */
+/** Keeps the process alive for the running server: never resolves, so `main()` never exits. */
 function never(): Promise<number> {
   return new Promise<number>(() => {});
 }
@@ -299,19 +279,19 @@ function instanceRootOf(argv: string[]): string | null {
   return i ? resolve(i) : null;
 }
 
-/** Keys a human summary never prints: already narrated as prose (`runbook`, logged line by
- *  line with `→`), or a whole markdown document meant for the PR UI (`checkRun`). */
+/** Keys the human summary leaves out: narrated already (`runbook`, printed line by line with
+ *  `→`), or a markdown document for the pull request (`checkRun`). */
 const SUMMARY_SKIP = new Set(['runbook', 'checkRun']);
 
-/** Fallback rendering of a result object for a human: one `key: value` line per field. Arrays
- *  of strings become bullets, nested objects a compact `k=v` list, empty things nothing. */
+/** A result object for a human, one `key: value` line per field: string arrays as bullets,
+ *  nested objects as `k=v`, empty values left out. */
 function summarize(result: Record<string, unknown>): string[] {
-  // A refusal is a sentence, not a record; the message already names the verb and the fix.
+  // A refusal prints its message, which names the verb and the fix.
   if (result.status === 'error') {
     const text = result.error ?? result.message;
     if (typeof text === 'string') return [text];
   }
-  // An abort has already explained itself at the prompt; repeating it as fields would duplicate.
+  // An abort was explained at the prompt.
   if (result.status === 'aborted') return [];
   const lines: string[] = [];
   for (const [key, value] of Object.entries(result)) {
@@ -333,9 +313,8 @@ function summarize(result: Record<string, unknown>): string[] {
 }
 
 /**
- * The human rendering for the verbs that narrate every step as they happen (`bootstrap`,
- * `upgrade`): their result object is a recap of lines already on the screen, so it closes
- * with one line naming what to open, instead of repeating itself.
+ * The human output for verbs that narrate each step as it happens (`bootstrap`, `upgrade`): the
+ * result recaps lines already on screen, so it ends with one line naming what to open.
  */
 function narrated(result: Record<string, unknown>): string[] {
   const special = summarize(result);
@@ -348,10 +327,9 @@ function narrated(result: Record<string, unknown>): string[] {
 }
 
 /**
- * Print a verb's result. The JSON envelope is OPT-IN (`--json`): otherwise it repeats, in a shape
- * nobody reads, the prose the verb already printed. Human output goes to stderr, so under `--json`
- * stdout stays a clean machine channel. Nothing in CI parses this stdout anyway (the shim and
- * workflows consume FILES: `oak validate --report`, `oak conformance --record`).
+ * Prints a verb's result. The JSON is opt-in (`--json`), since otherwise it repeats the prose the
+ * verb already printed. Human output goes to stderr, so with `--json` stdout carries only the
+ * JSON. CI reads files, not stdout (`oak validate --report`, `oak conformance --record`).
  */
 function emit(
   argv: string[],
@@ -365,8 +343,7 @@ function emit(
   for (const line of (human ?? summarize)(result)) process.stderr.write(line + '\n');
 }
 
-/** `oak deposit <prepare|publish|status>`, the Zenodo deposit verbs (slice 3).
- *  Observable behaviour: DOCS.deposit. */
+/** `oak deposit <prepare|publish|status>`, the Zenodo verbs. Documented at DOCS.deposit. */
 async function cmdDeposit(argv: string[]): Promise<number> {
   const sub = argv[0];
   const rest = argv.slice(1);
@@ -377,8 +354,8 @@ async function cmdDeposit(argv: string[]): Promise<number> {
   const instanceRoot = instanceRootOf(rest);
   const sandbox = has(rest, 'sandbox');
   const siteUrl = flag(rest, 'site-url') ?? process.env.SITE_URL;
-  // The environment picks the secret, same as `oak release` ([R102]).
-  // No cross-fallback: a sandbox run must not reach for the production token ([R133]).
+  // The environment picks the token, as in `oak release` [R102]; a sandbox run never uses the
+  // production one [R133].
   const token =
     flag(rest, 'token') ?? (sandbox ? process.env.ZENODO_TOKEN_SANDBOX : process.env.ZENODO_TOKEN);
   if (!token) {
@@ -395,8 +372,8 @@ async function cmdDeposit(argv: string[]): Promise<number> {
     }
     const out = await z.cmdPrepare({ mystPath, repo, siteUrl, api, instanceRoot });
     emit(rest, out.result);
-    // Open the DOI PR over the working-tree myst.yml write ([R3]/§1d). Best-effort: a local
-    // sandbox rehearsal with no gh/token just leaves the write for the human to PR.
+    // Open the DOI pull request for the myst.yml write [R3]. Without gh or a token (a local
+    // sandbox run) the write is left for a person to commit.
     if (out.exitCode === 0 && !has(rest, 'no-pr') && process.env.GH_TOKEN) {
       try {
         const url = gh.openDoiPr(resolve(mystPath, '..'), {
@@ -444,7 +421,6 @@ async function cmdDeposit(argv: string[]): Promise<number> {
   return 2;
 }
 
-/** Find the built PDF under `_build/exports` (the typst export). */
 function findExportedPdf(paperRoot: string): string | null {
   const dir = join(paperRoot, '_build', 'exports');
   if (!existsSync(dir)) return null;
@@ -452,9 +428,9 @@ function findExportedPdf(paperRoot: string): string | null {
   return hit ? join(dir, String(hit)) : null;
 }
 
-/** `oak release --tag vX [--no-build]`: build + deposit publish + attach the bundle to the tag Release,
- *  post a commit comment / failure issue via gh (§1e). Env is derived from the committed DOI.
- *  Observable behaviour: DOCS.release. */
+/** `oak release --tag vX [--no-build]`: builds, publishes the deposit, attaches the bundle to the
+ *  tag's release, and comments on the commit or opens a failure issue. The environment follows
+ *  the committed DOI. Documented at DOCS.release. */
 async function cmdRelease(argv: string[]): Promise<number> {
   const tag = flag(argv, 'tag');
   if (!tag) {
@@ -464,10 +440,9 @@ async function cmdRelease(argv: string[]): Promise<number> {
   const z = await import('./zenodo.js');
   const gh = await import('./gh.js');
 
-  // Build in a CHILD process, not in-process: the myst HTML/site build calls process.exit(0) on
-  // success, which in-process would kill `release` before its deposit half runs. The child
-  // isolates that exit; the parent then reads the same tree's _build/exports (PDF) and
-  // _build/site/content (abstract) for the deposit. `oak build` ignores the extra release flags.
+  // Build in a child process: myst's HTML build calls process.exit(0) on success, which would end
+  // `release` before the deposit. The parent then reads the PDF (_build/exports) and abstract
+  // (_build/site/content) from the same tree; `oak build` ignores release's extra flags.
   // `--no-build` deposits a build made elsewhere: CI builds in a job holding no token.
   const paperRoot = resolve(flag(argv, 'paper') ?? '.');
   if (!has(argv, 'no-build'))
@@ -537,9 +512,8 @@ async function cmdRelease(argv: string[]): Promise<number> {
   return out.exitCode;
 }
 
-/** `oak deploy-preview <site>`: deploy the inert Stage-1 artifact to Cloudflare Pages (or
- *  degrade to an artifact-link comment [R16]), post the sticky preview comment, then run the
- *  new-version reminder. Slice 2-shim; the git/gh + CF effects are the real gh.ts seams. */
+/** `oak deploy-preview <site>`: deploys the build artifact to Cloudflare Pages, or falls back to a
+ *  link to it [R16], posts the preview comment, then runs the new-version reminder. */
 async function cmdDeployPreview(argv: string[]): Promise<number> {
   const preview = await import('./preview.js');
   const gh = await import('./gh.js');
@@ -564,10 +538,9 @@ async function cmdDeployPreview(argv: string[]): Promise<number> {
   return out.exitCode;
 }
 
-/** `oak notify new-version [--pr N | --site <dir>]`, the standalone new-version reminder.
- *  deploy-preview runs the same logic internally ([R16]); this is the manual/testable entry, and
- *  its `.pr-number` read is read-only (deploy-preview owns the [R26] delete).
- *  Observable behaviour: DOCS.notify. */
+/** `oak notify new-version [--pr N | --site <dir>]`: the new-version reminder on its own.
+ *  deploy-preview runs the same logic [R16]; here `.pr-number` is only read, since deleting it is
+ *  deploy-preview's [R26]. Documented at DOCS.notify. */
 async function cmdNotify(argv: string[]): Promise<number> {
   if (argv[0] !== 'new-version') {
     process.stderr.write(msg.workflow.notifyUsage + '\n');
@@ -601,8 +574,8 @@ async function cmdNotify(argv: string[]): Promise<number> {
   return out.exitCode;
 }
 
-/** The paper's declared edition, or null. `oak validate` must survive a paper with a missing
- *  or malformed engine coordinate (that is itself a finding), so this never throws. */
+/** The paper's edition, or null. Never throws: `oak validate` reports a missing or malformed
+ *  version key as a finding. */
 function readEditionQuietly(paperRoot: string): string | null {
   try {
     const v = parseDocument(readFileSync(join(paperRoot, 'myst.yml'), 'utf8')).getIn([
@@ -618,11 +591,10 @@ function readEditionQuietly(paperRoot: string): string | null {
 }
 
 /**
- * Write the `--report` envelope for a run that could NOT produce one. Stage 1's frozen guard only
- * asks `jq -e '.checkRun.conclusion'`, so a missing file is indistinguishable from any other fault
- * and the author is told "engine crash" and nothing else. A validator is a reporter first ([R82]),
- * so even a usage error or an unexpected throw leaves a well-formed failing report for Stage 2 to
- * post. Best-effort: if even this write fails, the "no valid report" path still catches it.
+ * Writes a failing `--report` for a run that could not produce one. The `pull_request` job only
+ * checks `jq -e '.checkRun.conclusion'`, so a missing file would tell the author "engine crash"
+ * and nothing more. Even a usage error or an unexpected throw leaves a readable failing report
+ * for check-post to post [R82]. If this write fails too, the missing-report path still applies.
  */
 function writeFailureReport(reportPath: string | undefined, title: string, message: string): void {
   if (!reportPath) return;
@@ -648,15 +620,13 @@ function writeFailureReport(reportPath: string | undefined, title: string, messa
       ),
     );
   } catch {
-    /* best-effort: the Stage-1 guard remains the backstop */
+    /* the `pull_request` job's own check still catches a missing report */
   }
 }
 
 /**
- * The human rendering of a validate run: the verdict and every finding, not the envelope (that
- * exists for `check-post`, which reads `--report <path>`, and a terminal reader has no use for its
- * `checkRun` markdown). A shorter summary that DROPPED findings would be a different verdict, the
- * one thing a validator may never do.
+ * The human output of a validate run: the result and every finding. The JSON exists for
+ * check-post, which reads `--report <path>`. Leaving out findings would change the result.
  */
 function validateSummary(out: {
   status: string;
@@ -682,15 +652,13 @@ function validateSummary(out: {
   return lines;
 }
 
-/** `oak validate`: run Layer-A engine invariants + the journal's Layer-B editorial checks (slice
- *  4), with `--report <path>` writing the JSON envelope the Stage-2 `oak check-post` job posts.
- *  Does NOT post to GitHub itself: the untrusted validate job holds no write token.
- *  Observable behaviour: DOCS.validate. */
+/** `oak validate`: oak's own rules (Layer A) and the journal's editorial checks (Layer B), with
+ *  `--report <path>` writing the JSON check-post posts. Documented at DOCS.validate. */
 async function cmdValidate(argv: string[]): Promise<number> {
   const paperRoot = resolve(flag(argv, 'paper') ?? '.');
   const reportPath = flag(argv, 'report');
-  // Same shape check as `oak build`: without it a validate typed in the journal clone dies on the
-  // engine coordinate a journal repo never has, reported as an engine crash.
+  // A journal repo has no version key, so validate stops with a sentence ({@link isJournalRepo},
+  // as in `oak build`).
   if (isJournalRepo(paperRoot)) {
     const text = msg.validate.inJournalRepo(paperRoot);
     process.stderr.write(annotate('error', text) + '\n');
@@ -712,22 +680,18 @@ async function cmdValidate(argv: string[]): Promise<number> {
   const { runValidate } = await import('./validate.js');
   const { createMystEdge } = await import('./myst.js');
 
-  // myst-cli writes progress to STDOUT, the `📖/📚 Built…` logger lines AND a raw `console.debug`
-  // from `new Session()` that bypasses its own logger, which would corrupt the JSON `emit()` puts
-  // there. Forward every stdout write to stderr for the duration of the run (preserving myst's own
-  // formatting), so stdout carries ONLY our machine-readable payload; restore before we emit.
+  // myst-cli writes progress to stdout, through its logger and a raw `console.debug` in `new
+  // Session()`, which would corrupt the JSON `emit()` writes there. Forward stdout to stderr
+  // during the run, keeping myst's formatting, and restore it before emitting.
   const realStdoutWrite = process.stdout.write.bind(process.stdout);
   process.stdout.write = process.stderr.write.bind(process.stderr) as typeof process.stdout.write;
   let out;
   try {
     out = await runValidate(
       {
-        // The SAME inputs `oak build` materializes from, spread from the SAME builder rather than
-        // re-listed: [R82] shared `materializeDerived` but not its inputs, so validate once
-        // stamped a different `template:` than the build in the same tree. Spreading makes it
-        // structural (a field added for build reaches validate with it). [R72] disjointness also
-        // needs the engine layer + edition to compose; without both, validate degrades to the
-        // author's config and says so in the report.
+        // The inputs `oak build` composes from, spread from the same builder so a field added for
+        // build reaches validate too [R82]. The [R72] check also needs oak's checkout and the
+        // edition; without both, validate reads the author's config and says so.
         ...materializeInputFrom(argv, paperRoot, instanceRoot),
         edge: createMystEdge(),
         edition: readEditionQuietly(paperRoot),
@@ -735,12 +699,11 @@ async function cmdValidate(argv: string[]): Promise<number> {
       { strict, repo, pathBase: process.env.GITHUB_WORKSPACE ?? paperRoot },
     );
   } catch (err) {
-    // runValidate already guards the Layer-A/Layer-B faults it can name. Anything reaching
-    // here is an ENGINE fault, and it must still leave a readable report: the alternative is
-    // the bare "engine crash" Stage-1 line, which names neither the fault nor the file.
+    // runValidate catches the faults it can name, so anything here is oak's own, and it still
+    // writes a readable report; the `pull_request` job alone would say only "engine crash".
     process.stdout.write = realStdoutWrite;
-    // A UserError is a paper that needs fixing, not a crash: report its sentence (and only its
-    // sentence: a stack in a Check Run summary tells an author nothing they can act on).
+    // A UserError is a paper to fix: report its sentence only, since a stack in a Check Run
+    // summary gives an author nothing to act on.
     const userFault = err instanceof UserError;
     const message = userFault ? (err as Error).message : String((err as Error)?.stack ?? err);
     process.stderr.write(
@@ -763,18 +726,16 @@ async function cmdValidate(argv: string[]): Promise<number> {
       errors: out.errors,
       warnings: out.warnings,
       checks: out.checks,
-      // Only when there is something to say: a composed run is the normal case and stays quiet,
-      // an UNCOMPOSED one must announce itself ([R82]); the report is the only place a reader
-      // learns that these findings came from the author's config rather than the composed one.
+      // Only an uncomposed run says so [R82]: the report is the one place a reader learns the
+      // findings came from the author's config.
       ...(out.notes.length ? { notes: out.notes } : {}),
       checkRun: out.checkRun,
     },
     () => validateSummary(out),
   );
 
-  // `--report <path>`: write the FULL envelope (checkRun always included) for the Stage-2
-  // `oak check-post` job, which reads it in trusted base context and posts the Check Run +
-  // sticky comment. Stage 1 never posts (it holds no write token over fork content).
+  // `--report <path>`: the full JSON, `checkRun` included, for check-post, which posts the Check
+  // Run and the sticky comment from the trusted `workflow_run` job.
   if (reportPath) {
     writeFileSync(
       resolve(reportPath),
@@ -795,18 +756,18 @@ async function cmdValidate(argv: string[]): Promise<number> {
   return out.exitCode;
 }
 
-/** `oak check-post --report <path> --repo <o/r> --sha <headsha> [--pr <n>]`, Stage-2 write-back
- *  (slice 4b). Runs in trusted base context (checks:write + pull-requests:write); never re-runs
- *  validate or touches myst. Best-effort: a failing post degrades to a `::warning::`, never fails
- *  the job (needs GH_TOKEN). Observable behaviour: DOCS.checkPost. */
+/** `oak check-post --report <path> --repo <o/r> --sha <headsha> [--pr <n>]`: posts the report
+ *  from the trusted `workflow_run` job (checks and pull-requests write). Never reruns validate or
+ *  touches myst. Failing to post the Check Run fails the job; a failed comment only warns. Needs
+ *  GH_TOKEN. Documented at DOCS.checkPost. */
 async function cmdCheckPost(argv: string[]): Promise<number> {
   const reportPath = flag(argv, 'report');
   const repo = flag(argv, 'repo') ?? process.env.GITHUB_REPOSITORY;
   const sha = flag(argv, 'sha');
   const pr = flag(argv, 'pr');
-  // Frozen-shim advisory ([R83]): --base + --verified-head come from the workflow_run event
-  // (GitHub-set, not the fork-controlled artifact), so a PR that edits `.github/`/`CODEOWNERS`
-  // is flagged even if the artifact lies.
+  // The gated-files warning [R83]: --base and --verified-head come from the workflow_run event,
+  // which GitHub sets and the fork's artifact cannot, so a pull request editing `.github/` or
+  // `CODEOWNERS` is flagged even if the artifact lies.
   const base = flag(argv, 'base');
   const verifiedHead = flag(argv, 'verified-head');
   if (!reportPath || !repo || !sha || !base || !verifiedHead) {
@@ -817,8 +778,8 @@ async function cmdCheckPost(argv: string[]): Promise<number> {
     process.stderr.write(msg.workflow.checkPostNoReport(reportPath) + '\n');
     return 2;
   }
-  // Stage 1 is fork-controlled, so this file is untrusted input. A bad one is a sentence, not
-  // a stack: Stage 1's own jq guard runs in that same untrusted half ([R137]).
+  // The report comes from the fork's code, and so does the `pull_request` job's jq check of it
+  // [R137], so it is untrusted input. A bad one gets a sentence, not a stack.
   let report;
   try {
     report = JSON.parse(readFileSync(reportPath, 'utf8'));
@@ -846,10 +807,10 @@ async function cmdCheckPost(argv: string[]): Promise<number> {
   return out.checkRunPosted ? 0 : 1;
 }
 
-/** Default engine home pin, matching readEngineRepo's fallback ([R56]). */
+/** oak's own repo, matching readEngineRepo's fallback. */
 const ENGINE_REPO_DEFAULT = 'Open-Scholar-Nexus/oaktree-sapling';
 
-/** Confirm gate: print the plan to stderr, then honour --yes (required non-TTY) or prompt. */
+/** Prints the plan to stderr, then takes --yes (required without a TTY) or asks. */
 function makeConfirm(argv: string[]): (plan: string[]) => Promise<boolean> {
   return async (plan) => {
     for (const line of plan) process.stderr.write(line + '\n');
@@ -863,8 +824,8 @@ function makeConfirm(argv: string[]): (plan: string[]) => Promise<boolean> {
     const ans = (await rl.question(msg.prompt.proceed)).trim();
     rl.close();
     if (/^y/i.test(ans)) return true;
-    // Every abort says WHY. A bare `{"status":"aborted"}` after a prompt that defaults to No
-    // reads as the tool refusing, not as the answer being taken at its word.
+    // Every abort says why: a bare `{"status":"aborted"}` after a prompt that defaults to No
+    // reads as oak refusing.
     process.stderr.write(msg.prompt.declined(ans) + '\n');
     return false;
   };
@@ -883,11 +844,10 @@ function secretsFrom(argv: string[]) {
   };
 }
 
-/** The typed secret flags, for the refusals that distinguish a typed one from an env value. */
+/** The secret flags, to tell a typed one from an environment value in a refusal. */
 const SECRET_FLAGS = ['zenodo-token', 'zenodo-token-sandbox', 'cf-token', 'cf-account'] as const;
 
-/** `oak bootstrap <paper|journal>`: onboarding (slice 5).
- *  Observable behaviour: DOCS.bootstrap. */
+/** `oak bootstrap <paper|journal>`. Documented at DOCS.bootstrap. */
 async function cmdBootstrap(argv: string[]): Promise<number> {
   const sub = argv[0];
   const rest = argv.slice(1);
@@ -903,14 +863,15 @@ async function cmdBootstrap(argv: string[]): Promise<number> {
     process.stderr.write(msg.workflow.bootstrapNoRepo + '\n');
     return 2;
   }
-  // Argument-shape refusals come before any gh call ([R127]).
+  // Malformed arguments are refused before any gh call [R127].
   const external = sub === 'journal' && has(rest, 'external');
   if (sub === 'journal') {
     if (external === has(rest, 'co-located')) {
       process.stderr.write(msg.workflow.bootstrapJournalTier + '\n');
       return 2;
     }
-    // A typed secret flag sets nothing on the external tier; env values stay tolerated ([R127]).
+    // A typed secret flag is refused with an external journal; environment values are allowed
+    // [R127].
     if (external && SECRET_FLAGS.some((f) => flag(rest, f))) {
       process.stderr.write(msg.workflow.bootstrapSecretsNeedPaper + '\n');
       return 2;
@@ -919,8 +880,8 @@ async function cmdBootstrap(argv: string[]): Promise<number> {
   gh.assertGhReady();
   const engineRepo = flag(rest, 'engine-repo') ?? ENGINE_REPO_DEFAULT;
   let engineVersion = flag(rest, 'engine-version');
-  // Which way the version was chosen is part of the plan: "newest release right now" and "the tag
-  // you named" are different promises, and only the latter is reproducible next month.
+  // The plan says how the version was chosen: "the newest release now" and "the tag you named"
+  // differ, and only the second is reproducible.
   const engineVersionFrom: 'flag' | 'latest-release' = engineVersion ? 'flag' : 'latest-release';
   if (!engineVersion) {
     try {
@@ -952,10 +913,9 @@ async function cmdBootstrap(argv: string[]): Promise<number> {
         from: flag(rest, 'from'),
         sourceRef: flag(rest, 'source-ref'),
         instance: flag(rest, 'instance'),
-        // NOT defaulted (unlike `bootstrap journal`, where the scaffold's own edition file is
-        // named from the same value and so agrees with itself). A paper is joining a journal
-        // that already has editions; a literal `edition` invented here matches none of them,
-        // and the paper's CI fails on the missing edition file long after this command said ok.
+        // No default: the paper joins a journal that already has editions, and an invented
+        // `edition` would match none of them, so the paper's CI would fail later on a missing
+        // edition file.
         edition: flag(rest, 'edition'),
         engineVersion,
         engineRepo,
@@ -978,9 +938,8 @@ async function cmdBootstrap(argv: string[]): Promise<number> {
         repo,
         tier: external ? 'external' : 'co-located',
         name: flag(rest, 'name'),
-        // Defaulted (and declared in the plan): the scaffold NAMES its own edition file from
-        // this value, so `edition` is self-consistent here, a placeholder the tenant renames,
-        // not a claim about someone else's journal.
+        // Defaulted, and shown in the plan: the new journal's edition file is named from this
+        // value, so the two agree. The journal can rename it.
         edition: flag(rest, 'edition'),
         engineVersion,
         engineRepo,
@@ -1001,8 +960,7 @@ async function cmdBootstrap(argv: string[]): Promise<number> {
   return 2;
 }
 
-/** `oak upgrade`: render-and-compare lifecycle (slice 5).
- *  Observable behaviour: DOCS.upgrade. */
+/** `oak upgrade`. Documented at DOCS.upgrade. */
 async function cmdUpgrade(argv: string[]): Promise<number> {
   const gh = await import('./gh.js');
   const upgrade = await import('./upgrade.js');
@@ -1034,9 +992,8 @@ async function cmdUpgrade(argv: string[]): Promise<number> {
   return out.exitCode;
 }
 
-/** `oak conformance <reset|certify>`: the paper-CI conformance harness
- *  (plan-paper-ci-conformance.md). `reset` is idempotent teardown of a cert run's ephemeral state.
- *  Observable behaviour: DOCS.conformance. */
+/** `oak conformance <reset|certify>`: tests a release on GitHub; `reset` removes what earlier
+ *  runs left and is idempotent. Documented at DOCS.conformance. */
 async function cmdConformance(argv: string[]): Promise<number> {
   const sub = argv[0];
   const rest = argv.slice(1);
@@ -1063,8 +1020,7 @@ async function cmdConformance(argv: string[]): Promise<number> {
       return 2;
     }
     const upgrade = await import('./upgrade.js');
-    // Optional fork-PR preview phase: enabled only when a fork repo + its PAT are both present
-    // (otherwise the phase self-skips, so certs keep working before the fork is provisioned).
+    // The fork preview runs only when the fork repo and its token are both set.
     const forkRepo = flag(rest, 'fork-repo') ?? process.env.CONFORMANCE_FORK_REPO;
     const forkToken = process.env.CONFORMANCE_FORK_PAT;
     const out = await conformance.cmdConformanceCertify(
@@ -1080,7 +1036,8 @@ async function cmdConformance(argv: string[]): Promise<number> {
             return 0;
           }
         },
-        // Dogfood the migration path in-process: `oak upgrade --both` against a fresh clone.
+        // Installs the release on the test repo as a journal would: `oak upgrade --both` on a
+        // fresh clone, in-process.
         installEngine: async (r, t) => {
           const up = await upgrade.cmdUpgrade(
             { repoRoot: gh.tempClone(r), to: t, mode: 'both' },
@@ -1102,9 +1059,8 @@ async function cmdConformance(argv: string[]): Promise<number> {
       },
     );
     emit(rest, out.result);
-    // The tag-keyed cert record (the C5 promotion-gate seam): `--record` persists the verdict to a
-    // file the workflow attaches to the engine tag's release. The FILE is the machine channel
-    // (stdout carries the envelope only under `--json`), so the workflow parses nothing.
+    // `--record` writes the result to a file, which the workflow uploads to the release. The file
+    // is what machines read; stdout carries JSON only with `--json`.
     const record = flag(rest, 'record');
     if (record) writeFileSync(resolve(record), JSON.stringify(out.result, null, 2) + '\n');
     return out.exitCode;
@@ -1159,8 +1115,8 @@ function nearestVerb(word: string): string | null {
 
 async function main(argv: string[]): Promise<number> {
   const verb = argv[0] as Verb | undefined;
-  // One switch, read by gh.ts, so `--verbose` reaches the subprocess layer without threading
-  // a parameter through every seam (and survives the child process `oak release` spawns).
+  // One environment variable, read by gh.ts, so `--verbose` reaches the git and gh calls
+  // without passing a parameter around, and survives the child process `oak release` starts.
   if (has(argv, 'verbose')) process.env.OAK_VERBOSE = '1';
   if (verb === 'build') return cmdBuild(argv.slice(1));
   if (verb === 'start') return cmdStart(argv.slice(1));
@@ -1173,9 +1129,8 @@ async function main(argv: string[]): Promise<number> {
   if (verb === 'bootstrap') return cmdBootstrap(argv.slice(1));
   if (verb === 'upgrade') return cmdUpgrade(argv.slice(1));
   if (verb === 'conformance') return cmdConformance(argv.slice(1));
-  // A word we do not know is an ERROR, not an invitation to read the manual. Printing usage
-  // alone answers a question nobody asked and hides the one that matters: a typo looks exactly
-  // like a bare `oak`, so the reader assumes the command ran and did nothing.
+  // An unknown command is an error with a suggestion: printing usage alone would make a typo
+  // look like a bare `oak`, as if the command ran and did nothing.
   if (verb) {
     const near = nearestVerb(verb);
     process.stderr.write(msg.unknownCommand(verb, near) + '\n');
@@ -1187,9 +1142,8 @@ async function main(argv: string[]): Promise<number> {
 main(process.argv.slice(2)).then(
   (code) => process.exit(code),
   (err) => {
-    // A UserError was WRITTEN for whoever typed the command: one sentence naming the file and the
-    // fix, exit 2 (a usage failure), no stack. Anything else is an engine bug, and the stack is
-    // the only useful thing we have.
+    // A UserError is written for whoever typed the command: one sentence naming the file and the
+    // fix, exit 2, no stack. Anything else is a bug in oak, and the stack is what helps.
     if (err instanceof UserError) {
       process.stderr.write(annotate('error', err.message) + '\n');
       process.exit(2);
