@@ -7,7 +7,7 @@
  *    page, and a missed match makes `prepare` mint a second concept DOI.
  *  - A deposit is identified by the paper's `project.id`, stored as a URN
  *    (`urn:oaktree-sapling:<id>`) beside the GitHub URL and looked up first, so it survives the
- *    repository moving [R7] [design §9].
+ *    repo moving [R7] [design §9].
  *  - Extra files come from the paper's `deposit/` folder and upload as they are, beside oak's
  *    fixed files; a name clash with those is an error [R28].
  *  - The review pull request in the provenance comes from `gh api` (`GitContext.reviewPr`)
@@ -457,7 +457,7 @@ export function buildMetadata(input: MetadataInput): Record<string, unknown> {
   const related: Array<Record<string, string>> = [
     { identifier: githubUrl, relation: 'isVersionOf', scheme: 'url' },
   ];
-  // The identity URN [R7], which survives a repository move.
+  // The identity URN [R7], which survives a repo move.
   if (paperId)
     related.push({ identifier: paperUrn(paperId), relation: 'isVersionOf', scheme: 'urn' });
   if (siteUrl) related.push({ identifier: siteUrl, relation: 'isIdenticalTo', scheme: 'url' });

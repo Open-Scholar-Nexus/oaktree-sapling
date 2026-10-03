@@ -6,7 +6,7 @@
  *   B. The editorial checks the journal turns on in `journal.yml` `checks:` (checks.ts).
  *
  * File and myst access is injected so the rules are testable; myst-cli comes in only through
- * myst.ts. The caller passes the repository, used to find the paper's own registry entry.
+ * myst.ts. The caller passes the repo, used to find the paper's own registry entry.
  */
 import * as msg from './messages.js';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
@@ -256,7 +256,7 @@ export function checkTemplates(
   return out;
 }
 
-/* ---- journal repository readers ----------------------------------------- */
+/* ---- journal repo readers ----------------------------------------- */
 
 /** A journal with no settings, so a run without a readable `journal.yml` keeps its shape while
  *  the [R116] finding blocks. */
@@ -264,7 +264,7 @@ function emptyJournal(): JournalConfig {
   return JournalConfig.parse({ name: 'unknown' });
 }
 
-/** null means the journal repository has no `journal.yml`: broken, unlike `--no-instance`
+/** null means the journal repo has no `journal.yml`: broken, unlike `--no-instance`
  *  [R116]. */
 function loadJournal(instanceRoot: string | null, probes: FsProbes): JournalConfig | null {
   if (instanceRoot) {
@@ -283,8 +283,8 @@ function loadRegistry(instanceRoot: string | null, probes: FsProbes): Registry |
   return null;
 }
 
-/** The paper's own registry entry, found by its repository, so the uniqueness check skips it.
- *  Without a repository it cannot be found, so callers pass one (environment or git origin). */
+/** The paper's own registry entry, found by its repo, so the uniqueness check skips it.
+ *  Without a repo it cannot be found, so callers pass one (environment or git origin). */
 function findSelf(registry: Registry | null, repo: string | null): { slug: string } | undefined {
   if (!registry || !repo) return undefined;
   const e = registry.find((x) => x.location.repo === repo);
@@ -729,7 +729,7 @@ export async function runValidate(
     optional: opts.strict ? false : f.severity === 'warn',
   }));
   // Make curvenote's absolute paths relative to the checkout root, so GitHub can resolve them;
-  // the paper root by default, which is the repository root for a single-paper repository.
+  // the paper root by default, which is the repo root for a single-paper repo.
   const checkRun = toCheckRun(
     [...layerAResults, ...checks],
     opts.pathBase ?? input.paperRoot,

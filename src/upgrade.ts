@@ -1,5 +1,5 @@
 /**
- * `oak upgrade`: renders a paper's gated files at a target version from the repository's own
+ * `oak upgrade`: renders a paper's gated files at a target version from the repo's own
  * settings (`pins.yml`, `CODEOWNERS`), compares them with the files on disk, and opens a pull
  * request. Gated files are never edited by hand, so any difference is reset to the template;
  * a deliberate edit still shows in the pull request. Nothing records a template version.
@@ -9,7 +9,7 @@
  *    CODEOWNERS review.
  *  - **both** does both.
  *
- * A repository that is up to date gets no pull request. Finding the target, getting the
+ * A repo that is up to date gets no pull request. Finding the target, getting the
  * template and opening the pull request are injected, so tests use fakes.
  */
 import { existsSync, readFileSync, writeFileSync, mkdirSync, copyFileSync } from 'node:fs';
@@ -31,7 +31,7 @@ const PINS_REL = posix.join('.github', 'actions', 'engine', 'pins.yml');
 const CODEOWNERS_REL = 'CODEOWNERS';
 
 /* --------------------------------------------------------------------------
- * Settings read back from the repository (pins.yml, CODEOWNERS, myst.yml)
+ * Settings read back from the repo (pins.yml, CODEOWNERS, myst.yml)
  * ------------------------------------------------------------------------ */
 
 /** The owner column of the first gated line in CODEOWNERS, or a default. The whole column: a
@@ -41,7 +41,7 @@ export function ownerFromCodeowners(src: string): string {
   return first ?? '@owner';
 }
 
-/** The repository's owner column per gated path, so an owner added by hand survives a resync
+/** The repo's owner column per gated path, so an owner added by hand survives a resync
  *  [R126]. Empty without a CODEOWNERS file. */
 function codeownersOnDisk(repoRoot: string): Record<string, string> {
   const co = join(repoRoot, CODEOWNERS_REL);
@@ -88,7 +88,7 @@ function frozenFiles(templateAtTarget: string): string[] {
   return out.sort();
 }
 
-/** Renders one gated file at the target with the repository's settings, keeping its own
+/** Renders one gated file at the target with the repo's settings, keeping its own
  *  CODEOWNERS columns ({@link codeownersOnDisk}). */
 export function renderFrozenFile(
   templateAtTarget: string,
@@ -108,7 +108,7 @@ export function renderFrozenFile(
 
 /**
  * Files under the gated paths that the target template does not ship [R143]. They are reported,
- * not deleted: they may be the repository's own additions (a `dependabot.yml`), and nothing
+ * not deleted: they may be the repo's own additions (a `dependabot.yml`), and nothing
  * records which files oak once shipped, so a person decides.
  */
 export function extraFrozenFiles(repoRoot: string, templateAtTarget: string): string[] {
