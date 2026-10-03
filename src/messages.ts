@@ -117,16 +117,17 @@ export const usage = (): string =>
   `\n` +
   `Setting up repos\n` +
   `  oak bootstrap journal --repo <owner/name> (--external | --co-located) [--name <name>] [--edition <id>]\n` +
-  `                        [--engine-version <tag>] [--owner <@user|@org/team>] [--no-require-checks] [--no-site] [--yes]\n` +
+  `                        [--engine-repo <owner/name>] [--engine-version <tag>] [--owner <@user|@org/team>]\n` +
+  `                        [--no-require-checks] [--no-site] [--yes]\n` +
   `      --external    the journal gets its own public repo, holding its settings, branding\n` +
   `                    and the list of published papers; each paper then lives in a repo of\n` +
   `                    its own that points back at it. This is the usual choice.\n` +
-  `      --co-located  one repo holds the journal and its single paper together. For a\n` +
-  `                    one-off publication with no separate journal repo; there is no\n` +
-  `                    journal website in this shape.\n` +
+  `      --co-located  experimental: one repo holds the journal and its single paper\n` +
+  `                    together, with no journal website.\n` +
   `  oak bootstrap paper   --repo <owner/name> --instance <owner/journal-repo> --edition <id>\n` +
   `                        [--from <author-url> [--source-ref <ref>]]\n` +
-  `                        [--engine-version <tag>] [--owner <@user|@org/team>] [--private] [--no-require-checks] [--yes]\n` +
+  `                        [--engine-repo <owner/name>] [--engine-version <tag>] [--owner <@user|@org/team>]\n` +
+  `                        [--private] [--no-require-checks] [--yes]\n` +
   `      --instance    the journal repo this paper belongs to ('.' only if the journal\n` +
   `                    settings live in this same repo); --edition names one of its editions\n` +
   `  oak upgrade (--repo <owner/name> | --paper <dir>) [--to <tag>] [--version-only|--files-only|--both] [--yes]\n` +
@@ -156,6 +157,7 @@ export const usage = (): string =>
   `  oak conformance run   --repo <owner/name> --tag <vX.Y.Z> [--fork-repo <owner/name>]\n` +
   `\n` +
   `Any command\n` +
+  `  --help      print this text; --version prints oak's version\n` +
   `  --json      print the full machine-readable result on stdout instead of a summary\n` +
   `  --verbose   show the raw git/gh commands' output (shown on failure either way)\n`;
 
@@ -166,6 +168,8 @@ export const unknownCommand = (verb: string, near: string | null): string =>
 export const flagNeedsValue = (name: string): string =>
   `--${name} needs a value. It was passed with none, which usually means an empty shell ` +
   `variable: quote it, or drop the flag to use the default.`;
+
+export const version = (v: string): string => `oak ${v}`;
 
 export const flagNeedsPort = (name: string, got: string): string =>
   `--${name} needs a port number, not '${got}'.`;

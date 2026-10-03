@@ -1113,11 +1113,22 @@ function nearestVerb(word: string): string | null {
   return bestD <= 3 ? best : null;
 }
 
+/** Set by the bundle: the release tag's version, or package.json's in a local build. */
+declare const OAK_VERSION: string;
+
 async function main(argv: string[]): Promise<number> {
   const verb = argv[0] as Verb | undefined;
   // One environment variable, read by gh.ts, so `--verbose` reaches the git and gh calls
   // without passing a parameter around, and survives the child process `oak release` starts.
   if (has(argv, 'verbose')) process.env.OAK_VERBOSE = '1';
+  if (argv[0] === 'help' || argv[0] === '--help' || argv[0] === '-h') {
+    process.stdout.write(msg.usage());
+    return 0;
+  }
+  if (argv[0] === '--version') {
+    process.stdout.write(msg.version(OAK_VERSION) + '\n');
+    return 0;
+  }
   if (verb === 'build') return cmdBuild(argv.slice(1));
   if (verb === 'start') return cmdStart(argv.slice(1));
   if (verb === 'validate') return cmdValidate(argv.slice(1));

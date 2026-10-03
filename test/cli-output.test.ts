@@ -66,6 +66,21 @@ describe.skipIf(bundleState() === 'absent')(
       expect(code).toBe(2);
       expect(stderr).not.toContain('unknown command');
     });
+
+    it('`--help`, `-h` and `help` print the usage on stdout and succeed', () => {
+      for (const arg of ['--help', '-h', 'help']) {
+        const { code, stdout, stderr } = oak([arg]);
+        expect(code).toBe(0);
+        expect(stdout).toMatch(/^oak: a mystmd-based engine/);
+        expect(stderr).toBe('');
+      }
+    });
+
+    it('`--version` prints the version the bundle was built with', () => {
+      const { code, stdout } = oak(['--version']);
+      expect(code).toBe(0);
+      expect(stdout).toMatch(/^oak \d+\.\d+\.\d+\S*\n$/);
+    });
   },
 );
 
@@ -86,7 +101,7 @@ describe.skipIf(bundleState() === 'absent')(
     it('explains --external and --co-located in plain words', () => {
       const { stderr } = oak([]);
       expect(stderr).toMatch(/--external\s+the journal gets its own public repo/);
-      expect(stderr).toMatch(/--co-located\s+one repo holds the journal and its single paper/);
+      expect(stderr).toMatch(/--co-located\s+experimental: one repo holds the journal and its single paper/);
     });
 
     it('documents --json and --verbose', () => {
