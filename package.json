@@ -12,6 +12,9 @@
   "bin": {
     "oak": "dist/cli.cjs"
   },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "check:refs": "node scripts/check-ledger-refs.mjs --warn",
     "test": "npm run bundle && npm run check:refs && vitest run",
@@ -19,7 +22,7 @@
     "typecheck": "tsc --noEmit",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "bundle": "esbuild src/cli.ts --bundle --platform=node --format=cjs --minify-whitespace --outfile=dist/cli.cjs",
+    "bundle": "esbuild src/cli.ts --bundle --platform=node --format=cjs --minify-whitespace --outfile=dist/cli.cjs --define:OAK_VERSION=\\\"${OAK_VERSION:-$npm_package_version}\\\"",
     "build:fixture": "node scripts/build-fixture.mjs",
     "docs": "cd docs && npx -y mystmd@1.10.1 start",
     "docs:build": "cd docs && npx -y mystmd@1.10.1 build --html --strict",
