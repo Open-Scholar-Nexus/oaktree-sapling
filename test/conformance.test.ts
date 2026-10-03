@@ -510,7 +510,7 @@ describe('cmdConformanceRun', () => {
     expect(out.result).toMatchObject({ status: 'failed' });
   });
 
-  it('a rate limit still is not ours ([R113] still holds)', async () => {
+  it("a rate limit is still not oak's fault [R113]", async () => {
     const gh = fakeCertGh();
     const out = await cmdConformanceRun(
       { repo: REPO, tag: TAG },

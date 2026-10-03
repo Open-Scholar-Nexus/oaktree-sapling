@@ -167,7 +167,7 @@ const ghCall = (first: string, second?: string) =>
 
 const argAfter = (args: string[], flag: string) => args[args.indexOf(flag) + 1];
 
-describe('openDoiPr ([R108])', () => {
+describe('openDoiPr', () => {
   /** Every command the passing path runs; `over` replaces one answer. */
   const answers =
     (over: (args: string[]) => { status: number; stdout?: string; stderr?: string } | null) =>
@@ -220,7 +220,7 @@ describe('openDoiPr ([R108])', () => {
   });
 });
 
-describe('the tolerant probes tell absent from forbidden ([R108], [R113])', () => {
+describe('the tolerant probes tell absent from forbidden [R113]', () => {
   beforeEach(() => {
     child.calls.length = 0;
   });
@@ -281,7 +281,7 @@ describe('the tolerant probes tell absent from forbidden ([R108], [R113])', () =
   });
 });
 
-describe('list endpoints paginate ([R108])', () => {
+describe('list endpoints paginate', () => {
   beforeEach(() => {
     child.calls.length = 0;
     child.respond = () => ({ status: 0, stdout: '', stderr: '' });
@@ -303,7 +303,7 @@ describe('list endpoints paginate ([R108])', () => {
   });
 });
 
-describe('realGhPr.sticky ([R108])', () => {
+describe('realGhPr.sticky', () => {
   it('throws rather than report a comment it did not post', () => {
     child.calls.length = 0;
     child.respond = () => ({ status: 1, stdout: '', stderr: 'fatal: no such remote' });
