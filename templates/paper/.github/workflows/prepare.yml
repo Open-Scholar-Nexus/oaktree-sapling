@@ -56,7 +56,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
         run: |
-          pr=$(gh pr list --repo "$REPO" --head zenodo-doi --state open --json number,headRefOid --jq '.[0] // empty | "\(.number) \(.headRefOid)"')
+          # Only the bot's own pull request from this repo: a fork can name a branch zenodo-doi too.
+          pr=$(gh pr list --repo "$REPO" --head zenodo-doi --author app/github-actions --state open \
+            --json number,headRefOid,isCrossRepository \
+            --jq '[.[] | select(.isCrossRepository | not)][0] // empty | "\(.number) \(.headRefOid)"')
           if [ -z "$pr" ]; then
             echo "::notice::no open DOI pull request; nothing to check"
             exit 0
