@@ -431,7 +431,7 @@ describe('a PR number is a PR number ([R136])', () => {
   it('refuses one that is not, whether it came from a flag or the artifact', () => {
     const r = oak(['notify', 'new-version', '--pr', '1/comments?x=', '--paper', fixturePaper]);
     expect(r.code).toBe(2);
-    expect(r.stderr).toContain('not a PR number');
+    expect(r.stderr).toContain('not a pull request number');
   });
 });
 

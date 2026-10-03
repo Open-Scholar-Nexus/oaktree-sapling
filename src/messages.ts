@@ -1,63 +1,50 @@
 /**
- * EVERY string `oak` prints to a person. LLM writing is close, but not quite.
+ * The strings oak prints for people, grouped by where they appear: the output helpers, then
+ * usage, the confirm prompt, bootstrap, upgrade, build and start, validate, what lands on a pull
+ * request, and the verbs the workflows run.
  *
- * How to use this file:
- *   - Grouped by SURFACE: the output plumbing first (it decides how the rest is printed), then
- *     roughly the order a tenant meets them, usage → the confirm prompt → bootstrap → upgrade →
- *     build → start → validate → what lands on a pull request → the workflow-run verbs.
- *   - Fixed strings are consts; parameterized ones are functions. Edit the words freely; keep
- *     the `${…}` holes and the leading `oak <verb>:` prefixes (the prefix is how a reader knows
- *     which command spoke, and a few tests assert on distinctive fragments).
- *   - Nothing here does any work: no I/O, no logic beyond choosing between phrasings. The one
- *     import is the docs link table, which is constants only, keep it that way.
- *   - A message that links to documentation writes `docsUrl(DOCS.<topic>)`, never a URL. The
- *     domain lives in `assets.ts`; the page it lands on is `docs-links.ts`'s problem. Link
- *     where the page says more than a sentence can and the reader is stuck; a URL on every
- *     line is noise, and most of these messages already name the file and the fix.
+ * Fixed strings are consts, parameterised ones functions. Keep the `${…}` holes and the
+ * `oak <verb>:` prefixes, which say which command spoke; some tests assert on fragments. Nothing
+ * here does work beyond choosing a phrasing, and the one import is the docs link table. A link
+ * is `docsUrl(DOCS.<topic>)`, never a URL, and only where the page says more than a sentence can.
  *
- * The output rules these strings follow (open-tasks/cli-output-pass.md):
- *   1. Nothing the CLI assumes may be silent, every default or auto-resolved value is declared
- *      in the plan before the confirm prompt.
- *   2. No design-doc jargon ([S#]/[R#], "frozen shim", "build_type=workflow"). Enforced by a
- *      lint in messages.test.ts, so this rule cannot drift silently. ⚑ "instance-config" was on
- *      this list and is NOT enforced: it is the product's own name for the thing in four
- *      tenant-facing template files, including the README a journal editor reads first. Renaming
- *      it is a decision across the whole tenant surface, not a messages.ts edit ([R151]).
- *   3. Human prose on stderr by default; the JSON envelope only under `--json`, on stdout.
- *   4. An error names the file and the fix, and never shows a stack trace to a tenant.
+ * The rules:
+ *   1. Every default or resolved value is declared in the plan before the confirm prompt.
+ *   2. No design-doc jargon ([S#]/[R#], "frozen shim", "build_type=workflow",
+ *      "instance-config"). Enforced by a lint in messages.test.ts.
+ *   3. Prose goes to stderr; the JSON only with `--json`, on stdout.
+ *   4. An error names the file and the fix, and shows no stack trace.
  *
- * ── The user-visible surface that is NOT in this file ───────────────────────────────────────
- * These cannot import a TS module (they ship as files, or run inside GitHub Actions):
+ * ── Printed text that is NOT in this file ───────────────────────────────────────────────────
+ * These ship as files or run inside GitHub Actions, so they cannot import this module:
  *
- *   engine/templates/paper/README.md ............... what a paper author reads first in their repo
- *   engine/templates/paper/myst.yml ................ commented starter config (CHANGE-ME lines)
- *   engine/templates/paper/index.md ................ starter manuscript
- *   engine/templates/paper/CODEOWNERS .............. header comment
- *   engine/templates/paper/.github/workflows/*.yml . paper CI job names + `::error::` annotations
- *                                                    (ci, check, check-post, preview-deploy,
- *                                                    prepare, publish, version-bump: the names
- *                                                    show in the Actions tab)
- *   engine/templates/instance/README.md ............ what a journal editor reads first
- *   engine/templates/instance/journal.yml .......... journal's settings, comments and all
- *   engine/templates/instance/brand/brand.yml ...... branding knobs and their comments
- *   engine/templates/instance/editions/edition.yml . edition template
- *   engine/templates/instance/registry/papers.yml .. paper list's header comment
- *   engine/templates/site/myst.yml ................. journal website's config comments
- *   engine/templates/site/pages/index.md ........... journal website's landing copy
- *   engine/templates/site/.github/workflows/site.yml website job + its failure annotation
- *   engine/plugins/gallery.mjs ..................... paper-cards directive's own messages
- *   engine/templates/typst/*.typ ................... PDF's fixed wording (headers, footers)
- *   engine/ci/run.sh ............................... the launchers' own echoes
+ *   templates/paper/README.md ............... what an author reads first in their repo
+ *   templates/paper/myst.yml ................ the commented starter config (CHANGE-ME lines)
+ *   templates/paper/index.md ................ the starter manuscript
+ *   templates/paper/CODEOWNERS .............. its header comment
+ *   templates/paper/.github/workflows/*.yml . job names and `::error::` annotations (ci, check,
+ *                                             check-post, preview-deploy, prepare, publish,
+ *                                             version-bump: the names show in the Actions tab)
+ *   templates/instance/README.md ............ what a journal editor reads first
+ *   templates/instance/journal.yml .......... the journal's settings and their comments
+ *   templates/instance/brand/brand.yml ...... the branding settings and their comments
+ *   templates/instance/editions/edition.yml . the edition template
+ *   templates/instance/registry/papers.yml .. the paper list's header comment
+ *   templates/site/myst.yml ................. the journal website's config comments
+ *   templates/site/pages/index.md ........... the journal website's landing page
+ *   templates/site/.github/workflows/site.yml the website job and its failure annotation
+ *   plugins/gallery.mjs ..................... the paper-cards directive's messages
+ *   templates/typst/*.typ ................... the PDF's fixed wording (headers, footers)
+ *   ci/run.sh ............................... the launchers' own echoes
  *
- * Two TS surfaces are deliberately left in place, both read only in a CI log by someone who
- * already knows the system:
- *   src/conformance.ts . `oak conformance` is the maintainer's release harness; a tenant never
- *                        runs it, and its lines are progress markers for a certification run.
+ * Two TS files keep their own strings, both read only in a CI log:
+ *   src/conformance.ts . `oak conformance` is the maintainers' release test; its lines are
+ *                        progress markers.
  *   src/zenodo.ts ...... the `[prepare]`/`[publish]` progress markers and the Zenodo API's own
- *                        error bodies, echoed verbatim. The one author-facing line there is the
+ *                        error bodies, echoed as they are. The one line for authors there is the
  *                        skipped-ORCID warning.
  *
- * The check MESSAGES an author sees on a PR come from `@curvenote/check-implementations`
+ * The editorial checks' own messages come from `@curvenote/check-implementations`.
  */
 
 import { DOCS, docsUrl } from './docs-links.js';
@@ -72,11 +59,9 @@ export function inCI(): boolean {
 }
 
 /**
- * A warning/error line. `::warning::…` is GitHub-Actions syntax: in a workflow log it becomes an
- * annotation on the run, and in a tenant's terminal it is line noise in front of the sentence
- * that matters (the UX test read one as part of the error). So the annotation is added ONLY in
- * CI, where a multi-line message must also be escaped; a raw newline silently truncates the
- * annotation to its first line.
+ * A warning or error line. `::warning::…` becomes an annotation in a workflow log and is noise in
+ * a terminal, so it is added only in CI. There a message is escaped, since a raw newline cuts the
+ * annotation at its first line.
  */
 export function annotate(kind: 'warning' | 'error', message: string): string {
   if (!inCI()) return kind === 'warning' ? `warning: ${message}` : message;
@@ -84,10 +69,8 @@ export function annotate(kind: 'warning' | 'error', message: string): string {
 }
 
 /**
- * An error whose message was written FOR a tenant. `main()` prints it as a plain sentence and
- * exits 2: **no stack trace** (in a workflow log it is annotated, like every other error).
- * Anything else reaching the top level is an engine bug, and gets the stack it needs. The class
- * lives here because the message and the promise "this prints without a stack" are one decision.
+ * An error written for whoever ran the command. `main()` prints it as a sentence, with no stack
+ * trace, and exits 2. Anything else reaching the top level is a bug in oak and gets its stack.
  */
 export class UserError extends Error {
   constructor(message: string) {
@@ -97,9 +80,9 @@ export class UserError extends Error {
 }
 
 /**
- * A readable one-line summary of a thrown error, for embedding in a tenant-facing message. A zod
- * failure's `message` is a JSON dump whose first line is `[`, so name its offending key instead;
- * otherwise take the first non-empty trimmed line.
+ * A one-line summary of a thrown error, to put in a message. A zod error's `message` is JSON
+ * starting with `[`, so its first issue is named instead; any other error gives its first
+ * non-empty line.
  */
 export function firstLine(e: unknown): string {
   const issues = (e as { issues?: Array<{ path?: unknown[]; message?: string }> })?.issues;
@@ -116,12 +99,10 @@ export function firstLine(e: unknown): string {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════
- * Usage: the first screen a new tenant sees.
+ * Usage: the first screen a new user sees.
  * ═══════════════════════════════════════════════════════════════════════════════════════════
- * It opens with what `oak` IS and where someone with nothing starts, because a bare list of
- * verbs answers a question they have not reached yet. The two journal shapes get a plain
- * sentence each: `--external` vs `--co-located` is the most consequential choice on this screen
- * and it is not inferable from the words.
+ * It opens with what oak is and where to start. `--external` and `--co-located` get a sentence
+ * each, since the flag names do not explain the choice.
  */
 export const usage = (): string =>
   `oak: a mystmd-based engine for running a small journal. It sets up the journal\n` +
@@ -178,9 +159,7 @@ export const usage = (): string =>
   `  --json      print the full machine-readable result on stdout instead of a summary\n` +
   `  --verbose   show the raw git/gh commands' output (shown on failure either way)\n`;
 
-/** A word we do not know is an ERROR, not an invitation to read the manual: printing usage
- *  alone makes a typo look exactly like a bare `oak`, so the reader assumes it ran and did
- *  nothing. `near` is the closest verb, when one is close enough to be worth guessing. */
+/** `near` is the closest command, when one is close enough to suggest. */
 export const unknownCommand = (verb: string, near: string | null): string =>
   `oak: unknown command '${verb}'${near ? `; did you mean '${near}'?` : ''}\n`;
 
@@ -202,27 +181,25 @@ export const prompt = {
     'aborted: stdin is not a TTY, so the plan above could not be confirmed interactively. ' +
     'Nothing was created or changed. Re-run with --yes to accept the plan unattended.',
 
-  /** Every abort says WHY: a bare "aborted" after a prompt that defaults to No reads as the
-   *  tool refusing, not as the answer being taken at its word. */
   declined: (answer: string): string =>
     `aborted: the plan above was not confirmed (` +
     `${answer ? `answered "${answer}"` : 'no answer; the default is No'}). ` +
     'Nothing was created or changed. Re-run and answer "y", or pass --yes.',
 
-  /** The `reason` field of an aborted result (read back by `--json` consumers). */
+  /** The `reason` field of an aborted result, for `--json`. */
   abortedNothingCreated: 'the plan above was not confirmed; nothing was created or changed',
-  abortedNoPr: 'the plan above was not confirmed; nothing was changed and no PR was opened',
+  abortedNoPr:
+    'the plan above was not confirmed; nothing was changed and no pull request was opened',
 };
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════
- * oak bootstrap: the longest conversation the engine has with a tenant.
+ * oak bootstrap
  * ═════════════════════════════════════════════════════════════════════════════════════════ */
 
 /**
- * The plan's opening block: every value this run will use, and for each one whether it came
- * from a flag or from us. A default nobody was told about is a decision made on the tenant's
- * behalf, and `Proceed? [y/N]` is only consent if the assumptions are on the screen above it:
- * most of these end up stamped into files that are awkward to change afterwards.
+ * The plan's opening block: every value the run will use, and whether it came from a flag or a
+ * default. Most end up in files that are awkward to change later, so `Proceed? [y/N]` covers
+ * them all.
  */
 export const declared = {
   journalRepoCoLocated: 'this repo itself (--instance .)',
@@ -266,14 +243,12 @@ export const declared = {
 
 export const bootstrap = {
   // ── refusals, before anything is created ───────────────────────────────────────────────
-  /** A paper has no meaning without the journal it is a paper OF, and `pins.yml` is the only
-   *  place that link is recorded. Defaulting it moves the failure into the first CI run. */
   instanceRequired:
     'oak bootstrap paper: --instance <owner/journal-repo> is required. It names the ' +
     'journal this paper belongs to and is written into .github/actions/engine/pins.yml, ' +
     "where the paper's workflows read it to fetch the journal's branding, its edition " +
     'and the checks it wants run. Without it the repo bootstraps fine and then every CI ' +
-    'run fails with "no instance-config resolved". Pass `--instance .` only for a repo ' +
+    'run fails with "no journal repo found". Pass `--instance .` only for a repo ' +
     'that carries its own journal.yml (use `oak bootstrap journal --co-located` to stand ' +
     'one up). What the paper gets out of that connection: ' +
     docsUrl(DOCS.paperJournalLink),
@@ -297,7 +272,7 @@ export const bootstrap = {
     'then re-run this command; everything it does on GitHub goes through gh.',
   ghNotAuthed:
     'oak bootstrap: gh is installed but no account is logged in. Run `gh auth login` and ' +
-    're-run this command; it creates and configures GitHub repositories through that login.',
+    're-run this command; it creates and configures GitHub repos through that login.',
 
   // ── the plan ───────────────────────────────────────────────────────────────────────────
   paperPlanHeader: (mode: 'ingest' | 'bare', repo: string): string =>
@@ -324,8 +299,8 @@ export const bootstrap = {
   planSeedCoLocated:
     "  ○ seed main with the journal's settings AND a starter paper, plus the workflows that build and check it",
 
-  /** Idempotency has a sharp edge worth naming: a re-run to CHANGE an answer does not re-seed,
-   *  so the earlier pins.yml survives and the re-run appears to succeed while fixing nothing. */
+  /** A rerun that changes an answer does not reseed, so it would succeed while changing
+   *  nothing. */
   planAlreadySeededPaper: (instanceRepo: string): string =>
     `  ! main is already seeded; this run will NOT rewrite the workflows or` +
     ` .github/actions/engine/pins.yml, so the journal repo and engine version an earlier` +
@@ -340,7 +315,7 @@ export const bootstrap = {
   planReviewBranch: (from: string, ref: string): string =>
     `  ○ copy the author's files from ${from}@${ref} onto a "review" branch`,
   ingestBadUrl: (url: string): string =>
-    `oak bootstrap: --from must be a GitHub repository URL (https://github.com/owner/repo or ` +
+    `oak bootstrap: --from must be a GitHub repo URL (https://github.com/owner/repo or ` +
     `git@github.com:owner/repo), got: ${url}. A URL carrying a username or password is refused ` +
     `too, because --from is copied into a public commit message and pull request.`,
   ingestBadRef: (ref: string): string =>
@@ -363,13 +338,11 @@ export const bootstrap = {
     `  ○ turn on GitHub Pages for the journal website (${siteUrl}); no branch rules, no environments`,
   planNoSite: '  ○ (--no-site: settings only; no website, no branch rules, no environments)',
 
-  // ── the issue labels the engine creates (a tenant reads these in the labels list) ──────
-  /** A repo that already existed may not default to `main`; say what moved ([R127]). */
-  logDefaultBranch: (from: string): string => `  ✓ default branch switched from ${from} to main`,
+  // ── the issue labels oak creates, shown in the repo's labels list ──────────────────────
   labelEditorAction: 'An editor must take action before this can proceed',
   labelZenodoFailed: 'A Zenodo publish run failed and needs editor attention',
 
-  // ── what the repos are called on GitHub (the tenant reads these in the repo list) ───────
+  // ── the repo descriptions, shown on GitHub ─────────────────────────────────────────────
   descriptionPaper: 'A paper, created by `oak bootstrap paper`',
   descriptionJournal:
     'Journal settings, branding and paper list, created by `oak bootstrap journal`',
@@ -382,6 +355,8 @@ export const bootstrap = {
   logMadePublic:
     '  ✓ made the repo public (paper builds read these settings from here with no token)',
   logSeeded: '  ✓ seeded main',
+  /** A repo that already existed may not default to `main` [R127]. */
+  logDefaultBranch: (from: string): string => `  ✓ default branch switched from ${from} to main`,
   logReviewBranch:
     "  ✓ built the review branch: the author's files, with this repo's own workflows and settings restored over them",
   logPrOpened: (url: string): string => `  ✓ opened PR ${url}`,
@@ -419,12 +394,12 @@ export const bootstrap = {
     `  ! this run is incomplete; failed steps: ${steps}. What to do about each is in the ` +
     'runbook above.',
 
-  // ── the PR that an ingested submission opens ───────────────────────────────────────────
+  // ── the pull request that `--from` opens ───────────────────────────────────────────────
   ingestCommitMessage: (from: string): string =>
-    `Submission from ${from}\n\nOriginal repository: ${from}`,
+    `Submission from ${from}\n\nOriginal repo: ${from}`,
   ingestPrTitle: (owner: string): string => `Submission: ${owner}`,
   ingestPrBody: (from: string): string =>
-    `Original repository: ${from}\n\n---\n\n*Opened by \`oak bootstrap paper --from\`.*`,
+    `Original repo: ${from}\n\n---\n\n*Opened by \`oak bootstrap paper --from\`.*`,
 
   // ── the runbook (what to do once the command has finished) ─────────────────────────────
   runbookSecrets: (repo: string, missing: string): string =>
@@ -436,7 +411,7 @@ export const bootstrap = {
 
   runbookZenodoReviewer: (repo: string, env: string): string =>
     `Nobody has to approve a Zenodo publish run on this repo, because --owner named an ` +
-    `organisation rather than one of its teams, and an organisation cannot be a reviewer. ` +
+    `org rather than one of its teams, and an org cannot be a reviewer. ` +
     `Publishing runs a job holding your Zenodo token, so add your editors team as a required ` +
     `reviewer of the '${env}' environment: https://github.com/${repo}/settings/environments`,
 
@@ -467,10 +442,9 @@ export const bootstrap = {
   runbookSite: (siteUrl: string): string =>
     `The journal website is built from this repo and goes live at ${siteUrl} once the first ` +
     '"Journal site" workflow run finishes (watch it in the Actions tab). GitHub Pages takes a ' +
-    'minute or two to serve a brand-new site, so a 404 straight after this command is normal; ' +
-    'give it a moment and reload. Every file in it is yours to edit: the engine writes them ' +
-    'once and never touches them again, so upgrading the engine will not overwrite your ' +
-    'design. Three version pins you bump by hand when you want newer: the gallery plugin URL ' +
+    'minute or two to serve a new site, so a 404 immediately after this command is normal. Every ' +
+    'file in it is yours to edit: oak writes them once and never again, so an upgrade will not ' +
+    'overwrite your design. Three version pins you bump by hand when you want newer: the gallery plugin URL ' +
     'and `site.template` in myst.yml, and `mystmd` in package.json. What each one moves, and ' +
     'how to tell a bump worked: ' +
     docsUrl(DOCS.pins),
@@ -491,7 +465,7 @@ export const upgrade = {
   notAPaperRepo: (pinsRel: string): string => `no engine_repo in ${pinsRel}. Is this a paper repo?`,
 
   upToDate: (target: string, engineRepo: string, targetGiven: boolean): string =>
-    `up to date at ${target}${targetGiven ? '' : ` (the newest release of ${engineRepo}; no --to given)`}; no PR.`,
+    `up to date at ${target}${targetGiven ? '' : ` (the newest release of ${engineRepo}; no --to given)`}; no pull request.`,
 
   planHeader: (repoRoot: string, target: string): string => `upgrade ${repoRoot} → ${target}`,
   planTarget: (target: string, engineRepo: string, targetGiven: boolean): string =>
@@ -536,11 +510,7 @@ export const upgrade = {
 export const build = {
   done: (id: string): string => `oak build: done (id=${id})`,
 
-  /**
-   * `oak build` run in the journal repo. The journal repo carries a `journal.yml` but its
-   * `myst.yml` is the WEBSITE, not a paper. Without this shape check the co-located rung takes
-   * that `journal.yml` as proof of a paper and the run dies deep inside the config read.
-   */
+  /** `oak build` in the journal repo, whose myst.yml is the website (cli.ts `isJournalRepo`). */
   inJournalRepo: (root: string): string =>
     `oak build: ${root} is the journal repo, not a paper. Its journal.yml holds the journal's ` +
     `settings and its myst.yml is the journal website; there is no manuscript here to build.\n` +
@@ -551,11 +521,8 @@ export const build = {
     `--paper <path to the paper>.\n` +
     `What this repo is for: ${docsUrl(DOCS.journalStart)}`,
 
-  /**
-   * The engine coordinate a paper carries (`project.options.oaktree-sapling.version|edition`)
-   * is missing. Names the FILE and the FIX, because the reader is looking at a paper that used
-   * to work.
-   */
+  /** The paper's `project.options.oaktree-sapling` version or edition is missing. It names the
+   *  file and the fix, since the reader is looking at a paper that used to work. */
   missingEngineCoordinate: (field: 'version' | 'edition', mystPath: string): string =>
     `oak: ${mystPath} has no engine ${field}. Add the \`${field}:\` line back under ` +
     `\`project.options.oaktree-sapling\` (\`oak bootstrap paper\` writes ` +
@@ -566,14 +533,13 @@ export const build = {
       : `It names which of the journal's editions this paper appears in; the ids are the ` +
         `filenames under editions/ in the journal repo.`),
 
-  /** No journal settings could be resolved. The common way to reach this is a paper whose
-   *  pins.yml still carries the template's `.` placeholder, so the text explains both meanings
-   *  of `instance_repo` rather than naming a flag nobody can reach from a CI log. */
   badEdition: (got: string, mystPath: string): string =>
     `project.options.oaktree-sapling.edition is ${JSON.stringify(got.slice(0, 40))} in ${mystPath}. ` +
     `It names a file (editions/<edition>.yml), so it must be a plain name: letters, digits, . _ -`,
+  /** No journal repo found. In CI that means `instance_repo: .` with no journal.yml beside the
+   *  paper, so the text explains both values of `instance_repo`, not only a flag. */
   noInstance: (verb: 'build' | 'start' | 'validate', paperRoot: string): string =>
-    `oak ${verb}: no instance-config resolved; ` +
+    `oak ${verb}: no journal repo found; ` +
     `pass --instance <path> (or --no-instance for ` +
     `${verb === 'validate' ? 'a bare, engine-only check' : verb === 'start' ? 'an unbranded preview' : 'an unbranded build'}).\n` +
     `In a CI run the path comes from .github/actions/engine/pins.yml: ` +
@@ -588,8 +554,8 @@ export const build = {
   preflightFailed: (findings: string): string =>
     `oak build: pre-flight validation failed:\n${findings}`,
 
-  /** The coordinate the paper declares and the one the merged config resolves to disagree:
-   *  something in an extended layer is overriding `project.options`. */
+  /** The version and edition the paper declares differ from the merged config's: an extended
+   *  layer overrides `project.options`. */
   coordinateMismatch: (
     version: string,
     edition: string,
@@ -597,7 +563,7 @@ export const build = {
     resolvedEdition: string,
   ): string =>
     `options.oaktree-sapling mismatch: the CI workflow read {version:${version}, edition:${edition}} ` +
-    `but resolved config has {version:${resolvedVersion}, edition:${resolvedEdition}}. ` +
+    `but the merged config has {version:${resolvedVersion}, edition:${resolvedEdition}}. ` +
     `An extended config is likely overriding project.options.`,
 
   coordinateMissingFromResolved:
@@ -626,13 +592,12 @@ export const start = {
 };
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════
- * oak validate: the engine's own findings (Layer A) and the notes about how a run happened.
+ * oak validate: oak's own findings (Layer A) and the notes about how a run happened.
  * The editorial (Layer B) check messages come from the curvenote catalog, not from us.
  * ═════════════════════════════════════════════════════════════════════════════════════════ */
 
 export const validate = {
-  /** `oak validate` typed in the journal repo, the same shape check `oak build` makes, and the
-   *  same reason: without it the run dies on an engine coordinate a journal repo never has. */
+  /** `oak validate` in the journal repo, as {@link build.inJournalRepo}. */
   inJournalRepo: (root: string): string =>
     `oak validate: ${root} is the journal repo, not a paper; journal.yml holds the journal's ` +
     `settings, and there is no manuscript here to check. The journal's settings are checked by ` +
@@ -649,7 +614,7 @@ export const validate = {
   // ── layout / identity ──────────────────────────────────────────────────────────────────
   missingFile: (file: string): string => `missing required file "${file}" at the paper root`,
   strayMystYml: (path: string): string =>
-    `stray secondary myst.yml at "${path}" breaks the n=1 paper layout`,
+    `extra myst.yml at "${path}": a paper repo has one, at its root`,
   idMissing: 'project.id is missing',
 
   // ── brand ──────────────────────────────────────────────────────────────────────────────
@@ -680,7 +645,7 @@ export const validate = {
   journalMissing: (instanceRoot: string): string =>
     `no journal.yml in ${instanceRoot}, so the journal's own rules (the paper id policy and the ` +
     `editorial checks) could not be loaded and nothing was enforced. Point --instance at the ` +
-    `journal repository, or pass --no-instance to validate the paper on its own.`,
+    `journal repo, or pass --no-instance to validate the paper on its own.`,
   idNoPattern:
     "journal.yml sets no id_pattern, so paper ids are checked only against the engine's own " +
     "template placeholder; set one to enforce the journal's own id convention: " +
@@ -704,19 +669,18 @@ export const validate = {
     `thumbnail "${thumbnail}" does not resolve to a file under the paper root; the ` +
     `paper will ship with NO thumbnail (a declared thumbnail disables myst's ` +
     `first-image fallback) and its gallery card renders blank`,
-  templateOverride: (authorTemplate: string, tenantTemplate: string): string =>
+  templateOverride: (authorTemplate: string, journalTemplate: string): string =>
     `this paper declares its own typst template ("${authorTemplate}"), overriding the ` +
-    `journal's ("${tenantTemplate}"). Allowed and applied; flagged so the change from ` +
-    `journal identity is a deliberate, reviewed choice.`,
+    `journal's ("${journalTemplate}"). Allowed and applied; flagged so a reviewer ` +
+    `sees it.`,
   templateFloating: (layer: string, value: string): string =>
-    `${layer} typst template "${value}" is not pinned; its bytes can change under the ` +
-    `living site without this reference changing. Prefer a tag/release URL or a local ` +
-    `path. (DOI'd PDFs stay reproducible regardless: the deposit archives the resolved ` +
-    `template bytes.)`,
-  templateNameAmbiguous: (tenantTemplate: string): string =>
-    `journal.yml typst_template "${tenantTemplate}" is being used as a myst template ` +
-    `NAME, but "${tenantTemplate}" also exists in instance-config. If you meant the ` +
-    `directory, write "./${tenantTemplate}"; only ./ and ../ values are treated as paths. ` +
+    `${layer} typst template "${value}" is not pinned, so the file it points to can change ` +
+    `without this value changing. Prefer a release URL or a local path. (Published PDFs stay ` +
+    `reproducible: the deposit archives the template used.)`,
+  templateNameAmbiguous: (journalTemplate: string): string =>
+    `journal.yml typst_template "${journalTemplate}" is being used as a myst template ` +
+    `NAME, but "${journalTemplate}" also exists in the journal repo. If you meant the ` +
+    `directory, write "./${journalTemplate}"; only ./ and ../ values are treated as paths. ` +
     `See ${docsUrl(DOCS.typstTemplate)}`,
 
   // ── the deposit folder ─────────────────────────────────────────────────────────────────
@@ -731,19 +695,16 @@ export const validate = {
     'they declare could not be checked for clashes; extend a local path, or move those keys ' +
     'into the layer itself.',
   layersOverlap: (clashes: string): string =>
-    `extends layers declare overlapping keys: ${clashes}. ` +
-    'myst resolves sibling extends by load-completion order, so the winner is ' +
-    'non-deterministic; move each key to exactly one layer.',
+    `extends layers declare overlapping keys: ${clashes}; move each key to one layer.`,
 
   // ── a run that could not compose ───────────────────────────────────────────────────────
   noteComposeFailed: (failure: string): string =>
     `checked the paper's own myst.yml ONLY: it could not be combined with the journal's ` +
     `settings (${failure}), so anything the journal or its edition adds was not checked.`,
   composeFailed: (failure: string): string =>
-    `the derived config could not be produced: ${failure}. This paper's own ` +
-    `config is what broke composition, so \`oak build\` fails the same way; the checks ` +
-    `below read the author's myst.yml and cannot see what the engine, edition or brand ` +
-    `layers declare.`,
+    `myst.oak.yml could not be composed: ${failure}. The paper's own config caused it, so ` +
+    `\`oak build\` fails the same way; the checks below ran on the paper's myst.yml alone, ` +
+    `without oak's defaults, the edition or the branding.`,
 
   editorialLoadFailed: (message: string): string =>
     `could not load the paper project for editorial checks: ${message}`,
@@ -751,19 +712,25 @@ export const validate = {
 };
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════
- * What an author reads on their pull request (sticky comments + the Check Run).
- * The {@link stickyMarker} line is prepended by the caller; these are the bodies.
+ * What an author reads on their pull request: the comments and the Check Run. These are the
+ * bodies; {@link stickyMarker} goes above them.
  * ═════════════════════════════════════════════════════════════════════════════════════════ */
 
-/** The hidden upsert-key line prepended to a sticky PR comment; `gh`'s sticky() matches on it,
- *  so its bytes must stay identical across every caller. */
+/** The hidden first line of a comment oak edits in place. `realGhPr.sticky` (gh.ts) finds the
+ *  comment by it, so it must not change. */
 export function stickyMarker(header: string): string {
   return `<!-- oak-sticky: ${header} -->`;
 }
 
 export const pr = {
   previewDeployed: (url: string): string =>
-    ['**Preview deployed** 🚀', '', `${url}`, '', '_Updated on every push to this PR._'].join('\n'),
+    [
+      '**Preview deployed** 🚀',
+      '',
+      `${url}`,
+      '',
+      '_Updated on every push to this pull request._',
+    ].join('\n'),
 
   previewArtifact: (runUrl: string, reason: string): string =>
     [
@@ -782,17 +749,16 @@ export const pr = {
       'This paper is already published on Zenodo. Before tagging the next release, an editor must:',
       '',
       `1. Open the record: ${recordUrl}`,
-      '2. Click **New version** to spawn an empty draft.',
+      '2. Click **New version** to create an empty draft.',
       '',
-      'CI will populate that draft once the new `v*` tag is pushed. The editor then clicks',
-      '**Publish** on Zenodo to finalize.',
+      'Pushing the new `v*` tag fills that draft. The editor then clicks **Publish** on Zenodo.',
       '',
       `Concept DOI: \`${doi}\``,
     ].join('\n'),
 
   checksHeadline: (pass: boolean, title: string): string =>
     `### ${pass ? '✅' : '❌'} ${pass ? 'Journal checks passed' : 'Journal checks failed'}: ${title}`,
-  checksFooter: `[What these checks are](${docsUrl(DOCS.checks)}) · _Updated on every push to this PR._`,
+  checksFooter: `[What these checks are](${docsUrl(DOCS.checks)}) · _Updated on every push to this pull request._`,
   checkRunTitle: (passed: number, failed: number): string => `${passed} passed, ${failed} failed`,
   checkRunTitleShimTouched: (title: string): string => `⚠️ CI workflows modified: ${title}`,
   unknownCheckId: (id: string): string =>
@@ -800,12 +766,12 @@ export const pr = {
     `${docsUrl(DOCS.checksChanging)}`,
   checkTableHeader: '| Check | Status | Detail |\n| --- | --- | --- |',
 
-  /** A PR that edits the files the checks run from: an advisory, never a gate (legitimate
-   *  engine-upgrade PRs edit them too). */
+  /** A pull request that edits the files the checks run from. A warning, never a failure:
+   *  upgrade pull requests edit them too. */
   shimWarning: (shown: string, more: string): string =>
-    `> ⚠️ **This PR changes the files that run the checks** (${shown}${more}). The results below ` +
-    `were produced by this PR's own copy of them, so they may not be the journal's checks. ` +
-    `Unless this is a deliberate engine upgrade, an editor should read those changes before ` +
+    `> ⚠️ **This pull request changes the files that run the checks** (${shown}${more}). ` +
+    `The results below come from its own copy of them, so they may not be the journal's ` +
+    `checks. Unless this is an oak upgrade, an editor should read those changes before ` +
     `trusting the report.`,
 };
 
@@ -825,12 +791,12 @@ export const workflow = {
     `Fix the journal config and re-run; nothing else in this run depends on it.`,
 
   checkPostBadReport: (path: string): string =>
-    `${path} is not a checks report (no checkRun.conclusion). It comes from the Stage-1 ` +
-    `artifact, so this means that artifact is truncated, corrupt or hostile; nothing was posted.`,
+    `${path} is not a checks report (no checkRun.conclusion). It comes from the ` +
+    `pull_request job's artifact, which is truncated, corrupt or hostile; nothing was posted.`,
 
   previewBadPrNumber: (got: string): string =>
-    `.pr-number is not a PR number (${JSON.stringify(got.slice(0, 40))}). It comes from the ` +
-    `build artifact, so a value of this shape means that artifact is corrupt or hostile.`,
+    `.pr-number is not a pull request number (${JSON.stringify(got.slice(0, 40))}). It ` +
+    `comes from the build artifact, which is corrupt or hostile.`,
 
   depositNoToken: (sandbox: boolean): string =>
     `no token: set ${sandbox ? 'ZENODO_TOKEN_SANDBOX' : 'ZENODO_TOKEN'} or pass --token`,
@@ -842,12 +808,12 @@ export const workflow = {
 
   // release
   releaseNoTag: 'oak release: --tag vX.Y.Z is required',
-  releaseNoDoi: 'oak release: project.doi missing; run prepare and merge that PR first.',
+  releaseNoDoi: 'oak release: project.doi missing; run prepare and merge that pull request first.',
   releaseNoToken: (sandbox: boolean): string =>
     `no token: set ${sandbox ? 'ZENODO_TOKEN_SANDBOX' : 'ZENODO_TOKEN'}`,
   releaseNoPdf: 'oak release: no PDF under _build/exports (did the typst export run?)',
   releasePostStepsFailed: (message: string): string =>
-    `oak release: gh post-steps failed (${message})`,
+    `oak release: uploading to the GitHub release or commenting failed (${message})`,
   releaseCommitComment: (draft: string): string => `Zenodo draft populated: ${draft}`,
   releaseFailureIssue: (tag: string): string => `Zenodo publish failed for ${tag}`,
 
@@ -858,20 +824,18 @@ export const workflow = {
   previewNoPrNumberReason: 'no .pr-number in artifact',
   previewCloudflareFailedReason: (message: string): string => `cloudflare-failed: ${message}`,
   cloudflareDegraded: (message: string): string =>
-    `deploy-preview: Cloudflare deploy failed, degrading to artifact link (${message})`,
+    `deploy-preview: Cloudflare deploy failed, linking the build artifact instead (${message})`,
   cloudflareDegradedReason: (message: string): string => `Cloudflare deploy failed: ${message}`,
   noPrNumber: 'deploy-preview: no .pr-number in artifact; nothing to preview.',
   previewStripped: (names: string[]): string =>
     `deploy-preview: removed Cloudflare Pages control files before serving (${names.join(', ')}).`,
-  notImplemented: (verb: string, slice: string): string =>
-    `oak ${verb}: not implemented yet (${slice}).`,
   notifyUsage: 'oak notify: usage: oak notify new-version [--pr N | --site <dir>]',
   notifyNoPr: 'oak notify new-version: pass --pr N (or --site <dir> holding a .pr-number)',
   notifyPublishedButUnlinked:
     'notify: a v* tag exists on main but project.doi is missing from myst.yml; the ' +
     'repo is published but unlinked. Fix myst.yml before tagging the next release.',
   notifyBadDoi: (doi: string): string =>
-    `unrecognized DOI prefix: ${doi} (expected 10.5281/zenodo.* or 10.5072/zenodo.*)`,
+    `unrecognised DOI prefix: ${doi} (expected 10.5281/zenodo.* or 10.5072/zenodo.*)`,
   notifyFirstDeposit: 'no v* tags on main (first-deposit case)',
   notifyTagsFailed: (why: string): string =>
     `notify: gh could not list the repo's version tags (${why}); whether the paper is ` +
@@ -887,20 +851,19 @@ export const workflow = {
   checkPostCommentFailed: (message: string): string =>
     `check-post: comment not posted (${message})`,
 
-  // validate's own failure envelope (what Stage 2 posts when the run could not happen)
+  // validate's own failure report (what check-post posts when the run could not happen)
   validateCouldNotRun: 'oak validate could not run',
   validateCrashed: 'oak validate crashed',
   validateCrashLine: (details: string): string => `oak validate: ${details}`,
 
   // bootstrap / conformance argument errors
   bootstrapNoRepo: 'oak bootstrap: --repo <owner/name> is required',
-  /** The engine repo has pre-releases but no stable one. Saying "no release" would be a lie a
-   *  tenant can see through (they are looking at a releases page full of dev tags) so name
-   *  the distinction and the flag that reaches one. */
+  /** The engine repo has pre-releases but no stable one; "no release" would contradict its
+   *  releases page. */
   bootstrapNoRelease:
     'oak bootstrap: the engine repo has no stable release to default to. Pass ' +
     '--engine-version <tag> to name one; a pre-release (a tag like v1.2.0-dev.4) has to be ' +
-    'named explicitly, because it can be deleted and would take your papers with it.',
+    'named, because it can be deleted, which breaks the papers pinned to it.',
   bootstrapUsage: 'oak bootstrap: usage: oak bootstrap <paper|journal> --repo <owner/name> [...]',
   bootstrapJournalTier: 'oak bootstrap journal: pass exactly one of --external | --co-located',
   bootstrapSecretsNeedPaper:
@@ -920,23 +883,23 @@ export const workflow = {
   /** Printed while a git/gh call is in flight, then erased; see gh.ts `showWorking`. */
   working: (what: string): string => `  … ${what}`,
 
-  // the engine-release resolver + the wrangler deploy (gh.ts)
-  /** Same distinction as bootstrapNoRelease: pre-releases are deliberately not candidates for
-   *  "latest", so a repo can have many releases and still have nothing to float onto. */
+  // the release lookup and the wrangler deploy (gh.ts)
+  /** As {@link workflow.bootstrapNoRelease}: a repo can have many pre-releases and still no
+   *  stable release to move to. */
   noStableRelease: (engineRepo: string): string =>
     `no stable release on ${engineRepo} to move to. Pass --to <tag> to name one; ` +
     `pre-releases are excluded from "latest" on purpose, since a dev tag can be deleted.`,
-  /** Raised where a repository coordinate is required to post; see gh.ts `sticky` ([R108]). */
+  /** Thrown by `realGhPr.sticky` (gh.ts) when it cannot tell which repo to post to. */
   noOriginRepo: (repoRoot: string): string =>
-    `no github.com origin remote in ${repoRoot}, so there is no repository to post to`,
-  /** The DOI PR must be one file against the default branch, not a branch's divergence. */
+    `no github.com origin remote in ${repoRoot}, so there is no repo to post to`,
+  /** The DOI pull request must change one file against the default branch. */
   doiPrDiverged: (head: string, base: string): string =>
     `${head} carries commits that are not on ${base}, so the DOI pull request would not be ` +
     `the one-file change it claims to be. Run prepare on ${base}.`,
   wranglerNoUrl: 'wrangler did not report a *.pages.dev deployment URL',
-  /** Deliberately carries no detail from wrangler: this reaches a PUBLIC pull request comment,
-   *  and wrangler names the Cloudflare API path it called, which contains the account id. The
-   *  diagnostics stay in the workflow log, where Actions redacts registered secrets. */
+  /** No detail from wrangler: this reaches a public pull request comment, and wrangler's output
+   *  names the account id. The details stay in the workflow log, where Actions redacts
+   *  secrets. */
   wranglerFailed: 'wrangler could not deploy the preview; see the workflow log for its output',
 };
 
@@ -944,7 +907,7 @@ export const workflow = {
  * Last resort
  * ═════════════════════════════════════════════════════════════════════════════════════════ */
 
-/** An engine fault (not a tenant's mistake): say so, then show the stack it needs. */
+/** A bug in oak: say so, then show the stack. */
 export const engineCrash = (stack: string): string =>
-  `oak: the engine hit an unexpected error. This is a bug in oak, not something you did ` +
+  `oak: unexpected error. This is a bug in oak, not something you did ` +
   `wrong; the details below are what to report.\n${stack}`;

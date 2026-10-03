@@ -1,11 +1,11 @@
 /**
- * `oak upgrade`: renders a paper's gated files at a target version from the repo's own
+ * `oak upgrade`: renders a paper's engine-managed files at a target version from the repo's own
  * settings (`pins.yml`, `CODEOWNERS`), compares them with the files on disk, and opens a pull
- * request. Gated files are never edited by hand, so any difference is reset to the template;
+ * request. Engine-managed files are never edited by hand, so any difference is reset to the template;
  * a deliberate edit still shows in the pull request. Nothing records a template version.
  *
  *  - **version-only** sets `project.options.oaktree-sapling.version` in `myst.yml`. Not gated.
- *  - **files-only** overwrites the gated files that differ, so the pull request needs a
+ *  - **files-only** overwrites the engine-managed files that differ, so the pull request needs a
  *    CODEOWNERS review.
  *  - **both** does both.
  *
@@ -69,11 +69,12 @@ export function readAnswers(repoRoot: string): TemplateAnswers {
 }
 
 /* --------------------------------------------------------------------------
- * Differences: each gated file rendered at the target, compared with the file on disk
+ * Differences: each engine-managed file rendered at the target, compared with the file on disk
  * ------------------------------------------------------------------------ */
 
-/** The gated files: everything under `.github/`, and `CODEOWNERS`. The paper's own content
- *  (`myst.yml`, `index.md`, `bib.bib`) is not gated and never reset. */
+/** The engine-managed files: everything under `.github/`, and `CODEOWNERS`. All are gated
+ *  (checks.ts `frozenPathsTouched`), but `paper-environment.yml` is gated and the author's, so
+ *  like `myst.yml`, `index.md` and `bib.bib` it is never reset. */
 function frozenFiles(templateAtTarget: string): string[] {
   const out: string[] = [];
   const walk = (dir: string, prefix: string): void => {
@@ -88,7 +89,7 @@ function frozenFiles(templateAtTarget: string): string[] {
   return out.sort();
 }
 
-/** Renders one gated file at the target with the repo's settings, keeping its own
+/** Renders one engine-managed file at the target with the repo's settings, keeping its own
  *  CODEOWNERS columns ({@link codeownersOnDisk}). */
 export function renderFrozenFile(
   templateAtTarget: string,
@@ -107,7 +108,7 @@ export function renderFrozenFile(
 }
 
 /**
- * Files under the gated paths that the target template does not ship [R143]. They are reported,
+ * Files under `.github/` that the target template does not ship [R143]. They are reported,
  * not deleted: they may be the repo's own additions (a `dependabot.yml`), and nothing
  * records which files oak once shipped, so a person decides.
  */
@@ -128,7 +129,7 @@ export function extraFrozenFiles(repoRoot: string, templateAtTarget: string): st
 }
 
 /**
- * The gated files whose render at the target differs from the file on disk, or that are
+ * The engine-managed files whose render at the target differs from the file on disk, or that are
  * missing. Returns their relative paths, sorted.
  */
 export function computeDrift(
@@ -189,7 +190,7 @@ function bumpVersion(repoRoot: string, target: string): void {
   writeDoc(myst, doc);
 }
 
-/** Overwrites the gated files that differ with their render at the target. */
+/** Overwrites the engine-managed files that differ with their render at the target. */
 function resyncFiles(
   repoRoot: string,
   templateAtTarget: string,

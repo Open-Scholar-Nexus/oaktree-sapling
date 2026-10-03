@@ -85,7 +85,7 @@ describe('every tenant-facing string lives in messages.ts', () => {
       })
       .join('\n');
     const strings = code.match(/'[^'\n]*'|`[^`\n]*`|"[^"\n]*"/g) ?? [];
-    const banned = /\[[RS]\d+\]|frozen shim|build_type/;
+    const banned = /\[[RS]\d+\]|frozen shim|build_type|instance-config/;
     expect(strings.filter((x) => banned.test(x))).toEqual([]);
   });
 

@@ -105,7 +105,7 @@ describe('takePrNumber', () => {
   it('refuses a value that is not a PR number ([R136])', () => {
     // The file comes from the Stage-1 artifact, which runs fork content.
     for (const hostile of ['1/comments?x=', '../../../user/repos', '1 2', 'abc']) {
-      expect(() => takePrNumber(siteWithPr(hostile))).toThrow(/not a PR number/);
+      expect(() => takePrNumber(siteWithPr(hostile))).toThrow(/not a pull request number/);
     }
   });
 

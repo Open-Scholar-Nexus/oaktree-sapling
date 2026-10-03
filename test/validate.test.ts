@@ -50,7 +50,9 @@ describe('checkLayout', () => {
       existsProbe: () => true,
       listTree: () => ['myst.yml', 'sub/myst.yml'],
     };
-    expect(checkLayout('/paper', probes).some((r) => r.message.includes('stray'))).toBe(true);
+    expect(checkLayout('/paper', probes).some((r) => r.message.includes('extra myst.yml'))).toBe(
+      true,
+    );
   });
   it('passes a clean layout', () => {
     const probes: FsProbes = { existsProbe: () => true, listTree: () => ['myst.yml', 'index.md'] };
