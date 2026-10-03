@@ -101,7 +101,9 @@ describe.skipIf(bundleState() === 'absent')(
     it('explains --external and --co-located in plain words', () => {
       const { stderr } = oak([]);
       expect(stderr).toMatch(/--external\s+the journal gets its own public repo/);
-      expect(stderr).toMatch(/--co-located\s+experimental: one repo holds the journal and its single paper/);
+      expect(stderr).toMatch(
+        /--co-located\s+experimental: one repo holds the journal and its single paper/,
+      );
     });
 
     it('documents --json and --verbose', () => {
