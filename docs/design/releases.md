@@ -57,9 +57,9 @@ The release script refuses a tag that already exists, pre-releases included, bec
 
 The npm package is a second way to get oak, and papers do not use it: their CI runs oak from a checkout, as above.
 
-Its version in `package.json` is set apart from the release tag. npm versions stay published for good once the 72 hour unpublish window closes, and they must be plain semver, so they cannot follow dev tags that are deleted. The release script does not publish to npm, so a published version names a state of the source and cannot be traced to a tag. Publishing from CI as part of the release script, with npm trusted publishing, is planned and will tie the two together.
+`npm-publish.yml` publishes a release tag with npm trusted publishing, and sets the package version to the tag. npm versions stay published for good once the 72 hour unpublish window closes, so a dev tag published to `next` outlives its deletion here, and dev tags are published only by hand.
 
-`repository` in `package.json` has to name the repository whose Actions run publishes, because `--provenance` checks it.
+`repository` in `package.json` has to name the repository whose Actions run publishes, because provenance checks it. The workflow sets it to the repository it runs in.
 
 `files` in `package.json` is an allowlist. It carries what the CLI reads at runtime, plus all of `ci/` and `plugins/`: papers use those from the checkout and from a pinned raw URL, but they are small, and shipping them keeps the tarball a subset of the checkout. `prepack` runs the typecheck and the bundle. `dist/` is gitignored, and `npm pack` leaves out a missing file without an error, so the bundle has to be built by a hook that runs on both `npm pack` and `npm publish`, which `prepublishOnly` does not.
 
