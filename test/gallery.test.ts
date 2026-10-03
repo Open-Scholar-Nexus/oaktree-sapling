@@ -15,6 +15,7 @@ import {
   cardFrom,
   loadRegistry,
   fetchPaperConfig,
+  thumbnailAvailable,
   REGISTRY_PATH,
 } from '../plugins/gallery.mjs';
 
@@ -130,10 +131,42 @@ describe('cardFrom', () => {
     expect(cardFrom(entry(), { project: {} }).children[0].children[0].value).toBe('alpha');
   });
 
-  it('does not fetch the thumbnail; myst downloads the URL (stage: document)', () => {
-    // The card has a remote image URL; transformImagesToDisk downloads it later, which is also
-    // what makes a broken thumbnail an error under --strict.
+  it('carries the remote thumbnail URL; myst downloads it (stage: document)', () => {
     expect(cardFrom(entry(), config()).children[1].url).toMatch(/^https:\/\//);
+  });
+
+  it('leaves the image out when the thumbnail is unavailable', () => {
+    const card = cardFrom(entry(), config(), { thumbnail: false });
+    expect(kinds(card)).toEqual(['header', 'paragraph']);
+  });
+});
+
+describe('thumbnailAvailable: a missing thumbnail drops the image, not the site build', () => {
+  const answer =
+    (ok: boolean, type: string | null) => async (_url: string, init?: { method?: string }) => {
+      expect(init?.method).toBe('HEAD');
+      return { ok, headers: { get: () => type } };
+    };
+
+  it('is true for an image', async () => {
+    expect(await thumbnailAvailable(entry(), answer(true, 'image/png'))).toBe(true);
+  });
+
+  it("is false for raw.githubusercontent.com's 404, a text body", async () => {
+    expect(await thumbnailAvailable(entry(), answer(false, 'text/plain; charset=utf-8'))).toBe(
+      false,
+    );
+  });
+
+  it('is false for a 200 that is not an image', async () => {
+    expect(await thumbnailAvailable(entry(), answer(true, 'text/html'))).toBe(false);
+  });
+
+  it('is false on a network error', async () => {
+    const boom = async () => {
+      throw new Error('getaddrinfo ENOTFOUND');
+    };
+    expect(await thumbnailAvailable(entry(), boom)).toBe(false);
   });
 });
 
