@@ -606,9 +606,6 @@ export const realProvisioner: Provisioner = {
   enablePages(repo) {
     gh(['api', '-X', 'POST', `repos/${repo}/pages`, '-f', 'build_type=workflow']);
   },
-  userId(login) {
-    return Number(gh(['api', `users/${login}`, '--jq', '.id']));
-  },
   actionsCanApprovePrs(repo) {
     return (
       gh([
@@ -1015,37 +1012,6 @@ export const realConformanceGh: ConformanceGh = {
       `ref=refs/tags/${tag}`,
       '-f',
       `sha=${sha}`,
-    ]);
-  },
-  approveDeployment(repo, runId, environment) {
-    // Get the pending deployments, take the one for `environment`, and approve it. Nothing
-    // pending (already approved, or no reviewer) is fine.
-    let envId: string;
-    try {
-      envId = gh(
-        [
-          'api',
-          `repos/${repo}/actions/runs/${runId}/pending_deployments`,
-          '--jq',
-          `[.[] | select(.environment.name=="${environment}") | .environment.id] | first // empty`,
-        ],
-        { quiet: true },
-      );
-    } catch {
-      return;
-    }
-    if (!envId) return;
-    gh([
-      'api',
-      '-X',
-      'POST',
-      `repos/${repo}/actions/runs/${runId}/pending_deployments`,
-      '-F',
-      `environment_ids[]=${envId}`,
-      '-f',
-      'state=approved',
-      '-f',
-      'comment=conformance harness auto-approve',
     ]);
   },
   releaseAssets(repo, tag) {

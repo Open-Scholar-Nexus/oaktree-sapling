@@ -77,9 +77,6 @@ export interface ConformanceGh {
   defaultBranchSha(repo: string): string;
   /** Creates tag `tag` at `sha`; the `v*` push starts publish.yml. */
   pushTag(repo: string, tag: string, sha: string): void;
-  /** Approves run `runId`'s pending `environment` deployment (the required reviewer). Fine
-   *  when nothing is pending. */
-  approveDeployment(repo: string, runId: number, environment: string): void;
   /** Asset names on the release for `tag`; [] when there is no release yet. */
   releaseAssets(repo: string, tag: string): string[];
   /** Deletes the release for `tag`, and with it the tag; fine if absent. */
@@ -474,7 +471,7 @@ export async function cmdConformanceRun(input: RunInput, deps: ConformanceDeps):
     log(`same-repo preview CERTIFIED for ${tag}`);
 
     // ---- The deposit: publish.yml and `oak release` ----
-    // The tag push, the required reviewer, and the five deposit files on the tag's release [R24].
+    // The tag push, the publish run, and the five deposit files on the tag's release [R24].
     // Reserving a DOI is not tested: the test repo already has a sandbox DOI and `oak
     // deposit prepare` refuses when one is set. This holds no Zenodo token, so it checks the
     // deposit by the release's file names.
@@ -499,38 +496,13 @@ export async function cmdConformanceRun(input: RunInput, deps: ConformanceDeps):
     gh.pushTag(repo, depositTag, tagSha);
     log(`pushed deposit tag ${depositTag} → ${tagSha}`);
 
-    // 3. Find the publish run for the tag, approve its zenodo-publish deployment, and wait for it
-    //    to succeed.
-    const publishRun = await pollUntil(
-      `Publish Zenodo deposit run for ${depositTag}`,
-      () => {
-        const run = gh
-          .workflowRunsForCommit(repo, tagSha)
-          .find((r) => r.name === 'Publish Zenodo deposit' && r.event === 'push');
-        if (!run) return null;
-        if (run.status === 'completed') {
-          // Finished before it could be approved (no reviewer, or a failure): decide now.
-          if (run.conclusion !== 'success')
-            throw new Error(`Publish Zenodo deposit concluded ${run.conclusion}: ${run.url}`);
-          return run;
-        }
-        if (run.status !== 'waiting') return null; // queued/in_progress; keep waiting for the gate
-        return run;
-      },
-      { sleep, log },
-    );
-    // Only when there is a reviewer: a repo set up before [R123], or an org
-    // whose --owner named no team, has none.
-    if (publishRun.status === 'waiting') {
-      gh.approveDeployment(repo, publishRun.id, 'zenodo-publish');
-      log(`approved zenodo-publish deployment for run ${publishRun.id}`);
-    }
+    // 3. Wait for the publish run for the tag to succeed.
     await pollUntil(
       `Publish Zenodo deposit success for ${depositTag}`,
       () =>
         runOutcome(
           gh.workflowRunsForCommit(repo, tagSha),
-          (r) => r.id === publishRun.id,
+          (r) => r.name === 'Publish Zenodo deposit' && r.event === 'push',
           'Publish Zenodo deposit',
         ),
       { sleep, log },

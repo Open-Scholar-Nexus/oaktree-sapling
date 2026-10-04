@@ -212,7 +212,7 @@ describe('openDoiPr', () => {
     const body = argAfter(ghCall('pr', 'create')!.args, '--body')!;
     expect(body).toContain('10.5072/zenodo.5');
     expect(body).toContain('close and reopen');
-    expect(body).toContain('approving review');
+    expect(body).toContain('<details>');
   });
 
   it('a second prepare returns the pull request the first one opened', () => {

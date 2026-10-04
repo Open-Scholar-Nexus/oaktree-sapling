@@ -406,14 +406,12 @@ export interface Provisioner {
   createRuleset(repo: string, body: unknown): void;
   pagesEnabled(repo: string): boolean;
   enablePages(repo: string): void;
-  /** A user's numeric id, the `zenodo-publish` reviewer on a personal account [R123]. */
-  userId(login: string): number;
   /** Whether Actions may create and approve pull requests on `repo` ([R122]). */
   actionsCanApprovePrs(repo: string): boolean;
   /** Lets Actions create and approve pull requests, keeping the default token permission [R122]. */
   allowActionsApprovePrs(repo: string): void;
   environmentExists(repo: string, name: string): boolean;
-  /** `name`'s required reviewers, so a rerun keeps one added by hand [R123] [R127]. */
+  /** `name`'s required reviewers, so a rerun keeps one added by hand [R127]. */
   environmentReviewers(repo: string, name: string): EnvironmentReviewer[];
   upsertEnvironment(repo: string, name: string, reviewers: EnvironmentReviewer[]): void;
   /** Whether `env` admits only the refs its deployment policies name; GitHub creates environments
@@ -534,7 +532,7 @@ export const SECRET_MAP: Array<{ key: keyof SecretInputs; name: string; envs: st
   { key: 'cfAccount', name: 'CLOUDFLARE_ACCOUNT_ID', envs: [PREVIEW_ENV] },
 ];
 
-/** The environments admitting only `main`, beside the reviewer-gated {@link ZENODO_ENV}. */
+/** The environments admitting only `main`, beside the `v*`-only {@link ZENODO_ENV}. */
 const MAIN_ONLY_ENVS = [ZENODO_PREPARE_ENV, PREVIEW_ENV];
 
 /* --------------------------------------------------------------------------
@@ -672,23 +670,6 @@ function resolveOwner(
   const team =
     ownerType === 'Organization' && /^@[^/]+\/.+$/.test(ownerToken) ? ownerToken.slice(1) : null;
   return { ownerToken, team, ownerType };
-}
-
-/**
- * Who approves a `zenodo-publish` deployment [R123]. An org names its editors team; a
- * personal account has no team, so the CODEOWNERS owner is the reviewer (GitHub allows approving
- * your own run, so a sole editor still makes a deliberate click before a run holding a token).
- * An `@org` owner without a team names nobody, and {@link applyProvisioning} adds a runbook
- * line.
- */
-function zenodoReviewer(
-  owner: { ownerToken: string; team: string | null; ownerType: 'Organization' | 'User' },
-  prov: Provisioner,
-): EnvironmentReviewer | null {
-  if (owner.team) return { type: 'Team', id: prov.teamId(owner.team) };
-  if (owner.ownerType === 'Organization') return null;
-  const login = /^@([^/]+)$/.exec(owner.ownerToken)?.[1];
-  return login ? { type: 'User', id: prov.userId(login) } : null;
 }
 
 /** What a partial run leaves behind [R125]. */
@@ -830,30 +811,6 @@ function applyProvisioning(
     }
   });
 
-  // The reviewer and the `v*` policy [R123], read first so a rerun keeps a reviewer added by
-  // hand [R127].
-  step('zenodo_reviewers', () => {
-    const envThere = prov.environmentExists(repo, ZENODO_ENV);
-    const existingReviewers = envThere ? prov.environmentReviewers(repo, ZENODO_ENV) : [];
-    if (existingReviewers.length) {
-      actions.zenodo_reviewers = 'already set';
-      log(msg.bootstrap.logZenodoReviewersExist);
-      return;
-    }
-    const reviewer = zenodoReviewer(owner, prov);
-    if (reviewer) {
-      prov.upsertEnvironment(repo, ZENODO_ENV, [reviewer]);
-      actions.zenodo_reviewers = `${reviewer.type} ${owner.team ?? owner.ownerToken}`;
-      log(msg.bootstrap.logZenodoReviewerSet(owner.team ?? owner.ownerToken));
-      return;
-    }
-    // Created on a first run, since the `v*` policy needs it; never PUT again, since the PUT
-    // replaces the whole environment [R127].
-    if (!envThere) prov.upsertEnvironment(repo, ZENODO_ENV, []);
-    actions.zenodo_reviewers = 'none';
-    log(msg.bootstrap.logZenodoNoReviewer);
-    runbook.push(msg.bootstrap.runbookZenodoReviewer(repo, ZENODO_ENV));
-  });
   // GitHub creates a named environment open to every branch; the PUT keeps reviewers [R127].
   const restrict = (env: string) => {
     if (!prov.environmentExists(repo, env)) prov.upsertEnvironment(repo, env, []);
@@ -861,6 +818,8 @@ function applyProvisioning(
       prov.upsertEnvironment(repo, env, prov.environmentReviewers(repo, env));
   };
 
+  // No required reviewer [R123]: only editors push `v*` tags, the environment admits only them,
+  // and the Zenodo draft waits for an editor's Publish click.
   step('zenodo_env', () => {
     restrict(ZENODO_ENV);
     if (prov.branchPolicyExists(repo, ZENODO_ENV, 'v*')) {

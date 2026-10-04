@@ -329,12 +329,12 @@ export const bootstrap = {
   planReviewPr: '  ○ open the review → main pull request',
 
   planProvisioning:
-    '  ○ repo settings: branch + tag rules, GitHub Pages, the reviewer-gated zenodo-publish ' +
-    'environment and the main-only zenodo-prepare and preview ones, permission for Actions ' +
+    '  ○ repo settings: branch + tag rules, GitHub Pages, the zenodo-publish ' +
+    'environment (v* tags only) and the main-only zenodo-prepare and preview ones, permission for Actions ' +
     'to open pull requests, issue labels (safe to re-run)',
   planProvisioningCoLocated:
-    '  ○ repo settings: branch + tag rules, GitHub Pages, the reviewer-gated zenodo-publish ' +
-    'environment and the main-only zenodo-prepare and preview ones, permission for Actions ' +
+    '  ○ repo settings: branch + tag rules, GitHub Pages, the zenodo-publish ' +
+    'environment (v* tags only) and the main-only zenodo-prepare and preview ones, permission for Actions ' +
     'to open pull requests, issue labels',
   planSecrets: (names: string): string =>
     `  ○ secrets: ${names || 'none given; you get a list of what to set by hand'}`,
@@ -376,11 +376,6 @@ export const bootstrap = {
   logActionsPrsExists: '  ✓ Actions may already open pull requests',
   logActionsPrsAllowed:
     '  ✓ Actions allowed to open pull requests (the DOI write-back is one of them)',
-  logZenodoReviewerSet: (reviewer: string): string =>
-    `  ✓ ${reviewer} must approve a Zenodo publish run before it starts`,
-  logZenodoReviewersExist: '  ✓ the Zenodo publish gate already has its reviewers',
-  logZenodoNoReviewer:
-    '  ! nobody was named as the reviewer of a Zenodo publish run: see the notes below',
   logZenodoEnvExists:
     "  ✓ the 'zenodo-publish' environment already restricts its secrets to v* tags",
   logZenodoEnvCreated:
@@ -412,12 +407,6 @@ export const bootstrap = {
     '. Until they are set, publishing to Zenodo (ZENODO_TOKEN*) and live pull-request ' +
     'previews (CLOUDFLARE_*) are skipped; everything else works, and a preview falls back ' +
     'to a downloadable copy of the built site.',
-
-  runbookZenodoReviewer: (repo: string, env: string): string =>
-    `Nobody has to approve a Zenodo publish run on this repo, because --owner named an ` +
-    `org rather than one of its teams, and an org cannot be a reviewer. ` +
-    `Publishing runs a job holding your Zenodo token, so add your editors team as a required ` +
-    `reviewer of the '${env}' environment: https://github.com/${repo}/settings/environments`,
 
   runbookRepoSecrets: (repo: string, names: string): string =>
     `${names} is still a repository secret on ${repo}, which a workflow on any branch can read. ` +
@@ -824,7 +813,10 @@ export const workflow = {
   doiPrTitle: 'Reserve Zenodo DOI',
   doiPrBody: (conceptDoi: string): string =>
     [
-      `Stamps the reserved concept DOI \`${conceptDoi}\` into \`myst.yml\`. Merge before tagging.`,
+      `Writes the reserved concept DOI \`${conceptDoi}\` into \`myst.yml\`. Merge before tagging.`,
+      '',
+      '<details>',
+      '<summary>Why are some checks waiting for approval?</summary>',
       '',
       'The Journal checks for this pull request are posted by the "Prepare Zenodo deposit" run ' +
         'that opened it. GitHub holds the workflow runs of a pull request a bot opens, so the ' +
@@ -832,10 +824,7 @@ export const workflow = {
         'To run them anyway, approve them in the Actions tab, or close and reopen this pull ' +
         'request.',
       '',
-      'If merging still asks for an approving review, an editor approves it. A repo ' +
-        'bootstrapped before oak turned this off asks for one on every pull request a bot ' +
-        'opens: the "protect-main" ruleset\'s extra approval for unattributed changes, in ' +
-        'Settings > Rules.',
+      '</details>',
     ].join('\n'),
 
   // release

@@ -312,7 +312,6 @@ function fakeProv(state: FakeState = {}) {
     createRuleset: (r, b) => rec('createRuleset', { r, b }),
     pagesEnabled: (r) => state.pages?.has(r) ?? false,
     enablePages: (r) => rec('enablePages', r),
-    userId: (login) => (login === 'alice' ? 77 : 99),
     actionsCanApprovePrs: () => state.actionsCanApprovePrs ?? false,
     allowActionsApprovePrs: (r) => rec('allowActionsApprovePrs', r),
     environmentExists: (r, n) => state.environments?.has(`${r}/${n}`) ?? false,
@@ -338,7 +337,7 @@ function fakeProv(state: FakeState = {}) {
   return { prov, calls };
 }
 
-/** The PUTs on `zenodo-publish` alone, the environment carrying the reviewer gate. */
+/** The PUTs on `zenodo-publish` alone, the environment holding the publish token. */
 function zenodoPuts(calls: Record<string, unknown[]>) {
   return (calls.upsertEnvironment as Array<{ n: string }>).filter((c) => c.n === 'zenodo-publish');
 }
@@ -618,35 +617,25 @@ describe('cmdBootstrapPaper', () => {
     expect(already.calls.allowActionsApprovePrs).toHaveLength(0); // read before changing
   });
 
-  it('names a zenodo-publish reviewer: the team in an org, the owner on a personal account [R123]', async () => {
+  it('creates zenodo-publish with no required reviewer, for a team, a user or an org [R123]', async () => {
     const org = fakeProv({ ownerType: 'Organization' });
-    const orgOut = await cmdBootstrapPaper(
+    await cmdBootstrapPaper(
       paperInput({ repo: 'org/paper', owner: '@org/editors' }),
       deps(org.prov),
     );
-    expect(zenodoPuts(org.calls)).toEqual([
-      { r: 'org/paper', n: 'zenodo-publish', v: [{ type: 'Team', id: 4242 }] },
-    ]);
-    expect((orgOut.result.actions as Record<string, string>).zenodo_reviewers).toBe(
-      'Team org/editors',
-    );
+    expect(zenodoPuts(org.calls)).toEqual([{ r: 'org/paper', n: 'zenodo-publish', v: [] }]);
 
     const personal = fakeProv({ ownerType: 'User' });
     await cmdBootstrapPaper(paperInput(), deps(personal.prov));
-    expect(zenodoPuts(personal.calls)).toEqual([
-      { r: 'me/paper', n: 'zenodo-publish', v: [{ type: 'User', id: 77 }] },
-    ]);
-  });
+    expect(zenodoPuts(personal.calls)).toEqual([{ r: 'me/paper', n: 'zenodo-publish', v: [] }]);
 
-  it('an org owner without a team leaves publishing unreviewed, and says so [R123]', async () => {
-    const { prov, calls } = fakeProv({ ownerType: 'Organization' });
+    const noTeam = fakeProv({ ownerType: 'Organization' });
     const out = await cmdBootstrapPaper(
       paperInput({ repo: 'org/paper', owner: '@org' }),
-      deps(prov),
+      deps(noTeam.prov),
     );
-    expect(zenodoPuts(calls)).toEqual([{ r: 'org/paper', n: 'zenodo-publish', v: [] }]);
-    expect((out.result.actions as Record<string, string>).zenodo_reviewers).toBe('none');
-    expect((out.result.runbook as string[]).join('\n')).toContain('settings/environments');
+    expect(zenodoPuts(noTeam.calls)).toEqual([{ r: 'org/paper', n: 'zenodo-publish', v: [] }]);
+    expect(out.result.status).toBe('ok');
   });
 
   it('a rerun keeps a zenodo-publish reviewer added by hand [R123]', async () => {
@@ -654,9 +643,8 @@ describe('cmdBootstrapPaper', () => {
       environments: new Set(['me/paper/zenodo-publish']),
       reviewers: [{ type: 'User', id: 12 }],
     });
-    const out = await cmdBootstrapPaper(paperInput(), deps(prov));
+    await cmdBootstrapPaper(paperInput(), deps(prov));
     expect(zenodoPuts(calls)).toHaveLength(0);
-    expect((out.result.actions as Record<string, string>).zenodo_reviewers).toBe('already set');
   });
 
   it('sets every secret on its environments and none as a repository secret', async () => {
@@ -1253,9 +1241,9 @@ describe('a failing setup step [R125]', () => {
     expect((out.result.actions as Record<string, string>).protect_main).toMatch(/^failed: /);
   });
 
-  it('an existing zenodo-publish environment is left alone with no reviewer to add [R127]', async () => {
-    // The PUT replaces the whole environment, so a rerun with no reviewer to add sends no PUT
-    // and keeps what the journal set by hand.
+  it('an existing zenodo-publish environment is left alone [R127]', async () => {
+    // The PUT replaces the whole environment, so a rerun sends no PUT and keeps what the
+    // journal set by hand.
     const { prov, calls } = fakeProv({
       ownerType: 'Organization',
       environments: new Set(['org/paper/zenodo-publish']),
@@ -1265,9 +1253,7 @@ describe('a failing setup step [R125]', () => {
       deps(prov),
     );
     expect(zenodoPuts(calls)).toHaveLength(0);
-    expect((out.result.actions as Record<string, string>).zenodo_reviewers).toBe('none');
-    expect((out.result.runbook as string[]).join('\n')).toContain('settings/environments');
-    expect(out.result.status).toBe('ok'); // no reviewer is a runbook item, not a failure
+    expect(out.result.status).toBe('ok');
   });
 
   it('--private warns in the plan that the settings steps need a paid plan [R127]', async () => {

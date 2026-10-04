@@ -31,7 +31,7 @@ jobs:
 
   publish:
     needs: build
-    environment: zenodo-publish # required reviewer; v* tags only
+    environment: zenodo-publish # v* tags only
     permissions:
       contents: write # attach the Release bundle + commit comment
       issues: write # open the editor-action issue on failure
