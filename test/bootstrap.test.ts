@@ -16,6 +16,7 @@ import {
   renderInstanceTemplate,
   renderSiteTemplate,
   galleryPluginUrl,
+  siteUrlFor,
   engineMystRange,
   buildReviewTree,
   cmdBootstrapPaper,
@@ -154,6 +155,16 @@ describe('renderInstanceTemplate', () => {
     expect(readFileSync(join(dest, 'editions/ed-2026.yml'), 'utf8')).toBe(
       readFileSync(join(INSTANCE_ROOT, 'editions/edition.yml'), 'utf8'),
     );
+  });
+});
+
+describe('siteUrlFor', () => {
+  it('is a project site under the repo name, with a lowercase owner', () => {
+    expect(siteUrlFor('Me/Config')).toBe('https://me.github.io/Config/');
+  });
+
+  it('is the root for a repo named <owner>.github.io', () => {
+    expect(siteUrlFor('Me/me.github.io')).toBe('https://me.github.io/');
   });
 });
 
@@ -886,6 +897,27 @@ describe('cmdBootstrapJournal', () => {
     expect(myst.getIn(['project', 'plugins', 0])).toBe(galleryPluginUrl('me/engine', 'v1'));
     expect(myst.getIn(['project', 'title'])).toBe('J');
     expect((out.result.runbook as string[]).join('\n')).not.toContain('collaborators');
+    // Each paper's header links back to the website.
+    const brand = parseDocument(readFileSync(join(seed, 'brand/brand.yml'), 'utf8'));
+    expect(brand.getIn(['site', 'options', 'logo_url'])).toBe('https://me.github.io/config/');
+  });
+
+  it('--external <owner>.github.io: the brand links to the root site', async () => {
+    const { prov } = fakeProv();
+    const seedDirs: string[] = [];
+    await cmdBootstrapJournal(
+      {
+        repo: 'Me/me.github.io',
+        tier: 'external',
+        engineVersion: 'v1',
+        engineRepo: 'me/engine',
+        authedUser: 'alice',
+        secrets: {},
+      },
+      journalDeps(prov, seedDirs),
+    );
+    const brand = parseDocument(readFileSync(join(seedDirs[0]!, 'brand/brand.yml'), 'utf8'));
+    expect(brand.getIn(['site', 'options', 'logo_url'])).toBe('https://me.github.io/');
   });
 
   it('--external --no-site: neither the site files nor Pages', async () => {
@@ -908,6 +940,8 @@ describe('cmdBootstrapJournal', () => {
     expect(calls.enablePages ?? []).toHaveLength(0);
     expect(out.result.site_url).toBeUndefined();
     const seed = seedDirs[0]!;
+    const brand = parseDocument(readFileSync(join(seed, 'brand/brand.yml'), 'utf8'));
+    expect(brand.getIn(['site', 'options', 'logo_url'])).toBeUndefined();
     expect(existsSync(join(seed, 'journal.yml'))).toBe(true);
     expect(existsSync(join(seed, 'myst.yml'))).toBe(false);
     expect(existsSync(join(seed, '.github'))).toBe(false);
@@ -996,6 +1030,7 @@ describe('cmdBootstrapJournal', () => {
     expect(myst.getIn(['project', 'github'])).toBe('https://github.com/me/journal');
     const brand = parseDocument(readFileSync(join(seed, 'brand/brand.yml'), 'utf8'));
     expect(brand.getIn(['site', 'options', 'logo_text'])).toBe('J');
+    expect(brand.getIn(['site', 'options', 'logo_url'])).toBeUndefined(); // no website
     expect((out.result.runbook as string[])[0]).toMatch(/^Next: /);
   });
 

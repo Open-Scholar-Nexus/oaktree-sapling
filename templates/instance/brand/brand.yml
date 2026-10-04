@@ -7,6 +7,7 @@ site:
     logo_text: CHANGE-ME Journal
     # logo: https://example.org/logo.svg
     # favicon: https://example.org/logo.svg
+    # Where the logo links; a full https URL (a relative one resolves against the domain root).
     # logo_url: https://example.org
 project:
   options:
