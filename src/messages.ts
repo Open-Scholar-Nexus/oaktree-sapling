@@ -329,17 +329,17 @@ export const bootstrap = {
   planReviewPr: '  ○ open the review → main pull request',
 
   planProvisioning:
-    '  ○ repo settings: branch + tag rules, GitHub Pages, the zenodo-publish ' +
+    '  ○ repo settings: branch + tag rules, GitHub Pages and the repo website link, the zenodo-publish ' +
     'environment (v* tags only) and the main-only zenodo-prepare and preview ones, permission for Actions ' +
     'to open pull requests, issue labels (safe to re-run)',
   planProvisioningCoLocated:
-    '  ○ repo settings: branch + tag rules, GitHub Pages, the zenodo-publish ' +
+    '  ○ repo settings: branch + tag rules, GitHub Pages and the repo website link, the zenodo-publish ' +
     'environment (v* tags only) and the main-only zenodo-prepare and preview ones, permission for Actions ' +
     'to open pull requests, issue labels',
   planSecrets: (names: string): string =>
     `  ○ secrets: ${names || 'none given; you get a list of what to set by hand'}`,
   planPages: (siteUrl: string): string =>
-    `  ○ turn on GitHub Pages for the journal website (${siteUrl}); no branch rules, no environments`,
+    `  ○ turn on GitHub Pages for the journal website (${siteUrl}) and link it from the repo page; no branch rules, no environments`,
   planNoSite: '  ○ (--no-site: settings only; no website, no branch rules, no environments)',
 
   // ── the issue labels oak creates, shown in the repo's labels list ──────────────────────
@@ -373,6 +373,9 @@ export const bootstrap = {
     `  ✓ created tag rule '${name}': only editors can create the v* tags that publish a version`,
   logPagesExists: '  ✓ GitHub Pages already enabled',
   logPagesEnabled: '  ✓ GitHub Pages enabled (published by a workflow)',
+  logHomepageExists: (url: string): string => `  ✓ repo website link already set (${url})`,
+  logHomepageSet: (url: string): string =>
+    `  ✓ repo website link set to ${url} (shown under About on the repo page)`,
   logActionsPrsExists: '  ✓ Actions may already open pull requests',
   logActionsPrsAllowed:
     '  ✓ Actions allowed to open pull requests (the DOI write-back is one of them)',

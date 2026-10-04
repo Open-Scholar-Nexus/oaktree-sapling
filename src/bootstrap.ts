@@ -279,8 +279,8 @@ export function galleryPluginUrl(engineRepo: string, engineVersion: string): str
   return `https://raw.githubusercontent.com/${engineRepo}/${engineVersion}/plugins/gallery.mjs`;
 }
 
-/** The journal site's GitHub Pages URL for `owner/repo`: a project site under a path, or the
- *  root for a repo named `<owner>.github.io`. Pages hosts are lowercase. */
+/** The GitHub Pages URL for `owner/repo`: a project site under a path, or the root for a repo
+ *  named `<owner>.github.io`. Pages hosts are lowercase. */
 export function siteUrlFor(repo: string): string {
   const [owner, name] = repo.split('/');
   const host = `${owner!.toLowerCase()}.github.io`;
@@ -413,6 +413,9 @@ export interface Provisioner {
   createRuleset(repo: string, body: unknown): void;
   pagesEnabled(repo: string): boolean;
   enablePages(repo: string): void;
+  /** The repo's "About" website; '' when none. */
+  homepage(repo: string): string;
+  setHomepage(repo: string, url: string): void;
   /** Whether Actions may create and approve pull requests on `repo` ([R122]). */
   actionsCanApprovePrs(repo: string): boolean;
   /** Lets Actions create and approve pull requests, keeping the default token permission [R122]. */
@@ -732,6 +735,40 @@ function partial(
   };
 }
 
+/** Turns on Pages and links the Pages URL from the repo page. The link is set only when empty,
+ *  so a rerun keeps one set by hand. */
+function pagesSteps(
+  repo: string,
+  prov: Provisioner,
+  step: (step: string, body: () => void) => boolean,
+  actions: Record<string, string>,
+  log: (m: string) => void,
+): void {
+  step('pages', () => {
+    if (prov.pagesEnabled(repo)) {
+      actions.pages = 'already enabled';
+      log(msg.bootstrap.logPagesExists);
+    } else {
+      prov.enablePages(repo);
+      actions.pages = 'enabled';
+      log(msg.bootstrap.logPagesEnabled);
+    }
+  });
+
+  step('homepage', () => {
+    const current = prov.homepage(repo);
+    if (current) {
+      actions.homepage = 'already set';
+      log(msg.bootstrap.logHomepageExists(current));
+    } else {
+      const url = siteUrlFor(repo);
+      prov.setHomepage(repo, url);
+      actions.homepage = 'set';
+      log(msg.bootstrap.logHomepageSet(url));
+    }
+  });
+}
+
 /** Sets up the repo's settings. Returns the runbook lines and the steps that failed
  *  [R125]. */
 function applyProvisioning(
@@ -794,16 +831,7 @@ function applyProvisioning(
     }
   });
 
-  step('pages', () => {
-    if (prov.pagesEnabled(repo)) {
-      actions.pages = 'already enabled';
-      log(msg.bootstrap.logPagesExists);
-    } else {
-      prov.enablePages(repo);
-      actions.pages = 'enabled';
-      log(msg.bootstrap.logPagesEnabled);
-    }
-  });
+  pagesSteps(repo, prov, step, actions, log);
 
   // Actions can open a pull request only when the repo allows it, and the DOI write is a
   // pull request opened by an Action, so every first deposit needs this [R122].
@@ -1316,16 +1344,7 @@ export async function cmdBootstrapJournal(
   }
 
   // Pages, through the same read-first calls the paper path uses.
-  step('pages', () => {
-    if (prov.pagesEnabled(repo)) {
-      actions.pages = 'already enabled';
-      log(msg.bootstrap.logPagesExists);
-    } else {
-      prov.enablePages(repo);
-      actions.pages = 'enabled';
-      log(msg.bootstrap.logPagesEnabled);
-    }
-  });
+  pagesSteps(repo, prov, step, actions, log);
 
   const siteUrl = siteUrlFor(repo);
   actions.site = 'stamped';

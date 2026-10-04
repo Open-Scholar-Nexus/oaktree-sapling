@@ -275,6 +275,7 @@ interface FakeState {
   defaultBranch?: string;
   rulesets?: Set<string>; // "repo/name"
   pages?: Set<string>;
+  homepages?: Map<string, string>; // repo -> its "About" website
   policies?: Set<string>; // "repo/env/name"
   visibility?: 'public' | 'private';
   actionsCanApprovePrs?: boolean;
@@ -295,6 +296,7 @@ function fakeProv(state: FakeState = {}) {
     grantTeamWrite: [],
     createRuleset: [],
     enablePages: [],
+    setHomepage: [],
     upsertEnvironment: [],
     createBranchPolicy: [],
     createLabel: [],
@@ -323,6 +325,8 @@ function fakeProv(state: FakeState = {}) {
     createRuleset: (r, b) => rec('createRuleset', { r, b }),
     pagesEnabled: (r) => state.pages?.has(r) ?? false,
     enablePages: (r) => rec('enablePages', r),
+    homepage: (r) => state.homepages?.get(r) ?? '',
+    setHomepage: (r, u) => rec('setHomepage', { r, u }),
     actionsCanApprovePrs: () => state.actionsCanApprovePrs ?? false,
     allowActionsApprovePrs: (r) => rec('allowActionsApprovePrs', r),
     environmentExists: (r, n) => state.environments?.has(`${r}/${n}`) ?? false,
@@ -396,6 +400,16 @@ describe('cmdBootstrapPaper', () => {
     expect(calls.openPr).toHaveLength(0);
     expect(calls.createRuleset).toHaveLength(2); // protect-main + v-tags
     expect(calls.enablePages).toHaveLength(1);
+    expect(calls.setHomepage).toEqual([{ r: 'me/paper', u: 'https://me.github.io/paper/' }]);
+  });
+
+  it('a rerun keeps a repo website link set by hand', async () => {
+    const { prov, calls } = fakeProv({
+      homepages: new Map([['me/paper', 'https://example.org/paper']]),
+    });
+    const out = await cmdBootstrapPaper(paperInput(), deps(prov));
+    expect(calls.setHomepage).toHaveLength(0);
+    expect((out.result.actions as Record<string, string>).homepage).toBe('already set');
   });
 
   it('a new paper ends by saying what to fill in, and its myst.yml links the repo', async () => {
@@ -882,6 +896,7 @@ describe('cmdBootstrapJournal', () => {
     expect(calls.seedBranch).toHaveLength(1);
     expect(calls.createRuleset).toHaveLength(0); // no rulesets: a journal repo has no branch rules
     expect(calls.enablePages).toHaveLength(1); // but the website needs Pages
+    expect(calls.setHomepage).toEqual([{ r: 'me/config', u: 'https://me.github.io/config/' }]);
     expect(out.result.tier).toBe('external');
     expect(out.result.site_url).toBe('https://me.github.io/config/');
 
@@ -938,6 +953,7 @@ describe('cmdBootstrapJournal', () => {
       journalDeps(prov, seedDirs),
     );
     expect(calls.enablePages ?? []).toHaveLength(0);
+    expect(calls.setHomepage).toHaveLength(0);
     expect(out.result.site_url).toBeUndefined();
     const seed = seedDirs[0]!;
     const brand = parseDocument(readFileSync(join(seed, 'brand/brand.yml'), 'utf8'));
@@ -1013,6 +1029,7 @@ describe('cmdBootstrapJournal', () => {
       d,
     );
     expect(calls.createRuleset).toHaveLength(2); // it builds a paper
+    expect(calls.setHomepage).toEqual([{ r: 'me/journal', u: 'https://me.github.io/journal/' }]);
     // The seed holds both the paper workflows and the journal's settings, with
     // `instance_repo: .` in pins.yml.
     const seed = seedDirs[0]!;
