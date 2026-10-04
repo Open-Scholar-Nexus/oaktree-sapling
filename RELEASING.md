@@ -54,6 +54,6 @@ Edit `typst.version` and make a release ([why](https://scholar.nexus/oaktree-sap
 
 ## The npm package
 
-The package is published with `npm publish`, separately from the release script. `prepack` runs the typecheck and the bundle first.
+The package is published from a release tag by `npm-publish.yml` (Actions > npm-publish > Run workflow, with the tag): `vX.Y.Z-dev.N` goes to the `next` dist-tag, and `vX.Y.Z` goes to `latest` once its `conformance.json` says `ok`. The package version is the tag without the `v`. It uses npm trusted publishing, so there is no npm token, and runs in the `npm` environment. `prepack` runs the typecheck and the bundle first.
 
 What ships is the `files` list in `package.json`: `dist/cli.cjs`, `templates/` (with `!templates/*/README.md` leaving out each template's README), `ci/`, `plugins/`, `paper-base.yml` and `typst.version`.
