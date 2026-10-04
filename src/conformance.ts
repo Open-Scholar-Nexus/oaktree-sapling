@@ -13,7 +13,7 @@
  * test repo and are used by its own runs.
  */
 import { STICKY_PREVIEW } from './preview.js';
-import { stickyMarker, workflow as wfMsg } from './messages.js';
+import { stickyMarker } from './messages.js';
 import { RESERVED_BUNDLE_NAMES } from './zenodo.js';
 import { UPGRADE_BRANCH_PREFIX } from './upgrade.js';
 
@@ -496,18 +496,15 @@ export async function cmdConformanceRun(input: RunInput, deps: ConformanceDeps):
     gh.pushTag(repo, depositTag, tagSha);
     log(`pushed deposit tag ${depositTag} → ${tagSha}`);
 
-    // 3. Wait for the publish run for the tag to succeed. `zenodo-publish` has no required
-    //    reviewer [R123], so a run waiting on it means the test repo is misconfigured.
-    const isPublishRun = (r: WorkflowRun) =>
-      r.name === 'Publish Zenodo deposit' && r.event === 'push';
+    // 3. Wait for the publish run for the tag to succeed.
     await pollUntil(
       `Publish Zenodo deposit success for ${depositTag}`,
-      () => {
-        const runs = gh.workflowRunsForCommit(repo, tagSha);
-        const waiting = runs.find((r) => isPublishRun(r) && r.status === 'waiting');
-        if (waiting) throw new Error(wfMsg.conformancePublishGated(waiting.url));
-        return runOutcome(runs, isPublishRun, 'Publish Zenodo deposit');
-      },
+      () =>
+        runOutcome(
+          gh.workflowRunsForCommit(repo, tagSha),
+          (r) => r.name === 'Publish Zenodo deposit' && r.event === 'push',
+          'Publish Zenodo deposit',
+        ),
       { sleep, log },
     );
 

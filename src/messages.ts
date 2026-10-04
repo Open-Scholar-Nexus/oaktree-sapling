@@ -895,10 +895,6 @@ export const workflow = {
     "paper repo's environment settings.",
   conformanceResetArgs: 'oak conformance reset: --repo <owner/name> is required',
   conformanceRunArgs: 'oak conformance run: --repo <owner/name> and --tag <vX.Y.Z> are required',
-  conformancePublishGated: (url: string): string =>
-    `the Publish Zenodo deposit run is waiting for a deployment approval (${url}): the test ` +
-    "repo's zenodo-publish environment has a required reviewer and should have none. Remove it " +
-    'in Settings > Environments and rerun.',
   conformanceUsage:
     'oak conformance: usage:\n' +
     '  oak conformance reset --repo <owner/name>\n' +

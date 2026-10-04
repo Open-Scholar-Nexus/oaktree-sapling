@@ -168,7 +168,7 @@ const PREVIEW_COMMENT =
 /** A fake `ConformanceGh` for `run`. The reset methods do nothing (the test repo starts clean);
  *  the others follow `over`. It records labels, merges, closes, tags, approvals and releases.
  *  The publish run on the deposit tag ('main-sha') is `in_progress` on the first poll and
- *  `completed`/`success` after; `publishWaits` holds it `waiting` on a required reviewer. */
+ *  `completed`/`success` after. */
 function fakeCertGh(
   over: {
     workflowRuns?: (sha: string) => WorkflowRun[];
@@ -177,7 +177,6 @@ function fakeCertGh(
     committedDoi?: () => string | null;
     committedEngineVersion?: () => string | null;
     releaseAssets?: (tag: string) => string[];
-    publishWaits?: boolean;
   } = {},
 ): ConformanceGh & {
   labeled: [number, string][];
@@ -211,8 +210,8 @@ function fakeCertGh(
         name: 'Publish Zenodo deposit',
         event: 'push',
         url: 'publish-run-url',
-        status: over.publishWaits ? 'waiting' : publishPolls === 1 ? 'in_progress' : 'completed',
-        conclusion: over.publishWaits || publishPolls === 1 ? null : 'success',
+        status: publishPolls === 1 ? 'in_progress' : 'completed',
+        conclusion: publishPolls === 1 ? null : 'success',
       });
     }
     return runs;
@@ -559,15 +558,6 @@ describe('cmdConformanceRun', () => {
     expect(out.result.failure).toContain('engine.zip');
     expect(gh.pushedTags).toHaveLength(1); // the tag was pushed before the failing asset check
     expect(gh.pushedTags[0]![1]).toBe('main-sha');
-  });
-
-  it('fails at the deposit when the publish run waits on a zenodo-publish reviewer [R123]', async () => {
-    const gh = fakeCertGh({ publishWaits: true });
-    const out = await cmdConformanceRun({ repo: REPO, tag: TAG }, runDeps(gh));
-    expect(out.exitCode).toBe(1);
-    expect(out.result).toMatchObject({ status: 'failed', path: 'deposit' });
-    expect(out.result.failure).toContain('required reviewer');
-    expect(out.result.failure).toContain('publish-run-url');
   });
 
   it('fails on a result that never appeared, rather than blaming a slow third party', async () => {
