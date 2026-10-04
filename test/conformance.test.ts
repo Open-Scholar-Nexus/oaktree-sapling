@@ -167,8 +167,8 @@ const PREVIEW_COMMENT =
 
 /** A fake `ConformanceGh` for `run`. The reset methods do nothing (the test repo starts clean);
  *  the others follow `over`. It records labels, merges, closes, tags, approvals and releases.
- *  The publish run on the deposit tag ('main-sha') is `waiting` on the first poll (for its
- *  reviewer) and `completed`/`success` after, so the passing path approves it. */
+ *  The publish run on the deposit tag ('main-sha') is `in_progress` on the first poll and
+ *  `completed`/`success` after; `publishWaits` holds it `waiting` on a required reviewer. */
 function fakeCertGh(
   over: {
     workflowRuns?: (sha: string) => WorkflowRun[];
@@ -177,13 +177,13 @@ function fakeCertGh(
     committedDoi?: () => string | null;
     committedEngineVersion?: () => string | null;
     releaseAssets?: (tag: string) => string[];
+    publishWaits?: boolean;
   } = {},
 ): ConformanceGh & {
   labeled: [number, string][];
   merged: number[];
   closed: number[];
   pushedTags: [string, string][];
-  approvals: [number, string][];
   deletedReleases: string[];
   resetSweeps: number;
   sweptForkBranches: string[];
@@ -195,7 +195,6 @@ function fakeCertGh(
   const merged: number[] = [];
   const closed: number[] = [];
   const pushedTags: [string, string][] = [];
-  const approvals: [number, string][] = [];
   const deletedReleases: string[] = [];
   const sweptForkBranches: string[] = [];
   const openedForkPr: [string, string][] = []; // [forkRepo, branch]
@@ -212,8 +211,8 @@ function fakeCertGh(
         name: 'Publish Zenodo deposit',
         event: 'push',
         url: 'publish-run-url',
-        status: publishPolls === 1 ? 'waiting' : 'completed',
-        conclusion: publishPolls === 1 ? null : 'success',
+        status: over.publishWaits ? 'waiting' : publishPolls === 1 ? 'in_progress' : 'completed',
+        conclusion: over.publishWaits || publishPolls === 1 ? null : 'success',
       });
     }
     return runs;
@@ -223,7 +222,6 @@ function fakeCertGh(
     merged,
     closed,
     pushedTags,
-    approvals,
     deletedReleases,
     sweptForkBranches,
     openedForkPr,
@@ -255,7 +253,6 @@ function fakeCertGh(
     committedEngineVersion: () => (over.committedEngineVersion ?? (() => TAG))(),
     defaultBranchSha: () => 'main-sha',
     pushTag: (_r, tag, sha) => pushedTags.push([tag, sha]),
-    approveDeployment: (_r, runId, env) => approvals.push([runId, env]),
     releaseAssets: (_r, tag) => (over.releaseAssets ?? (() => [...RESERVED_BUNDLE_NAMES]))(tag),
     deleteRelease: (_r, tag) => deletedReleases.push(tag),
     sweepForkBranches: (forkRepo, _tok, _prefix) => {
@@ -316,7 +313,6 @@ describe('cmdConformanceRun', () => {
     expect(gh.merged).toEqual([7]); // only the upgrade pull request is merged (the push to main)
     expect(gh.closed).toEqual([21]); // the preview pull request is closed, not merged
     expect(gh.pushedTags).toEqual([[CERT_DEPOSIT_TAG, 'main-sha']]); // the reserved deposit tag
-    expect(gh.approvals).toEqual([[3, 'zenodo-publish']]); // approved the waiting deployment
     expect(gh.deletedReleases).toContain(CERT_DEPOSIT_TAG); // removed before the push and after success
     // Without a fork, the fork preview is skipped and no fork method is called.
     expect((out.result.paths as string[]).length).toBe(3);
@@ -563,7 +559,15 @@ describe('cmdConformanceRun', () => {
     expect(out.result.failure).toContain('engine.zip');
     expect(gh.pushedTags).toHaveLength(1); // the tag was pushed before the failing asset check
     expect(gh.pushedTags[0]![1]).toBe('main-sha');
-    expect(gh.approvals).toEqual([[3, 'zenodo-publish']]); // the deployment was approved before the asset check
+  });
+
+  it('fails at the deposit when the publish run waits on a zenodo-publish reviewer [R123]', async () => {
+    const gh = fakeCertGh({ publishWaits: true });
+    const out = await cmdConformanceRun({ repo: REPO, tag: TAG }, runDeps(gh));
+    expect(out.exitCode).toBe(1);
+    expect(out.result).toMatchObject({ status: 'failed', path: 'deposit' });
+    expect(out.result.failure).toContain('required reviewer');
+    expect(out.result.failure).toContain('publish-run-url');
   });
 
   it('fails on a result that never appeared, rather than blaming a slow third party', async () => {

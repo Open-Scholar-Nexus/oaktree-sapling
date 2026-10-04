@@ -13,7 +13,7 @@ Two terms recur below. A flow that needs a token runs as two workflows: **Stage 
 :::{tip} In short
 An author with push access opens a pull request from a branch. Stage 1 runs their content on a GitHub-hosted runner, a fresh machine discarded after the job, with a read-only token. Their pull request reaches `main` through the `protect-main` rule, which requires the editorial checks to pass and requires an editor's review for any change under `CODEOWNERS`. The author's code runs only in jobs that hold no secret, and every job that holds a secret runs code from `main` or from an editor's `v*` tag.
 
-A pull request from a fork, the default for an outside contributor, adds a step before anything runs: GitHub holds the run for a maintainer's approval when the contributor has never had anything merged into the repository. That is GitHub's default for a public repository, `oak bootstrap` leaves it there, and the [runbook](src:src/messages.ts#L450-L453) tells the editor to expect the approval click. Once approved, the fork's run builds like any other, and any edit it makes to a gated file needs an editor's review before it can merge. The checks comment also [flags](src:src/checks.ts#L216-L223) a pull request that touches `.github/`, `CODEOWNERS` or `paper-environment.yml`.
+A pull request from a fork, the default for an outside contributor, adds a step before anything runs: GitHub holds the run for a maintainer's approval when the contributor has never had anything merged into the repository. That is GitHub's default for a public repository, `oak bootstrap` leaves it there, and the [runbook](src:src/messages.ts#L424-L427) tells the editor to expect the approval click. Once approved, the fork's run builds like any other, and any edit it makes to a gated file needs an editor's review before it can merge. The checks comment also [flags](src:src/checks.ts#L216-L223) a pull request that touches `.github/`, `CODEOWNERS` or `paper-environment.yml`.
 :::
 
 (design-paper-ci-trust)=
@@ -45,7 +45,7 @@ The author changes the content and `myst.yml`, including the engine version, wit
 
 (r92)=
 
-[`CODEOWNERS`](src:templates/paper/CODEOWNERS#L3-L5) tells GitHub who must review a change to the files it names. It only blocks a merge behind a branch rule that requires a code owner's review, and the pull request's workflows still run before anyone reviews it. `oak bootstrap` creates that rule as [`protect-main`](src:src/bootstrap.ts#L446-L480). Our CODEOWNERS names three things:
+[`CODEOWNERS`](src:templates/paper/CODEOWNERS#L3-L5) tells GitHub who must review a change to the files it names. It only blocks a merge behind a branch rule that requires a code owner's review, and the pull request's workflows still run before anyone reviews it. `oak bootstrap` creates that rule as [`protect-main`](src:src/bootstrap.ts#L444-L478). Our CODEOWNERS names three things:
 
 - `.github/`, so an editor approves any change to the launchers or to `pins.yml`, which could otherwise name a different engine repository, or a journal repository whose MyST plugins run at build time.
 - `CODEOWNERS` itself, so a pull request cannot remove the gate in the same change.
@@ -75,7 +75,7 @@ A branch pull request goes through the same two stages. A check then behaves the
 
 (r207)=
 
-Branches cannot reach the tokens at all. A repository secret is readable by every workflow on every branch, and an author with push access can push a branch carrying a workflow of their own, so `oak bootstrap` stores every secret in a GitHub environment instead. The Cloudflare secrets live on `preview` and the Zenodo tokens on `zenodo-prepare`, both admitting only `main`, and on `zenodo-publish`, which admits only `v*` tags and waits for a required reviewer. Each job that reads a secret declares its environment, and a job on any other ref is refused before it starts. Re-running `oak bootstrap` with the values sets them on the environments and deletes the repository-level copies.
+Branches cannot reach the tokens at all. A repository secret is readable by every workflow on every branch, and an author with push access can push a branch carrying a workflow of their own, so `oak bootstrap` stores every secret in a GitHub environment instead. The Cloudflare secrets live on `preview` and the Zenodo tokens on `zenodo-prepare`, both admitting only `main`, and on `zenodo-publish`, which admits only `v*` tags; only editors can push one. Each job that reads a secret declares its environment, and a job on any other ref is refused before it starts. Re-running `oak bootstrap` with the values sets them on the environments and deletes the repository-level copies.
 
 Inside those jobs the paper's code never runs. `publish.yml` builds in a job with no secrets and hands the output to the deposit job, which runs `oak release --no-build`. The action installs `paper-environment.yml` only when a job asks, and only the build jobs ask. And the engine runs `wrangler` from an empty directory, so a `.npmrc` or `node_modules` in the paper cannot choose which wrangler receives the Cloudflare token.
 
