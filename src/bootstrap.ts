@@ -41,6 +41,9 @@ export interface TemplateAnswers {
   /** The repo being bootstrapped (`owner/name`), written as the starter paper's
    *  `project.github`. */
   repo?: string;
+  /** The journal website's URL, for the brand's `logo_url`, so each paper's header links back
+   *  to it. Unset when there is no website. */
+  siteUrl?: string;
 }
 
 /** The journal name the templates ship, replaced by `--name`. */
@@ -223,8 +226,9 @@ export function renderPaperTemplate(
 /**
  * Renders the journal template (`journal.yml`, `editions/<edition>.yml`, `brand/`, the registry)
  * into `destRoot`: the journal name from the settings into `journal.yml` (`name` and the
- * commented Zenodo blurb), the brand's `logo_text` and the edition's `venue`; the edition file
- * renamed, the rest copied, the README left out. Returns the written paths.
+ * commented Zenodo blurb), the brand's `logo_text` and the edition's `venue`; the website's URL
+ * into the brand's `logo_url`; the edition file renamed, the rest copied, the README left out.
+ * Returns the written paths.
  */
 export function renderInstanceTemplate(
   instanceRoot: string,
@@ -246,9 +250,10 @@ export function renderInstanceTemplate(
         rel,
         name ? out.replaceAll(JOURNAL_NAME_PLACEHOLDER, name.replace(/\s+/g, ' ')) : out,
       );
-    } else if (rel === posix.join('brand', 'brand.yml') && name) {
+    } else if (rel === posix.join('brand', 'brand.yml') && (name || answers.siteUrl)) {
       const doc = readDoc(join(instanceRoot, rel));
-      doc.setIn(['site', 'options', 'logo_text'], name);
+      if (name) doc.setIn(['site', 'options', 'logo_text'], name);
+      if (answers.siteUrl) doc.setIn(['site', 'options', 'logo_url'], answers.siteUrl);
       writeRel(destRoot, rel, doc.toString());
     } else if (rel === posix.join('editions', 'edition.yml')) {
       const dest = posix.join('editions', `${answers.edition}.yml`);
@@ -274,10 +279,12 @@ export function galleryPluginUrl(engineRepo: string, engineVersion: string): str
   return `https://raw.githubusercontent.com/${engineRepo}/${engineVersion}/plugins/gallery.mjs`;
 }
 
-/** The journal site's GitHub Pages URL for `owner/repo`, a project site, so under a path. */
+/** The journal site's GitHub Pages URL for `owner/repo`: a project site under a path, or the
+ *  root for a repo named `<owner>.github.io`. Pages hosts are lowercase. */
 export function siteUrlFor(repo: string): string {
   const [owner, name] = repo.split('/');
-  return `https://${owner}.github.io/${name}/`;
+  const host = `${owner!.toLowerCase()}.github.io`;
+  return name!.toLowerCase() === host ? `https://${host}/` : `https://${host}/${name}/`;
 }
 
 /**
@@ -1162,6 +1169,7 @@ export async function cmdBootstrapJournal(
     edition,
     journalName: input.name,
     repo,
+    ...(withSite ? { siteUrl: siteUrlFor(repo) } : {}),
   };
 
   const repoThere = prov.repoExists(repo);
