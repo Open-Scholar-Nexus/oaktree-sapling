@@ -606,6 +606,12 @@ export const realProvisioner: Provisioner = {
   enablePages(repo) {
     gh(['api', '-X', 'POST', `repos/${repo}/pages`, '-f', 'build_type=workflow']);
   },
+  homepage(repo) {
+    return gh(['api', `repos/${repo}`, '--jq', '.homepage // empty']);
+  },
+  setHomepage(repo, url) {
+    gh(['api', '-X', 'PATCH', `repos/${repo}`, '-f', `homepage=${url}`]);
+  },
   actionsCanApprovePrs(repo) {
     return (
       gh([
