@@ -1,0 +1,10 @@
+# The papers listed on your page. Adding an entry is how a paper is published to your website.
+# https://scholar.nexus/oaktree-sapling/reference/files#file-registry
+#
+# - id:       j-2026-example
+#   slug:     example
+#   location: { repo: owner/example-paper, path: . }
+#   edition:  edition
+#   doi:      10.5281/zenodo.1234567
+#   site_url: https://journal.example.org/example
+[]

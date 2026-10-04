@@ -1,0 +1,349 @@
+import { describe, it, expect } from 'vitest';
+import {
+  toCheckRun,
+  checksComment,
+  cmdCheckPost,
+  frozenPathsTouched,
+  STICKY_CHECKS,
+  CheckStatus,
+  type EngineCheckResult,
+  type CheckRun,
+  type ChecksReport,
+  type CheckPostDeps,
+} from '../src/checks.js';
+
+// The editorial checks read myst's processed project, so they run only in a real session, in
+// validate.integration.test.ts. This tests how results become a Check Run.
+
+describe('toCheckRun (reporting: GitHub Check Run, ours)', () => {
+  it('fails the conclusion on a non-optional failure', () => {
+    expect(toCheckRun([{ id: 'x', status: CheckStatus.fail, message: 'bad' }]).conclusion).toBe(
+      'failure',
+    );
+  });
+
+  it('an error status also fails the Check Run', () => {
+    expect(toCheckRun([{ id: 'x', status: CheckStatus.error }]).conclusion).toBe('failure');
+  });
+
+  it('optional failures are annotated and do not block the merge', () => {
+    const r = toCheckRun([
+      { id: 'x', status: CheckStatus.fail, optional: true },
+      { id: 'y', status: CheckStatus.pass },
+    ]);
+    expect(r.conclusion).toBe('success');
+  });
+
+  it('counts an optional failure as a warning, not a failure', () => {
+    const r = toCheckRun([
+      { id: 'x', status: CheckStatus.fail, optional: true },
+      { id: 'y', status: CheckStatus.pass },
+      { id: 'z', status: CheckStatus.fail },
+    ]);
+    expect(r.title).toBe('1 passed, 1 failed, 1 warning');
+    const ok = toCheckRun([
+      { id: 'x', status: CheckStatus.fail, optional: true },
+      { id: 'w', status: CheckStatus.error, optional: true },
+      { id: 'y', status: CheckStatus.pass },
+    ]);
+    expect(ok.title).toBe('1 passed, 0 failed, 2 warnings');
+    expect(checksComment({ checkRun: ok })).toContain(
+      '✅ Journal checks passed: 1 passed, 0 failed, 2 warnings',
+    );
+  });
+
+  it('emits inline annotations from file+position (unist), capped at 50', () => {
+    const results: EngineCheckResult[] = Array.from({ length: 60 }, (_, i) => ({
+      id: `c${i}`,
+      status: CheckStatus.fail,
+      message: 'm',
+      file: 'index.md',
+      position: { start: { line: i + 1, column: 1 }, end: { line: i + 1, column: 1 } },
+    }));
+    const r = toCheckRun(results);
+    expect(r.annotations).toHaveLength(50);
+    expect(r.annotations[0]).toMatchObject({
+      path: 'index.md',
+      start_line: 1,
+      annotation_level: 'failure',
+    });
+  });
+
+  it('relativizes an absolute annotation path against pathBase, leaves a relative one alone', () => {
+    // curvenote gives absolute or relative paths, and GitHub resolves only paths relative to the
+    // repo, so they are made relative to pathBase, the checkout root.
+    const r = toCheckRun(
+      [
+        {
+          id: 'abs',
+          status: CheckStatus.fail,
+          message: 'm',
+          file: '/home/runner/work/repo/repo/papers/foo/myst.yml',
+          position: { start: { line: 3, column: 1 }, end: { line: 3, column: 1 } },
+        },
+        {
+          id: 'rel',
+          status: CheckStatus.fail,
+          message: 'm',
+          file: 'index.md',
+          position: { start: { line: 1, column: 1 }, end: { line: 1, column: 1 } },
+        },
+      ],
+      '/home/runner/work/repo/repo',
+    );
+    expect(r.annotations[0]?.path).toBe('papers/foo/myst.yml');
+    expect(r.annotations[1]?.path).toBe('index.md');
+  });
+
+  it('embeds notes above the table without touching the conclusion ([R82])', () => {
+    // An uncomposed run says so in the Check Run, but the note alone does not fail it; the
+    // compose finding does.
+    const r = toCheckRun([{ id: 'authors-exist', status: CheckStatus.pass }], undefined, [
+      'ran uncomposed: myst.oak.yml could not be composed (boom).',
+    ]);
+    expect(r.conclusion).toBe('success');
+    expect(r.summary).toMatch(/^> ⚠️ ran uncomposed/);
+    expect(r.summary.indexOf('uncomposed')).toBeLessThan(r.summary.indexOf('| Check |'));
+  });
+
+  it('says nothing when there are no notes, a composed run stays quiet', () => {
+    const r = toCheckRun([{ id: 'authors-exist', status: CheckStatus.pass }]);
+    expect(r.summary.startsWith('| Check |')).toBe(true);
+  });
+
+  it('never annotates a finding in myst.oak.yml [R82]', () => {
+    // Results about the config name myst.oak.yml, which is gitignored: GitHub cannot resolve
+    // the path, and its line numbers are not the author's [R82]. So the finding is in the
+    // summary and gets no annotation.
+    const r = toCheckRun(
+      [
+        {
+          id: 'derived',
+          status: CheckStatus.fail,
+          message: 'no keywords',
+          file: '/paper/myst.oak.yml',
+          position: { start: { line: 12, column: 1 }, end: { line: 12, column: 1 } },
+        },
+        {
+          id: 'authored',
+          status: CheckStatus.fail,
+          message: 'bad abstract',
+          file: '/paper/index.md',
+          position: { start: { line: 4, column: 1 }, end: { line: 4, column: 1 } },
+        },
+      ],
+      '/paper',
+    );
+    expect(r.annotations.map((a) => a.path)).toEqual(['index.md']);
+    // Left out of the annotations only; it still fails the check and still shows.
+    expect(r.conclusion).toBe('failure');
+    expect(r.summary).toMatch(/no keywords/);
+  });
+
+  it('without a pathBase, paths pass through unchanged (pure default)', () => {
+    const r = toCheckRun([
+      {
+        id: 'abs',
+        status: CheckStatus.fail,
+        message: 'm',
+        file: '/abs/myst.yml',
+        position: { start: { line: 1, column: 1 }, end: { line: 1, column: 1 } },
+      },
+    ]);
+    expect(r.annotations[0]?.path).toBe('/abs/myst.yml');
+  });
+
+  it('an optional finding annotates as a warning, not a failure', () => {
+    const r = toCheckRun([
+      {
+        id: 'c',
+        status: CheckStatus.fail,
+        message: 'm',
+        file: 'index.md',
+        position: { start: { line: 2, column: 1 }, end: { line: 2, column: 1 } },
+        optional: true,
+      },
+    ]);
+    expect(r.annotations[0]?.annotation_level).toBe('warning');
+  });
+
+  it('renders a markdown summary table keyed by check id', () => {
+    const r = toCheckRun([{ id: 'abstract-exists', status: CheckStatus.pass }]);
+    expect(r.summary).toContain('| Check | Status | Detail |');
+    expect(r.summary).toContain('abstract-exists');
+  });
+});
+
+/* --------------------------------------------------------------------------
+ * Posting: the comment, and `oak check-post`.
+ * ------------------------------------------------------------------------ */
+
+const report = (over: Partial<CheckRun> = {}): ChecksReport => ({
+  status: over.conclusion === 'failure' ? 'error' : 'ok',
+  checkRun: toCheckRun([
+    { id: 'abstract-exists', status: CheckStatus.pass },
+    ...(over.conclusion === 'failure'
+      ? [
+          {
+            id: 'authors-have-orcid',
+            status: CheckStatus.fail,
+            message: 'no ORCID',
+          } as EngineCheckResult,
+        ]
+      : []),
+  ]),
+});
+
+describe('checksComment (the pull request comment)', () => {
+  it('renders a success body: sticky marker, ✅ headline, counts, table', () => {
+    const body = checksComment(report());
+    expect(body.startsWith(`<!-- oak-sticky: ${STICKY_CHECKS} -->`)).toBe(true);
+    expect(body).toContain('✅');
+    expect(body).toContain('1 passed, 0 failed');
+    expect(body).toContain('| Check | Status | Detail |');
+    expect(body).toContain('abstract-exists');
+  });
+
+  it('renders a failure body: ❌ headline, failure counts, the failing check in the table', () => {
+    const body = checksComment(report({ conclusion: 'failure' }));
+    expect(body).toContain('❌');
+    expect(body).toContain('1 passed, 1 failed');
+    expect(body).toContain('authors-have-orcid');
+  });
+
+  it("carries an uncomposed run's note into the comment [R82]", () => {
+    // check-post does not handle notes; they are in checkRun.summary, which the comment shows,
+    // so an uncomposed run looks uncomposed on the pull request.
+    const body = checksComment({
+      status: 'ok',
+      checkRun: toCheckRun([{ id: 'abstract-exists', status: CheckStatus.pass }], undefined, [
+        'ran uncomposed (no oak checkout or journal repo)',
+      ]),
+    });
+    expect(body).toContain('⚠️ ran uncomposed');
+  });
+});
+
+function fakePost(over: Partial<CheckPostDeps> = {}): {
+  deps: CheckPostDeps;
+  runs: Array<{ repo: string; sha: string; name: string; run: CheckRun }>;
+  stickies: Array<{ pr: string; header: string; body: string }>;
+} {
+  const runs: Array<{ repo: string; sha: string; name: string; run: CheckRun }> = [];
+  const stickies: Array<{ pr: string; header: string; body: string }> = [];
+  const deps: CheckPostDeps = {
+    checkRun: { create: (repo, sha, name, run) => void runs.push({ repo, sha, name, run }) },
+    sticky: (_root, pr, header, body) => void stickies.push({ pr, header, body }),
+    ...over,
+  };
+  return { deps, runs, stickies };
+}
+
+describe('cmdCheckPost, with fakes for GitHub', () => {
+  it('posts the Check Run, and creates or updates the comment when a pull request is given', () => {
+    const { deps, runs, stickies } = fakePost();
+    const out = cmdCheckPost({ report: report(), repo: 'o/r', sha: 'abc', pr: '7' }, deps);
+    expect(out.checkRunPosted).toBe(true);
+    expect(out.commentPosted).toBe(true);
+    expect(runs).toEqual([
+      { repo: 'o/r', sha: 'abc', name: 'Journal checks', run: report().checkRun },
+    ]);
+    expect(stickies).toHaveLength(1);
+    expect(stickies[0]).toMatchObject({ pr: '7', header: STICKY_CHECKS });
+    expect(stickies[0]!.body).toContain('| Check | Status | Detail |');
+  });
+
+  it('without --pr posts the Check Run but no comment', () => {
+    const { deps, runs, stickies } = fakePost();
+    const out = cmdCheckPost({ report: report(), repo: 'o/r', sha: 'abc' }, deps);
+    expect(runs).toHaveLength(1);
+    expect(stickies).toHaveLength(0);
+    expect(out.checkRunPosted).toBe(true);
+    expect(out.commentPosted).toBe(false);
+  });
+
+  it('a failed Check Run post is an error and a warning; the comment is still posted', () => {
+    const { deps, stickies } = fakePost({
+      checkRun: {
+        create: () => {
+          throw new Error('403 read-only');
+        },
+      },
+    });
+    const out = cmdCheckPost({ report: report(), repo: 'o/r', sha: 'abc', pr: '7' }, deps);
+    expect(out.checkRunPosted).toBe(false);
+    expect(out.commentPosted).toBe(true);
+    expect(stickies).toHaveLength(1);
+    expect(out.warnings.join(' ')).toContain('Check Run not posted');
+    // The Check Run is required to merge, so failing to post it is an error [R144]: the pull
+    // request would wait for a check that never comes.
+    expect(out.status).toBe('error');
+  });
+
+  it('a failed comment post becomes a warning (no crash)', () => {
+    const { deps, runs } = fakePost({
+      sticky: () => {
+        throw new Error('boom');
+      },
+    });
+    const out = cmdCheckPost({ report: report(), repo: 'o/r', sha: 'abc', pr: '7' }, deps);
+    expect(out.checkRunPosted).toBe(true);
+    expect(out.commentPosted).toBe(false);
+    expect(runs).toHaveLength(1);
+    expect(out.warnings.join(' ')).toContain('comment not posted');
+    // The Check Run carries the result, so a failed comment stays 'ok' [R144].
+    expect(out.status).toBe('ok');
+  });
+});
+
+describe('frozenPathsTouched (the gated files)', () => {
+  it('matches .github/**, CODEOWNERS and paper-environment.yml, ignores paper content', () => {
+    const changed = [
+      'index.md',
+      '.github/workflows/check.yml',
+      'CODEOWNERS',
+      'data/x.csv',
+      'paper-environment.yml',
+      '.github/actions/engine/pins.yml',
+    ];
+    expect(frozenPathsTouched(changed)).toEqual([
+      '.github/workflows/check.yml',
+      'CODEOWNERS',
+      'paper-environment.yml',
+      '.github/actions/engine/pins.yml',
+    ]);
+  });
+  it('a change to content only touches no gated file', () => {
+    expect(frozenPathsTouched(['index.md', 'myst.yml', 'figures/f1.png'])).toEqual([]);
+  });
+});
+
+describe('cmdCheckPost: the gated-files warning', () => {
+  it('with shimTouched: warns in the comment and the Check Run title and summary, with the conclusion unchanged', () => {
+    const { deps, runs, stickies } = fakePost();
+    const out = cmdCheckPost(
+      {
+        report: report(),
+        repo: 'o/r',
+        sha: 'abc',
+        pr: '7',
+        shimTouched: ['.github/workflows/check.yml'],
+      },
+      deps,
+    );
+    expect(out.checkRunPosted).toBe(true);
+    // a warning only: the conclusion stays, since upgrades edit these files too
+    expect(runs[0]!.run.conclusion).toBe(report().checkRun.conclusion);
+    expect(runs[0]!.run.title).toContain('CI workflows modified');
+    expect(runs[0]!.run.summary).toContain('changes the files that run the checks');
+    expect(stickies[0]!.body).toContain('changes the files that run the checks');
+    expect(stickies[0]!.body).toContain('`.github/workflows/check.yml`');
+  });
+
+  it('without shimTouched: posts the report as it is, with no warning', () => {
+    const { deps, runs, stickies } = fakePost();
+    cmdCheckPost({ report: report(), repo: 'o/r', sha: 'abc', pr: '7' }, deps);
+    expect(runs[0]!.run.title).toBe(report().checkRun.title);
+    expect(stickies[0]!.body).not.toContain('changes the files that run the checks');
+  });
+});

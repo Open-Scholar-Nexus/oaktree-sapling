@@ -1,0 +1,19 @@
+version: 1
+
+# Your journal's website: a plain MyST project, yours to rewrite. The plugin URL and
+# `site.template` below, and `mystmd` in package.json, are pinned at bootstrap and bumped
+# by hand. https://scholar.nexus/oaktree-sapling/guide/pins
+
+extends:
+  - ./brand/brand.yml
+
+project:
+  title: CHANGE-ME Journal
+  plugins:
+    # The `paper-cards` directive, at an engine tag.
+    - STAMPED-AT-BOOTSTRAP
+  toc:
+    - file: pages/index.md
+
+site:
+  template: STAMPED-AT-BOOTSTRAP

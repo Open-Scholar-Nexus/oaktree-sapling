@@ -1,0 +1,19 @@
+version: 1
+
+# The MyST config every paper extends [design §5]. The typst export is declared whole here
+# because MyST merges `exports` whole, by id [R52]; oak adds the template URL [R5].
+project:
+  thumbnail: thumbnails/thumbnail.png # read by the gallery plugin
+  exports:
+    - format: typst
+      id: typst-pdf
+      articles:
+        - file: index.md
+          level: 0
+  downloads:
+    - id: typst-pdf
+      title: PDF export
+
+site:
+  options:
+    hide_toc: true

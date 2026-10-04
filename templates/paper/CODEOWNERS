@@ -1,0 +1,5 @@
+# Editors review the launchers, the pins and the environment; content and myst.yml stay with the author.
+# https://scholar.nexus/oaktree-sapling/design/paper-ci#design-paper-ci-codeowners
+/.github/                @pollomarzo
+/CODEOWNERS              @pollomarzo
+/paper-environment.yml   @pollomarzo

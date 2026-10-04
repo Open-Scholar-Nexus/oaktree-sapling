@@ -1,0 +1,31 @@
+# Your journal's settings, read by every paper build.
+# https://scholar.nexus/oaktree-sapling/guide/journal-yml
+name: CHANGE-ME Journal
+# url: https://example.org
+
+tier: paper
+
+# https://scholar.nexus/oaktree-sapling/guide/journal-yml#id-pattern
+id_sentinel: CHANGE-ME-template-placeholder
+id_pattern: "^[a-z0-9]+-\\d{4}-[a-z0-9-]+$"
+
+# engine PDF template override
+# https://scholar.nexus/oaktree-sapling/guide/journal-yml#typst-template
+# typst_template: ./typst-template
+
+preview:
+  provider: artifact
+  branch_pattern: paper-{repo}-{pr}
+
+zenodo: {}
+  # community: your-zenodo-community
+  # description_blurb: >-
+  #   Published in CHANGE-ME Journal.
+
+# editorial checks a paper must pass in CI. https://scholar.nexus/oaktree-sapling/guide/checks
+checks:
+- id: authors-exist
+- id: authors-have-orcid
+- id: authors-have-credit-roles
+- id: abstract-exists
+- id: keywords-defined

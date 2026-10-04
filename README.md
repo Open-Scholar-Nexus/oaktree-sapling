@@ -1,28 +1,66 @@
-# scholar nexus
+# oaktree-sapling
 
-This repo contains the public development for a prototype of an open, easy-to-setup, free science dissemination platform.
-Do not expect stability or extensive documentation until the project will consolidate.
+A journal engine for small publications built on [MyST](https://mystmd.org), GitHub and Zenodo.
 
-**Live site:** https://open-scholar-nexus.github.io/oaktree-sapling/
+One repo holds the journal: its settings, branding, editions and the list of published papers.
+Each paper gets a repo of its own, with CI that builds a website and a PDF, runs the journal's checks on every pull request, publishes a preview, and deposits the final version to Zenodo for a DOI. `oak` is the command line tool that sets those repos up and does the work inside them.
 
-The site is automatically deployed to GitHub Pages on every push to the main branch.
+Papers refer to the engine by a single version coordinate, so a journal upgrades by changing one line rather than by copying workflow files around.
 
-## run this locally
+## Status
 
-1. Clone this repo
-2. Create the environment from the environment file: `mamba env create -f .devcontainer/environment.yml`
-3. Activate the environment: `mamba activate nexus`
-4. Run `myst start` to start the local development server
+Pre-1.0 and in active development. Every command is implemented and the CI is being tested end to end against real GitHub, Cloudflare and Zenodo, but interfaces may still change between 0.x versions and the documentation is incomplete. Its original design served Neuromatch Impact Scholars Program 2025, but is being heavily revised to become suitable to more tenants.
 
-## dev
+## Install
 
-### what the workflow is right now
+```
+npm install -g oaktree-sapling
+oak
+```
 
-- `papers.txt` contains a list of paper repository names (organized by year)
-- MyST builds the site from the source files
-- you can check html builds by serving them with `npx serve _build/html`
-- GitHub Actions builds and deploys to GitHub Pages on push to main
+`oak` with no arguments prints the full usage.
 
-### where to find more info
+## Commands
 
-Most of the work will follow our issue board. This work is funded by Neuromatch! More info [here](https://neuromatch.io/about/)
+Setting up repos:
+
+- `oak bootstrap journal`: create the journal repo (settings, branding, paper list)
+- `oak bootstrap paper`: create a paper repo pointing at a journal
+- `oak upgrade`: move a paper repo to a newer engine version, as a pull request
+
+Working on a paper:
+
+- `oak validate`: run the journal's checks over a manuscript
+- `oak build`: build the paper's website and PDF into `_build/`
+- `oak start`: preview it in a browser with the journal's settings applied
+
+The rest (`check-post`, `deploy-preview`, `deposit`, `release`, `notify`, `conformance`) are run by the generated workflows and are rarely typed by hand.
+
+## Known limitations of the npm package
+
+The engine is normally run from a checked-out release tag, which carries two things the npm package does not:
+
+- **No PDF export.** A pinned `typst` binary ships with each release tag; the package has none, so `oak build` produces a PDF only if `typst` is already on your `PATH`.
+- **`oak deposit` does not work.** It archives the engine with `git archive` to record what built the paper, which needs a git checkout rather than an installed package.
+
+Both are being worked on. Until then, CI uses release tags.
+
+## Editorial checks
+
+`oak validate` runs two kinds of check. The engine's own invariants are built in. The editorial checks a journal selects (authors exist, have ORCIDs, have valid CRediT roles, abstract exists, keywords defined) come from the MIT-licensed [`@curvenote/check-implementations`](https://www.npmjs.com/package/@curvenote/check-implementations) and [`@curvenote/check-definitions`](https://www.npmjs.com/package/@curvenote/check-definitions). The engine supplies the runner and the GitHub Check Run reporter.
+
+## Development
+
+```
+npm install
+npm test
+npm run typecheck
+```
+
+`NOTES.md` has the module map and the build internals. `RELEASING.md` explains how releases are cut and why the built bundle is committed at the tag. `STYLE.md` and `WRITING.md` are the conventions a change is reviewed against, for code and for prose.
+
+## License
+
+BSD 3-Clause, copyright Neuromatch, Inc. See `LICENSE`.
+
+One subtree is not covered by it: `templates/typst/` is the [LaPreprint](https://github.com/curvenote/lapreprint) typst template, MIT-licensed and copyright Rowan Cockett. It keeps its own `LICENSE` alongside it, which ships with the package and with every release tag.

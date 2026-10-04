@@ -1,0 +1,54 @@
+name: Publish Zenodo deposit
+
+# A v* tag fills the Zenodo draft; a human clicks Publish on Zenodo. Token picked by DOI prefix.
+# https://scholar.nexus/oaktree-sapling/reference/cli#release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  build: # no secrets: the paper's code runs here, never beside the token
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/engine
+        with:
+          args: build
+          paper-env: true
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-build
+          path: |
+            myst.oak.yml
+            _build/exports
+            _build/site/content
+            _build/templates
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    environment: zenodo-publish # v* tags only
+    permissions:
+      contents: write # attach the Release bundle + commit comment
+      issues: write # open the editor-action issue on failure
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # git archive + PR discovery need history
+          persist-credentials: false # nothing here pushes
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-build
+          path: .
+      - uses: ./.github/actions/engine
+        with:
+          args: release --tag ${{ github.ref_name }} --no-build
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ZENODO_TOKEN: ${{ secrets.ZENODO_TOKEN }}
+          ZENODO_TOKEN_SANDBOX: ${{ secrets.ZENODO_TOKEN_SANDBOX }}

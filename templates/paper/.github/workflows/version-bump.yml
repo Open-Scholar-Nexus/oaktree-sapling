@@ -1,0 +1,24 @@
+name: Engine version bump
+
+# Weekly PR moving myst.yml's engine version to the latest release. These files resync only by hand.
+# https://scholar.nexus/oaktree-sapling/reference/cli#upgrade
+
+on:
+  schedule:
+    - cron: "17 4 * * 1" # weekly, Monday 04:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write # commit the bump branch
+  pull-requests: write # open the bump PR
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/engine
+        with:
+          args: upgrade --paper . --version-only --yes
+        env:
+          GH_TOKEN: ${{ github.token }}

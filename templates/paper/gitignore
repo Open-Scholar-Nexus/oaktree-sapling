@@ -1,0 +1,5 @@
+# Written by `oak build`; your myst.yml is never modified. Safe to delete.
+myst.oak.yml
+
+# MyST build outputs
+_build/

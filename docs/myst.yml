@@ -1,0 +1,47 @@
+version: 1
+
+# The docs site. `npm run docs` previews it, `npm run docs:build` builds it as CI does.
+# Leave BASE_URL unset locally; CI sets it to the path GitHub Pages serves under.
+
+project:
+  id: oaktree-sapling-docs
+  title: Oaktree Sapling
+  description: Documentation for the oaktree-sapling journal engine.
+  # `[text](src:path#L1-L9)` links to oak's source at a release tag.
+  plugins:
+    - plugins/source-links.mjs
+  # oak prints links to these pages' labels (src/docs-links.ts), so a broken one fails the build.
+  error_rules:
+    - rule: reference-target-resolves
+      severity: error
+    - rule: identifier-is-unique
+      severity: error
+  toc:
+    - file: index.md
+    - title: Start
+      children:
+        - file: start/journal.md
+        - file: start/paper.md
+    - title: Guides
+      children:
+        - file: guide/journal-yml.md
+        - file: guide/branding.md
+        - file: guide/checks.md
+        - file: guide/journal-site.md
+        - file: guide/pins.md
+    - title: Reference
+      children:
+        - file: reference/files.md
+        - file: reference/cli.md
+    - title: Design
+      children:
+        - file: design/index.md
+        - file: design/paper-ci.md
+        - file: design/releases.md
+
+site:
+  template: book-theme
+  options:
+    logo_text: Oaktree Sapling
+    # Keeps the folder in each URL (/guide/journal-yml), which oak's printed links rely on.
+    folders: true
