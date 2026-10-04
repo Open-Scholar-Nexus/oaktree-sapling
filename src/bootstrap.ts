@@ -953,6 +953,7 @@ function applySecrets(
   });
 
   runbook.push(msg.bootstrap.runbookForkApproval);
+  runbook.push(msg.bootstrap.runbookAuthorAccess(repo));
   return { set, runbook, failed };
 }
 

@@ -437,6 +437,13 @@ export const bootstrap = {
     `approve the workflow run before it starts: one click in the repo's Actions tab, per new ` +
     `contributor. There is no way to switch this off.`,
 
+  // oak has no invite command: authors work from a fork by default [R124].
+  runbookAuthorAccess: (repo: string): string =>
+    `Authors work from a fork of ${repo}; there is nothing to set up. To give an author push ` +
+    `access instead: gh api -X PUT repos/${repo}/collaborators/<github-user> -f permission=push ` +
+    `(they can then push branches here; main still needs a pull request and only editors can ` +
+    `create v* tags).`,
+
   runbookStartHere: (repo: string): string =>
     `Start here: edit journal.yml (your journal's name and the rules papers are checked against) ` +
     `and brand/ (logo + colours). Papers read both at build time, so a change here reaches ` +

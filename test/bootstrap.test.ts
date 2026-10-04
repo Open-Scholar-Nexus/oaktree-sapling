@@ -607,6 +607,14 @@ describe('cmdBootstrapPaper', () => {
     expect(runbook).not.toContain('zt'); // never the value
   });
 
+  it('the runbook says how to give an author push access, with the repo filled in [R124]', async () => {
+    const { prov } = fakeProv();
+    const out = await cmdBootstrapPaper(paperInput(), deps(prov));
+    expect((out.result.runbook as string[]).join('\n')).toContain(
+      'gh api -X PUT repos/me/paper/collaborators/<github-user> -f permission=push',
+    );
+  });
+
   it('allows Actions to open pull requests, which the first DOI pull request needs [R122]', async () => {
     const { prov, calls } = fakeProv();
     const out = await cmdBootstrapPaper(paperInput(), deps(prov));
@@ -889,6 +897,7 @@ describe('cmdBootstrapJournal', () => {
     expect(myst.getIn(['site', 'template'])).toBe(themeZipUrl());
     expect(myst.getIn(['project', 'plugins', 0])).toBe(galleryPluginUrl('me/engine', 'v1'));
     expect(myst.getIn(['project', 'title'])).toBe('J');
+    expect((out.result.runbook as string[]).join('\n')).not.toContain('collaborators');
   });
 
   it('--external --no-site: neither the site files nor Pages', async () => {
