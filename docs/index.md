@@ -12,6 +12,8 @@ A toolkit to create free, simple journals run on GitHub, hosted on Zenodo and bu
 
 [After bootstrap](start/journal.md): initialize your journal, make the first edits, push and watch the site go live.
 
+[Add a paper](guide/add-paper.md): create a repository per submission, and list it on the website.
+
 [journal.yml](guide/journal-yml.md): every setting and what changing it does.
 
 [Editorial checks](guide/checks.md): what a submission is held to.

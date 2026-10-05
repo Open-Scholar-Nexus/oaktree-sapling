@@ -25,6 +25,7 @@ project:
         - file: start/paper.md
     - title: Guides
       children:
+        - file: guide/add-paper.md
         - file: guide/journal-yml.md
         - file: guide/branding.md
         - file: guide/checks.md
