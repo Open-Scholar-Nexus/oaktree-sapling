@@ -20,7 +20,7 @@ import {
   type CheckRunRef,
 } from '../src/conformance.js';
 import { RESERVED_BUNDLE_NAMES } from '../src/zenodo.js';
-import { UPGRADE_BRANCH_PREFIX } from '../src/upgrade.js';
+import { UPGRADE_BRANCH } from '../src/upgrade.js';
 
 const REPO = 'me/fixture-paper-repo';
 
@@ -640,7 +640,7 @@ describe('reset sweeps what the run creates ([R117])', () => {
   it('deletes the upgrade branch too, not only cert-*', async () => {
     // The upgrade branch is named after the tag, so leaving it would block a second run of the
     // same tag [R117].
-    const branches = ['cert-123', 'oak/upgrade-v0.0.2', 'main'];
+    const branches = ['cert-123', 'oak/upgrade-v0.0.2', 'oak/upgrade', 'main'];
     const deleted: string[] = [];
     const out = await cmdConformanceReset(
       { repo: 'o/r' },
@@ -661,13 +661,14 @@ describe('reset sweeps what the run creates ([R117])', () => {
       },
     );
     expect(deleted).toContain('oak/upgrade-v0.0.2');
+    expect(deleted).toContain('oak/upgrade');
     expect(deleted).toContain('cert-123');
     expect(deleted).not.toContain('main');
     expect(out.exitCode).toBe(0);
   });
 
-  it('uses the prefix `oak upgrade` actually opens', () => {
-    expect(UPGRADE_BRANCH_PREFIX).toBe('oak/upgrade-');
+  it('uses the branch `oak upgrade` actually opens', () => {
+    expect(UPGRADE_BRANCH).toBe('oak/upgrade');
   });
 });
 

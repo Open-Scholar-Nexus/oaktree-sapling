@@ -475,6 +475,10 @@ export const upgrade = {
   upToDate: (target: string, engineRepo: string, targetGiven: boolean): string =>
     `up to date at ${target}${targetGiven ? '' : ` (the newest release of ${engineRepo}; no --to given)`}; no pull request.`,
 
+  pinAhead: (pin: string, target: string, engineRepo: string): string =>
+    `kept ${pin}: it is newer than ${target} (the newest release of ${engineRepo}) or is a ` +
+    `branch or commit; no pull request. Pass --to <tag> to move it.`,
+
   planHeader: (repoRoot: string, target: string): string => `upgrade ${repoRoot} → ${target}`,
   planTarget: (target: string, engineRepo: string, targetGiven: boolean): string =>
     `  engine version : ${target}${
@@ -492,6 +496,8 @@ export const upgrade = {
     '  ○ all of the above goes up as a pull request for you to review; nothing is pushed to main',
 
   logPrOpened: (url: string): string => `opened upgrade PR ${url}`,
+  logPrUpdated: (url: string): string => `updated upgrade PR ${url}`,
+  logPrCurrent: (url: string): string => `upgrade PR ${url} already has these changes`,
 
   prTitle: (target: string): string => `Upgrade engine to ${target}`,
   prBodyHeader: (target: string): string => `Moves this repo to engine \`${target}\`.`,

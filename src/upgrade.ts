@@ -9,7 +9,9 @@
  *    CODEOWNERS review.
  *  - **both** does both.
  *
- * A repo that is up to date gets no pull request. Finding the target, getting the
+ * A repo that is up to date gets no pull request. Without `--to`, the target is the newest stable
+ * release, and a pin already past it stays. That run reuses one branch, so its pull request is
+ * updated in place; a `--to` pick gets a branch of its own. Finding the target, getting the
  * template and opening the pull request are injected, so tests use fakes.
  */
 import { existsSync, readFileSync, writeFileSync, mkdirSync, copyFileSync } from 'node:fs';
@@ -23,9 +25,46 @@ import {
   type TemplateAnswers,
 } from './bootstrap.js';
 import * as msg from './messages.js';
+import type { cmdConformanceReset } from './conformance.js';
 
-/** Exported so `conformance reset` removes the branches this opens [R117]. */
-export const UPGRADE_BRANCH_PREFIX = 'oak/upgrade-';
+/** The branch for the newest release; a `--to` pick adds `-<tag>`. Exported for
+ *  {@link cmdConformanceReset}, which deletes both [R117]. */
+export const UPGRADE_BRANCH = 'oak/upgrade';
+
+/** A release tag: `vX.Y.Z`, optionally with a pre-release such as `-dev.4`. */
+const RELEASE_TAG = /^v(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/;
+
+/** Semver order of two release tags (negative, 0, positive), or null if either is not one. */
+export function compareTags(a: string, b: string): number | null {
+  const ma = RELEASE_TAG.exec(a);
+  const mb = RELEASE_TAG.exec(b);
+  if (!ma || !mb) return null;
+  for (let i = 1; i <= 3; i++) {
+    const d = Number(ma[i]) - Number(mb[i]);
+    if (d) return d;
+  }
+  return comparePre(ma[4], mb[4]);
+}
+
+/** Pre-release order per semver §11: none ranks above any, numeric ids below alphanumeric. */
+function comparePre(a: string | undefined, b: string | undefined): number {
+  if (a === b) return 0;
+  if (a === undefined) return 1;
+  if (b === undefined) return -1;
+  const pa = a.split('.');
+  const pb = b.split('.');
+  for (let i = 0; i < Math.min(pa.length, pb.length); i++) {
+    const x = pa[i]!;
+    const y = pb[i]!;
+    if (x === y) continue;
+    const nx = /^\d+$/.test(x);
+    const ny = /^\d+$/.test(y);
+    if (nx && ny) return Number(x) - Number(y);
+    if (nx !== ny) return nx ? -1 : 1;
+    return x < y ? -1 : 1;
+  }
+  return pa.length - pb.length;
+}
 
 const PINS_REL = posix.join('.github', 'actions', 'engine', 'pins.yml');
 const CODEOWNERS_REL = 'CODEOWNERS';
@@ -151,12 +190,16 @@ export function computeDrift(
  * Injected, so tests use fakes
  * ------------------------------------------------------------------------ */
 
+/** What `UpgradePr.open` did: opened a pull request, updated the open one on the branch, or
+ *  left it as it was because it already had these changes. */
+export type PrAction = 'opened' | 'updated' | 'current';
+
 export interface UpgradePr {
-  /** Branch, commit as the bot, push, open the pull request; returns its URL. */
+  /** Branch, commit as the bot, push, and open the pull request or update the branch's open one. */
   open(
     repoRoot: string,
     opts: { branch: string; title: string; body: string; paths: string[] },
-  ): string;
+  ): { url: string; action: PrAction };
 }
 
 export interface UpgradeDeps {
@@ -218,6 +261,18 @@ export async function cmdUpgrade(input: UpgradeInput, deps: UpgradeDeps): Promis
   // right now" is not.
   const targetGiven = Boolean(input.to);
   const target = input.to ?? deps.resolveTarget(answers.engineRepo);
+
+  // The newest release never moves a pin back: a pre-release or a ref picked by hand stays.
+  if (!targetGiven && answers.version) {
+    const order = compareTags(answers.version, target);
+    if (order === null || order > 0) {
+      deps.log(msg.upgrade.pinAhead(answers.version, target, answers.engineRepo));
+      return {
+        exitCode: 0,
+        result: { status: 'ok', target, pin: answers.version, pr: null, pin_ahead: true },
+      };
+    }
+  }
   const wantVersion = mode === 'version-only' || mode === 'both';
   const wantFiles = mode === 'files-only' || mode === 'both';
 
@@ -274,16 +329,30 @@ export async function cmdUpgrade(input: UpgradeInput, deps: UpgradeDeps): Promis
     paths.push(...drift);
   }
 
-  const url = deps.pr.open(repoRoot, {
-    branch: `${UPGRADE_BRANCH_PREFIX}${target}`,
+  const { url, action } = deps.pr.open(repoRoot, {
+    branch: targetGiven ? `${UPGRADE_BRANCH}-${target}` : UPGRADE_BRANCH,
     title: msg.upgrade.prTitle(target),
     body: upgradeBody(target, versionChanged, drift, extra),
     paths,
   });
-  deps.log(msg.upgrade.logPrOpened(url));
+  const logs = {
+    opened: msg.upgrade.logPrOpened,
+    updated: msg.upgrade.logPrUpdated,
+    current: msg.upgrade.logPrCurrent,
+  };
+  deps.log(logs[action](url));
   return {
     exitCode: 0,
-    result: { status: 'ok', target, drift, extra, version_bumped: versionChanged, pr: url, paths },
+    result: {
+      status: 'ok',
+      target,
+      drift,
+      extra,
+      version_bumped: versionChanged,
+      pr: url,
+      pr_action: action,
+      paths,
+    },
   };
 }
 

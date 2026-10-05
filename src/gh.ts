@@ -793,20 +793,58 @@ export function materializeTemplate(engineRepo: string, tag: string): string {
   return join(tmp, 'templates', 'paper');
 }
 
-/** The upgrade pull request, opened like the DOI one: branch, commit as the bot, push, create. */
+/** The upgrade pull request: branch, commit as the bot, push, then open one or update the
+ *  branch's open one, so the weekly run keeps a single pull request. */
 export const realUpgradePr: UpgradePr = {
   open(repoRoot, opts) {
     git(repoRoot, ['checkout', '-B', opts.branch]);
     git(repoRoot, ['add', ...opts.paths]);
     git(repoRoot, [...BOT_ID, 'commit', '-m', opts.title]);
-    git(repoRoot, ['push', '-u', 'origin', opts.branch, '--force']);
     // Run `gh` inside the clone so it finds the repo from the remote: in CI the cwd is
     // already the repo, while a local `oak upgrade` works in a temporary clone.
-    return gh(['pr', 'create', '--title', opts.title, '--body', opts.body, '--head', opts.branch], {
-      cwd: repoRoot,
-    });
+    const cwd = repoRoot;
+    const existing =
+      gh(
+        [
+          'pr',
+          'list',
+          '--head',
+          opts.branch,
+          '--state',
+          'open',
+          '--json',
+          'url',
+          '--jq',
+          '.[0].url // empty',
+        ],
+        { cwd },
+      ) || null;
+    // The open pull request already has these changes.
+    if (existing && sameTreeAsRemote(repoRoot, opts.branch))
+      return { url: existing, action: 'current' };
+    git(repoRoot, ['push', '-u', 'origin', opts.branch, '--force']);
+    if (existing) {
+      gh(['pr', 'edit', existing, '--title', opts.title, '--body', opts.body], { cwd });
+      return { url: existing, action: 'updated' };
+    }
+    const create = ['pr', 'create', '--title', opts.title, '--body', opts.body];
+    const url = gh([...create, '--head', opts.branch], { cwd });
+    return { url, action: 'opened' };
   },
 };
+
+/** Whether `origin/<branch>` has the tree of HEAD. False when the branch is not on the remote. */
+function sameTreeAsRemote(repoRoot: string, branch: string): boolean {
+  try {
+    git(repoRoot, ['fetch', '--quiet', 'origin', branch], { quiet: true });
+  } catch {
+    return false;
+  }
+  return (
+    git(repoRoot, ['rev-parse', 'HEAD^{tree}']) ===
+    git(repoRoot, ['rev-parse', 'FETCH_HEAD^{tree}'])
+  );
+}
 
 /** A value from the test repo's `myst.yml` on the default branch, read through the
  *  Contents API, so no clone is needed. null when absent or unreadable. */
