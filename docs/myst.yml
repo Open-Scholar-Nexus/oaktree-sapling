@@ -20,6 +20,7 @@ project:
     - file: index.md
     - title: Start
       children:
+        - file: start/setup.md
         - file: start/journal.md
         - file: start/paper.md
     - title: Guides

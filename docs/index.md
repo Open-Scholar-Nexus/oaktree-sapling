@@ -8,6 +8,8 @@ A toolkit to create free, simple journals run on GitHub, hosted on Zenodo and bu
 ::::{grid} 1 1 3 3
 
 :::{card} Run a journal
+[Before you start](start/setup.md): install `oak`, choose where the repositories live, create the journal.
+
 [After bootstrap](start/journal.md): initialize your journal, make the first edits, push and watch the site go live.
 
 [journal.yml](guide/journal-yml.md): every setting and what changing it does.
