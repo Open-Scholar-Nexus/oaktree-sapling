@@ -1327,7 +1327,9 @@ export async function cmdBootstrapJournal(
   ];
   if (!withSite) {
     const allRunbook = [...contentRunbook, ...runbook];
-    for (const line of contentRunbook) log(`  → ${line}`);
+    for (const line of allRunbook) log(`  → ${line}`);
+    if (contentFailed.length)
+      log(msg.bootstrap.logPartial(contentFailed.map((f) => f.step).join(', ')));
     return {
       exitCode: contentFailed.length ? 1 : 0,
       result: {
