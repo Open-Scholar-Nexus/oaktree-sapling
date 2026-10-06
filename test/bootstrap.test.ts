@@ -935,9 +935,12 @@ describe('cmdBootstrapJournal', () => {
     expect(brand.getIn(['site', 'options', 'logo_url'])).toBe('https://me.github.io/');
   });
 
-  it('--external --no-site: neither the site files nor Pages', async () => {
+  it('--external --no-site: neither the site files nor Pages, and prints the runbook', async () => {
     const { prov, calls } = fakeProv();
     const seedDirs: string[] = [];
+    const logged: string[] = [];
+    const d = journalDeps(prov, seedDirs);
+    d.log = (line) => logged.push(line);
     const out = await cmdBootstrapJournal(
       {
         repo: 'me/config',
@@ -950,8 +953,9 @@ describe('cmdBootstrapJournal', () => {
         site: false,
         secrets: {},
       },
-      journalDeps(prov, seedDirs),
+      d,
     );
+    expect(logged.join('\n')).toContain('Start here: edit journal.yml');
     expect(calls.enablePages ?? []).toHaveLength(0);
     expect(calls.setHomepage).toHaveLength(0);
     expect(out.result.site_url).toBeUndefined();

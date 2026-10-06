@@ -1,6 +1,7 @@
 name: Engine version bump
 
-# Weekly PR moving myst.yml's engine version to the latest release. These files resync only by hand.
+# Weekly PR moving myst.yml's engine version to the latest release, updated in place while open.
+# These files resync only by hand. An archived repo runs no workflows, so it is left alone.
 # https://scholar.nexus/oaktree-sapling/reference/cli#upgrade
 
 on:
