@@ -27,6 +27,7 @@ import {
   extraFrozenFiles,
   readAnswers,
   cmdUpgrade,
+  compareTags,
   type UpgradePr,
   type UpgradeDeps,
   ownerFromCodeowners,
@@ -143,7 +144,7 @@ function fakePr() {
   const pr: UpgradePr = {
     open(_root, o) {
       opened.push({ branch: o.branch, paths: o.paths });
-      return 'https://github.com/me/paper/pull/9';
+      return { url: 'https://github.com/me/paper/pull/9', action: 'opened' };
     },
   };
   return { pr, opened };
@@ -218,7 +219,7 @@ describe('cmdUpgrade', () => {
     expect(myst.getIn(['project', 'options', 'oaktree-sapling', 'version'])).toBe('v2.0.0');
     expect(readFileSync(join(repo, '.github/workflows/ci.yml'), 'utf8')).toBe(before); // workflows unchanged
     expect(opened[0]!.paths).toEqual(['myst.yml']);
-    expect(opened[0]!.branch).toBe('oak/upgrade-v2.0.0');
+    expect(opened[0]!.branch).toBe('oak/upgrade');
   });
 
   it('--files-only overwrites only the engine-managed files that differ, not myst.yml', async () => {
@@ -270,5 +271,86 @@ describe('cmdUpgrade', () => {
     expect(out.result.up_to_date).toBe(true);
     expect(out.result.pr).toBeNull();
     expect(opened).toHaveLength(0);
+  });
+});
+
+describe('the newest release', () => {
+  /** A paper repo pinned at `pin`. */
+  function pinned(pin: string): string {
+    const repo = makeRepo();
+    const myst = join(repo, 'myst.yml');
+    const doc = parseDocument(readFileSync(myst, 'utf8'));
+    doc.setIn(['project', 'options', 'oaktree-sapling', 'version'], pin);
+    writeFileSync(myst, doc.toString());
+    return repo;
+  }
+
+  it('never moves a pin back from a newer pre-release', async () => {
+    const repo = pinned('v1.0.1-dev.2');
+    const { pr, opened } = fakePr();
+    const out = await cmdUpgrade(
+      { repoRoot: repo, mode: 'version-only' },
+      deps(pr, 'v1.0.0', () => TEMPLATE_ROOT),
+    );
+    expect(out.result.pin_ahead).toBe(true);
+    expect(opened).toHaveLength(0);
+  });
+
+  it('leaves a pin that is not a release tag', async () => {
+    const { pr, opened } = fakePr();
+    await cmdUpgrade(
+      { repoRoot: pinned('main'), mode: 'version-only' },
+      deps(pr, 'v2.0.0', () => TEMPLATE_ROOT),
+    );
+    expect(opened).toHaveLength(0);
+  });
+
+  it('moves a pre-release pin up to its release', async () => {
+    const { pr, opened } = fakePr();
+    await cmdUpgrade(
+      { repoRoot: pinned('v2.0.0-dev.9'), mode: 'version-only' },
+      deps(pr, 'v2.0.0', () => TEMPLATE_ROOT),
+    );
+    expect(opened[0]!.branch).toBe('oak/upgrade');
+  });
+
+  it('--to moves a pin back, on a branch named after the tag', async () => {
+    const { pr, opened } = fakePr();
+    await cmdUpgrade(
+      { repoRoot: pinned('v1.0.1-dev.2'), to: 'v1.0.0', mode: 'version-only' },
+      deps(pr, 'v9.0.0', () => TEMPLATE_ROOT),
+    );
+    expect(opened[0]!.branch).toBe('oak/upgrade-v1.0.0');
+  });
+
+  it('reports an update of the open pull request', async () => {
+    const lines: string[] = [];
+    const pr: UpgradePr = {
+      open: () => ({ url: 'https://github.com/me/paper/pull/9', action: 'updated' }),
+    };
+    const out = await cmdUpgrade(
+      { repoRoot: makeRepo(), mode: 'version-only' },
+      { ...deps(pr, 'v2.0.0', () => TEMPLATE_ROOT), log: (m) => lines.push(m) },
+    );
+    expect(out.result.pr_action).toBe('updated');
+    expect(lines.join('\n')).toContain('updated upgrade PR');
+  });
+});
+
+describe('compareTags', () => {
+  it.each([
+    ['v1.2.3', 'v1.2.3', 0],
+    ['v1.10.0', 'v1.9.9', 1],
+    ['v0.0.5-dev.2', 'v0.0.4', 1],
+    ['v0.0.4-dev.9', 'v0.0.4', -1],
+    ['v0.0.0-dev.10', 'v0.0.0-dev.9', 1],
+    ['v1.0.0-alpha', 'v1.0.0-alpha.1', -1],
+    ['v1.0.0-1', 'v1.0.0-alpha', -1],
+  ])('%s vs %s', (a, b, sign) => {
+    expect(Math.sign(compareTags(a, b)!)).toBe(sign);
+  });
+
+  it('is null for a ref that is not a release tag', () => {
+    expect(compareTags('main', 'v1.0.0')).toBeNull();
   });
 });

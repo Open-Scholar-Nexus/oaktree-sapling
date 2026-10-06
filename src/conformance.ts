@@ -15,7 +15,7 @@
 import { STICKY_PREVIEW } from './preview.js';
 import { stickyMarker } from './messages.js';
 import { RESERVED_BUNDLE_NAMES } from './zenodo.js';
-import { UPGRADE_BRANCH_PREFIX } from './upgrade.js';
+import { UPGRADE_BRANCH } from './upgrade.js';
 
 /** The label on every pull request a run opens, which is how `reset` finds them, including pull
  *  requests from the fork, whose branch names it does not know. */
@@ -167,10 +167,10 @@ export async function cmdConformanceReset(input: ResetInput, deps: ResetDeps): P
     log(`closed PR #${pr.number} (${pr.headRef})`);
   }
 
-  // Both prefixes: the run's own `oak upgrade` opens the second, and sweeping only the first
-  // made each release testable once [R117]. Deleting a branch closes its pull request.
+  // The run's `oak upgrade` opens `oak/upgrade-<tag>`; deleting it lets the same release be tested
+  // again [R117]. Deleting a branch closes its pull request.
   const deletedBranches: string[] = [];
-  for (const prefix of [CERT_BRANCH_PREFIX, UPGRADE_BRANCH_PREFIX]) {
+  for (const prefix of [CERT_BRANCH_PREFIX, UPGRADE_BRANCH]) {
     for (const branch of gh.listBranches(repo, prefix)) {
       gh.deleteBranch(repo, branch);
       deletedBranches.push(branch);
