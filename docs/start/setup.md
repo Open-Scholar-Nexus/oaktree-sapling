@@ -21,16 +21,16 @@ On a personal account you are the only editor. Paper repositories let you merge 
 On an organisation, the editors are a team. Before bootstrapping, create:
 
 - the organisation;
-- a team for the editors, with its members (for example `@my-journal/editors`);
+- a team for the editors (for example `@my-journal/editors`). Its members can be added later, but a paper's pull requests cannot merge and its versions cannot be tagged until the team has at least one;
 
 and check that the account running `oak` can create repositories in the organisation and administer them, since `oak bootstrap` sets rules and environments on each one.
 
-Then pass the team with `--owner @my-journal/editors` when you create each paper repository. The team gets write access, owns the repository's workflows and settings in `CODEOWNERS`, and is the only one allowed to create the tags that publish a version. The journal repository itself needs no owner.
+Then pass the team with `--owner @my-journal/editors` when you create each paper repository. The team gets write access, owns the repository's workflows and settings in `CODEOWNERS`, and is the only one allowed to create the tags that publish a version. `--owner` applies to paper repositories only: the journal repository belongs to the account that created it, and editors who should change the journal's settings need access to it granted on GitHub.
 
 ## Create the journal
 
 ```bash
-oak bootstrap journal --repo <owner>/<journal-repo> --external --name "My Journal" --edition 2026
+oak bootstrap journal --repo <owner>/<journal-repo> --name "My Journal" --edition 2026
 ```
 
 `oak` prints what it is about to do, including every value it took a default for, and asks before changing anything. `--edition` names the first edition; without it the edition is called `edition`. The engine version defaults to the newest stable release.

@@ -1,9 +1,7 @@
 (start-journal)=
 # You just bootstrapped a journal
 
-`oak bootstrap journal --external` created a public repository on GitHub with one commit in it, turned on GitHub Pages for the journal website, and linked the website from the repository page. Nothing was written to your machine, so the next steps are to clone the repository and edit its settings.
-
-`--co-located` is experimental: it puts the journal's settings and a single paper in one repository, with no journal website. The rest of this page describes `--external`.
+`oak bootstrap journal` created a public repository on GitHub with one commit in it, turned on GitHub Pages for the journal website, and linked the website from the repository page. Nothing was written to your machine, so the next steps are to clone the repository and edit its settings.
 
 ## 1. Clone it
 
@@ -25,7 +23,7 @@ package.json                 the website's build dependencies
 .github/workflows/site.yml   builds and deploys the website on every push to main
 ```
 
-Every file here is yours to rewrite: `oak upgrade` updates paper repositories and leaves this one alone. See [what each file is](../reference/files.md).
+Every file here is yours to rewrite: `oak upgrade` updates paper repositories and leaves this one alone. The next steps cover the files to edit first; [Files in a journal repository](../reference/files.md) describes each one.
 
 ## 2. Edit journal.yml and the brand
 
@@ -35,7 +33,7 @@ Every paper build reads [`journal.yml`](../guide/journal-yml.md). Before the fir
 : The journal's name. `--name` wrote it here and everywhere else the name appears: the text beside the logo, the venue printed on each paper's PDF, and the website's title. Without `--name`, each of those says `CHANGE-ME Journal`.
 
 `id_pattern`
-: The shape every paper's id must have. The seeded pattern is `^[a-z0-9]+-\d{4}-[a-z0-9-]+$`, which accepts `oak-2026-tidal-flats`. A paper whose id does not match fails its checks and cannot merge. See [id_pattern](../guide/journal-yml.md#id-pattern), including how to turn it off.
+: The shape every paper's id must have. It starts as `^[a-z0-9]+-\d{4}-[a-z0-9-]+$`, which accepts `oak-2026-tidal-flats`. A paper whose id does not match fails its checks and cannot merge. See [id_pattern](../guide/journal-yml.md#id-pattern), including how to turn it off.
 
 `checks`
 : The editorial checks a paper has to pass. See [editorial checks](../guide/checks.md).
@@ -55,26 +53,23 @@ git push
 
 The push redeploys the website. Paper builds read this repository when they run, so the next build of every paper, old and new, uses the settings you pushed.
 
-To have changes to the journal reviewed before they take effect, add a branch rule to the repository yourself.
-
 (first-deploy)=
 ## 4. Wait for the website
 
-The website is served at `https://<owner>.github.io/<journal-repo>/`, or at your custom domain if the account has one. It appears when the first **Journal site** run in the repository's **Actions** tab finishes, and GitHub Pages can take another minute or two to serve a new site. Until then the address returns 404.
+The website is served at `https://<owner>.github.io/<journal-repo>/`, or at your custom domain if the account has one, a few minutes after the first **Journal site** run in the repository's **Actions** tab finishes. If a later build fails, the last version deployed keeps serving.
 
-If a later build fails, the last version deployed keeps serving, so a bad entry in `registry/papers.yml` shows up as a failed run and the website stays up.
+## 5. Create a repository for each paper
+
+A paper is built, checked and published from a repository of its own, so the journal has no papers until you create one. [Add a paper](../guide/add-paper.md) covers creating it with `oak bootstrap paper`, what the author finds there, and listing the paper on the journal website once it is published.
 
 ## Previewing before you push
 
-The website is a MyST project, so you can serve it locally:
-
 ```bash
-npm install     # once
 oak start
 ```
 
-`oak start` stops and asks for `npm install` if the dependencies are missing. `oak build` and `oak validate` work on papers and refuse to run in this repository.
+In the journal repository, `oak start` serves the website with MyST as it is, the same way the **Journal site** workflow builds it. On a paper repository it does more; [Processing MyST markdown](../design/index.md#processing-myst) explains what oaktree-sapling adds around MyST.
 
-## What comes next
-
-Each submission gets its own paper repository, created with `oak bootstrap paper --instance <owner>/<journal-repo>`. What the author finds there is described in [your paper repository](paper.md). A paper appears on the journal website when an entry for it is added to [`registry/papers.yml`](../reference/files.md#file-registry).
+:::{dropdown} Experimental: the journal and its paper in one repository
+`oak bootstrap journal --co-located` puts the journal's settings and a single paper in one repository, with no journal website. It is experimental and the rest of this page does not apply to it.
+:::
