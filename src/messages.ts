@@ -201,46 +201,44 @@ export const prompt = {
  * ═════════════════════════════════════════════════════════════════════════════════════════ */
 
 /**
- * The plan's opening block: every value the run will use, and whether it came from a flag or a
- * default. Most end up in files that are awkward to change later, so `Proceed? [y/N]` covers
- * them all.
+ * The plan's opening block: every value the run will use, one row per flag, with `(default)`
+ * on the ones no flag set. Most end up in files that are awkward to change later, so
+ * `Proceed? [y/N]` covers them all.
  */
 export const declared = {
-  journalRepoCoLocated: 'this repo itself (--instance .)',
-  journalRepo: (repo: string): string => `${repo} (--instance): the journal this paper belongs to`,
+  journalRepoCoLocated: '. (this repo itself)',
+  journalRepo: (repo: string): string => `${repo}: the journal this paper belongs to`,
 
-  journalNameGiven: (name: string): string => `${name} (--name)`,
-  journalNameDefault:
-    '"CHANGE-ME Journal" (default): a placeholder in journal.yml, brand/brand.yml and the ' +
-    'edition file',
+  journalNameGiven: (name: string): string => name,
+  journalNameDefault: (name: string): string =>
+    `${name} (default): a placeholder in journal.yml, brand/brand.yml and the edition file`,
 
-  editionGiven: (edition: string): string => `${edition} (--edition)`,
+  editionGiven: (edition: string): string => edition,
   editionDefault: (edition: string): string =>
-    `${edition} (default): the journal's first edition file is editions/${edition}.yml, ` +
-    `and every paper in it names this id`,
+    `${edition} (default): written as editions/${edition}.yml; papers name this id`,
 
-  engineVersionGiven: (tag: string): string => `${tag} (--engine-version)`,
+  engineVersionGiven: (tag: string): string => tag,
   engineVersionDefault: (tag: string): string =>
     `${tag} (default): the newest engine release, looked up just now`,
 
-  engineRepoGiven: (repo: string): string => `${repo} (--engine-repo)`,
+  engineRepoGiven: (repo: string): string => repo,
   engineRepoDefault: (repo: string): string =>
     `${repo} (default): where the workflows fetch the engine from`,
 
   ownerGiven: (owner: string): string =>
-    `${owner} (--owner): written into CODEOWNERS, so this is who must approve changes`,
+    `${owner}: written into CODEOWNERS, so this is who must approve changes`,
   ownerDefault: (owner: string): string =>
     `${owner} (default): your own GitHub login; written into CODEOWNERS, so this ` +
     `is who must approve changes`,
 
-  /** Row labels, in the order they print. */
+  /** Row labels, in the order they print: the flag that sets each value. */
   labels: {
-    journalRepo: 'journal repo',
-    journalName: 'journal name',
-    edition: 'edition',
-    engineVersion: 'engine version',
-    engineRepo: 'engine repo',
-    owner: 'review owner',
+    journalRepo: '--instance',
+    journalName: '--name',
+    edition: '--edition',
+    engineVersion: '--engine-version',
+    engineRepo: '--engine-repo',
+    owner: '--owner',
   },
 };
 
@@ -287,7 +285,7 @@ export const bootstrap = {
   planCreateRepo: (isPrivate: boolean): string =>
     `  ○ create repo (${isPrivate ? 'private' : 'public'})`,
   planCreateJournalRepo: (external: boolean): string =>
-    `  ○ create repo (public${external ? '; it must stay public: every paper build reads the journal settings from it, without a token' : ''})`,
+    `  ○ create repo (public${external ? ', and it must stay so: paper builds read it without a token' : ''})`,
   planPrivate:
     "  ! on GitHub's free plan a private repo cannot have repo rulesets or Pages, so those " +
     'steps will fail late in this run (403), after the repo and its content are already in ' +
@@ -328,13 +326,8 @@ export const bootstrap = {
   planReviewPr: '  ○ open the review → main pull request',
 
   planProvisioning:
-    '  ○ repo settings: branch + tag rules, GitHub Pages and the repo website link, the zenodo-publish ' +
-    'environment (v* tags only) and the main-only zenodo-prepare and preview ones, permission for Actions ' +
-    'to open pull requests, issue labels (safe to re-run)',
-  planProvisioningCoLocated:
-    '  ○ repo settings: branch + tag rules, GitHub Pages and the repo website link, the zenodo-publish ' +
-    'environment (v* tags only) and the main-only zenodo-prepare and preview ones, permission for Actions ' +
-    'to open pull requests, issue labels',
+    '  ○ repo settings: branch and tag rules, GitHub Pages, Zenodo environments, Actions ' +
+    'permissions, issue labels',
   planSecrets: (names: string): string =>
     `  ○ secrets: ${names || 'none given; you get a list of what to set by hand'}`,
   planPages: (siteUrl: string): string =>

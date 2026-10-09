@@ -47,7 +47,7 @@ export interface TemplateAnswers {
 }
 
 /** The journal name the templates ship, replaced by `--name`. */
-const JOURNAL_NAME_PLACEHOLDER = 'CHANGE-ME Journal';
+const JOURNAL_NAME_PLACEHOLDER = 'Acorn Annals';
 
 const RENDER_PINS = posix.join('.github', 'actions', 'engine', 'pins.yml');
 const RENDER_CODEOWNERS = 'CODEOWNERS';
@@ -616,7 +616,7 @@ function declaredValues(v: {
       msg.declared.labels.journalName,
       v.journalName
         ? msg.declared.journalNameGiven(v.journalName)
-        : msg.declared.journalNameDefault,
+        : msg.declared.journalNameDefault(JOURNAL_NAME_PLACEHOLDER),
     ]);
   }
   rows.push([
@@ -642,7 +642,7 @@ function declaredValues(v: {
     ]);
   }
   const width = Math.max(...rows.map(([k]) => k.length));
-  return rows.map(([k, val]) => `  ${k.padEnd(width)} : ${val}`);
+  return rows.map(([k, val]) => `  ${k.padEnd(width)}  ${val}`);
 }
 
 export interface BootstrapPaperInput {
@@ -1145,9 +1145,9 @@ export async function cmdBootstrapPaper(
   };
 }
 
-/** The edition when `--edition` is not given. Consistent, since it also names the
- *  `editions/<id>.yml` this run writes, and shown in the plan. */
-const DEFAULT_EDITION = 'edition';
+/** The edition when `--edition` is not given: a journal's first growth ring. It also names
+ *  the `editions/<id>.yml` this run writes, and is shown in the plan. */
+const DEFAULT_EDITION = 'ring-1';
 
 export interface BootstrapJournalInput {
   repo: string; // owner/name
@@ -1230,7 +1230,7 @@ export async function cmdBootstrapJournal(
       ? withSite
         ? msg.bootstrap.planPages(siteUrlFor(repo))
         : msg.bootstrap.planNoSite
-      : msg.bootstrap.planProvisioningCoLocated,
+      : msg.bootstrap.planProvisioning,
     // As for papers, a rerun does not seed again, so a changed `--name`, `--edition` or
     // `--engine-version` does not reach a seeded main.
     ...(mainThere ? [msg.bootstrap.planAlreadySeededJournal] : []),
