@@ -143,7 +143,7 @@ describe('renderInstanceTemplate', () => {
     expect(parseDocument(journal).get('name')).toBe('Acta: Tests #1');
     expect(journal).toContain('Published in Acta: Tests #1.');
     for (const f of ['journal.yml', 'brand/brand.yml', 'editions/ed-2026.yml'])
-      expect(readFileSync(join(dest, f), 'utf8'), f).not.toContain('CHANGE-ME Journal');
+      expect(readFileSync(join(dest, f), 'utf8'), f).not.toContain('Acorn Annals');
   });
 
   it('without --name the files keep their placeholder as shipped', () => {
@@ -482,13 +482,12 @@ describe('cmdBootstrapPaper', () => {
       d,
     );
     const plan = plans[0]!.join('\n');
-    expect(plan).toContain('journal repo   : me/instance-config');
-    expect(plan).toContain('edition        : ed-2026');
-    // A resolved value says so, and names the flag that sets it.
-    expect(plan).toMatch(/engine version : v1\.2\.3: the newest engine release right now/);
-    expect(plan).toContain('--engine-version');
-    expect(plan).toMatch(/engine repo    : me\/engine: built-in default/);
-    expect(plan).toMatch(/review owner   : @alice: your own GitHub login/);
+    // One row per flag; a resolved value is marked as a default.
+    expect(plan).toMatch(/--instance +me\/instance-config/);
+    expect(plan).toMatch(/--edition +ed-2026/);
+    expect(plan).toMatch(/--engine-version +v1\.2\.3 \(default\): the newest engine release/);
+    expect(plan).toMatch(/--engine-repo +me\/engine \(default\)/);
+    expect(plan).toMatch(/--owner +@alice \(default\): your own GitHub login/);
   });
 
   it('a value that was passed is shown as passed, not as a default', async () => {
@@ -507,10 +506,10 @@ describe('cmdBootstrapPaper', () => {
       d,
     );
     const plan = plans[0]!.join('\n');
-    expect(plan).toContain('engine version : v1.2.3 (--engine-version)');
-    expect(plan).toContain('engine repo    : me/engine (--engine-repo)');
-    expect(plan).toContain('review owner   : @org/editors (--owner)');
-    expect(plan).not.toContain('no --engine-version given');
+    expect(plan).toMatch(/--engine-version +v1\.2\.3\n/);
+    expect(plan).toMatch(/--engine-repo +me\/engine\n/);
+    expect(plan).toMatch(/--owner +@org\/editors: written into CODEOWNERS/);
+    expect(plan).not.toContain('(default)');
   });
 
   it('--instance . names this repo as the journal, and still bootstraps', async () => {
@@ -1081,9 +1080,9 @@ describe('cmdBootstrapJournal', () => {
       d,
     );
     const plan = plans[0]!.join('\n');
-    expect(plan).toMatch(/edition        : edition \(placeholder; no --edition given\)/);
-    expect(plan).toContain('editions/edition.yml');
-    expect(existsSync(join(seedDirs[0]!, 'editions/edition.yml'))).toBe(true);
+    expect(plan).toMatch(/--edition +seedling \(default\)/);
+    expect(plan).toContain('editions/seedling.yml');
+    expect(existsSync(join(seedDirs[0]!, 'editions/seedling.yml'))).toBe(true);
   });
 
   it('the plan shows no review owner for an external journal, which has none', async () => {
@@ -1110,7 +1109,7 @@ describe('cmdBootstrapJournal', () => {
       },
       ext,
     );
-    expect(plans[0]!.join('\n')).not.toContain('review owner');
+    expect(plans[0]!.join('\n')).not.toContain('--owner');
 
     // A co-located journal writes CODEOWNERS, so the plan shows the owner.
     const colo = journalDeps(fakeProv().prov, []);
@@ -1132,7 +1131,7 @@ describe('cmdBootstrapJournal', () => {
       },
       colo,
     );
-    expect(plans[1]!.join('\n')).toContain('review owner   : @alice');
+    expect(plans[1]!.join('\n')).toMatch(/--owner +@alice/);
   });
 
   it('--co-located --no-site is refused', async () => {
