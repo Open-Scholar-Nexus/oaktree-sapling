@@ -1019,6 +1019,7 @@ export async function cmdBootstrapPaper(
       instanceRepo,
       resolved: input.resolved,
     }),
+    '',
     repoThere ? msg.bootstrap.planRepoExists : msg.bootstrap.planCreateRepo(input.private),
     // The last point to say so before content exists [R127].
     ...(input.private ? [msg.bootstrap.planPrivate] : []),
@@ -1218,6 +1219,7 @@ export async function cmdBootstrapJournal(
       journalName: input.name ?? null,
       resolved: input.resolved,
     }),
+    '',
     repoThere ? msg.bootstrap.planRepoExists : msg.bootstrap.planCreateJournalRepo(external),
     mainThere
       ? msg.bootstrap.planMainSeeded

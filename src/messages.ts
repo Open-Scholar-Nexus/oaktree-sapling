@@ -207,32 +207,31 @@ export const prompt = {
  */
 export const declared = {
   journalRepoCoLocated: 'this repo itself (--instance .)',
-  journalRepo: (repo: string): string => `${repo}: the journal this paper belongs to (--instance)`,
+  journalRepo: (repo: string): string => `${repo} (--instance): the journal this paper belongs to`,
 
   journalNameGiven: (name: string): string => `${name} (--name)`,
   journalNameDefault:
-    'not given; journal.yml, brand/brand.yml and the edition file keep the "CHANGE-ME ' +
-    'Journal" placeholder (set it now with --name "Your Journal")',
+    '"CHANGE-ME Journal" (default): a placeholder in journal.yml, brand/brand.yml and the ' +
+    'edition file',
 
   editionGiven: (edition: string): string => `${edition} (--edition)`,
   editionDefault: (edition: string): string =>
-    `${edition} (placeholder; no --edition given). The scaffold writes editions/${edition}.yml ` +
-    `and every paper must name the same id (pass --edition 2026, say, to use your own)`,
+    `${edition} (default): the journal's first edition file is editions/${edition}.yml, ` +
+    `and every paper in it names this id`,
 
   engineVersionGiven: (tag: string): string => `${tag} (--engine-version)`,
   engineVersionDefault: (tag: string): string =>
-    `${tag}: the newest engine release right now, no --engine-version given ` +
-    `(pass one to pin a version you have tested)`,
+    `${tag} (default): the newest engine release, looked up just now`,
 
   engineRepoGiven: (repo: string): string => `${repo} (--engine-repo)`,
   engineRepoDefault: (repo: string): string =>
-    `${repo}: built-in default, no --engine-repo given (where the workflows fetch the engine from)`,
+    `${repo} (default): where the workflows fetch the engine from`,
 
   ownerGiven: (owner: string): string =>
-    `${owner} (--owner); written into CODEOWNERS, so this is who must approve changes`,
+    `${owner} (--owner): written into CODEOWNERS, so this is who must approve changes`,
   ownerDefault: (owner: string): string =>
-    `${owner}: your own GitHub login, no --owner given; written into CODEOWNERS, so this ` +
-    `is who must approve changes (pass --owner @org/team for a team)`,
+    `${owner} (default): your own GitHub login; written into CODEOWNERS, so this ` +
+    `is who must approve changes`,
 
   /** Row labels, in the order they print. */
   labels: {
@@ -295,24 +294,24 @@ export const bootstrap = {
     'place. Create the repo public, or confirm your GitHub plan covers private repos, before ' +
     'proceeding.',
 
-  planMainSeeded: '  ✓ main seeded',
+  planMainSeeded: '  ✓ main exists',
   planSeedPaper:
-    '  ○ seed main with the starter manuscript + the GitHub Actions workflows that build and check it',
+    '  ○ commit to main: the starter manuscript and the GitHub Actions workflows that build and check it',
   planSeedJournal: (withSite: boolean): string =>
-    `  ○ seed main with the journal's settings, branding and paper list${withSite ? ', plus the journal website' : ''} (no paper workflows; this repo publishes nothing itself)`,
+    `  ○ commit to main: the journal's settings, branding and paper list${withSite ? ', plus the journal website' : ''} (${docsUrl(DOCS.files)})`,
   planSeedCoLocated:
-    "  ○ seed main with the journal's settings AND a starter paper, plus the workflows that build and check it",
+    "  ○ commit to main: the journal's settings, a starter paper and the workflows that build and check it",
 
-  /** A rerun that changes an answer does not reseed, so it would succeed while changing
-   *  nothing. */
+  /** A rerun that changes an answer does not commit to main again, so it would succeed
+   *  while changing nothing. */
   planAlreadySeededPaper: (instanceRepo: string): string =>
-    `  ! main is already seeded; this run will NOT rewrite the workflows or` +
+    `  ! main already exists; this run will NOT rewrite the workflows or` +
     ` .github/actions/engine/pins.yml, so the journal repo and engine version an earlier` +
     ` bootstrap wrote stay as they are (this run would have set instance_repo:` +
     ` ${instanceRepo}). To change them, run \`oak upgrade\` or edit` +
     ` .github/actions/engine/pins.yml in a pull request.`,
   planAlreadySeededJournal:
-    '  ! main is already seeded; this run will NOT rewrite the files there, so a changed' +
+    '  ! main already exists; this run will NOT rewrite the files there, so a changed' +
     ' --name/--edition/--engine-version will not reach them. Edit the repo directly.',
 
   planReviewBranchExists: '  ✓ review branch exists',
@@ -339,8 +338,8 @@ export const bootstrap = {
   planSecrets: (names: string): string =>
     `  ○ secrets: ${names || 'none given; you get a list of what to set by hand'}`,
   planPages: (siteUrl: string): string =>
-    `  ○ turn on GitHub Pages for the journal website (${siteUrl}) and link it from the repo page; no branch rules, no environments`,
-  planNoSite: '  ○ (--no-site: settings only; no website, no branch rules, no environments)',
+    `  ○ turn on GitHub Pages for the journal website (${siteUrl}) and link it from the repo page`,
+  planNoSite: '  ○ no journal website (--no-site)',
 
   // ── the issue labels oak creates, shown in the repo's labels list ──────────────────────
   labelEditorAction: 'An editor must take action before this can proceed',
@@ -358,7 +357,7 @@ export const bootstrap = {
   logCreatedPublic: (repo: string): string => `  ✓ created ${repo} (public)`,
   logMadePublic:
     '  ✓ made the repo public (paper builds read these settings from here with no token)',
-  logSeeded: '  ✓ seeded main',
+  logSeeded: '  ✓ committed to main',
   /** A repo that already existed may not default to `main` [R127]. */
   logDefaultBranch: (from: string): string => `  ✓ default branch switched from ${from} to main`,
   logReviewBranch:

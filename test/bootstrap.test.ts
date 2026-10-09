@@ -484,11 +484,10 @@ describe('cmdBootstrapPaper', () => {
     const plan = plans[0]!.join('\n');
     expect(plan).toContain('journal repo   : me/instance-config');
     expect(plan).toContain('edition        : ed-2026');
-    // A resolved value says so, and names the flag that sets it.
-    expect(plan).toMatch(/engine version : v1\.2\.3: the newest engine release right now/);
-    expect(plan).toContain('--engine-version');
-    expect(plan).toMatch(/engine repo    : me\/engine: built-in default/);
-    expect(plan).toMatch(/review owner   : @alice: your own GitHub login/);
+    // A resolved value is marked as a default.
+    expect(plan).toMatch(/engine version : v1\.2\.3 \(default\): the newest engine release/);
+    expect(plan).toMatch(/engine repo    : me\/engine \(default\)/);
+    expect(plan).toMatch(/review owner   : @alice \(default\): your own GitHub login/);
   });
 
   it('a value that was passed is shown as passed, not as a default', async () => {
@@ -1081,7 +1080,7 @@ describe('cmdBootstrapJournal', () => {
       d,
     );
     const plan = plans[0]!.join('\n');
-    expect(plan).toMatch(/edition        : edition \(placeholder; no --edition given\)/);
+    expect(plan).toMatch(/edition        : edition \(default\)/);
     expect(plan).toContain('editions/edition.yml');
     expect(existsSync(join(seedDirs[0]!, 'editions/edition.yml'))).toBe(true);
   });
