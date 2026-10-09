@@ -18,6 +18,7 @@ So adding a paper means adding a repository. There is no server: each paper's ow
 
 <!-- One repository per paper is the only topology the engine builds today, and it is what this page describes. A co-located tier, where a single repository holds the journal and many papers at once, is designed but not built ([R188]). It is the part of this model most likely to be revisited. -->
 
+(processing-myst)=
 ## Processing MyST markdown
 
 [MyST](https://mystmd.org) does the rendering: it converts markdown into an AST, and is able to render that to a website or a PDF. See [their docs](https://mystmd.org/guide) to learn more. Oaktree-sapling adds everything around a build that a single paper cannot know by itself[^around], calling MyST as a library.

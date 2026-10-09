@@ -101,8 +101,7 @@ export function firstLine(e: unknown): string {
 /* ═══════════════════════════════════════════════════════════════════════════════════════════
  * Usage: the first screen a new user sees.
  * ═══════════════════════════════════════════════════════════════════════════════════════════
- * It opens with what oak is and where to start. `--external` and `--co-located` get a sentence
- * each, since the flag names do not explain the choice.
+ * It opens with what oak is and where to start.
  */
 export const usage = (): string =>
   `oak: a mystmd-based engine for running a small journal. It sets up the journal\n` +
@@ -112,18 +111,18 @@ export const usage = (): string =>
   `prints a plan and asks before it does it.\n` +
   `\n` +
   `Starting from nothing? Create the journal, then a repo per paper:\n` +
-  `  oak bootstrap journal --repo <owner/name> --external --name "My Journal" --edition 2026\n` +
+  `  oak bootstrap journal --repo <owner/name> --name "My Journal" --edition 2026\n` +
   `  oak bootstrap paper   --repo <owner/name> --instance <owner/journal-repo> --edition 2026\n` +
   `\n` +
   `Setting up repos\n` +
-  `  oak bootstrap journal --repo <owner/name> (--external | --co-located) [--name <name>] [--edition <id>]\n` +
+  `  oak bootstrap journal --repo <owner/name> [--name <name>] [--edition <id>]\n` +
   `                        [--engine-repo <owner/name>] [--engine-version <tag>] [--owner <@user|@org/team>]\n` +
-  `                        [--no-require-checks] [--no-site] [--yes]\n` +
-  `      --external    the journal gets its own public repo, holding its settings, branding\n` +
-  `                    and the list of published papers; each paper then lives in a repo of\n` +
-  `                    its own that points back at it. This is the usual choice.\n` +
+  `                        [--no-require-checks] [--no-site] [--co-located] [--yes]\n` +
+  `                    a public repo holding the journal's settings, branding, website and\n` +
+  `                    list of published papers; each paper lives in a repo of its own that\n` +
+  `                    points back at it\n` +
   `      --co-located  experimental: one repo holds the journal and its single paper\n` +
-  `                    together, with no journal website.\n` +
+  `                    together, with no journal website\n` +
   `  oak bootstrap paper   --repo <owner/name> --instance <owner/journal-repo> --edition <id>\n` +
   `                        [--from <author-url> [--source-ref <ref>]]\n` +
   `                        [--engine-repo <owner/name>] [--engine-version <tag>] [--owner <@user|@org/team>]\n` +
@@ -268,7 +267,7 @@ export const bootstrap = {
     docsUrl(DOCS.fileEditions),
 
   noSiteNeedsExternal:
-    '--no-site is only meaningful with --external: a co-located journal never gets a ' +
+    '--no-site does not apply with --co-located: a co-located journal never gets a ' +
     'website (an index over many papers in one repo is separate, unbuilt work).',
 
   ghMissing:
@@ -902,9 +901,8 @@ export const workflow = {
     '--engine-version <tag> to name one; a pre-release (a tag like v1.2.0-dev.4) has to be ' +
     'named, because it can be deleted, which breaks the papers pinned to it.',
   bootstrapUsage: 'oak bootstrap: usage: oak bootstrap <paper|journal> --repo <owner/name> [...]',
-  bootstrapJournalTier: 'oak bootstrap journal: pass exactly one of --external | --co-located',
   bootstrapSecretsNeedPaper:
-    'oak bootstrap journal --external: the secret flags (--zenodo-token, ' +
+    'oak bootstrap journal: the secret flags (--zenodo-token, ' +
     '--zenodo-token-sandbox, --cf-token, --cf-account) set nothing here; this repo holds ' +
     "the journal's settings and runs no publishing, so it takes no secrets. The tokens are " +
     'set per paper repo: `oak bootstrap paper` accepts the same flags, or set them in the ' +

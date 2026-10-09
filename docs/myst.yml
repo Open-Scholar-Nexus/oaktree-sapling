@@ -20,10 +20,12 @@ project:
     - file: index.md
     - title: Start
       children:
+        - file: start/setup.md
         - file: start/journal.md
         - file: start/paper.md
     - title: Guides
       children:
+        - file: guide/add-paper.md
         - file: guide/journal-yml.md
         - file: guide/branding.md
         - file: guide/checks.md
