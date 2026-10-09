@@ -1080,9 +1080,9 @@ describe('cmdBootstrapJournal', () => {
       d,
     );
     const plan = plans[0]!.join('\n');
-    expect(plan).toMatch(/--edition +ring-1 \(default\)/);
-    expect(plan).toContain('editions/ring-1.yml');
-    expect(existsSync(join(seedDirs[0]!, 'editions/ring-1.yml'))).toBe(true);
+    expect(plan).toMatch(/--edition +seedling \(default\)/);
+    expect(plan).toContain('editions/seedling.yml');
+    expect(existsSync(join(seedDirs[0]!, 'editions/seedling.yml'))).toBe(true);
   });
 
   it('the plan shows no review owner for an external journal, which has none', async () => {

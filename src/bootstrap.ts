@@ -1145,9 +1145,9 @@ export async function cmdBootstrapPaper(
   };
 }
 
-/** The edition when `--edition` is not given: a journal's first growth ring. It also names
+/** The edition when `--edition` is not given: a journal's first. It also names
  *  the `editions/<id>.yml` this run writes, and is shown in the plan. */
-const DEFAULT_EDITION = 'ring-1';
+const DEFAULT_EDITION = 'seedling';
 
 export interface BootstrapJournalInput {
   repo: string; // owner/name
