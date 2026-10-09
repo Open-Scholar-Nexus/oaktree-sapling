@@ -98,9 +98,9 @@ describe.skipIf(bundleState() === 'absent')(
       expect(stderr).toContain('oak validate');
     });
 
-    it('explains --external and --co-located in plain words', () => {
+    it('explains the journal repo and --co-located in plain words', () => {
       const { stderr } = oak([]);
-      expect(stderr).toMatch(/--external\s+the journal gets its own public repo/);
+      expect(stderr).toMatch(/a public repo holding the journal's settings/);
       expect(stderr).toMatch(
         /--co-located\s+experimental: one repo holds the journal and its single paper/,
       );
@@ -315,13 +315,12 @@ describe.skipIf(bundleState() === 'absent')('bootstrap preflight ([R110], [R125]
     expect(stderr).not.toContain('no stable release');
   });
 
-  it('a typed secret flag on bootstrap journal --external is refused, before any gh call', () => {
+  it('a typed secret flag on bootstrap journal is refused, before any gh call', () => {
     const { code, stderr } = oakOffline([
       'bootstrap',
       'journal',
       '--repo',
       'me/j',
-      '--external',
       '--zenodo-token',
       't',
     ]);
@@ -333,7 +332,7 @@ describe.skipIf(bundleState() === 'absent')('bootstrap preflight ([R110], [R125]
   });
 
   it('an env-derived token does not trigger the refusal', () => {
-    const { code, stderr } = oakOffline(['bootstrap', 'journal', '--repo', 'me/j', '--external'], {
+    const { code, stderr } = oakOffline(['bootstrap', 'journal', '--repo', 'me/j'], {
       env: { ZENODO_TOKEN: 'zt' },
     });
     expect(code).toBe(2);
