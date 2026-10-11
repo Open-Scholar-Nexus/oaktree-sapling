@@ -37,7 +37,7 @@ Open the address `oak start` prints. The preview reloads as you edit, and shows 
 : The paper's metadata. Replace the placeholders: `id`, unique in the journal and in the shape the journal asks for (for example `oak-2026-tidal-flats`, see [id_pattern](../guide/journal-yml.md#id-pattern)), then `title`, `authors` and `keywords`. The commented-out `authors` block shows the fields. Leave the `oaktree-sapling` block at the bottom as it is.
 
 `index.md`
-: The paper, with its abstract in the frontmatter at the top.
+: The paper, with its abstract in the frontmatter at the top. The [MyST guide](https://mystmd.org/guide) covers the syntax: headings, figures, equations, citations.
 
 `bib.bib`
 : Your references, cited as `[@key]`.
@@ -62,14 +62,12 @@ Once a week the bot also opens a pull request updating the engine version in `my
 
 Your paper is built with the journal's look and rules: its logo and colours, the venue and licence of its edition, and the checks every paper has to pass. The editors keep them in the journal's own repository, which your paper repository names, and your paper's builds read them from there.
 
-[How a paper gets the journal's settings](../guide/journal-settings.md) covers which settings come from where, how a local preview keeps them up to date, and previewing with a different copy of them.
+[How a paper gets the journal's settings](../guide/journal-settings.md) has the details.
 
-## Building the PDF locally
+## Building the PDF
 
 ```bash
 oak build
 ```
 
-This writes the website to `_build/html` and the PDF to `_build/exports/paper.pdf`; `--exports-only` builds only the PDF. `oak start` serves the website only, and its PDF download serves the PDF from the last `oak build`. The PDF needs [typst](https://github.com/typst/typst) on your `PATH`, at the version in oak's [`typst.version`](src:typst.version) file.
-
-A local build uses the `oak` you installed; CI uses the version in `myst.yml`. To match CI, install that version: `npm install -g oaktree-sapling@<version>`, without the leading `v`.
+This writes the PDF to `_build/exports/paper.pdf`. It needs [typst](https://github.com/typst/typst) installed.
