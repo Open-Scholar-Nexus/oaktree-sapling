@@ -33,7 +33,7 @@ oak start
 
 Open the address `oak start` prints. The preview reloads as you edit.
 
-The preview is styled with the journal's logo, colours and settings. `oak start` downloads them from the journal's repository into `_build/journal/` and reuses that copy for a day; delete the folder to fetch them sooner. `--no-instance` previews without them: no logo, no venue on the paper.
+The preview is styled with the journal's logo, colours and settings. `oak start` downloads them from the journal's repository into `_build/journal/` and reuses that copy for a week; delete the folder to fetch them sooner. `--no-instance` previews without them: no logo, no venue on the paper.
 
 ## 3. Write the paper
 
@@ -77,7 +77,7 @@ Once a week the repository also opens an **Engine version bump** pull request, w
 - `brand/brand.yml`: the logo, colours and the mark on the PDF;
 - `journal.yml`: the id rule, the editorial checks and the PDF template.
 
-A field set in your `myst.yml` takes precedence over the same field from the edition. CI reads the journal's latest commit on every build, so a change the editors make applies from your paper's next build there; a local build picks it up once its copy is a day old.
+A field set in your `myst.yml` takes precedence over the same field from the edition. CI reads the journal's latest commit on every build, so a change the editors make applies from your paper's next build there; a local build picks it up once its copy is a week old.
 
 To build with a local copy of the journal instead, for example while editing its settings, pass its path: `oak start --instance ../<journal-repo>`.
 

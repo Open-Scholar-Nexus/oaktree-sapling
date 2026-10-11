@@ -223,7 +223,7 @@ describe.skipIf(bundleState() === 'absent')('--json gates the machine envelope',
     expect(existsSync(join(dir, '_build', 'journal', 'me', 'journal', 'journal.yml'))).toBe(true);
   }, 60_000);
 
-  it('reuses a cached journal, fetches it again after a day, and falls back to it offline', () => {
+  it('reuses a cached journal, fetches it again after a week, and falls back to it offline', () => {
     const { dir, mirrors, env } = pinnedPaper('me/journal');
     const args = ['validate', '--paper', dir, '--repo', fixtureRepo];
     oak(args, env);
@@ -235,19 +235,19 @@ describe.skipIf(bundleState() === 'absent')('--json gates the machine envelope',
     expect(reused.code).toBe(0);
 
     const stamp = join(dir, '_build', 'journal', 'me', 'journal', '.git', 'oak-fetched');
-    const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
-    utimesSync(stamp, twoDaysAgo, twoDaysAgo);
+    const eightDaysAgo = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000);
+    utimesSync(stamp, eightDaysAgo, eightDaysAgo);
     const updated = oak(args, env);
     expect(updated.stderr).toContain('updated just now');
     expect(updated.code).toBe(0);
 
-    utimesSync(stamp, twoDaysAgo, twoDaysAgo);
+    utimesSync(stamp, eightDaysAgo, eightDaysAgo);
     rmSync(mirrors, { recursive: true, force: true });
     const stale = oak(args, env);
     expect(stale.stderr).toMatch(
       /warning: .*could not update the journal settings from me\/journal/,
     );
-    expect(stale.stderr).toContain('using the copy fetched 2 days ago');
+    expect(stale.stderr).toContain('using the copy fetched 8 days ago');
     expect(stale.code).toBe(0);
   }, 120_000);
 

@@ -777,7 +777,7 @@ export function tempClone(repo: string): string {
 }
 
 /** How long a cached journal clone is used as it is before oak fetches the journal again. */
-export const JOURNAL_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+export const JOURNAL_CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 /** Where the journal settings for a local run came from, for the line oak prints about it. */
 export type JournalCache =
