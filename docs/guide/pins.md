@@ -21,7 +21,7 @@ oak upgrade --repo <owner>/<paper-repo>
 These versions in the journal repository are written at bootstrap and change only by hand:
 
 `project.plugins` in `myst.yml`
-: The plugin behind the list of papers, as a URL holding an oaktree-sapling release tag: `https://raw.githubusercontent.com/<engine-repo>/<tag>/plugins/gallery.mjs`. To update it, change the tag.
+: The `paper-cards` plugin, as a URL holding an oaktree-sapling release tag: `https://raw.githubusercontent.com/<engine-repo>/<tag>/plugins/gallery.mjs`. To update it, change the tag.
 
 `site.template` in `myst.yml`
 : The website theme, as the URL of a release zip. A release of oaktree-sapling builds papers with the theme named by `THEME_VERSION` in [`src/assets.ts`](src:src/assets.ts); use the same, so the journal website matches its papers.

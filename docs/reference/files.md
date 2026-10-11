@@ -11,10 +11,10 @@ The journal's settings, read by every paper build. Every field but `name` is opt
 | field | default | |
 |---|---|---|
 | `name` | | The journal's name. Required. `oak bootstrap journal --name` also writes it to the brand's `logo_text`, the edition's `venue` and the website's title, which are what the papers show. |
-| `url` | | The journal's address. oak does not read it. |
+| `url` | | The journal's address, for people reading the file. |
 | `tier` | `paper` | Only `paper` is built. |
 | `id_sentinel` | | An id rejected as a placeholder, besides `CHANGE-ME-template-placeholder`. |
-| `id_pattern` | | A regular expression every paper's `project.id` must match. Unset, ids are not checked against a pattern. See [the paper id rule](../guide/journal-yml.md#id-pattern). |
+| `id_pattern` | | A regular expression every paper's `project.id` must match, when set. See [the paper id rule](../guide/journal-yml.md#id-pattern). |
 | `typst_template` | oak's template | The PDF template: a `./` or `../` path in the journal repository, a URL, or a MyST template name. See [your own PDF template](../guide/journal-yml.md#typst-template). |
 | `preview.provider` | `artifact` | `cloudflare` for live previews on Cloudflare Pages, `artifact` for a downloadable copy. See [live previews](../guide/journal-yml.md#live-previews). |
 | `preview.cf_project_name` | | The Cloudflare Pages project the previews go to. |

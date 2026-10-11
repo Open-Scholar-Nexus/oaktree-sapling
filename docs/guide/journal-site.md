@@ -1,9 +1,9 @@
 (guide-journal-site)=
 # The journal website
 
-`oak bootstrap journal` puts the journal website in the journal repository, beside the settings: `myst.yml`, the pages under `pages/`, and `package.json` with the website's build dependencies. It is a MyST website like any other, and every file of it is yours to edit.
+`oak bootstrap journal` puts the journal website in the journal repository, beside the settings: `myst.yml`, the pages under `pages/`, and `package.json` with the website's build dependencies.
 
-The **Journal site** workflow builds it and deploys it to GitHub Pages on every push to `main`. If a build fails, the last version deployed keeps serving.
+The **Journal site** workflow builds it and deploys it to GitHub Pages on every push to `main`.
 
 ## Pages
 
@@ -37,11 +37,11 @@ npm install
 oak start
 ```
 
-`npm install` fetches what the paper list needs to read the registry, once per clone.
+`npm install` fetches `js-yaml`, which the `paper-cards` plugin needs to read the registry, once per clone.
 
 ## Who can change it
 
-The journal repository has no branch rules, so anyone with write access can push to `main` and redeploy the website. To require a reviewed pull request, add a branch rule in the repository's **Settings**.
+Anyone with write access to the journal repository can push to `main`, which redeploys the website. To require a reviewed pull request, add a branch rule in the repository's **Settings**.
 
 ## Leaving out the website
 
@@ -49,4 +49,4 @@ The journal repository has no branch rules, so anyone with write access can push
 
 ## Versions
 
-The website's MyST version, theme and paper-list plugin are fixed when the journal is bootstrapped, and nothing updates them: see [Keeping versions current](pins.md#site-pins).
+The website's MyST version, theme and `paper-cards` plugin are fixed when the journal is bootstrapped, and nothing updates them: see [Keeping versions current](pins.md#site-pins).
