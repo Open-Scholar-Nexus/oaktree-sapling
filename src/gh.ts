@@ -786,19 +786,17 @@ export type JournalCache =
   | { root: string; state: 'stale'; ageMs: number; why: string };
 
 /**
- * The journal repo for a local `oak build`, `start` or `validate` given no `--instance`, kept
- * under the paper's `_build/journal/<owner>/<repo>`; CI clones it in ci/run.sh. `_build/` is
- * gitignored and myst skips it, as it does for the templates it caches in `_build/templates`.
- * Plain git over https, as in run.sh: journal repos are public, so an author needs no `gh`
- * login.
- *
- * A copy younger than {@link JOURNAL_CACHE_MAX_AGE_MS} is used as it is. An older one is fetched
- * again, and kept when the fetch fails, so a run offline still works. A new clone is made beside
- * its final path and renamed into place, so an interrupted one leaves nothing that looks cached.
+ * `journalRepo` cloned into `<paperRoot>/_build/journal/<owner>/<repo>`, or the copy already
+ * there, fetched again once older than {@link JOURNAL_CACHE_MAX_AGE_MS} (DOCS.paperPreviewLocally).
+ * Throws when `journalRepo` is not owner/name, or when there is no copy and the clone fails.
  */
-export function cachedJournal(repo: string, paperRoot: string, now = Date.now()): JournalCache {
-  assertRepoName(repo);
-  const root = join(paperRoot, '_build', 'journal', ...repo.split('/'));
+export function cachedJournal(
+  journalRepo: string,
+  paperRoot: string,
+  now = Date.now(),
+): JournalCache {
+  assertRepoName(journalRepo);
+  const root = join(paperRoot, '_build', 'journal', ...journalRepo.split('/'));
   // Inside .git, so the journal's own files are exactly what was fetched.
   const stamp = join(root, '.git', 'oak-fetched');
   if (existsSync(stamp)) {
@@ -813,11 +811,13 @@ export function cachedJournal(repo: string, paperRoot: string, now = Date.now())
     writeFileSync(stamp, '');
     return { root, state: 'updated' };
   }
+  // Cloned beside its path and renamed in, so only a complete clone sits at `root`.
   rmSync(root, { recursive: true, force: true });
   mkdirSync(dirname(root), { recursive: true });
   const tmp = mkdtempSync(join(dirname(root), '.clone-'));
   try {
-    run('git', ['clone', '--depth', '1', '--quiet', `https://github.com/${repo}.git`, tmp]);
+    // Plain git: journal repos are public, and an author may have no gh login.
+    run('git', ['clone', '--depth', '1', '--quiet', `https://github.com/${journalRepo}.git`, tmp]);
   } catch (err) {
     rmSync(tmp, { recursive: true, force: true });
     throw err;

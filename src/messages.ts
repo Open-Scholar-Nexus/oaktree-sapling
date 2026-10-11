@@ -547,33 +547,37 @@ export const build = {
   /** Where a local run without `--instance` got the journal settings ({@link JournalCache}). */
   journalCache: (
     verb: 'build' | 'start' | 'validate',
-    repo: string,
+    journalRepo: string,
     cache: JournalCache,
   ): string => {
     const head = `oak ${verb}: `;
     switch (cache.state) {
       case 'cloned':
         return (
-          `${head}using the journal settings from ${repo} (instance_repo in pins.yml), cloned ` +
-          `to ${cache.root}. Pass --instance <path> to use a local clone instead.`
+          `${head}using the journal settings from ${journalRepo} (instance_repo in pins.yml), cloned ` +
+          `to ${cache.root}. Pass --instance <path> to use a local clone.`
         );
       case 'updated':
-        return `${head}using the journal settings from ${repo}, updated just now in ${cache.root}.`;
+        return `${head}using the journal settings from ${journalRepo}, updated just now in ${cache.root}.`;
       case 'reused':
         return (
-          `${head}reusing the journal settings from ${repo} fetched ${age(cache.ageMs)} ago ` +
+          `${head}reusing the journal settings from ${journalRepo} fetched ${age(cache.ageMs)} ago ` +
           `(${cache.root}); delete that folder to fetch them now.`
         );
       case 'stale':
         return (
-          `${head}could not update the journal settings from ${repo} (${cache.why}); using ` +
+          `${head}could not update the journal settings from ${journalRepo} (${cache.why}); using ` +
           `the copy fetched ${age(cache.ageMs)} ago in ${cache.root}.`
         );
     }
   },
 
-  instanceCloneFailed: (verb: 'build' | 'start' | 'validate', repo: string, why: string): string =>
-    `oak ${verb}: could not clone the journal ${repo} named in .github/actions/engine/pins.yml ` +
+  instanceCloneFailed: (
+    verb: 'build' | 'start' | 'validate',
+    journalRepo: string,
+    why: string,
+  ): string =>
+    `oak ${verb}: could not clone the journal ${journalRepo} named in .github/actions/engine/pins.yml ` +
     `(${why}). Pass --instance <path to a clone of the journal>, or --no-instance to go ` +
     `without its settings. See ${docsUrl(DOCS.paperPreviewLocally)}`,
 

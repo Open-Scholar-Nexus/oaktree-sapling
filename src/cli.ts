@@ -104,8 +104,8 @@ function assetOverridesFrom(argv: string[]): ComposeInput['assetOverrides'] {
  * Where the journal repo is [R38]: none with `--no-instance`, else `--instance`, else this repo
  * when a `journal.yml` sits beside the paper, else a cached clone of pins.yml's `instance_repo`.
  * The third case serves a repo that is its own journal, where the engine action passes no
- * `--instance` (`instance_repo: .`). The clone serves a local run; CI always passes
- * `--instance` for any other `instance_repo` (ci/run.sh), so it never reaches it.
+ * `--instance` (`instance_repo: .`). Only a local run reaches the clone: CI passes `--instance`
+ * (ci/run.sh).
  *
  * Returns a root or an error string and never exits, so `oak validate` can report the error.
  */
@@ -120,17 +120,17 @@ async function resolveInstanceRoot(
   if (explicit === '') throw new UserError(msg.flagNeedsValue('instance'));
   if (explicit) return { root: resolve(explicit) };
   if (existsSync(join(paperRoot, 'journal.yml'))) return { root: paperRoot };
-  const pinned = readPin(paperRoot, 'instance_repo');
-  if (!pinned || pinned === '.') return { error: msg.build.noInstance(verb, paperRoot) };
+  const journalRepo = readPin(paperRoot, 'instance_repo');
+  if (!journalRepo || journalRepo === '.') return { error: msg.build.noInstance(verb, paperRoot) };
   const { cachedJournal } = await import('./gh.js');
   try {
-    const cache = cachedJournal(pinned, paperRoot);
-    const line = msg.build.journalCache(verb, pinned, cache);
+    const cache = cachedJournal(journalRepo, paperRoot);
+    const line = msg.build.journalCache(verb, journalRepo, cache);
     process.stderr.write((cache.state === 'stale' ? annotate('warning', line) : line) + '\n');
     return { root: cache.root };
   } catch (err) {
     const why = err instanceof Error ? err.message : String(err);
-    return { error: msg.build.instanceCloneFailed(verb, pinned, why) };
+    return { error: msg.build.instanceCloneFailed(verb, journalRepo, why) };
   }
 }
 
