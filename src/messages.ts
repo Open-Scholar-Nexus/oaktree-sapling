@@ -121,8 +121,8 @@ export const usage = (): string =>
   `                    a public repo holding the journal's settings, branding, website and\n` +
   `                    list of published papers; each paper lives in a repo of its own that\n` +
   `                    points back at it\n` +
-  `      --co-located  experimental: one repo holds the journal and its single paper\n` +
-  `                    together, with no journal website\n` +
+  `      --co-located  not ready: one repo for the journal and its papers, with no journal\n` +
+  `                    website; today it holds a single paper\n` +
   `  oak bootstrap paper   --repo <owner/name> --instance <owner/journal-repo> --edition <id>\n` +
   `                        [--from <author-url> [--source-ref <ref>]]\n` +
   `                        [--engine-repo <owner/name>] [--engine-version <tag>] [--owner <@user|@org/team>]\n` +

@@ -102,7 +102,7 @@ describe.skipIf(bundleState() === 'absent')(
       const { stderr } = oak([]);
       expect(stderr).toMatch(/a public repo holding the journal's settings/);
       expect(stderr).toMatch(
-        /--co-located\s+experimental: one repo holds the journal and its single paper/,
+        /--co-located\s+not ready: one repo for the journal and its papers/,
       );
     });
 
