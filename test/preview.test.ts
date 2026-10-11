@@ -7,8 +7,8 @@ import { describe, it, expect } from 'vitest';
 import { mkdtempSync, writeFileSync, existsSync, mkdirSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { takePrNumber } from '../src/artifact.js';
 import {
-  takePrNumber,
   stripPagesControlFiles,
   previewBranch,
   planPreview,
@@ -57,10 +57,16 @@ function fakeGh(over: Partial<GhPr> = {}): {
     versionTags() {
       return [];
     },
+    prHead() {
+      return HEAD;
+    },
     ...over,
   };
   return { gh, stickies, labels };
 }
+
+/** The commit Stage 1 built, and the head of every pull request {@link fakeGh} knows. */
+const HEAD = 'a'.repeat(40);
 
 const okDeployer = (url = 'https://paper-repo-7.pages.dev'): PagesDeployer => ({
   async deploy() {
@@ -324,6 +330,7 @@ const baseInput = (siteDir: string, over: Record<string, unknown> = {}) => ({
   repo: 'o/r',
   serverUrl: 'https://github.com',
   cf: { apiToken: 't', accountId: 'a' },
+  verifiedHead: HEAD,
   mystPath: join(siteDir, 'no-myst.yml'), // absent: notify's no-DOI path (not reached without tags)
   ...over,
 });
@@ -397,6 +404,77 @@ describe('cmdDeployPreview', () => {
     });
     expect(sawWorker).toBe(false);
     expect(existsSync(join(dir, '_worker.js'))).toBe(false);
+  });
+
+  it('refuses a pull request whose head is not the commit Stage 1 built [R136]', async () => {
+    // A real pull request number, but another one's: a fork names a pull request it does not own.
+    const dir = siteWithPr('99');
+    let deployed = false;
+    const spy: PagesDeployer = {
+      async deploy() {
+        deployed = true;
+        return 'https://x.pages.dev';
+      },
+    };
+    const { gh, stickies } = fakeGh({ prHead: () => 'b'.repeat(40) });
+    await expect(
+      cmdDeployPreview(baseInput(dir, { instanceRoot: instanceCf(dir) }), { deployer: spy, gh }),
+    ).rejects.toThrow(/heads at b{40}, not at a{40}/);
+    expect(deployed).toBe(false);
+    expect(stickies).toHaveLength(0);
+    expect(existsSync(join(dir, '.pr-number'))).toBe(false); // still never served
+  });
+
+  it('refuses without a commit to compare the pull request head with', async () => {
+    const dir = siteWithPr('7');
+    const { gh, stickies } = fakeGh();
+    await expect(
+      cmdDeployPreview(baseInput(dir, { verifiedHead: undefined }), { deployer: okDeployer(), gh }),
+    ).rejects.toThrow(/--verified-head/);
+    expect(stickies).toHaveLength(0);
+  });
+
+  it('takes --pr over the artifact, and still checks it', async () => {
+    // The bot pull request checks pass the number; a .pr-number the build planted is not used.
+    const dir = siteWithPr('5');
+    const asked: string[] = [];
+    const { gh } = fakeGh({
+      prHead: (_r, n) => {
+        asked.push(n);
+        return HEAD;
+      },
+    });
+    const out = await cmdDeployPreview(baseInput(dir, { pr: '12', cf: {} }), {
+      deployer: okDeployer(),
+      gh,
+    });
+    expect(asked).toEqual(['12']);
+    expect(out.result.pr).toBe('12');
+    expect(existsSync(join(dir, '.pr-number'))).toBe(false);
+  });
+
+  it('refuses a --pr that is not a number', async () => {
+    const { gh } = fakeGh();
+    await expect(
+      cmdDeployPreview(baseInput(siteWithPr(null), { pr: '1/comments' }), {
+        deployer: okDeployer(),
+        gh,
+      }),
+    ).rejects.toThrow(/not a pull request number/);
+  });
+
+  it("reads the paper's myst.yml from the artifact's .paper, and never serves the file", async () => {
+    const dir = siteWithPr('7');
+    writeFileSync(join(dir, '.paper'), 'papers/one\n');
+    const repoRoot = mkdtempSync(join(tmpdir(), 'oak-colo-'));
+    mkdirSync(join(repoRoot, 'papers/one'), { recursive: true });
+    writeFileSync(join(repoRoot, 'papers/one/myst.yml'), 'project:\n  doi: 10.5281/zenodo.55\n');
+    const { gh, stickies } = fakeGh({ versionTags: () => ['v1.0.0'] });
+    const input = { ...baseInput(dir, { cf: {} }), repoRoot, mystPath: undefined };
+    const out = await cmdDeployPreview(input, { deployer: okDeployer(), gh });
+    expect(out.result.paper).toBe('papers/one');
+    expect(stickies.some((s) => s.header === STICKY_NEWVERSION)).toBe(true);
+    expect(existsSync(join(dir, '.paper'))).toBe(false);
   });
 
   it('no-ops when there is no .pr-number', async () => {

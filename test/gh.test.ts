@@ -181,6 +181,7 @@ describe('openDoiPr', () => {
       if (args[0] === 'api') return { status: 0, stdout: 'main', stderr: '' };
       if (args[0] === 'pr' && args[1] === 'create')
         return { status: 0, stdout: 'https://github.com/o/r/pull/7', stderr: '' };
+      if (args.includes('rev-parse')) return { status: 0, stdout: 'e'.repeat(40), stderr: '' };
       return { status: 0, stdout: '', stderr: '' };
     };
 
@@ -223,8 +224,39 @@ describe('openDoiPr', () => {
         return { status: 0, stdout: 'https://github.com/o/r/pull/7' };
       return null;
     });
-    expect(openDoiPr('/paper', { conceptDoi: '10.5072/zenodo.5' })).toBe(
+    expect(openDoiPr('/paper', { conceptDoi: '10.5072/zenodo.5' }).url).toBe(
       'https://github.com/o/r/pull/7',
+    );
+  });
+
+  it('returns the number and the commit it pushed, for the checks prepare runs', () => {
+    expect(openDoiPr('/paper', { conceptDoi: '10.5072/zenodo.5' })).toEqual({
+      url: 'https://github.com/o/r/pull/7',
+      number: '7',
+      head: 'e'.repeat(40),
+    });
+  });
+
+  it("never takes a fork's pull request from a branch of the same name", () => {
+    child.respond = answers((args) =>
+      args[0] === 'pr' && args[1] === 'create' ? { status: 1, stderr: 'already exists' } : null,
+    );
+    try {
+      openDoiPr('/paper', { conceptDoi: '10.5072/zenodo.5' });
+    } catch {
+      /* the fake answers the lookup with nothing */
+    }
+    const list = ghCall('pr', 'list')!.args;
+    expect(argAfter(list, '--json')).toContain('isCrossRepository');
+    expect(argAfter(list, '--jq')).toContain('select(.isCrossRepository | not)');
+  });
+
+  it('refuses an answer that is not a pull request URL', () => {
+    child.respond = answers((args) =>
+      args[0] === 'pr' && args[1] === 'create' ? { status: 0, stdout: 'created!' } : null,
+    );
+    expect(() => openDoiPr('/paper', { conceptDoi: '10.5072/zenodo.5' })).toThrow(
+      /pull request URL/,
     );
   });
 });
@@ -338,6 +370,21 @@ describe('realGhPr.sticky', () => {
     child.calls.length = 0;
     child.respond = () => ({ status: 1, stdout: '', stderr: 'fatal: no such remote' });
     expect(() => realGhPr.sticky('.', '3', 'header', 'body')).toThrow();
+  });
+});
+
+describe('realGhPr.prHead', () => {
+  it('asks for the pull request head commit', () => {
+    child.calls.length = 0;
+    child.respond = () => ({ status: 0, stdout: 'f'.repeat(40), stderr: '' });
+    expect(realGhPr.prHead('o/r', '7')).toBe('f'.repeat(40));
+    expect(ghCall('api')!.args.slice(0, 2)).toEqual(['api', 'repos/o/r/pulls/7']);
+  });
+
+  it('refuses a repo that is not owner/name before gh sees it', () => {
+    child.calls.length = 0;
+    expect(() => realGhPr.prHead('--jq', '7')).toThrow(UserError);
+    expect(child.calls).toHaveLength(0);
   });
 });
 

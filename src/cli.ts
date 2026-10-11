@@ -3,11 +3,13 @@
  * The `oak` entry point, bundled to dist/cli.cjs at each release; CI calls it through ci/run.sh.
  * The myst side is imported only by the verbs that build, so other verbs start fast.
  */
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import {
   existsSync,
+  lstatSync,
   readFileSync,
   readdirSync,
+  rmSync,
   writeFileSync,
   mkdtempSync,
   watchFile,
@@ -19,7 +21,7 @@ import type { UpgradeMode } from './upgrade.js';
 import type { ComposeInput } from './compose.js';
 import type { MaterializeInput, StartOpts } from './materialize.js';
 import * as msg from './messages.js';
-import { annotate, UserError } from './messages.js';
+import { annotate, inCI, UserError } from './messages.js';
 
 // oak only runs as the CJS bundle [R51] (ci/run.sh and local runs both call dist/cli.cjs), so
 // `__dirname` is the bundle's directory; @types/node declares it for tsc.
@@ -169,7 +171,8 @@ function materializeInputFrom(
     engineRoot: engineRoot(),
     instanceRoot,
     engineRepo: flag(argv, 'engine-repo') ?? readEngineRepo(paperRoot),
-    baseUrl: flag(argv, 'base-url') ?? '',
+    // A preview is served from the domain root, whatever base URL ci/run.sh adds for the event.
+    baseUrl: has(argv, 'preview') ? '' : (flag(argv, 'base-url') ?? ''),
     assetOverrides: assetOverridesFrom(argv),
   };
 }
@@ -204,11 +207,69 @@ async function buildPaper(argv: string[]): Promise<{ paperRoot: string; resolved
   return { paperRoot, resolvedId: res.resolvedProject.id };
 }
 
-/** `oak build`: builds a paper ({@link buildPaper}). Documented at DOCS.build. */
+/** `oak build`: builds a paper ({@link buildPaper}), then {@link finishSite}. Documented at
+ *  DOCS.build. */
 async function cmdBuild(argv: string[]): Promise<number> {
+  const paperRoot = resolve(flag(argv, 'paper') ?? '.');
+  const { ENGINE_ID_SENTINEL } = await import('./schema.js');
+  const artifact = await import('./artifact.js');
+  const placeholder = readProjectIdQuietly(paperRoot) === ENGINE_ID_SENTINEL;
+  if (placeholder && inCI()) process.stderr.write(annotate('notice', msg.build.placeholder) + '\n');
+  // myst's HTML build ends the process with exit(0), so the site is finished on exit.
+  process.once('exit', (code) => {
+    if (code === 0) finishSite(paperRoot, placeholder, artifact);
+  });
   const { resolvedId } = await buildPaper(argv);
   process.stderr.write(msg.build.done(resolvedId ?? '?') + '\n');
   return 0;
+}
+
+/**
+ * The build's last steps, run synchronously from the exit handler: drops symlinks from the site,
+ * since upload-artifact follows them and would publish a runner file; on a `pull_request` run,
+ * leaves the pull request number and the paper folder for Stage 2 (artifact.ts); and records the
+ * result. A failure here fails the build.
+ */
+function finishSite(
+  paperRoot: string,
+  placeholder: boolean,
+  artifact: typeof import('./artifact.js'),
+): void {
+  try {
+    const html = join(paperRoot, '_build', 'html');
+    if (existsSync(html)) {
+      dropSymlinks(html);
+      artifact.writeStage1Files(html, artifact.SITE_FILES, paperRoot, process.cwd(), process.env);
+    }
+    recordResult({ status: 'ok', placeholder });
+  } catch (e) {
+    process.stderr.write(annotate('error', msg.build.finishFailed(String(e))) + '\n');
+    process.exitCode = 1;
+  }
+}
+
+/** Deletes every symlink under `dir`, without following any. */
+function dropSymlinks(dir: string): void {
+  for (const name of readdirSync(dir)) {
+    const p = join(dir, name);
+    const st = lstatSync(p);
+    if (st.isSymbolicLink()) rmSync(p);
+    else if (st.isDirectory()) dropSymlinks(p);
+  }
+}
+
+/** `project.id` from the author's myst.yml, or null. Never throws: the build reports a broken
+ *  myst.yml itself. */
+function readProjectIdQuietly(paperRoot: string): string | null {
+  try {
+    const v = parseDocument(readFileSync(join(paperRoot, 'myst.yml'), 'utf8')).getIn([
+      'project',
+      'id',
+    ]);
+    return typeof v === 'string' && v ? v : null;
+  } catch {
+    return null;
+  }
 }
 
 /** The `myst start` flags `oak start` passes through, under myst's names. */
@@ -365,15 +426,25 @@ function narrated(result: Record<string, unknown>): string[] {
 }
 
 /**
- * Prints a verb's result. The JSON is opt-in (`--json`), since otherwise it repeats the prose the
- * verb already printed. Human output goes to stderr, so with `--json` stdout carries only the
- * JSON. CI reads files, not stdout (`oak validate --report`, `oak conformance --record`).
+ * Writes the result to `OAK_RESULT_FILE`, which ci/run.sh sets and copies into the engine
+ * action's `result` output. One line of JSON, since `$GITHUB_OUTPUT` is line-oriented.
+ */
+function recordResult(result: Record<string, unknown>): void {
+  const f = process.env.OAK_RESULT_FILE;
+  if (f) writeFileSync(f, JSON.stringify(result));
+}
+
+/**
+ * Prints a verb's result, and records it ({@link recordResult}). The JSON is opt-in (`--json`),
+ * since otherwise it repeats the prose the verb already printed. Human output goes to stderr, so
+ * with `--json` stdout carries only the JSON.
  */
 function emit(
   argv: string[],
   result: Record<string, unknown>,
   human?: (r: Record<string, unknown>) => string[],
 ): void {
+  recordResult(result);
   if (has(argv, 'json')) {
     process.stdout.write(JSON.stringify(result, null, 2) + '\n');
     return;
@@ -409,21 +480,24 @@ async function cmdDeposit(argv: string[]): Promise<number> {
       return 2;
     }
     const out = await z.cmdPrepare({ mystPath, repo, siteUrl, api, instanceRoot });
-    emit(rest, out.result);
     // Open the DOI pull request for the myst.yml write [R3]. Without gh or a token (a local
     // sandbox run) the write is left for a person to commit.
+    let pushed: Record<string, string> = {};
     if (out.exitCode === 0 && !has(rest, 'no-pr') && process.env.GH_TOKEN) {
       try {
-        const url = gh.openDoiPr(resolve(mystPath, '..'), {
+        const pr = gh.openDoiPr(resolve(mystPath, '..'), {
           conceptDoi: String(out.result.concept_doi),
         });
-        process.stderr.write(msg.workflow.depositDoiPrOpened(url) + '\n');
+        process.stderr.write(msg.workflow.depositDoiPrOpened(pr.url) + '\n');
+        // For the checks prepare.yml runs on this pull request.
+        pushed = { pr: pr.url, pr_number: pr.number, head_sha: pr.head };
       } catch (e) {
         process.stderr.write(
           annotate('warning', msg.workflow.depositDoiPrFailed((e as Error).message)) + '\n',
         );
       }
     }
+    emit(rest, { ...out.result, ...pushed });
     return out.exitCode;
   }
 
@@ -483,8 +557,11 @@ async function cmdRelease(argv: string[]): Promise<number> {
   // (_build/site/content) from the same tree; `oak build` ignores release's extra flags.
   // `--no-build` deposits a build made elsewhere: CI builds in a job holding no token.
   const paperRoot = resolve(flag(argv, 'paper') ?? '.');
-  if (!has(argv, 'no-build'))
-    execFileSync(process.execPath, [process.argv[1]!, 'build', ...argv], { stdio: 'inherit' });
+  // The child gets no OAK_RESULT_FILE: the result is release's.
+  if (!has(argv, 'no-build')) {
+    const { OAK_RESULT_FILE: _, ...env } = process.env;
+    execFileSync(process.execPath, [process.argv[1]!, 'build', ...argv], { stdio: 'inherit', env });
+  }
   const mystPath = mystPathOf(argv);
 
   const doi = parseDocument(readFileSync(mystPath, 'utf8')).getIn(['project', 'doi']);
@@ -550,16 +627,19 @@ async function cmdRelease(argv: string[]): Promise<number> {
   return out.exitCode;
 }
 
-/** `oak deploy-preview <site>`: deploys the build artifact to Cloudflare Pages, or falls back to a
- *  link to it [R16], posts the preview comment, then runs the new-version reminder. */
+/** `oak deploy-preview <site> [--pr N --verified-head <sha>]`: deploys the build artifact to
+ *  Cloudflare Pages, or falls back to a link to it [R16], posts the preview comment, then runs
+ *  the new-version reminder. */
 async function cmdDeployPreview(argv: string[]): Promise<number> {
   const preview = await import('./preview.js');
   const gh = await import('./gh.js');
+  const { eventHeadSha } = await import('./artifact.js');
   const siteDir = resolve(argv.find((a) => !a.startsWith('--')) ?? 'site');
+  const myst = flag(argv, 'myst');
   const out = await preview.cmdDeployPreview(
     {
       siteDir,
-      repoRoot: resolve(flag(argv, 'paper') ?? '.'),
+      repoRoot: resolve('.'),
       instanceRoot: instanceRootOf(argv),
       repo: flag(argv, 'repo') ?? process.env.GITHUB_REPOSITORY ?? null,
       serverUrl: process.env.GITHUB_SERVER_URL ?? 'https://github.com',
@@ -568,7 +648,10 @@ async function cmdDeployPreview(argv: string[]): Promise<number> {
         apiToken: process.env.CLOUDFLARE_API_TOKEN,
         accountId: process.env.CLOUDFLARE_ACCOUNT_ID,
       },
-      mystPath: mystPathOf(argv),
+      pr: flag(argv, 'pr'),
+      verifiedHead: flag(argv, 'verified-head') ?? eventHeadSha(process.env),
+      paper: flag(argv, 'paper'),
+      ...(myst ? { mystPath: resolve(myst) } : {}),
     },
     { deployer: gh.realPagesDeployer, gh: gh.realGhPr },
   );
@@ -587,13 +670,12 @@ async function cmdNotify(argv: string[]): Promise<number> {
   const rest = argv.slice(1);
   const preview = await import('./preview.js');
   const gh = await import('./gh.js');
+  const artifact = await import('./artifact.js');
 
-  let pr = flag(rest, 'pr');
-  if (!pr) {
-    const f = join(resolve(flag(rest, 'site') ?? 'site'), '.pr-number');
-    if (existsSync(f)) pr = readFileSync(f, 'utf8').trim();
-  }
-  if (pr) preview.assertPrNumber(pr);
+  const flagged = flag(rest, 'pr');
+  const pr = flagged
+    ? artifact.assertPrNumber(flagged)
+    : artifact.readPrNumber(resolve(flag(rest, 'site') ?? 'site'), artifact.SITE_FILES.pr);
   if (!pr) {
     process.stderr.write(msg.workflow.notifyNoPr + '\n');
     return 2;
@@ -629,37 +711,58 @@ function readEditionQuietly(paperRoot: string): string | null {
 }
 
 /**
- * Writes a failing `--report` for a run that could not produce one. The `pull_request` job only
- * checks `jq -e '.checkRun.conclusion'`, so a missing file would tell the author "engine crash"
- * and nothing more. Even a usage error or an unexpected throw leaves a readable failing report
- * for check-post to post [R82]. If this write fails too, the missing-report path still applies.
+ * Writes `--report` and, on a `pull_request` run, the pull request number and paper folder
+ * beside it for check-post (artifact.ts). Returns whether the report was written.
  */
-function writeFailureReport(reportPath: string | undefined, title: string, message: string): void {
-  if (!reportPath) return;
+async function writeReport(
+  reportPath: string,
+  paperRoot: string,
+  report: Record<string, unknown>,
+): Promise<boolean> {
+  const artifact = await import('./artifact.js');
+  const path = resolve(reportPath);
   try {
-    writeFileSync(
-      resolve(reportPath),
-      JSON.stringify(
-        {
-          status: 'error',
-          errors: [message],
-          warnings: [],
-          checks: [],
-          notes: [],
-          checkRun: {
-            conclusion: 'failure',
-            title,
-            summary: `**${title}**\n\n${'```'}\n${message}\n${'```'}`,
-            annotations: [],
-          },
-        },
-        null,
-        2,
-      ),
-    );
+    writeFileSync(path, JSON.stringify(report, null, 2));
   } catch {
-    /* the `pull_request` job's own check still catches a missing report */
+    return false;
   }
+  artifact.writeStage1Files(
+    dirname(path),
+    artifact.CHECKS_FILES,
+    paperRoot,
+    process.cwd(),
+    process.env,
+  );
+  return true;
+}
+
+/**
+ * Writes a failing `--report` for a run that could not produce one, so even a usage error or an
+ * unexpected throw leaves a readable report for check-post to post [R82]. Returns the exit code:
+ * 0 once a report is written, as with a failing result, else `fallback`.
+ */
+async function writeFailureReport(
+  reportPath: string | undefined,
+  paperRoot: string,
+  title: string,
+  message: string,
+  fallback: number,
+): Promise<number> {
+  if (!reportPath) return fallback;
+  const written = await writeReport(reportPath, paperRoot, {
+    status: 'error',
+    errors: [message],
+    warnings: [],
+    checks: [],
+    notes: [],
+    checkRun: {
+      conclusion: 'failure',
+      title,
+      summary: `**${title}**\n\n${'```'}\n${message}\n${'```'}`,
+      annotations: [],
+    },
+  });
+  return written ? 0 : fallback;
 }
 
 /**
@@ -687,7 +790,9 @@ function validateSummary(out: {
 }
 
 /** `oak validate`: oak's own rules (Layer A) and the journal's editorial checks (Layer B), with
- *  `--report <path>` writing the JSON check-post posts. Documented at DOCS.validate. */
+ *  `--report <path>` writing the JSON check-post posts. With `--report` it exits 0 once a report
+ *  is written, failing or not, since check-post posts the result; nonzero means no report.
+ *  Documented at DOCS.validate. */
 async function cmdValidate(argv: string[]): Promise<number> {
   const paperRoot = resolve(flag(argv, 'paper') ?? '.');
   const reportPath = flag(argv, 'report');
@@ -696,14 +801,18 @@ async function cmdValidate(argv: string[]): Promise<number> {
   if (isJournalRepo(paperRoot)) {
     const text = msg.validate.inJournalRepo(paperRoot);
     process.stderr.write(annotate('error', text) + '\n');
-    writeFailureReport(reportPath, msg.workflow.validateCouldNotRun, text);
-    return 2;
+    return writeFailureReport(reportPath, paperRoot, msg.workflow.validateCouldNotRun, text, 2);
   }
   const resolved = await resolveInstanceRoot(argv, paperRoot, 'validate');
   if ('error' in resolved) {
     process.stderr.write(annotate('error', resolved.error) + '\n');
-    writeFailureReport(reportPath, msg.workflow.validateCouldNotRun, resolved.error);
-    return 2;
+    return writeFailureReport(
+      reportPath,
+      paperRoot,
+      msg.workflow.validateCouldNotRun,
+      resolved.error,
+      2,
+    );
   }
   const instanceRoot = resolved.root;
   const strict = has(argv, 'strict');
@@ -743,12 +852,13 @@ async function cmdValidate(argv: string[]): Promise<number> {
     process.stderr.write(
       annotate('error', userFault ? message : msg.workflow.validateCrashLine(message)) + '\n',
     );
-    writeFailureReport(
+    return await writeFailureReport(
       reportPath,
+      paperRoot,
       userFault ? msg.workflow.validateCouldNotRun : msg.workflow.validateCrashed,
       message,
+      userFault ? 2 : 1,
     );
-    return userFault ? 2 : 1;
   } finally {
     process.stdout.write = realStdoutWrite;
   }
@@ -771,34 +881,29 @@ async function cmdValidate(argv: string[]): Promise<number> {
   // `--report <path>`: the full JSON, `checkRun` included, for check-post, which posts the Check
   // Run and the sticky comment from the trusted `workflow_run` job.
   if (reportPath) {
-    writeFileSync(
-      resolve(reportPath),
-      JSON.stringify(
-        {
-          status: out.status,
-          errors: out.errors,
-          warnings: out.warnings,
-          checks: out.checks,
-          notes: out.notes,
-          checkRun: out.checkRun,
-        },
-        null,
-        2,
-      ),
-    );
+    const written = await writeReport(reportPath, paperRoot, {
+      status: out.status,
+      errors: out.errors,
+      warnings: out.warnings,
+      checks: out.checks,
+      notes: out.notes,
+      checkRun: out.checkRun,
+    });
+    if (!written) throw new Error(msg.workflow.validateReportNotWritten(reportPath));
+    return 0;
   }
   return out.exitCode;
 }
 
 /** `oak check-post --report <path> --repo <o/r> --sha <headsha> [--pr <n>]`: posts the report
  *  from the trusted `workflow_run` job (checks and pull-requests write). Never reruns validate or
- *  touches myst. Failing to post the Check Run fails the job; a failed comment only warns. Needs
- *  GH_TOKEN. Documented at DOCS.checkPost. */
+ *  touches myst. The pull request is `--pr`, else the `pr-number` beside the report, and is
+ *  checked against `--verified-head` before anything is posted. Failing to post the Check Run
+ *  fails the job; a failed comment only warns. Needs GH_TOKEN. Documented at DOCS.checkPost. */
 async function cmdCheckPost(argv: string[]): Promise<number> {
   const reportPath = flag(argv, 'report');
   const repo = flag(argv, 'repo') ?? process.env.GITHUB_REPOSITORY;
   const sha = flag(argv, 'sha');
-  const pr = flag(argv, 'pr');
   // The gated-files warning [R83]: --base and --verified-head come from the workflow_run event,
   // which GitHub sets and the fork's artifact cannot, so a pull request editing `.github/` or
   // `CODEOWNERS` is flagged even if the artifact lies.
@@ -828,6 +933,20 @@ async function cmdCheckPost(argv: string[]): Promise<number> {
   }
 
   const gh = await import('./gh.js');
+  const artifact = await import('./artifact.js');
+  // Old artifacts carry no `paper`; it is read here so a malformed one is refused.
+  const artifactDir = dirname(resolve(reportPath));
+  const paper = artifact.resolvePaperDir(
+    flag(argv, 'paper'),
+    artifact.readPaperDir(artifactDir, artifact.CHECKS_FILES.paper),
+  );
+  const flagged = flag(argv, 'pr');
+  const pr =
+    (flagged ? artifact.assertPrNumber(flagged) : null) ??
+    artifact.readPrNumber(artifactDir, artifact.CHECKS_FILES.pr) ??
+    undefined;
+  if (pr) artifact.verifyPrHead(repo, pr, verifiedHead, (r, n) => gh.realGhPr.prHead(r, n));
+
   const { cmdCheckPost: run, frozenPathsTouched } = await import('./checks.js');
   const shimTouched = frozenPathsTouched(gh.changedFiles(repo, base, verifiedHead));
   const out = run(
@@ -837,7 +956,7 @@ async function cmdCheckPost(argv: string[]): Promise<number> {
       sticky: (root, prNum, header, body) => gh.realGhPr.sticky(root, prNum, header, body),
     },
   );
-  emit(argv, { ...out });
+  emit(argv, { ...out, pr: pr ?? null, paper });
   return out.checkRunPosted ? 0 : 1;
 }
 

@@ -42,10 +42,18 @@ if [ "$verb" = "build" ] || [ "$verb" = "release" ] || [ "$verb" = "deploy-previ
   fi
 fi
 
+# A paper below the repo root (co-located). "." is oak's default, so it is not passed.
+if [ -n "${PAPER_DIR:-}" ] && [ "$PAPER_DIR" != "." ]; then
+  case "$verb" in
+    build|validate|release|deploy-preview|deposit|check-post|notify) extra+=(--paper "$PAPER_DIR") ;;
+  esac
+fi
+
 echo "::group::engine context"
 echo "engine dir : $engine"
 echo "verb       : $verb"
 echo "instance   : ${INSTANCE_REPO:-<co-located>}"
+echo "paper      : ${PAPER_DIR:-.}"
 echo "extra args : ${extra[*]:-<none>}"
 # Whether each secret is set, never its value.
 echo "GH_TOKEN     : ${GH_TOKEN:+present}"
@@ -53,4 +61,13 @@ echo "ZENODO_TOKEN : ${ZENODO_TOKEN:+present}"
 echo "CLOUDFLARE   : ${CLOUDFLARE_API_TOKEN:+present}"
 echo "::endgroup::"
 
-exec node "$engine/dist/cli.cjs" "$@" "${extra[@]}"
+# The verb's result, as one line of JSON, becomes the engine action's `result` output. oak
+# writes it to OAK_RESULT_FILE; a verb that stops before it has a result leaves the file empty.
+OAK_RESULT_FILE="$(mktemp)"
+export OAK_RESULT_FILE
+code=0
+node "$engine/dist/cli.cjs" "$@" "${extra[@]}" || code=$?
+if [ -n "${GITHUB_OUTPUT:-}" ] && [ -s "$OAK_RESULT_FILE" ]; then
+  printf 'result=%s\n' "$(tr -d '\r\n' < "$OAK_RESULT_FILE")" >> "$GITHUB_OUTPUT"
+fi
+exit "$code"

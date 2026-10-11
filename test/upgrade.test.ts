@@ -31,6 +31,7 @@ import {
   type UpgradePr,
   type UpgradeDeps,
   ownerFromCodeowners,
+  MIN_ENGINE_KEY,
 } from '../src/upgrade.js';
 
 const TEMPLATE_ROOT = 'templates/paper';
@@ -144,7 +145,12 @@ function fakePr() {
   const pr: UpgradePr = {
     open(_root, o) {
       opened.push({ branch: o.branch, paths: o.paths });
-      return { url: 'https://github.com/me/paper/pull/9', action: 'opened' };
+      return {
+        url: 'https://github.com/me/paper/pull/9',
+        action: 'opened',
+        number: '9',
+        head: 'c'.repeat(40),
+      };
     },
   };
   return { pr, opened };
@@ -326,7 +332,12 @@ describe('the newest release', () => {
   it('reports an update of the open pull request', async () => {
     const lines: string[] = [];
     const pr: UpgradePr = {
-      open: () => ({ url: 'https://github.com/me/paper/pull/9', action: 'updated' }),
+      open: () => ({
+        url: 'https://github.com/me/paper/pull/9',
+        action: 'updated',
+        number: '9',
+        head: 'd'.repeat(40),
+      }),
     };
     const out = await cmdUpgrade(
       { repoRoot: makeRepo(), mode: 'version-only' },
@@ -334,6 +345,116 @@ describe('the newest release', () => {
     );
     expect(out.result.pr_action).toBe('updated');
     expect(lines.join('\n')).toContain('updated upgrade PR');
+    // The bump workflow checks the pull request at the commit just pushed to it.
+    expect(out.result.pr_number).toBe('9');
+    expect(out.result.head_sha).toBe('d'.repeat(40));
+  });
+
+  it('names no pull request to check when nothing was pushed', async () => {
+    const pr: UpgradePr = {
+      open: () => ({ url: 'https://github.com/me/paper/pull/9', action: 'current', number: '9' }),
+    };
+    const out = await cmdUpgrade(
+      { repoRoot: makeRepo(), mode: 'version-only' },
+      deps(pr, 'v2.0.0', () => TEMPLATE_ROOT),
+    );
+    expect(out.result.pr_action).toBe('current');
+    expect(out.result.pr_number).toBeUndefined();
+    expect(out.result.head_sha).toBeUndefined();
+  });
+
+  it('a newly opened pull request carries its number and head', async () => {
+    const { pr } = fakePr();
+    const out = await cmdUpgrade(
+      { repoRoot: makeRepo(), mode: 'version-only' },
+      deps(pr, 'v2.0.0', () => TEMPLATE_ROOT),
+    );
+    expect(out.result.pr_number).toBe('9');
+    expect(out.result.head_sha).toBe('c'.repeat(40));
+  });
+});
+
+describe('the minimum engine version the workflows declare', () => {
+  /** A template whose pins.yml asks for `min`. */
+  function templateNeeding(min: string): string {
+    const target = tmp('oak-tmpl-');
+    cpSync(TEMPLATE_ROOT, target, { recursive: true });
+    const pins = join(target, '.github/actions/engine/pins.yml');
+    const doc = parseDocument(readFileSync(pins, 'utf8'));
+    doc.set(MIN_ENGINE_KEY, min);
+    writeFileSync(pins, doc.toString());
+    return target;
+  }
+
+  it('--files-only refuses to leave the pin below it, and changes nothing', async () => {
+    const repo = makeRepo(); // pinned at v1.0.0
+    const before = readFileSync(join(repo, '.github/actions/engine/pins.yml'), 'utf8');
+    const { pr, opened } = fakePr();
+    const out = await cmdUpgrade(
+      { repoRoot: repo, mode: 'files-only' },
+      deps(pr, 'v2.0.0', () => templateNeeding('v2.0.0')),
+    );
+    expect(out.exitCode).toBe(2);
+    expect(String(out.result.message)).toContain('v2.0.0 or newer');
+    expect(String(out.result.message)).toContain('without --files-only');
+    expect(opened).toHaveLength(0);
+    expect(readFileSync(join(repo, '.github/actions/engine/pins.yml'), 'utf8')).toBe(before);
+  });
+
+  it('--both moves the pin with the files, so it passes', async () => {
+    const { pr, opened } = fakePr();
+    const out = await cmdUpgrade(
+      { repoRoot: makeRepo(), mode: 'both' },
+      deps(pr, 'v2.0.0', () => templateNeeding('v2.0.0')),
+    );
+    expect(out.exitCode).toBe(0);
+    expect(opened[0]!.paths).toContain('myst.yml');
+    expect(opened[0]!.paths).toContain('.github/actions/engine/pins.yml');
+  });
+
+  it("--version-only checks the new pin against the repo's own workflows", async () => {
+    const repo = makeRepo();
+    const pins = join(repo, '.github/actions/engine/pins.yml');
+    const doc = parseDocument(readFileSync(pins, 'utf8'));
+    doc.set(MIN_ENGINE_KEY, 'v1.5.0');
+    writeFileSync(pins, doc.toString());
+    const { pr, opened } = fakePr();
+    const back = await cmdUpgrade(
+      { repoRoot: repo, to: 'v1.2.0', mode: 'version-only' },
+      deps(pr, 'v9.0.0', () => TEMPLATE_ROOT),
+    );
+    expect(back.exitCode).toBe(2);
+    expect(String(back.result.message)).toContain('--to');
+    const forward = await cmdUpgrade(
+      { repoRoot: repo, mode: 'version-only' },
+      deps(pr, 'v2.0.0', () => TEMPLATE_ROOT),
+    );
+    expect(forward.exitCode).toBe(0);
+    expect(opened).toHaveLength(1);
+  });
+
+  it('a pre-release of the minimum passes when the minimum admits pre-releases', async () => {
+    const { pr, opened } = fakePr();
+    const out = await cmdUpgrade(
+      { repoRoot: makeRepo(), to: 'v2.0.0-dev.3', mode: 'both' },
+      deps(pr, 'v9.0.0', () => templateNeeding('v2.0.0-0')),
+    );
+    expect(out.exitCode).toBe(0);
+    expect(opened).toHaveLength(1);
+  });
+
+  it('a pin that is not a release tag cannot be ordered, and is let through', async () => {
+    const repo = makeRepo();
+    const myst = join(repo, 'myst.yml');
+    const doc = parseDocument(readFileSync(myst, 'utf8'));
+    doc.setIn(['project', 'options', 'oaktree-sapling', 'version'], 'main');
+    writeFileSync(myst, doc.toString());
+    const { pr } = fakePr();
+    const out = await cmdUpgrade(
+      { repoRoot: repo, to: 'v2.0.0', mode: 'files-only' },
+      deps(pr, 'v2.0.0', () => templateNeeding('v2.0.0')),
+    );
+    expect(out.exitCode).toBe(0);
   });
 });
 

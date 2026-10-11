@@ -555,6 +555,40 @@ describe('a pull request number is a number [R136]', () => {
     expect(r.code).toBe(2);
     expect(r.stderr).toContain('not a pull request number');
   });
+
+  /** check-post on a valid report, with `files` beside it, and no gh on PATH: a refusal has to
+   *  come before any GitHub call. */
+  function checkPostWith(files: Record<string, string>) {
+    const dir = mkdtempSync(join(tmpdir(), 'oak-checks-'));
+    const report = {
+      checkRun: { conclusion: 'success', title: 't', summary: 's', annotations: [] },
+    };
+    writeFileSync(join(dir, 'report.json'), JSON.stringify(report));
+    for (const [name, body] of Object.entries(files)) writeFileSync(join(dir, name), body);
+    return oak(
+      ['check-post', '--report', join(dir, 'report.json'), '--repo', 'o/r'].concat([
+        '--sha',
+        'a'.repeat(40),
+        '--base',
+        'main',
+        '--verified-head',
+        'a'.repeat(40),
+      ]),
+      { PATH: dirname(process.execPath) },
+    );
+  }
+
+  it('check-post reads pr-number beside the report and refuses a forged one', () => {
+    const r = checkPostWith({ 'pr-number': '1/comments?x=' });
+    expect(r.code).toBe(2);
+    expect(r.stderr).toContain('not a pull request number');
+  });
+
+  it('check-post refuses a paper folder outside the repo', () => {
+    const r = checkPostWith({ 'pr-number': '7', paper: '../../elsewhere' });
+    expect(r.code).toBe(2);
+    expect(r.stderr).toContain('not a folder below the repo root');
+  });
 });
 
 describe('a sandbox deposit never uses the production token [R102]', () => {
@@ -563,6 +597,7 @@ describe('a sandbox deposit never uses the production token [R102]', () => {
     const r = oak(['deposit', 'prepare', '--sandbox', '--paper', fixturePaper], env);
     expect(r.code).toBe(2);
     expect(r.stderr).toContain('ZENODO_TOKEN_SANDBOX');
+    expect(r.stderr).toContain('never falls back to the production token');
     expect(r.stdout + r.stderr).not.toContain('production-secret');
   });
 });
