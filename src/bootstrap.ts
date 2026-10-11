@@ -1322,11 +1322,8 @@ export async function cmdBootstrapJournal(
   // --- external -------------------------------------------------------------------
   // No rulesets or branch protection on the journal repo: adding a paper to the registry
   // is a pull request into a repo only editors can write, and protecting it is the
-  // journal's call, as with `--no-require-checks` for papers. The runbook mentions it.
-  const runbook: string[] = [
-    msg.bootstrap.runbookStartHere(repo),
-    msg.bootstrap.runbookNoProtection,
-  ];
+  // journal's call, as with `--no-require-checks` for papers. The start/journal docs say so.
+  const runbook: string[] = [msg.bootstrap.runbookStartHere];
   if (!withSite) {
     const allRunbook = [...contentRunbook, ...runbook];
     for (const line of allRunbook) log(`  → ${line}`);
@@ -1353,7 +1350,7 @@ export async function cmdBootstrapJournal(
   const siteUrl = siteUrlFor(repo);
   actions.site = 'stamped';
   log(msg.bootstrap.logSiteAdded(siteUrl));
-  runbook.push(msg.bootstrap.runbookSite(siteUrl), msg.bootstrap.runbookSiteFailure);
+  runbook.push(msg.bootstrap.runbookSite(siteUrl));
   const allRunbook = [...contentRunbook, ...runbook];
   for (const line of allRunbook) log(`  → ${line}`);
   if (contentFailed.length)

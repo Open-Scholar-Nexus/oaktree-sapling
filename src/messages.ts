@@ -428,31 +428,11 @@ export const bootstrap = {
     `(they can then push branches here; main still needs a pull request and only editors can ` +
     `create v* tags).`,
 
-  runbookStartHere: (repo: string): string =>
-    `Start here: edit journal.yml (your journal's name and the rules papers are checked against) ` +
-    `and brand/ (logo + colours). Papers read both at build time, so a change here reaches ` +
-    `every paper's next build. Clone it with: git clone https://github.com/${repo}.git\n` +
-    `The whole first pass, in order: ${docsUrl(DOCS.journalStart)}`,
-
-  runbookNoProtection:
-    'This repo has no branch protection: adding a paper to the list, or changing the branding, ' +
-    'is an ordinary commit or pull request. If you want those changes reviewed, add a branch ' +
-    'protection rule yourself.',
+  runbookStartHere: `Next: clone the repo and edit journal.yml and brand/. See ${docsUrl(DOCS.journalStart)}`,
 
   runbookSite: (siteUrl: string): string =>
-    `The journal website is built from this repo and goes live at ${siteUrl} once the first ` +
-    '"Journal site" workflow run finishes (watch it in the Actions tab). GitHub Pages takes a ' +
-    'minute or two to serve a new site, so a 404 immediately after this command is normal. Every ' +
-    'file in it is yours to edit: oak writes them once and never again, so an upgrade will not ' +
-    'overwrite your design. Three version pins you bump by hand when you want newer: the gallery plugin URL ' +
-    'and `site.template` in myst.yml, and `mystmd` in package.json. What each one moves, and ' +
-    'how to tell a bump worked: ' +
-    docsUrl(DOCS.pins),
-
-  runbookSiteFailure:
-    'If a website build ever fails, the version already published keeps serving; a bad entry ' +
-    'in registry/papers.yml (the list of published papers) cannot take the journal offline. ' +
-    'Fix the entry and push again.',
+    `The website goes live at ${siteUrl} a few minutes after the first "Journal site" run ` +
+    'finishes (Actions tab).',
 };
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════

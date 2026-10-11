@@ -954,7 +954,7 @@ describe('cmdBootstrapJournal', () => {
       },
       d,
     );
-    expect(logged.join('\n')).toContain('Start here: edit journal.yml');
+    expect(logged.join('\n')).toContain('Next: clone the repo and edit journal.yml');
     expect(calls.enablePages ?? []).toHaveLength(0);
     expect(calls.setHomepage).toHaveLength(0);
     expect(out.result.site_url).toBeUndefined();

@@ -817,7 +817,10 @@ const ENGINE_REPO_DEFAULT = 'Open-Scholar-Nexus/oaktree-sapling';
 function makeConfirm(argv: string[]): (plan: string[]) => Promise<boolean> {
   return async (plan) => {
     for (const line of plan) process.stderr.write(line + '\n');
-    if (has(argv, 'yes')) return true;
+    if (has(argv, 'yes')) {
+      process.stderr.write('\n'); // between the plan and the progress lines
+      return true;
+    }
     if (!process.stdin.isTTY) {
       process.stderr.write(msg.prompt.nonTty + '\n');
       return false;
@@ -826,7 +829,10 @@ function makeConfirm(argv: string[]): (plan: string[]) => Promise<boolean> {
     const rl = createInterface({ input: process.stdin, output: process.stderr });
     const ans = (await rl.question(msg.prompt.proceed)).trim();
     rl.close();
-    if (/^y/i.test(ans)) return true;
+    if (/^y/i.test(ans)) {
+      process.stderr.write('\n');
+      return true;
+    }
     // Every abort says why: a bare `{"status":"aborted"}` after a prompt that defaults to No
     // reads as oak refusing.
     process.stderr.write(msg.prompt.declined(ans) + '\n');
