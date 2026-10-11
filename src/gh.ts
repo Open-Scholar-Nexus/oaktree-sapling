@@ -6,9 +6,18 @@
 import * as msg from './messages.js';
 import { UserError } from './messages.js';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { cpSync, mkdtempSync, rmSync } from 'node:fs';
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { parseDocument } from 'yaml';
 import type { GitContext } from './zenodo.js';
 import { LABEL_ZENODO_FAILED, type GhPr, type PagesDeployer } from './preview.js';
@@ -767,20 +776,55 @@ export function tempClone(repo: string): string {
   return tmp;
 }
 
+/** How long a cached journal clone is used as it is before oak fetches the journal again. */
+export const JOURNAL_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+/** Where the journal settings for a local run came from, for the line oak prints about it. */
+export type JournalCache =
+  | { root: string; state: 'cloned' | 'updated' }
+  | { root: string; state: 'reused'; ageMs: number }
+  | { root: string; state: 'stale'; ageMs: number; why: string };
+
 /**
- * A shallow clone of the journal repo at its default branch, for a local `oak build`, `start` or
- * `validate` given no `--instance`; CI clones it in ci/run.sh. Plain git over https, as there:
- * journal repos are public, so an author needs no `gh` login. The clone is removed on exit.
- * Ctrl-C, the only way `oak start` ends, skips exit handlers unless SIGINT has a listener, so it
- * gets one.
+ * The journal repo for a local `oak build`, `start` or `validate` given no `--instance`, kept
+ * under the paper's `_build/journal/<owner>/<repo>`; CI clones it in ci/run.sh. `_build/` is
+ * gitignored and myst skips it, as it does for the templates it caches in `_build/templates`.
+ * Plain git over https, as in run.sh: journal repos are public, so an author needs no `gh`
+ * login.
+ *
+ * A copy younger than {@link JOURNAL_CACHE_MAX_AGE_MS} is used as it is. An older one is fetched
+ * again, and kept when the fetch fails, so a run offline still works. A new clone is made beside
+ * its final path and renamed into place, so an interrupted one leaves nothing that looks cached.
  */
-export function cloneJournal(repo: string): string {
+export function cachedJournal(repo: string, paperRoot: string, now = Date.now()): JournalCache {
   assertRepoName(repo);
-  const tmp = mkdtempSync(join(tmpdir(), 'oak-journal-'));
-  process.on('exit', () => rmSync(tmp, { recursive: true, force: true }));
-  process.once('SIGINT', () => process.exit(130));
-  run('git', ['clone', '--depth', '1', '--quiet', `https://github.com/${repo}.git`, tmp]);
-  return tmp;
+  const root = join(paperRoot, '_build', 'journal', ...repo.split('/'));
+  // Inside .git, so the journal's own files are exactly what was fetched.
+  const stamp = join(root, '.git', 'oak-fetched');
+  if (existsSync(stamp)) {
+    const ageMs = now - statSync(stamp).mtimeMs;
+    if (ageMs < JOURNAL_CACHE_MAX_AGE_MS) return { root, state: 'reused', ageMs };
+    try {
+      git(root, ['fetch', '--depth', '1', '--quiet', 'origin'], { quiet: true });
+      git(root, ['reset', '--hard', '--quiet', 'FETCH_HEAD'], { quiet: true });
+    } catch (err) {
+      return { root, state: 'stale', ageMs, why: err instanceof Error ? err.message : String(err) };
+    }
+    writeFileSync(stamp, '');
+    return { root, state: 'updated' };
+  }
+  rmSync(root, { recursive: true, force: true });
+  mkdirSync(dirname(root), { recursive: true });
+  const tmp = mkdtempSync(join(dirname(root), '.clone-'));
+  try {
+    run('git', ['clone', '--depth', '1', '--quiet', `https://github.com/${repo}.git`, tmp]);
+  } catch (err) {
+    rmSync(tmp, { recursive: true, force: true });
+    throw err;
+  }
+  renameSync(tmp, root);
+  writeFileSync(stamp, '');
+  return { root, state: 'cloned' };
 }
 
 /**

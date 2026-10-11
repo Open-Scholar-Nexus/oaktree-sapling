@@ -102,7 +102,7 @@ function assetOverridesFrom(argv: string[]): ComposeInput['assetOverrides'] {
 
 /**
  * Where the journal repo is [R38]: none with `--no-instance`, else `--instance`, else this repo
- * when a `journal.yml` sits beside the paper, else a clone of the `instance_repo` in pins.yml.
+ * when a `journal.yml` sits beside the paper, else a cached clone of pins.yml's `instance_repo`.
  * The third case serves a repo that is its own journal, where the engine action passes no
  * `--instance` (`instance_repo: .`). The clone serves a local run; CI always passes
  * `--instance` for any other `instance_repo` (ci/run.sh), so it never reaches it.
@@ -122,11 +122,12 @@ async function resolveInstanceRoot(
   if (existsSync(join(paperRoot, 'journal.yml'))) return { root: paperRoot };
   const pinned = readPin(paperRoot, 'instance_repo');
   if (!pinned || pinned === '.') return { error: msg.build.noInstance(verb, paperRoot) };
-  const { cloneJournal } = await import('./gh.js');
+  const { cachedJournal } = await import('./gh.js');
   try {
-    const root = cloneJournal(pinned);
-    process.stderr.write(msg.build.instanceCloned(verb, pinned) + '\n');
-    return { root };
+    const cache = cachedJournal(pinned, paperRoot);
+    const line = msg.build.journalCache(verb, pinned, cache);
+    process.stderr.write((cache.state === 'stale' ? annotate('warning', line) : line) + '\n');
+    return { root: cache.root };
   } catch (err) {
     const why = err instanceof Error ? err.message : String(err);
     return { error: msg.build.instanceCloneFailed(verb, pinned, why) };

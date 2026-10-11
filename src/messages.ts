@@ -48,10 +48,21 @@
  */
 
 import { DOCS, docsUrl } from './docs-links.js';
+import type { JournalCache } from './gh.js';
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════
  * Output plumbing: not prose, but it decides HOW the prose is printed.
  * ═════════════════════════════════════════════════════════════════════════════════════════ */
+
+/** An age for a person: minutes under an hour, hours under two days, then days. */
+export function age(ms: number): string {
+  const minutes = Math.max(0, Math.floor(ms / 60_000));
+  if (minutes < 1) return 'less than a minute';
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 48) return `${hours} h`;
+  return `${Math.floor(hours / 24)} days`;
+}
 
 /** Are we inside a GitHub Actions run? Annotations mean something only there. */
 export function inCI(): boolean {
@@ -533,10 +544,33 @@ export const build = {
     `${verb === 'validate' ? 'a bare, engine-only check' : verb === 'start' ? 'an unbranded preview' : 'an unbranded build'}. ` +
     `See ${docsUrl(DOCS.paperJournalLink)}`,
 
-  /** A local run found no `--instance` and cloned the journal pins.yml names. */
-  instanceCloned: (verb: 'build' | 'start' | 'validate', repo: string): string =>
-    `oak ${verb}: using the journal settings from ${repo} (instance_repo in pins.yml), cloned ` +
-    `just now. Pass --instance <path> to use a local clone instead.`,
+  /** Where a local run without `--instance` got the journal settings ({@link JournalCache}). */
+  journalCache: (
+    verb: 'build' | 'start' | 'validate',
+    repo: string,
+    cache: JournalCache,
+  ): string => {
+    const head = `oak ${verb}: `;
+    switch (cache.state) {
+      case 'cloned':
+        return (
+          `${head}using the journal settings from ${repo} (instance_repo in pins.yml), cloned ` +
+          `to ${cache.root}. Pass --instance <path> to use a local clone instead.`
+        );
+      case 'updated':
+        return `${head}using the journal settings from ${repo}, updated just now in ${cache.root}.`;
+      case 'reused':
+        return (
+          `${head}reusing the journal settings from ${repo} fetched ${age(cache.ageMs)} ago ` +
+          `(${cache.root}); delete that folder to fetch them now.`
+        );
+      case 'stale':
+        return (
+          `${head}could not update the journal settings from ${repo} (${cache.why}); using ` +
+          `the copy fetched ${age(cache.ageMs)} ago in ${cache.root}.`
+        );
+    }
+  },
 
   instanceCloneFailed: (verb: 'build' | 'start' | 'validate', repo: string, why: string): string =>
     `oak ${verb}: could not clone the journal ${repo} named in .github/actions/engine/pins.yml ` +
