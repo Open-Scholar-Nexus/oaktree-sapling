@@ -1,86 +1,95 @@
 (start-paper)=
 # Your paper repository
 
-An editor created this repository for your paper with `oak bootstrap paper`. It holds one manuscript, and its workflows build it into a website and a PDF, check it against the journal's rules, and deposit each published version on Zenodo.
+An editor has created a repository for your paper. You write the paper there in [MyST markdown](https://mystmd.org/guide), and its workflows turn it into a website and a PDF in the journal's style.
 
-## What is in it
+The steps below get you from that repository to a preview on your own machine, then to a pull request the editors can merge.
 
-```text
-myst.yml                  the paper's metadata: id, title, authors, keywords
-index.md                  the manuscript, with the abstract in its frontmatter
-bib.bib                   the bibliography
-thumbnails/thumbnail.png  the picture on the journal's list of papers
-LICENSE                   the paper's licence, CC BY 4.0
-.gitignore                keeps build output out of git
-CODEOWNERS                who reviews changes to the files below
-.github/                  the workflows, and the journal the paper belongs to
-```
+## Before you start
 
-The manuscript, `myst.yml`, the bibliography and the thumbnail are yours to edit. A change to `.github/`, `CODEOWNERS` or `paper-environment.yml` needs an editor's review before it can merge. `paper-environment.yml` is optional: a conda environment, installed before each build, for a paper that runs code.
-
-The paper is written in [MyST markdown](https://mystmd.org/guide), and `myst.yml` is an ordinary MyST project file.
-
-## 1. Fill in myst.yml
-
-A new repository starts from a starter paper whose `myst.yml` has placeholders. Replace them:
-
-`project.id`
-: The paper's id, unique in the journal and in the shape the journal's [`id_pattern`](../guide/journal-yml.md#id-pattern) asks for, for example `oak-2026-tidal-flats`. Until it is set, the Journal checks fail and the paper's website is not deployed.
-
-`project.title`, `project.authors`, `project.keywords`
-: The commented-out `authors` block shows the fields. The journal's [editorial checks](../guide/checks.md) decide which are required; a new journal starts by requiring an ORCID and CRediT roles for every author, an abstract, and keywords.
-
-Write the abstract in the frontmatter of `index.md`, replace `bib.bib` with your references, and replace the grey `thumbnails/thumbnail.png`.
-
-Leave `project.options.oaktree-sapling` as it is: it names the engine version and the journal's edition, and the build fails without them. Leave out `extends:` too; the build adds the journal's settings itself (see [below](#paper-journal-link)).
-
-## 2. Open a pull request
-
-Every change reaches `main` through a pull request. Unless an editor gave you push access, fork the repository and open the pull request from your fork. The first time you do, the workflows wait until an editor approves them in the repository's **Actions** tab, once per new contributor.
-
-Each pull request gets two comments, updated on every push:
-
-- **Journal checks**: whether the paper builds and passes the journal's checks, and what to fix when it does not. The same result shows as a check on the pull request.
-- **A preview** of the paper's website: a link, or, when the journal has no live previews set up, a downloadable copy of the built site attached to the **Paper CI** run.
-
-The pull request merges once the Journal checks pass and an editor approves it. Each merge redeploys the paper's website at `https://<owner>.github.io/<paper-repo>/`.
-
-Once a week the repository opens an **Engine version bump** pull request of its own, moving `project.options.oaktree-sapling.version` in `myst.yml` to the newest engine release. It merges like any other once its checks pass.
-
-## 3. Publishing a version
-
-Editors publish. They reserve a DOI on Zenodo, which opens a pull request writing it into `myst.yml`, then create a `v*` tag. The tag builds the paper and fills the Zenodo draft, and an editor clicks **Publish** on Zenodo. Once a version is published, later pull requests carry a comment saying what an editor does on Zenodo before tagging the next one.
-
-(paper-journal-link)=
-## Where the journal's settings come from
-
-The paper repository names its journal in `.github/actions/engine/pins.yml`, as `instance_repo: <owner>/<journal-repo>`. Every build clones that repository at its latest commit and reads from it:
-
-- `editions/<edition>.yml`, for the edition `myst.yml` names: the venue, licence and other frontmatter every paper in the edition shares;
-- `brand/brand.yml`: the logo, colours and the mark on the PDF;
-- `journal.yml`: the id rule, the editorial checks and the PDF template.
-
-A field set in your `myst.yml` takes precedence over the same field from the edition. A change the editors push to the journal repository applies from your paper's next build.
-
-To move the paper to another edition, set `project.options.oaktree-sapling.edition` to the name of another file in the journal repository's `editions/` folder, without the `.yml`.
-
-(paper-preview-locally)=
-## Previewing locally
-
-Install `oak` as in [Install](setup.md#install). A local build reads the journal's settings from a clone of the journal repository, the one `instance_repo` names in `.github/actions/engine/pins.yml`. Clone it beside the paper:
+You need a GitHub account, `git`, and Node 22 or later. Then install `oak`:
 
 ```bash
+npm install -g oaktree-sapling
+```
+
+## 1. Fork and clone
+
+On the paper repository's GitHub page, click **Fork**. Then clone your fork, and the journal's repository beside it:
+
+```bash
+git clone https://github.com/<you>/<paper-repo>.git
 git clone https://github.com/<owner>/<journal-repo>.git
+```
+
+The journal's repository holds the logo, colours and settings every paper in the journal is built with. It is public, so anyone can clone it. Its name is on the `instance_repo:` line of `.github/actions/engine/pins.yml` in the paper repository.
+
+If an editor gave you push access to the paper repository, clone it directly and skip the fork.
+
+(paper-preview-locally)=
+## 2. Preview it
+
+```bash
 cd <paper-repo>
 oak start --instance ../<journal-repo>
 ```
 
-`oak start` serves the paper's website, prints its address, and reloads when you edit the manuscript or `myst.yml`. With `--no-instance` in place of `--instance`, it previews without the journal's settings: no logo and no edition frontmatter.
+Open the address `oak start` prints. The preview reloads as you edit.
 
-`oak build --instance ../<journal-repo>` builds the website into `_build/html` and the PDF to `_build/exports/paper.pdf`. `--exports-only` builds only the PDF, and works offline.
+`--instance` is the path to your clone of the journal. With `--no-instance` in its place, the preview skips the journal's settings: no logo, no venue on the paper.
 
-Both write `myst.oak.yml` beside your `myst.yml`: the configuration the build reads, assembled from yours and the journal's. It is rewritten on every run, gitignored, and safe to delete.
+## 3. Write the paper
 
-The PDF needs [typst](https://github.com/typst/typst) on your `PATH`, at the version in oak's [`typst.version`](src:typst.version) file. The paper's CI brings its own typst; the npm package ships none.
+`myst.yml`
+: The paper's metadata. Replace the placeholders: `id`, unique in the journal and in the shape the journal asks for (for example `oak-2026-tidal-flats`, see [id_pattern](../guide/journal-yml.md#id-pattern)), then `title`, `authors` and `keywords`. The commented-out `authors` block shows the fields. Leave the `oaktree-sapling` block at the bottom as it is.
 
-A local build runs the `oak` you installed, and CI runs the version `myst.yml` names. To preview with the version CI uses, install it: `npm install -g oaktree-sapling@<version>`, with the version written without its leading `v`.
+`index.md`
+: The paper, with its abstract in the frontmatter at the top.
+
+`bib.bib`
+: Your references, cited as `[@key]`.
+
+`thumbnails/thumbnail.png`
+: The picture shown beside your paper on the journal's website.
+
+The journal's [editorial checks](../guide/checks.md) decide which metadata is required. A new journal starts by requiring an ORCID and CRediT roles for every author, an abstract, and keywords.
+
+## 4. Open a pull request
+
+Commit, push to your fork, and open a pull request against the paper repository. The first time you do, its workflows wait until an editor approves them.
+
+Each pull request then gets two comments, updated on every push:
+
+- **Journal checks**: whether the paper builds and passes the journal's checks, and what to fix when it does not.
+- **A preview** of the paper's website, as a link or as a download attached to the **Paper CI** run.
+
+Once the checks pass and an editor approves, the pull request can merge, and the paper's website at `https://<owner>.github.io/<paper-repo>/` updates. Changes to `.github/`, `CODEOWNERS` or `paper-environment.yml` need an editor's review on top.
+
+## 5. Publication
+
+Editors publish a version: they reserve a DOI on Zenodo, which opens a pull request writing it into `myst.yml`, then tag the version, and the paper is deposited on Zenodo.
+
+Once a week the repository also opens an **Engine version bump** pull request, which updates the version in `myst.yml`. It merges like any other once its checks pass.
+
+(paper-journal-link)=
+## Where the journal's settings come from
+
+`.github/actions/engine/pins.yml` names the journal's repository. Every build, in CI and with `oak start --instance`, reads three things from it:
+
+- `editions/<edition>.yml`, for the edition named in `myst.yml`: the venue, licence and other frontmatter shared by the edition;
+- `brand/brand.yml`: the logo, colours and the mark on the PDF;
+- `journal.yml`: the id rule, the editorial checks and the PDF template.
+
+A field set in your `myst.yml` takes precedence over the same field from the edition. CI reads the journal's latest commit, so a change the editors make applies from your paper's next build; `git pull` in your clone to preview with it.
+
+## Building the PDF locally
+
+```bash
+oak build --instance ../<journal-repo>
+```
+
+This writes the website to `_build/html` and the PDF to `_build/exports/paper.pdf`; `--exports-only` builds only the PDF. The PDF needs [typst](https://github.com/typst/typst) on your `PATH`, at the version in oak's [`typst.version`](src:typst.version) file.
+
+`oak start` and `oak build` also write `myst.oak.yml` next to `myst.yml`: your settings and the journal's, assembled. It is gitignored and safe to delete.
+
+A local build uses the `oak` you installed; CI uses the version in `myst.yml`. To match CI, install that version: `npm install -g oaktree-sapling@<version>`, without the leading `v`.
