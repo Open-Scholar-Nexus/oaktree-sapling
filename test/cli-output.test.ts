@@ -101,9 +101,7 @@ describe.skipIf(bundleState() === 'absent')(
     it('explains the journal repo and --co-located in plain words', () => {
       const { stderr } = oak([]);
       expect(stderr).toMatch(/a public repo holding the journal's settings/);
-      expect(stderr).toMatch(
-        /--co-located\s+not ready: one repo for the journal and its papers/,
-      );
+      expect(stderr).toMatch(/--co-located\s+not ready: one repo for the journal and its papers/);
     });
 
     it('documents --json and --verbose', () => {
