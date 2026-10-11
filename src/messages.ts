@@ -74,7 +74,7 @@ export function inCI(): boolean {
  * a terminal, so it is added only in CI. There a message is escaped, since a raw newline cuts the
  * annotation at its first line.
  */
-export function annotate(kind: 'warning' | 'error', message: string): string {
+export function annotate(kind: 'notice' | 'warning' | 'error', message: string): string {
   if (!inCI()) return kind === 'warning' ? `warning: ${message}` : message;
   return `::${kind}::${message.replace(/%/g, '%25').replace(/\r?\n/g, '%0A')}`;
 }
@@ -146,7 +146,7 @@ export const usage = (): string =>
   `Working on a paper\n` +
   `  oak validate [--paper <dir>] [--instance <dir> | --no-instance] [--strict] [--report <path>]\n` +
   `                    run the journal's checks over a manuscript and report what fails\n` +
-  `  oak build   [--paper <dir>] [--instance <dir> | --no-instance] [--base-url <url>] [--no-site-template]\n` +
+  `  oak build   [--paper <dir>] [--instance <dir> | --no-instance] [--base-url <url> | --preview] [--no-site-template]\n` +
   `                    build the paper's website + PDF into _build/\n` +
   `  oak start   [--paper <dir>] [--instance <dir> | --no-instance] [--port <n>] [--server-port <n>]\n` +
   `                    run mystmd's live preview of the paper, with the journal's settings\n` +
@@ -157,7 +157,7 @@ export const usage = (): string =>
   `Run by the workflows (rarely typed by hand)\n` +
   `  oak check-post --report <path> --repo <owner/repo> --sha <headsha> --base <branch>\n` +
   `                 --verified-head <headsha> [--pr <n>]\n` +
-  `  oak deploy-preview <site> [--instance <dir>] [--repo <owner/repo>]\n` +
+  `  oak deploy-preview <site> [--pr <n>] [--verified-head <headsha>] [--instance <dir>] [--repo <owner/repo>]\n` +
   `  oak notify new-version [--pr <n> | --site <dir>] [--repo <owner/repo>]\n` +
   `  oak deposit prepare --repo <owner/repo> [--site-url <url>] [--sandbox] [--instance <dir>]\n` +
   `  oak deposit publish --pdf <path> --tag <vX.Y.Z> [--site-url <url>] [--sandbox] [--instance <dir>]\n` +
@@ -461,6 +461,14 @@ export const upgrade = {
     `kept ${pin}: it is newer than ${target} (the newest release of ${engineRepo}) or is a ` +
     `branch or commit; no pull request. Pass --to <tag> to move it.`,
 
+  /** The pin this run leaves is older than the workflows it leaves need. */
+  belowMinimum: (pin: string, min: string, mode: 'version-only' | 'files-only' | 'both'): string =>
+    `oak upgrade: the workflows need engine ${min} or newer, and this run would leave ` +
+    `myst.yml at ${pin}; nothing was changed. ` +
+    (mode === 'files-only'
+      ? `Run it without --files-only, which moves the version too, or pass --to <tag> naming ${min} or newer.`
+      : `Pass --to <tag> naming ${min} or newer.`),
+
   planHeader: (repoRoot: string, target: string): string => `upgrade ${repoRoot} → ${target}`,
   planTarget: (target: string, engineRepo: string, targetGiven: boolean): string =>
     `  engine version : ${target}${
@@ -505,6 +513,11 @@ export const upgrade = {
 
 export const build = {
   done: (id: string): string => `oak build: done (id=${id})`,
+  placeholder:
+    'oak build: project.id in myst.yml is still the template placeholder; GitHub Pages is not ' +
+    'deployed until it is set',
+  finishFailed: (why: string): string =>
+    `oak build: the site was built, but preparing it for upload failed (${why})`,
 
   /** `oak build` in the journal repo, whose myst.yml is the website (cli.ts `isJournalRepo`). */
   inJournalRepo: (root: string): string =>
@@ -837,9 +850,29 @@ export const workflow = {
   previewBadPrNumber: (got: string): string =>
     `.pr-number is not a pull request number (${JSON.stringify(got.slice(0, 40))}). It ` +
     `comes from the build artifact, which is corrupt or hostile.`,
+  badPaperDir: (got: string): string =>
+    `the paper folder ${JSON.stringify(got.slice(0, 60))} is not a folder below the repo root ` +
+    `(letters, digits, . _ - and /, no part starting with a dot). If it came from a build ` +
+    `artifact, the artifact is corrupt or hostile.`,
+  paperDirMismatch: (artifact: string, flagged: string): string =>
+    `the build artifact names the paper ${artifact} but --paper is ${flagged}; refusing to ` +
+    `post for either. Check the paper-dir the workflow passes.`,
+
+  // the pull request check before Stage 2 writes to a pull request
+  prCheckNoRepo: (pr: string): string =>
+    `cannot check pull request #${pr}: no repo. Pass --repo <owner/name> or set GITHUB_REPOSITORY.`,
+  prCheckNoHead: (pr: string): string =>
+    `cannot check pull request #${pr}: no commit to compare its head with. Pass ` +
+    `--verified-head <sha> (a workflow_run run reads it from the event).`,
+  prHeadMismatch: (pr: string, actual: string, built: string): string =>
+    `pull request #${pr} heads at ${actual}, not at ${built}, the commit this run built; ` +
+    `refusing to post. A newer push gets its own run.`,
 
   depositNoToken: (sandbox: boolean): string =>
-    `no token: set ${sandbox ? 'ZENODO_TOKEN_SANDBOX' : 'ZENODO_TOKEN'} or pass --token`,
+    sandbox
+      ? 'oak deposit: --sandbox needs ZENODO_TOKEN_SANDBOX (an environment secret on ' +
+        'zenodo-prepare) or --token. A sandbox run never falls back to the production token.'
+      : 'oak deposit: no token. Set ZENODO_TOKEN or pass --token.',
   depositNoRepo: 'deposit prepare: pass --repo owner/repo (or set GITHUB_REPOSITORY)',
   depositPublishArgs: 'deposit publish: --pdf and --tag are required',
   depositDoiPrOpened: (url: string): string => `deposit prepare: opened DOI PR ${url}`,
@@ -856,8 +889,8 @@ export const workflow = {
       '<details>',
       '<summary>Why are some checks waiting for approval?</summary>',
       '',
-      'The Journal checks for this pull request are posted by the "Prepare Zenodo deposit" run ' +
-        'that opened it. GitHub holds the workflow runs of a pull request a bot opens, so the ' +
+      'The preview and Journal checks for this pull request are posted by the "Prepare Zenodo ' +
+        'deposit" run that opened it. GitHub holds the workflow runs of a pull request a bot opens, so the ' +
         'Paper CI and Journal checks runs here wait for approval; neither is needed to merge. ' +
         'To run them anyway, approve them in the Actions tab, or close and reopen this pull ' +
         'request.',
@@ -914,6 +947,8 @@ export const workflow = {
   validateCouldNotRun: 'oak validate could not run',
   validateCrashed: 'oak validate crashed',
   validateCrashLine: (details: string): string => `oak validate: ${details}`,
+  validateReportNotWritten: (path: string): string =>
+    `oak validate: could not write the report to ${path}`,
 
   // bootstrap / conformance argument errors
   bootstrapNoRepo: 'oak bootstrap: --repo <owner/name> is required',
@@ -953,6 +988,8 @@ export const workflow = {
   doiPrDiverged: (head: string, base: string): string =>
     `${head} carries commits that are not on ${base}, so the DOI pull request would not be ` +
     `the one-file change it claims to be. Run prepare on ${base}.`,
+  notAPrUrl: (got: string): string =>
+    `gh answered ${JSON.stringify(got.slice(0, 120))} where a pull request URL was expected`,
   wranglerNoUrl: 'wrangler did not report a *.pages.dev deployment URL',
   /** No detail from wrangler: this reaches a public pull request comment, and wrangler's output
    *  names the account id. The details stay in the workflow log, where Actions redacts

@@ -85,7 +85,8 @@ describe.skipIf(bundleState() === 'absent')(
       expect(stderr).toMatch(/building myst-cli session with API URL/);
     }, 60_000);
 
-    it('fails a made-up CRediT role and a missing abstract: exit 1', () => {
+    /** The fixture paper with no abstract and a made-up CRediT role. */
+    function failingPaper(): string {
       const tmp = mkdtempSync(join(tmpdir(), 'oak-val-'));
       copyFileSync(join(fixturePaper, 'bib.bib'), join(tmp, 'bib.bib'));
       // index.md without the abstract part
@@ -98,8 +99,11 @@ describe.skipIf(bundleState() === 'absent')(
         .replace(/ {2}abstract: .*\n/, '')
         .replace('    - conceptualization\n', '    - not-a-real-credit-role\n');
       writeFileSync(join(tmp, 'myst.yml'), myst);
+      return tmp;
+    }
 
-      const { exitCode, out } = runValidate(tmp);
+    it('fails a made-up CRediT role and a missing abstract: exit 1', () => {
+      const { exitCode, out } = runValidate(failingPaper());
       expect(exitCode).toBe(1);
       expect(out.checkRun.conclusion).toBe('failure');
       const credit = out.checks.filter((c: any) => c.id === 'authors-have-credit-roles');
@@ -136,6 +140,62 @@ describe.skipIf(bundleState() === 'absent')(
       expect(written.checkRun.conclusion).toBe('success');
       expect(Array.isArray(written.checks)).toBe(true);
       expect(written.status).toBe('ok');
+    }, 60_000);
+
+    it('--report exits 0 on a failing result, since check-post posts it', () => {
+      const tmp = mkdtempSync(join(tmpdir(), 'oak-report-'));
+      const reportPath = join(tmp, 'report.json');
+      const r = spawnSync(
+        'node',
+        [bundle, 'validate', '--paper', failingPaper(), '--instance', fixtureInstance].concat([
+          '--repo',
+          repo,
+          '--report',
+          reportPath,
+        ]),
+        { encoding: 'utf8' },
+      );
+      expect(r.status).toBe(0);
+      expect(JSON.parse(readFileSync(reportPath, 'utf8')).checkRun.conclusion).toBe('failure');
+    }, 60_000);
+
+    it('--report exits nonzero only when no report was written', () => {
+      const reportPath = join(tmpdir(), 'oak-no-such-dir', 'nested', 'report.json');
+      const r = spawnSync(
+        'node',
+        [bundle, 'validate', '--paper', fixturePaper, '--instance', fixtureInstance].concat([
+          '--repo',
+          repo,
+          '--report',
+          reportPath,
+        ]),
+        { encoding: 'utf8' },
+      );
+      expect(r.status).not.toBe(0);
+      expect(existsSync(reportPath)).toBe(false);
+    }, 60_000);
+
+    it('on a pull_request run, leaves pr-number and paper beside the report', () => {
+      const tmp = mkdtempSync(join(tmpdir(), 'oak-report-'));
+      const eventPath = join(tmp, 'event.json');
+      writeFileSync(eventPath, JSON.stringify({ pull_request: { number: 42 } }));
+      const r = spawnSync(
+        'node',
+        [bundle, 'validate', '--paper', fixturePaper, '--instance', fixtureInstance].concat([
+          '--repo',
+          repo,
+          '--report',
+          join(tmp, 'report.json'),
+        ]),
+        {
+          encoding: 'utf8',
+          cwd: fixturePaper,
+          env: { ...process.env, GITHUB_EVENT_NAME: 'pull_request', GITHUB_EVENT_PATH: eventPath },
+        },
+      );
+      expect(r.status).toBe(0);
+      expect(readFileSync(join(tmp, 'pr-number'), 'utf8')).toBe('42\n');
+      expect(readFileSync(join(tmp, 'paper'), 'utf8')).toBe('.\n');
     }, 60_000);
   },
 );
@@ -194,14 +254,14 @@ describe.skipIf(bundleState() === 'absent')(
     }
 
     it('writes a failing report when no journal repo is found', () => {
-      // The `pull_request` job checks `jq -e '.checkRun.conclusion' report.json`; a missing file
-      // would tell the author only "engine crash".
+      // A missing file would tell the author only "engine crash".
       const dir = paperOnly();
       const report = join(dir, 'report.json');
       const r = spawnSync('node', [bundle, 'validate', '--paper', dir, '--report', report], {
         encoding: 'utf8',
       });
-      expect(r.status).toBe(2);
+      // A report was written, so the run passes and check-post posts the failure.
+      expect(r.status).toBe(0);
       expect(existsSync(report)).toBe(true);
       const written = JSON.parse(readFileSync(report, 'utf8'));
       expect(written.checkRun.conclusion).toBe('failure');

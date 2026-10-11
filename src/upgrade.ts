@@ -67,6 +67,18 @@ function comparePre(a: string | undefined, b: string | undefined): number {
 }
 
 const PINS_REL = posix.join('.github', 'actions', 'engine', 'pins.yml');
+
+/** The pins.yml key naming the oldest engine the workflows beside it run with. */
+export const MIN_ENGINE_KEY = 'min_engine_version';
+
+/** `min_engine_version` from the pins.yml under `root` (a repo or a template), or null when the
+ *  file or the key is absent. */
+export function readMinEngine(root: string): string | null {
+  const pins = join(root, PINS_REL);
+  if (!existsSync(pins)) return null;
+  const v = readDoc(pins).get(MIN_ENGINE_KEY);
+  return typeof v === 'string' && v ? v : null;
+}
 const CODEOWNERS_REL = 'CODEOWNERS';
 
 /* --------------------------------------------------------------------------
@@ -195,11 +207,12 @@ export function computeDrift(
 export type PrAction = 'opened' | 'updated' | 'current';
 
 export interface UpgradePr {
-  /** Branch, commit as the bot, push, and open the pull request or update the branch's open one. */
+  /** Branch, commit as the bot, push, and open the pull request or update the branch's open one.
+   *  `head` is the commit pushed, absent when nothing was (`current`). */
   open(
     repoRoot: string,
     opts: { branch: string; title: string; body: string; paths: string[] },
-  ): { url: string; action: PrAction };
+  ): { url: string; action: PrAction; number: string; head?: string };
 }
 
 export interface UpgradeDeps {
@@ -289,6 +302,23 @@ export async function cmdUpgrade(input: UpgradeInput, deps: UpgradeDeps): Promis
   }
   const filesChanged = wantFiles && drift.length > 0;
 
+  // The pin and the workflows this run leaves must agree: workflows above the pin call verbs it
+  // lacks, and on GitHub that fails quietly. A pin that is not a release tag cannot be ordered.
+  const pinAfter = wantVersion ? target : answers.version;
+  const minEngine = readMinEngine(templateAtTarget ?? repoRoot);
+  if (minEngine && (compareTags(pinAfter, minEngine) ?? 0) < 0) {
+    return {
+      exitCode: 2,
+      result: {
+        status: 'error',
+        message: msg.upgrade.belowMinimum(pinAfter, minEngine, mode),
+        target,
+        pin: pinAfter,
+        min_engine_version: minEngine,
+      },
+    };
+  }
+
   if (!versionChanged && !filesChanged) {
     deps.log(msg.upgrade.upToDate(target, answers.engineRepo, targetGiven));
     // Report files the target no longer ships even when up to date: a retired workflow may
@@ -329,7 +359,7 @@ export async function cmdUpgrade(input: UpgradeInput, deps: UpgradeDeps): Promis
     paths.push(...drift);
   }
 
-  const { url, action } = deps.pr.open(repoRoot, {
+  const { url, action, number, head } = deps.pr.open(repoRoot, {
     branch: targetGiven ? `${UPGRADE_BRANCH}-${target}` : UPGRADE_BRANCH,
     title: msg.upgrade.prTitle(target),
     body: upgradeBody(target, versionChanged, drift, extra),
@@ -352,6 +382,8 @@ export async function cmdUpgrade(input: UpgradeInput, deps: UpgradeDeps): Promis
       pr: url,
       pr_action: action,
       paths,
+      // For the checks the bump workflow runs on this pull request; none when nothing was pushed.
+      ...(head ? { pr_number: number, head_sha: head } : {}),
     },
   };
 }
