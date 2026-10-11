@@ -30,7 +30,7 @@ Every file here is yours to rewrite: `oak upgrade` updates paper repositories an
 Every paper build reads [`journal.yml`](../guide/journal-yml.md). Before the first paper, set:
 
 `name`
-: The journal's name. `--name` wrote it here and everywhere else the name appears: the text beside the logo, the venue printed on each paper's PDF, and the website's title. Without `--name`, each of those says `CHANGE-ME Journal`.
+: The journal's name. `--name` wrote it here and everywhere else the name appears: the text beside the logo, the venue printed on each paper's PDF, and the website's title. Without `--name`, each of those says `Acorn Annals`, a placeholder.
 
 `id_pattern`
 : The shape every paper's id must have. It starts as `^[a-z0-9]+-\d{4}-[a-z0-9-]+$`, which accepts `oak-2026-tidal-flats`. A paper whose id does not match fails its checks and cannot merge. See [id_pattern](../guide/journal-yml.md#id-pattern), including how to turn it off.
