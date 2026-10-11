@@ -1,5 +1,5 @@
 (start-setup)=
-# Before you start
+# Create a journal
 
 ## Install
 
@@ -16,9 +16,7 @@ gh auth login
 
 A journal is a set of repositories under one GitHub account: one for the journal's settings and website, then one per paper. The account can be your own or an organisation.
 
-On a personal account you are the only editor. Paper repositories let you merge your own pull requests and create the tags that publish a version.
-
-On an organisation, the editors are a team. Before bootstrapping, create:
+On a personal account you are the only editor. On an organisation, the editors are a team. To run the journal from an organisation, create these before bootstrapping:
 
 - the organisation;
 - a team for the editors (for example `@my-journal/editors`). Its members can be added later, but a paper's pull requests cannot merge and its versions cannot be tagged until the team has at least one;

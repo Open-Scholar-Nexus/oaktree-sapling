@@ -20,7 +20,7 @@ oak bootstrap paper --repo <owner>/<paper-repo> --instance <owner>/<journal-repo
 
 `--instance` names the journal repository and `--edition` one of its editions, as named by a file in its `editions/` folder. Both are required: they are written into the paper repository, and every build reads the journal's settings through them.
 
-On an organisation, add `--owner @<org>/<team>` so the editors team owns the repository's workflows and settings (see [Before you start](../start/setup.md)). On a personal account the owner is you.
+On an organisation, add `--owner @<org>/<team>` so the editors team owns the repository's workflows and settings (see [Create a journal](../start/setup.md)). On a personal account the owner is you.
 
 As with the journal, `oak` prints a plan, including every default it took, and asks before changing anything. Running the same command again finishes a run that failed partway.
 

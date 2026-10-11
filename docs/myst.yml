@@ -18,7 +18,7 @@ project:
       severity: error
   toc:
     - file: index.md
-    - title: Start
+    - title: Getting started
       children:
         - file: start/setup.md
         - file: start/journal.md
