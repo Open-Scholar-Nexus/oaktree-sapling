@@ -867,12 +867,8 @@ async function cmdBootstrap(argv: string[]): Promise<number> {
     return 2;
   }
   // Malformed arguments are refused before any gh call [R127].
-  const external = sub === 'journal' && has(rest, 'external');
+  const external = sub === 'journal' && !has(rest, 'co-located');
   if (sub === 'journal') {
-    if (external === has(rest, 'co-located')) {
-      process.stderr.write(msg.workflow.bootstrapJournalTier + '\n');
-      return 2;
-    }
     // A typed secret flag is refused with an external journal; environment values are allowed
     // [R127].
     if (external && SECRET_FLAGS.some((f) => flag(rest, f))) {

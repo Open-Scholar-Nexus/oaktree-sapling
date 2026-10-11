@@ -289,7 +289,7 @@ export function siteUrlFor(repo: string): string {
 
 /**
  * Renders the journal website (`templates/site/`) into `destRoot`, in the same repo as
- * the journal's settings for `--external`, so the registry pull request that adds a paper also
+ * the journal's settings for an external journal, so the registry pull request that adds a paper also
  * deploys the site.
  *
  * Written once: the journal owns every byte, `oak upgrade` never touches it and oak never reads
@@ -1159,7 +1159,7 @@ export interface BootstrapJournalInput {
   owner?: string;
   authedUser: string;
   requireChecks: boolean; // add "Journal checks" to protect-main required checks (default true)
-  /** `--external` only: also write the journal website and turn on Pages. Default true; `--no-site`
+  /** External journal only: also write the journal website and turn on Pages. Default true; `--no-site`
    *  gives a settings repo with no website [design §2]. `site: false` with `--co-located`
    *  is a usage error: that kind never gets a site, so the flag would do nothing. */
   site?: boolean;

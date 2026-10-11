@@ -1,36 +1,32 @@
 (docs-home)=
 # Oaktree Sapling
 
-A toolkit to create free, simple journals run on GitHub, hosted on Zenodo and built with MystMD. Each paper lives in its own repository and builds itself into a website and a PDF; a separate journal repository holds the settings every paper build reads: the journal's name, its branding, the editorial checks a submission has to pass, and the list of what has been published. Publishing a version deposits it to Zenodo for a DOI.
+A toolkit to create free, simple journals run on GitHub, hosted on Zenodo and built with MystMD. Each paper lives in its own repository and builds itself into a website and a PDF; a separate journal repository holds the settings every paper build reads: the journal's name, its branding, the editorial checks a submission has to pass, and the list of what has been published. Publishing a version deposits it to Zenodo for a DOI, and the `oak` command-line tool sets it all up and runs it.
 
-`oak` is the command-line tool that sets those repositories up and does the building, checking, previewing and publishing.
-
-::::{grid} 1 1 3 3
+::::{grid} 1 1 2 2
 
 :::{card} Run a journal
-[After bootstrap](start/journal.md): initialize your journal, make the first edits, push and watch the site go live.
+Set up the journal's repositories, then one per submission.
 
-[journal.yml](guide/journal-yml.md): every setting and what changing it does.
-
-[Editorial checks](guide/checks.md): what a submission is held to.
-
-[Branding](guide/branding.md): logo, colours, and further customization.
-
-[Files](reference/files.md): reference documentation.
+[Create a journal](start/setup.md) · [Add a paper](guide/add-paper.md)
 :::
 
-:::{card} Write a paper
-[Your paper repository](start/paper.md): what is in it, what to fill in, how to submit.
+:::{card} Submit a paper
+An editor created a repository for your paper: what to fill in and how to submit.
 
-[Editorial checks](guide/checks.md): what your submission is held to.
-
-The reference for writing the manuscript itself is a WIP!
+[Your paper repository](start/paper.md)
 :::
 
-:::{card} Understand how it works
-[How it works](design/index.md): the two-repository shape, what the engine wraps, and how a paper's configuration is assembled.
+:::{card} Look something up
+Each file in a journal repository, and each `oak` command.
 
-[Paper CI](design/paper-ci.md): why a paper repository's workflows look the way they do.
+[Files](reference/files.md) · [CLI](reference/cli.md)
+:::
+
+:::{card} How it works
+For anyone forking oaktree-sapling or deciding whether to run a journal on it.
+
+[Why it's built this way](design/index.md)
 :::
 
 ::::

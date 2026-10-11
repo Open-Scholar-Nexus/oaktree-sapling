@@ -4,7 +4,7 @@
  * same repo:
  *
  *   paper + instance   `oak bootstrap journal --co-located`
- *   site  + instance   `oak bootstrap journal --external`
+ *   site  + instance   `oak bootstrap journal`
  *
  * `site` and `paper` are not checked: they never land together, and both have a root `myst.yml`
  * and `.gitignore`. A file that belongs in both trees of a checked pair fails here, so someone
@@ -28,7 +28,7 @@ describe('template disjointness invariant', () => {
     expect(overlap(PAPER_ROOT, INSTANCE_ROOT)).toEqual([]);
   });
 
-  it('--external: the website and journal templates write different paths', () => {
+  it('external: the website and journal templates write different paths', () => {
     expect(overlap(SITE_ROOT, INSTANCE_ROOT)).toEqual([]);
   });
 });

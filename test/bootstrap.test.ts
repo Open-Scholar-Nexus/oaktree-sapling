@@ -2,7 +2,7 @@
  * `oak bootstrap`, with a fake provisioner (no gh or git): the rendered pins.yml, CODEOWNERS
  * and myst.yml, the rest copied as is; `--from` restoring the editor's `.github/`; reruns that
  * read before they change; secrets set when given, otherwise listed in the runbook; the bypass
- * for an org team or a personal account; and the two journal setups, `--external` (settings
+ * for an org team or a personal account; and the two journal setups, external (settings
  * and website, public) and `--co-located` (the paper workflows and a starter paper, no website).
  */
 import { describe, it, expect } from 'vitest';
@@ -876,7 +876,7 @@ describe('cmdBootstrapJournal', () => {
     return d;
   };
 
-  it("--external: a public repo with the journal's settings and website, Pages, no rulesets or environments", async () => {
+  it("external: a public repo with the journal's settings and website, Pages, no rulesets or environments", async () => {
     const { prov, calls } = fakeProv();
     const seedDirs: string[] = [];
     const out = await cmdBootstrapJournal(
@@ -917,7 +917,7 @@ describe('cmdBootstrapJournal', () => {
     expect(brand.getIn(['site', 'options', 'logo_url'])).toBe('https://me.github.io/config/');
   });
 
-  it('--external <owner>.github.io: the brand links to the root site', async () => {
+  it('external <owner>.github.io: the brand links to the root site', async () => {
     const { prov } = fakeProv();
     const seedDirs: string[] = [];
     await cmdBootstrapJournal(
@@ -935,7 +935,7 @@ describe('cmdBootstrapJournal', () => {
     expect(brand.getIn(['site', 'options', 'logo_url'])).toBe('https://me.github.io/');
   });
 
-  it('--external --no-site: neither the site files nor Pages, and prints the runbook', async () => {
+  it('external --no-site: neither the site files nor Pages, and prints the runbook', async () => {
     const { prov, calls } = fakeProv();
     const seedDirs: string[] = [];
     const logged: string[] = [];
@@ -967,7 +967,7 @@ describe('cmdBootstrapJournal', () => {
     expect(existsSync(join(seed, '.github'))).toBe(false);
   });
 
-  it('an --external rerun does not enable Pages again', async () => {
+  it('an external rerun does not enable Pages again', async () => {
     const { prov, calls } = fakeProv({
       repos: new Set(['me/config']),
       branches: new Set(['me/config/main']),
@@ -988,7 +988,7 @@ describe('cmdBootstrapJournal', () => {
     expect(calls.enablePages ?? []).toHaveLength(0);
   });
 
-  it('an --external rerun makes a private repo public again', async () => {
+  it('an external rerun makes a private repo public again', async () => {
     const { prov, calls } = fakeProv({
       repos: new Set(['me/config']),
       branches: new Set(['me/config/main']),
@@ -1155,7 +1155,7 @@ describe('cmdBootstrapJournal', () => {
     // A co-located journal has no website, so --no-site is refused with the reason.
     expect(out.exitCode).toBe(2);
     expect(out.result.status).toBe('error');
-    expect(String(out.result.error)).toContain('--external');
+    expect(String(out.result.error)).toContain('--co-located');
   });
 });
 
