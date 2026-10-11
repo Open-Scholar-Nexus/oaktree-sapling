@@ -130,12 +130,26 @@ describe('compose: brand paths made absolute [R62]', () => {
 });
 
 describe("compose: the paper's other options are kept", () => {
-  it('ownOverride sets only exports and site.template, never project.options', () => {
+  it('ownOverride sets only exports, the PDF download and site.template, never project.options', () => {
     const r = compose(base());
     expect(r.ownOverride.project).toEqual({
       exports: [expect.objectContaining({ id: 'typst-pdf' })],
+      downloads: [{ id: 'typst-pdf', title: 'PDF export' }],
     });
     expect(r.ownOverride.project).not.toHaveProperty('options');
+  });
+});
+
+describe('compose: the PDF download', () => {
+  it('is left out with pdfDownload: false, for oak start while there is no PDF', () => {
+    const r = compose(base({ pdfDownload: false }));
+    expect(r.ownOverride.project).not.toHaveProperty('downloads');
+    expect(r.ownOverride.project!.exports![0]!.id).toBe('typst-pdf');
+  });
+
+  it('is left out when there is no typst export to download', () => {
+    const r = compose(base({ resolvedProject: { ...resolvedProject, exports: [] } }));
+    expect(r.ownOverride.project?.downloads).toBeUndefined();
   });
 });
 

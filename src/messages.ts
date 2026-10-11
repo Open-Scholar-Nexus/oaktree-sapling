@@ -601,10 +601,13 @@ export const build = {
 };
 
 export const start = {
-  composed: (root: string, instanceRoot: string | null): string =>
+  composed: (root: string, instanceRoot: string | null, hasPdf: boolean): string =>
     `oak start: previewing ${root} with ${instanceRoot ? `the journal settings in ${instanceRoot}` : 'no journal settings (--no-instance): unbranded, engine defaults only'}.\n` +
     `This is the same config the paper's CI builds; myst reads myst.oak.yml, composed just now ` +
     `from your myst.yml. Edit myst.yml as usual; oak rewrites myst.oak.yml when you save it.\n` +
+    (hasPdf
+      ? `The PDF download serves the PDF from the last \`oak build\`; run it again to update it.\n`
+      : `The preview has no PDF download until \`oak build\` makes the PDF.\n`) +
     `Press Ctrl-C to stop.`,
 
   journalSite: (root: string): string =>
@@ -621,6 +624,10 @@ export const start = {
     `load. Run \`npm install\` in this repo once, then \`oak start\` again.`,
 
   recomposed: 'oak start: myst.yml changed; recomposed, the preview will reload.',
+
+  pdfAdded: 'oak start: the PDF is built; the preview now offers it for download.',
+
+  pdfGone: 'oak start: the PDF was deleted; the preview offers no download until `oak build` runs.',
 
   recomposeFailed: (message: string): string =>
     `oak start: myst.yml changed but could not be composed, so the preview is still showing the ` +

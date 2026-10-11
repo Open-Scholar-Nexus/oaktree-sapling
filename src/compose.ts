@@ -24,6 +24,9 @@ import { typstTemplateUrl, themeZipUrl } from './assets.js';
  */
 export const TYPST_OUTPUT = '_build/exports/paper.pdf';
 
+/** The id of the typst export `paper-base.yml` declares, which the PDF download points at. */
+export const TYPST_EXPORT_ID = 'typst-pdf';
+
 /** Brand fields holding a path, which myst resolves against the paper root rather than the
  *  brand directory [R62], so compose makes them absolute against `<instanceRoot>/brand`. By
  *  namespace: `site.options.*` for the HTML theme (logo, logo_dark, favicon, style), and
@@ -133,6 +136,8 @@ export interface ComposeInput {
    *  merge unpredictable [R72], so paper-base stays the only one. A name, path or URL; a `./`
    *  path is made absolute ({@link resolveJournalTemplate}). */
   journalTypstTemplate?: string;
+  /** false leaves the PDF download out of the site, for `oak start` while there is no PDF. */
+  pdfDownload?: boolean;
   /** The brand's asset fields ({@link BRAND_ASSET_KEYS}), read as written from
    *  `brand/brand.yml`. compose makes relative values absolute against `<instanceRoot>/brand`,
    *  since myst resolves them against the paper root [R62]. Read from brand.yml itself so a
@@ -142,8 +147,12 @@ export interface ComposeInput {
 
 export interface OwnOverride {
   /** Merged into the base `project`. `options` carries only the PDF watermark (`logo`), set key
-   *  by key so the author's other options survive. */
-  project?: { exports?: Array<Record<string, unknown>>; options?: Record<string, string> };
+   *  by key so the author's other options survive; `downloads` is appended to the author's. */
+  project?: {
+    exports?: Array<Record<string, unknown>>;
+    downloads?: Array<Record<string, string>>;
+    options?: Record<string, string>;
+  };
   /** Merged into the base `site`. `options` carries the asset overrides [R62]; MyST merges
    *  `site.options` field by field, so the brand's other options survive. */
   site?: { template?: string; options?: Record<string, string> };
@@ -215,7 +224,7 @@ export function compose(input: ComposeInput): ComposeResult {
   // both fields. Declaring them in paper-base would let a multi-article paper's own entry drop
   // them [R52] [R53].
   const typst = (resolvedProject.exports ?? []).find(
-    (e) => e['format'] === 'typst' || e['id'] === 'typst-pdf',
+    (e) => e['format'] === 'typst' || e['id'] === TYPST_EXPORT_ID,
   );
   if (typst) {
     // Template precedence [R76]: author, then journal, then oak. A `template:` on the resolved
@@ -245,6 +254,10 @@ export function compose(input: ComposeInput): ComposeResult {
     }
 
     ownOverride.project = { exports: [{ ...typst, template, output: TYPST_OUTPUT }] };
+    // Offered only when the PDF can be served: `oak start` builds none (DOCS.start).
+    if (input.pdfDownload !== false) {
+      ownOverride.project.downloads = [{ id: TYPST_EXPORT_ID, title: 'PDF export' }];
+    }
   } else {
     warnings.push(
       'no typst export found in the resolved config; PDF export + Zenodo deposit will be skipped',

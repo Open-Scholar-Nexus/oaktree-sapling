@@ -266,25 +266,39 @@ async function cmdStart(argv: string[]): Promise<number> {
     process.stderr.write(resolved.error + '\n');
     return 2;
   }
-  const input = { ...materializeInputFrom(argv, paperRoot, resolved.root), edge };
+  const { TYPST_OUTPUT } = await import('./compose.js');
+  const pdfPath = join(paperRoot, TYPST_OUTPUT);
+  // myst start builds no PDF, so the download is offered only once `oak build` has made one.
+  const inputNow = () => ({
+    ...materializeInputFrom(argv, paperRoot, resolved.root),
+    pdfDownload: existsSync(pdfPath),
+    edge,
+  });
 
   const { runStart } = await import('./build.js');
   const { materializeDerived } = await import('./materialize.js');
-  process.stderr.write(msg.start.composed(paperRoot, resolved.root) + '\n');
-  const first = await runStart({ ...input, startOpts });
+  process.stderr.write(msg.start.composed(paperRoot, resolved.root, existsSync(pdfPath)) + '\n');
+  const first = await runStart({ ...inputNow(), startOpts });
   for (const w of first.warnings) process.stderr.write(annotate('warning', w) + '\n');
 
-  // myst watches the derived config, so an edit to the author's `myst.yml` would show nothing
-  // until the next `oak start`. Recomposing on change rewrites `myst.oak.yml`, and myst's own
-  // watcher reloads it.
-  watchFile(join(paperRoot, 'myst.yml'), { interval: 500 }, (curr, prev) => {
-    if (curr.mtimeMs === prev.mtimeMs) return;
-    materializeDerived(input).then(
-      () => process.stderr.write(msg.start.recomposed + '\n'),
+  // myst watches the derived config, so an edit to the author's `myst.yml`, or a PDF appearing,
+  // would show nothing until the next `oak start`. Recomposing rewrites `myst.oak.yml`, and
+  // myst's own watcher reloads it.
+  const recompose = (done: string) =>
+    materializeDerived(inputNow()).then(
+      () => process.stderr.write(done + '\n'),
       // A half-edited config is normal while typing: say what is stale and keep serving.
       (e) =>
         process.stderr.write(msg.start.recomposeFailed(String((e as Error)?.message ?? e)) + '\n'),
     );
+  watchFile(join(paperRoot, 'myst.yml'), { interval: 500 }, (curr, prev) => {
+    if (curr.mtimeMs !== prev.mtimeMs) void recompose(msg.start.recomposed);
+  });
+  // A missing file stats as mtime 0, so this fires when the PDF appears or is deleted.
+  watchFile(pdfPath, { interval: 1000 }, (curr, prev) => {
+    if ((curr.mtimeMs === 0) !== (prev.mtimeMs === 0)) {
+      void recompose(curr.mtimeMs === 0 ? msg.start.pdfGone : msg.start.pdfAdded);
+    }
   });
   return await never();
 }
