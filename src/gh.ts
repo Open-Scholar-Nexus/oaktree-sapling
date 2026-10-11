@@ -6,9 +6,18 @@
 import * as msg from './messages.js';
 import { UserError } from './messages.js';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { cpSync, mkdtempSync, rmSync } from 'node:fs';
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { parseDocument } from 'yaml';
 import type { GitContext } from './zenodo.js';
 import { LABEL_ZENODO_FAILED, type GhPr, type PagesDeployer } from './preview.js';
@@ -765,6 +774,57 @@ export function tempClone(repo: string): string {
   const tmp = mkdtempSync(join(tmpdir(), 'oak-upgrade-'));
   gh(['repo', 'clone', repo, tmp]);
   return tmp;
+}
+
+/** How long a cached journal clone is used as it is before oak fetches the journal again. */
+export const JOURNAL_CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** Where the journal settings for a local run came from, for the line oak prints about it. */
+export type JournalCache =
+  | { root: string; state: 'cloned' | 'updated' }
+  | { root: string; state: 'reused'; ageMs: number }
+  | { root: string; state: 'stale'; ageMs: number; why: string };
+
+/**
+ * `journalRepo` cloned into `<paperRoot>/_build/journal/<owner>/<repo>`, or the copy already
+ * there, fetched again once older than {@link JOURNAL_CACHE_MAX_AGE_MS} (DOCS.paperPreviewLocally).
+ * Throws when `journalRepo` is not owner/name, or when there is no copy and the clone fails.
+ */
+export function cachedJournal(
+  journalRepo: string,
+  paperRoot: string,
+  now = Date.now(),
+): JournalCache {
+  assertRepoName(journalRepo);
+  const root = join(paperRoot, '_build', 'journal', ...journalRepo.split('/'));
+  // Inside .git, so the journal's own files are exactly what was fetched.
+  const stamp = join(root, '.git', 'oak-fetched');
+  if (existsSync(stamp)) {
+    const ageMs = now - statSync(stamp).mtimeMs;
+    if (ageMs < JOURNAL_CACHE_MAX_AGE_MS) return { root, state: 'reused', ageMs };
+    try {
+      git(root, ['fetch', '--depth', '1', '--quiet', 'origin'], { quiet: true });
+      git(root, ['reset', '--hard', '--quiet', 'FETCH_HEAD'], { quiet: true });
+    } catch (err) {
+      return { root, state: 'stale', ageMs, why: err instanceof Error ? err.message : String(err) };
+    }
+    writeFileSync(stamp, '');
+    return { root, state: 'updated' };
+  }
+  // Cloned beside its path and renamed in, so only a complete clone sits at `root`.
+  rmSync(root, { recursive: true, force: true });
+  mkdirSync(dirname(root), { recursive: true });
+  const tmp = mkdtempSync(join(dirname(root), '.clone-'));
+  try {
+    // Plain git: journal repos are public, and an author may have no gh login.
+    run('git', ['clone', '--depth', '1', '--quiet', `https://github.com/${journalRepo}.git`, tmp]);
+  } catch (err) {
+    rmSync(tmp, { recursive: true, force: true });
+    throw err;
+  }
+  renameSync(tmp, root);
+  writeFileSync(stamp, '');
+  return { root, state: 'cloned' };
 }
 
 /**

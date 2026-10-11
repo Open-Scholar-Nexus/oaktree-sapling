@@ -48,10 +48,21 @@
  */
 
 import { DOCS, docsUrl } from './docs-links.js';
+import type { JournalCache } from './gh.js';
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════
  * Output plumbing: not prose, but it decides HOW the prose is printed.
  * ═════════════════════════════════════════════════════════════════════════════════════════ */
+
+/** An age for a person: minutes under an hour, hours under two days, then days. */
+export function age(ms: number): string {
+  const minutes = Math.max(0, Math.floor(ms / 60_000));
+  if (minutes < 1) return 'less than a minute';
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 48) return `${hours} h`;
+  return `${Math.floor(hours / 24)} days`;
+}
 
 /** Are we inside a GitHub Actions run? Annotations mean something only there. */
 export function inCI(): boolean {
@@ -521,20 +532,54 @@ export const build = {
   badEdition: (got: string, mystPath: string): string =>
     `project.options.oaktree-sapling.edition is ${JSON.stringify(got.slice(0, 40))} in ${mystPath}. ` +
     `It names a file (editions/<edition>.yml), so it must be a plain name: letters, digits, . _ -`,
-  /** No journal repo found. In CI that means `instance_repo: .` with no journal.yml beside the
-   *  paper, so the text explains both values of `instance_repo`, not only a flag. */
+  /** No journal repo found: pins.yml names none (`instance_repo: .` or absent, which means the
+   *  same) and no journal.yml sits beside the paper. */
   noInstance: (verb: 'build' | 'start' | 'validate', paperRoot: string): string =>
-    `oak ${verb}: no journal repo found; ` +
-    `pass --instance <path> (or --no-instance for ` +
-    `${verb === 'validate' ? 'a bare, engine-only check' : verb === 'start' ? 'an unbranded preview' : 'an unbranded build'}).\n` +
-    `In a CI run the path comes from .github/actions/engine/pins.yml: ` +
-    `\`instance_repo: <owner/repo>\` makes the workflow fetch that journal, and ` +
-    `\`instance_repo: "."\` means the journal.yml sits in THIS repo, but there is no ` +
+    `oak ${verb}: no journal repo found. .github/actions/engine/pins.yml names none ` +
+    `(\`instance_repo: "."\` means the journal.yml sits in this repo), and there is no ` +
     `journal.yml at ${paperRoot}.\n` +
-    `If this paper belongs to a journal, set instance_repo in pins.yml to that journal's ` +
-    `owner/repo (\`oak bootstrap paper --instance\` writes it for you). Running locally, ` +
-    `pass --instance <path to a checkout of the journal repo>.\n` +
-    `Which journal to clone, and where to put it: ${docsUrl(DOCS.paperPreviewLocally)}`,
+    `Set instance_repo in pins.yml to the journal's owner/repo (\`oak bootstrap paper ` +
+    `--instance\` writes it), or pass --instance <path to a clone of the journal> or ` +
+    `--no-instance for ` +
+    `${verb === 'validate' ? 'a bare, engine-only check' : verb === 'start' ? 'an unbranded preview' : 'an unbranded build'}. ` +
+    `See ${docsUrl(DOCS.paperJournalLink)}`,
+
+  /** Where a local run without `--instance` got the journal settings ({@link JournalCache}). */
+  journalCache: (
+    verb: 'build' | 'start' | 'validate',
+    journalRepo: string,
+    cache: JournalCache,
+  ): string => {
+    const head = `oak ${verb}: `;
+    switch (cache.state) {
+      case 'cloned':
+        return (
+          `${head}using the journal settings from ${journalRepo} (instance_repo in pins.yml), cloned ` +
+          `to ${cache.root}. Pass --instance <path> to use a local clone.`
+        );
+      case 'updated':
+        return `${head}using the journal settings from ${journalRepo}, updated just now in ${cache.root}.`;
+      case 'reused':
+        return (
+          `${head}reusing the journal settings from ${journalRepo} fetched ${age(cache.ageMs)} ago ` +
+          `(${cache.root}); delete that folder to fetch them now.`
+        );
+      case 'stale':
+        return (
+          `${head}could not update the journal settings from ${journalRepo} (${cache.why}); using ` +
+          `the copy fetched ${age(cache.ageMs)} ago in ${cache.root}.`
+        );
+    }
+  },
+
+  instanceCloneFailed: (
+    verb: 'build' | 'start' | 'validate',
+    journalRepo: string,
+    why: string,
+  ): string =>
+    `oak ${verb}: could not clone the journal ${journalRepo} named in .github/actions/engine/pins.yml ` +
+    `(${why}). Pass --instance <path to a clone of the journal>, or --no-instance to go ` +
+    `without its settings. See ${docsUrl(DOCS.paperPreviewLocally)}`,
 
   preflightFailed: (findings: string): string =>
     `oak build: pre-flight validation failed:\n${findings}`,

@@ -5,7 +5,17 @@
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, copyFileSync, readFileSync, writeFileSync, cpSync } from 'node:fs';
+import {
+  mkdtempSync,
+  mkdirSync,
+  copyFileSync,
+  readFileSync,
+  writeFileSync,
+  cpSync,
+  existsSync,
+  rmSync,
+  utimesSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -170,6 +180,91 @@ describe.skipIf(bundleState() === 'absent')('--json gates the machine envelope',
     // The fixture has no thumbnail, and an uncomposed run adds a note; either way, one warning
     // shows that the JSON's findings reach the screen.
     expect(stderr).toMatch(/[✗!→]/);
+  }, 60_000);
+
+  /** A paper whose pins.yml names `instanceRepo`, and an env that makes git fetch
+   *  `https://github.com/<owner>/<name>.git` from `<mirrors>/<owner>/<name>.git`, so the clone
+   *  runs offline. The fixture journal is committed at `me/journal`. */
+  function pinnedPaper(instanceRepo: string): {
+    dir: string;
+    mirrors: string;
+    env: Record<string, string>;
+  } {
+    const dir = paperOnly();
+    mkdirSync(join(dir, '.github', 'actions', 'engine'), { recursive: true });
+    writeFileSync(
+      join(dir, '.github', 'actions', 'engine', 'pins.yml'),
+      `engine_repo: Open-Scholar-Nexus/oaktree-sapling\ninstance_repo: ${instanceRepo}\n`,
+    );
+    const mirrors = mkdtempSync(join(tmpdir(), 'oak-mirrors-'));
+    const journal = join(mirrors, 'me', 'journal.git');
+    cpSync(fixtureInstance, journal, { recursive: true });
+    const git = (...args: string[]) => spawnSync('git', ['-C', journal, ...args]);
+    git('init', '-q');
+    git('add', '-A');
+    git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'journal');
+    return {
+      dir,
+      mirrors,
+      env: {
+        GIT_CONFIG_COUNT: '1',
+        GIT_CONFIG_KEY_0: `url.file://${mirrors}/.insteadOf`,
+        GIT_CONFIG_VALUE_0: 'https://github.com/',
+      },
+    };
+  }
+
+  it('with no --instance, clones the journal pins.yml names into _build/journal', () => {
+    const { dir, env } = pinnedPaper('me/journal');
+    const { code, stderr } = oak(['validate', '--paper', dir, '--repo', fixtureRepo], env);
+    expect(stderr).toContain('using the journal settings from me/journal');
+    expect(stderr).toMatch(/oak validate: PASS/);
+    expect(code).toBe(0);
+    expect(existsSync(join(dir, '_build', 'journal', 'me', 'journal', 'journal.yml'))).toBe(true);
+  }, 60_000);
+
+  it('reuses a cached journal, fetches it again after a week, and falls back to it offline', () => {
+    const { dir, mirrors, env } = pinnedPaper('me/journal');
+    const args = ['validate', '--paper', dir, '--repo', fixtureRepo];
+    oak(args, env);
+
+    const reused = oak(args, env);
+    expect(reused.stderr).toMatch(
+      /reusing the journal settings from me\/journal fetched (less than a minute|\d+ min) ago/,
+    );
+    expect(reused.code).toBe(0);
+
+    const stamp = join(dir, '_build', 'journal', 'me', 'journal', '.git', 'oak-fetched');
+    const eightDaysAgo = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000);
+    utimesSync(stamp, eightDaysAgo, eightDaysAgo);
+    const updated = oak(args, env);
+    expect(updated.stderr).toContain('updated just now');
+    expect(updated.code).toBe(0);
+
+    utimesSync(stamp, eightDaysAgo, eightDaysAgo);
+    rmSync(mirrors, { recursive: true, force: true });
+    const stale = oak(args, env);
+    expect(stale.stderr).toMatch(
+      /warning: .*could not update the journal settings from me\/journal/,
+    );
+    expect(stale.stderr).toContain('using the copy fetched 8 days ago');
+    expect(stale.code).toBe(0);
+  }, 120_000);
+
+  it('a journal that cannot be cloned names the repo and both flags', () => {
+    const { dir, env } = pinnedPaper('me/missing');
+    const { code, stderr } = oak(['validate', '--paper', dir], env);
+    expect(code).toBe(2);
+    expect(stderr).toContain('could not clone the journal me/missing');
+    expect(stderr).toContain('--instance <path');
+    expect(stderr).toContain('--no-instance');
+  }, 60_000);
+
+  it('instance_repo: "." with no journal.yml beside the paper is refused', () => {
+    const { dir } = pinnedPaper('"."');
+    const { code, stderr } = oak(['validate', '--paper', dir]);
+    expect(code).toBe(2);
+    expect(stderr).toContain('no journal repo found');
   }, 60_000);
 
   it('a refusal prints the sentence, not a JSON record', () => {

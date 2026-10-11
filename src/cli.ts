@@ -67,15 +67,19 @@ function has(argv: string[], name: string): boolean {
   return argv.includes(`--${name}`);
 }
 
+/** A string value from the paper's `pins.yml`, or undefined when the file or the key is
+ *  absent. */
+function readPin(paperRoot: string, key: 'engine_repo' | 'instance_repo'): string | undefined {
+  const pins = join(paperRoot, '.github', 'actions', 'engine', 'pins.yml');
+  if (!existsSync(pins)) return undefined;
+  const v = parseDocument(readFileSync(pins, 'utf8')).get(key);
+  return typeof v === 'string' && v ? v : undefined;
+}
+
 /** The `engine_repo` pin, for asset URLs. Repos carry pins.yml; the fallback is oak's own
  *  repo. */
 function readEngineRepo(paperRoot: string): string {
-  const pins = join(paperRoot, '.github', 'actions', 'engine', 'pins.yml');
-  if (existsSync(pins)) {
-    const v = parseDocument(readFileSync(pins, 'utf8')).get('engine_repo');
-    if (typeof v === 'string') return v;
-  }
-  return 'Open-Scholar-Nexus/oaktree-sapling';
+  return readPin(paperRoot, 'engine_repo') ?? 'Open-Scholar-Nexus/oaktree-sapling';
 }
 
 /**
@@ -98,23 +102,36 @@ function assetOverridesFrom(argv: string[]): ComposeInput['assetOverrides'] {
 
 /**
  * Where the journal repo is [R38]: none with `--no-instance`, else `--instance`, else this repo
- * when a `journal.yml` sits beside the paper. The last case serves a repo that is its own
- * journal, where the engine action passes no `--instance` (`instance_repo: .`).
+ * when a `journal.yml` sits beside the paper, else a cached clone of pins.yml's `instance_repo`.
+ * The third case serves a repo that is its own journal, where the engine action passes no
+ * `--instance` (`instance_repo: .`). Only a local run reaches the clone: CI passes `--instance`
+ * (ci/run.sh).
  *
  * Returns a root or an error string and never exits, so `oak validate` can report the error.
  */
-function resolveInstanceRoot(
+async function resolveInstanceRoot(
   argv: string[],
   paperRoot: string,
   verb: 'build' | 'start' | 'validate',
-): { root: string | null } | { error: string } {
+): Promise<{ root: string | null } | { error: string }> {
   if (has(argv, 'no-instance')) return { root: null };
   const explicit = flag(argv, 'instance');
   // Refused, since the error below would ask for the flag that was just passed [R147].
   if (explicit === '') throw new UserError(msg.flagNeedsValue('instance'));
   if (explicit) return { root: resolve(explicit) };
   if (existsSync(join(paperRoot, 'journal.yml'))) return { root: paperRoot };
-  return { error: msg.build.noInstance(verb, paperRoot) };
+  const journalRepo = readPin(paperRoot, 'instance_repo');
+  if (!journalRepo || journalRepo === '.') return { error: msg.build.noInstance(verb, paperRoot) };
+  const { cachedJournal } = await import('./gh.js');
+  try {
+    const cache = cachedJournal(journalRepo, paperRoot);
+    const line = msg.build.journalCache(verb, journalRepo, cache);
+    process.stderr.write((cache.state === 'stale' ? annotate('warning', line) : line) + '\n');
+    return { root: cache.root };
+  } catch (err) {
+    const why = err instanceof Error ? err.message : String(err);
+    return { error: msg.build.instanceCloneFailed(verb, journalRepo, why) };
+  }
 }
 
 /**
@@ -165,7 +182,7 @@ async function buildPaper(argv: string[]): Promise<{ paperRoot: string; resolved
     process.stderr.write(annotate('error', msg.build.inJournalRepo(paperRoot)) + '\n');
     process.exit(2);
   }
-  const resolved = resolveInstanceRoot(argv, paperRoot, 'build');
+  const resolved = await resolveInstanceRoot(argv, paperRoot, 'build');
   if ('error' in resolved) {
     process.stderr.write(resolved.error + '\n');
     process.exit(2);
@@ -244,7 +261,7 @@ async function cmdStart(argv: string[]): Promise<number> {
     return await never();
   }
 
-  const resolved = resolveInstanceRoot(argv, paperRoot, 'start');
+  const resolved = await resolveInstanceRoot(argv, paperRoot, 'start');
   if ('error' in resolved) {
     process.stderr.write(resolved.error + '\n');
     return 2;
@@ -668,7 +685,7 @@ async function cmdValidate(argv: string[]): Promise<number> {
     writeFailureReport(reportPath, msg.workflow.validateCouldNotRun, text);
     return 2;
   }
-  const resolved = resolveInstanceRoot(argv, paperRoot, 'validate');
+  const resolved = await resolveInstanceRoot(argv, paperRoot, 'validate');
   if ('error' in resolved) {
     process.stderr.write(annotate('error', resolved.error) + '\n');
     writeFailureReport(reportPath, msg.workflow.validateCouldNotRun, resolved.error);
