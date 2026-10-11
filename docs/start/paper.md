@@ -58,7 +58,7 @@ The journal's [editorial checks](../guide/checks.md) decide which metadata is re
 
 Commit, push to your fork, and open a pull request against the paper repository. The first time you do, its workflows wait until an editor approves them.
 
-Each pull request then gets two comments, updated on every push:
+Each pull request then gets these comments, updated on every push:
 
 - **Journal checks**: whether the paper builds and passes the journal's checks, and what to fix when it does not.
 - **A preview** of the paper's website, as a link or as a download attached to the **Paper CI** run.
@@ -74,7 +74,7 @@ Once a week the repository also opens an **Engine version bump** pull request, w
 (paper-journal-link)=
 ## Where the journal's settings come from
 
-`.github/actions/engine/pins.yml` names the journal's repository. Every build, in CI and with `oak start --instance`, reads three things from it:
+`.github/actions/engine/pins.yml` names the journal's repository. Every build, in CI and with `oak start --instance`, reads from it:
 
 - `editions/<edition>.yml`, for the edition named in `myst.yml`: the venue, licence and other frontmatter shared by the edition;
 - `brand/brand.yml`: the logo, colours and the mark on the PDF;
