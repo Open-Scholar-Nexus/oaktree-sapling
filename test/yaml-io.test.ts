@@ -141,3 +141,32 @@ describe('readJournalTypstTemplate ([R76])', () => {
     expect(readJournalTypstTemplate('/no/such/instance')).toBeUndefined();
   });
 });
+
+describe('applyOwnOverride: the PDF download', () => {
+  const download = { id: 'typst-pdf', title: 'PDF export' };
+
+  it('adds project.downloads when the author has none', () => {
+    const doc = parseDocument('version: 1\nproject:\n  id: x\n');
+    applyOwnOverride(doc, { project: { downloads: [download] } });
+    expect(doc.toJSON().project.downloads).toEqual([download]);
+  });
+
+  it("appends to the author's own downloads", () => {
+    const doc = parseDocument(
+      'version: 1\nproject:\n  downloads:\n    - url: https://example.org/data.zip\n',
+    );
+    applyOwnOverride(doc, { project: { downloads: [download] } });
+    expect(doc.toJSON().project.downloads).toEqual([
+      { url: 'https://example.org/data.zip' },
+      download,
+    ]);
+  });
+
+  it('keeps an author entry with the same id', () => {
+    const doc = parseDocument(
+      'version: 1\nproject:\n  downloads:\n    - id: typst-pdf\n      title: Paper\n',
+    );
+    applyOwnOverride(doc, { project: { downloads: [download] } });
+    expect(doc.toJSON().project.downloads).toEqual([{ id: 'typst-pdf', title: 'Paper' }]);
+  });
+});

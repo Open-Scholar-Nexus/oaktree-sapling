@@ -65,6 +65,7 @@ export interface MaterializeInput {
   engineRepo: string;
   baseUrl: string;
   assetOverrides?: ComposeInput['assetOverrides'];
+  pdfDownload?: ComposeInput['pdfDownload'];
   edge: MystEdge;
 }
 
@@ -93,7 +94,16 @@ export async function materializeDerived(
   input: MaterializeInput,
   preflight?: (project: ResolvedProject, ctx: { edition: string }) => void,
 ): Promise<MaterializeResult> {
-  const { paperRoot, engineRoot, instanceRoot, engineRepo, baseUrl, assetOverrides, edge } = input;
+  const {
+    paperRoot,
+    engineRoot,
+    instanceRoot,
+    engineRepo,
+    baseUrl,
+    assetOverrides,
+    pdfDownload,
+    edge,
+  } = input;
 
   // The author's config is read, never written [R71].
   const authorPath = join(paperRoot, 'myst.yml');
@@ -133,6 +143,7 @@ export async function materializeDerived(
     edition,
     baseUrl,
     assetOverrides,
+    pdfDownload,
     brandAssets,
     journalTypstTemplate,
   });

@@ -1,7 +1,8 @@
 version: 1
 
 # The MyST config every paper extends [design §5]. The typst export is declared whole here
-# because MyST merges `exports` whole, by id [R52]; oak adds the template URL [R5].
+# because MyST merges `exports` whole, by id [R52]; oak adds the template URL [R5] and the PDF
+# download, which `oak start` leaves out while there is no PDF.
 project:
   thumbnail: thumbnails/thumbnail.png # read by the gallery plugin
   exports:
@@ -10,9 +11,6 @@ project:
       articles:
         - file: index.md
           level: 0
-  downloads:
-    - id: typst-pdf
-      title: PDF export
 
 site:
   options:

@@ -4,7 +4,7 @@
  */
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { parseDocument, type Document } from 'yaml';
+import { isSeq, parseDocument, type Document } from 'yaml';
 import { BRAND_ASSET_KEYS, type OwnOverride } from './compose.js';
 import { EDITION_ID } from './schema.js';
 import * as msg from './messages.js';
@@ -125,12 +125,22 @@ export function setExtends(doc: Document, chain: string[]): void {
   else doc.set('extends', chain);
 }
 
-/** Pass 2: merges compose's additions: `project.exports`, `site.template`, and single asset
- *  keys under `site.options` and `project.options` [R62]. Keys are set one by one so the
- *  author's other options, and the `oaktree-sapling` key, survive. */
+/** Pass 2: merges compose's additions: `project.exports`, `project.downloads`, `site.template`,
+ *  and single asset keys under `site.options` and `project.options` [R62]. Keys are set one by
+ *  one so the author's other options, and the `oaktree-sapling` key, survive; a download is
+ *  appended unless the author declares its id. */
 export function applyOwnOverride(doc: Document, override: OwnOverride): void {
   if (override.project?.exports) {
     doc.setIn(['project', 'exports'], override.project.exports);
+  }
+  for (const download of override.project?.downloads ?? []) {
+    const existing = doc.getIn(['project', 'downloads']);
+    if (existing === undefined) {
+      doc.setIn(['project', 'downloads'], [download]);
+    } else if (isSeq(existing)) {
+      const ids = (existing.toJSON() as Array<{ id?: unknown }>).map((d) => d?.id);
+      if (!ids.includes(download.id)) existing.add(doc.createNode(download));
+    }
   }
   if (override.project?.options) {
     for (const [key, value] of Object.entries(override.project.options)) {
