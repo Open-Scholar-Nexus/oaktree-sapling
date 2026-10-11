@@ -24,7 +24,8 @@
  *   templates/paper/CODEOWNERS .............. its header comment
  *   templates/paper/.github/workflows/*.yml . job names and `::error::` annotations (ci, check,
  *                                             check-post, preview-deploy, prepare, publish,
- *                                             version-bump: the names show in the Actions tab)
+ *                                             version-bump, bot-pr-checks: the names show in
+ *                                             the Actions tab)
  *   templates/instance/README.md ............ what a journal editor reads first
  *   templates/instance/journal.yml .......... the journal's settings and their comments
  *   templates/instance/brand/brand.yml ...... the branding settings and their comments

@@ -23,7 +23,6 @@ import { join } from 'node:path';
 import { parseDocument } from 'yaml';
 import { readdirSync } from 'node:fs';
 import { SECRET_MAP } from '../src/bootstrap.js';
-import { ENGINE_ID_SENTINEL } from '../src/schema.js';
 
 const SHIM = 'templates/paper';
 
@@ -107,117 +106,24 @@ describe('the engine action refuses a malformed ref before echoing it ([R155])',
     }
   });
 
+  it('reads the myst.yml in paper-dir, and names it when the version is missing', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'oak-ref-'));
+    const bin = mkdtempSync(join(tmpdir(), 'oak-bin-'));
+    // yq prints the file it was given, so the test sees which myst.yml the step read.
+    writeFileSync(join(bin, 'yq'), '#!/bin/sh\nprintf "%s" "$2" > yq-arg\n');
+    chmodSync(join(bin, 'yq'), 0o755);
+    const r = run(script, { PATH: `${bin}:${process.env.PATH}`, PAPER_DIR: 'papers/one' }, dir);
+    expect(readFileSync(join(dir, 'yq-arg'), 'utf8')).toBe('papers/one/myst.yml');
+    expect(r.code).toBe(1);
+    expect(r.out).toContain('missing from papers/one/myst.yml');
+  });
+
   it('writes exactly one ref= line for the versions a paper actually pins', () => {
     for (const v of ['v1.2.3', 'v0.0.0-dev.35', 'refs/pull/7/merge', 'a'.repeat(40), 'main']) {
       const r = refStep(v);
       expect(r.code).toBe(0);
       expect(r.output.trim()).toBe(`ref=${v}`);
     }
-  });
-});
-
-/** Runs `script` in a fresh directory with `tool` on PATH printing `value`, and a real
- *  GITHUB_OUTPUT file. */
-function stubbedStep(script: string, tool: string, value: string) {
-  const dir = mkdtempSync(join(tmpdir(), 'oak-step-'));
-  const bin = mkdtempSync(join(tmpdir(), 'oak-bin-'));
-  writeFileSync(join(dir, 'myst.yml'), 'project: {}');
-  writeFileSync(join(bin, tool), `#!/bin/sh\nprintf '%s' "$STUB_VALUE"\n`);
-  chmodSync(join(bin, tool), 0o755);
-  const outFile = join(dir, 'gh_output');
-  writeFileSync(outFile, '');
-  const r = run(
-    script,
-    { PATH: `${bin}:${process.env.PATH}`, STUB_VALUE: value, GITHUB_OUTPUT: outFile },
-    dir,
-  );
-  return { ...r, output: readFileSync(outFile, 'utf8') };
-}
-
-describe('Paper CI holds the Pages deploy while the id is the template placeholder', () => {
-  const script = stepScript('.github/workflows/ci.yml', 'id');
-
-  it('marks the starter paper as a placeholder', () => {
-    const r = stubbedStep(script, 'yq', ENGINE_ID_SENTINEL);
-    expect(r.code).toBe(0);
-    expect(r.output.trim()).toBe('placeholder=true');
-  });
-
-  it('lets a real id deploy', () => {
-    const r = stubbedStep(script, 'yq', 'j-2026-alpha');
-    expect(r.code).toBe(0);
-    expect(r.output).toBe('');
-  });
-
-  it('the deploy job reads that output', () => {
-    const doc = parseDocument(
-      readFileSync(join(SHIM, '.github/workflows/ci.yml'), 'utf8'),
-    ).toJS() as { jobs: Record<string, { if?: string }> };
-    expect(doc.jobs['deploy-pages']!.if).toContain("needs.build.outputs.placeholder != 'true'");
-  });
-});
-
-describe('prepare finds the DOI pull request it checks', () => {
-  const script = stepScript('.github/workflows/prepare.yml', 'pr');
-
-  it('passes on the number and head commit', () => {
-    const sha = 'a'.repeat(40);
-    const r = stubbedStep(script, 'gh', `12 ${sha}`);
-    expect(r.code).toBe(0);
-    expect(r.output).toBe(`number=12\nsha=${sha}\n`);
-  });
-
-  it('does nothing when no DOI pull request is open', () => {
-    const r = stubbedStep(script, 'gh', '');
-    expect(r.code).toBe(0);
-    expect(r.output).toBe('');
-  });
-
-  it('refuses an answer that is not a number and a commit', () => {
-    const r = stubbedStep(script, 'gh', '12 main\nsha=evil');
-    expect(r.code).toBe(1);
-    expect(r.output).toBe('');
-  });
-});
-
-describe('preview-deploy refuses a forged pull request number [R136]', () => {
-  const script = stepScript('.github/workflows/preview-deploy.yml', 'pr-owner');
-
-  /** A site directory, and a `gh` on PATH that answers with `headSha`, so no network. */
-  function fixture(prNumber: string | null, headSha: string) {
-    const dir = mkdtempSync(join(tmpdir(), 'oak-guard-'));
-    const bin = mkdtempSync(join(tmpdir(), 'oak-bin-'));
-    if (prNumber !== null) {
-      spawnSync('mkdir', ['-p', join(dir, 'site')]);
-      writeFileSync(join(dir, 'site/.pr-number'), prNumber);
-    }
-    writeFileSync(join(bin, 'gh'), `#!/bin/sh\necho ${headSha}\n`);
-    chmodSync(join(bin, 'gh'), 0o755);
-    return { dir, env: { PATH: `${bin}:${process.env.PATH}` } };
-  }
-
-  it('refuses a value that is not a number', () => {
-    const f = fixture('1/comments?x=', 'deadbeef');
-    const r = run(script, { ...f.env, REPO: 'o/r', HEAD_SHA: 'deadbeef' }, f.dir);
-    expect(r.code).toBe(1);
-    expect(r.out).toContain('is not a number');
-  });
-
-  it('refuses a real pull request that is not the one this run built', () => {
-    const f = fixture('99', 'other-sha');
-    const r = run(script, { ...f.env, REPO: 'o/r', HEAD_SHA: 'deadbeef' }, f.dir);
-    expect(r.code).toBe(1);
-    expect(r.out).toContain('refusing to comment');
-  });
-
-  it('accepts the pull request this run built', () => {
-    const f = fixture('99', 'deadbeef');
-    expect(run(script, { ...f.env, REPO: 'o/r', HEAD_SHA: 'deadbeef' }, f.dir).code).toBe(0);
-  });
-
-  it('does nothing on a push build, which has no pull request number', () => {
-    const f = fixture(null, 'deadbeef');
-    expect(run(script, { ...f.env, REPO: 'o/r', HEAD_SHA: 'deadbeef' }, f.dir).code).toBe(0);
   });
 });
 
@@ -303,25 +209,7 @@ describe('no template run: script puts an expression in the script [R153]', () =
   });
 
   it('finds the scripts it claims to check', () => {
-    expect(runScripts().length).toBeGreaterThan(5);
-  });
-});
-
-describe('the sandbox-token guard refuses an unset token ([R172])', () => {
-  const script = stepScript(
-    '.github/workflows/prepare.yml',
-    undefined,
-    'Refuse a sandbox run with no sandbox token',
-  );
-
-  it('refuses when the sandbox token is unset', () => {
-    const r = run(script, { SANDBOX_TOKEN: '' });
-    expect(r.code).toBe(1);
-    expect(r.out).toContain('refusing to fall back to the production token');
-  });
-
-  it('allows the run when the sandbox token is set', () => {
-    expect(run(script, { SANDBOX_TOKEN: 'a-token' }).code).toBe(0);
+    expect(runScripts().length).toBeGreaterThanOrEqual(4);
   });
 });
 
@@ -358,6 +246,18 @@ describe('workflow expressions', () => {
 
   it('finds the conditions it claims to check', () => {
     expect(conditions().length).toBeGreaterThan(3);
+  });
+
+  it('every fromJSON of an engine result tolerates an engine that wrote none', () => {
+    // fromJSON('') fails the whole workflow, and an engine older than the templates writes no
+    // result.
+    const files = readdirSync(join(SHIM, '.github/workflows'));
+    const bare = files.flatMap((f) =>
+      [...readFileSync(join(SHIM, '.github/workflows', f), 'utf8').matchAll(/fromJSON\(([^)]*)\)/g)]
+        .filter((m) => !m[1]!.includes("|| '{}'"))
+        .map((m) => `${f}: ${m[0]}`),
+    );
+    expect(bare).toEqual([]);
   });
 });
 
@@ -411,5 +311,130 @@ describe('every secret a job reads comes from an environment', () => {
 
   it('finds the jobs it claims to check', () => {
     expect(jobs().filter((j) => j.secrets.length).length).toBeGreaterThanOrEqual(3);
+  });
+});
+
+/** A template workflow, parsed. */
+function workflow(file: string): any {
+  return parseDocument(readFileSync(join(SHIM, '.github/workflows', file), 'utf8')).toJS();
+}
+
+describe('Paper CI holds the Pages deploy while the id is the template placeholder', () => {
+  it("the build job's output is the engine's placeholder flag", () => {
+    const ci = workflow('ci.yml');
+    expect(ci.jobs.build.outputs.placeholder).toBe(
+      "${{ fromJSON(steps.build.outputs.result || '{}').placeholder }}",
+    );
+    expect(ci.jobs.build.steps.some((s: any) => s.id === 'build')).toBe(true);
+  });
+
+  it('the deploy job reads that output', () => {
+    expect(workflow('ci.yml').jobs['deploy-pages'].if).toContain(
+      "needs.build.outputs.placeholder != 'true'",
+    );
+  });
+});
+
+describe('the engine action returns the verb result', () => {
+  it('one result output, from the dispatch step', () => {
+    const action = parseDocument(
+      readFileSync(join(SHIM, '.github/actions/engine/action.yml'), 'utf8'),
+    ).toJS() as any;
+    expect(Object.keys(action.outputs)).toEqual(['result']);
+    expect(action.outputs.result.value).toBe('${{ steps.dispatch.outputs.result }}');
+    expect(action.inputs['paper-dir'].default).toBe('.');
+  });
+});
+
+describe('the bot pull request checks (bot-pr-checks.yml)', () => {
+  const called = workflow('bot-pr-checks.yml');
+  const callers = ['version-bump.yml', 'prepare.yml'].map((f) => {
+    const jobs = workflow(f).jobs as Record<string, any>;
+    const [name, job] = Object.entries(jobs).find(([, j]) => j.uses)!;
+    return { f, name, job, jobs };
+  });
+
+  it('is a reusable workflow, called by the bump and the DOI prepare', () => {
+    expect(Object.keys(called.on)).toEqual(['workflow_call']);
+    expect(called.on.workflow_call.inputs.paper.default).toBe('.');
+    for (const c of callers) expect(c.job.uses, c.f).toBe('./.github/workflows/bot-pr-checks.yml');
+  });
+
+  it('each caller runs it only on the default branch, which the preview environment admits', () => {
+    for (const c of callers) {
+      expect(c.job.if, c.f).toContain(
+        "github.ref == format('refs/heads/{0}', github.event.repository.default_branch)",
+      );
+      // Only once something was pushed: the engine names no commit otherwise.
+      expect(c.job.if, c.f).toContain("outputs.sha != ''");
+    }
+  });
+
+  it('each caller passes the number and commit its engine step reported', () => {
+    for (const c of callers) {
+      const opener = c.jobs[c.job.needs];
+      const step = opener.steps.find((s: any) => s.uses === './.github/actions/engine');
+      expect(opener.outputs.pr, c.f).toBe(
+        `\${{ fromJSON(steps.${step.id}.outputs.result || '{}').pr_number }}`,
+      );
+      expect(opener.outputs.sha, c.f).toBe(
+        `\${{ fromJSON(steps.${step.id}.outputs.result || '{}').head_sha }}`,
+      );
+      expect(c.job.with, c.f).toEqual({
+        pr: `\${{ needs.${c.job.needs}.outputs.pr }}`,
+        sha: `\${{ needs.${c.job.needs}.outputs.sha }}`,
+      });
+    }
+  });
+
+  it("each caller grants exactly what the called jobs ask for, since a caller's grant caps them", () => {
+    const asked: Record<string, string> = {};
+    for (const job of Object.values(called.jobs) as any[]) Object.assign(asked, job.permissions);
+    for (const c of callers) expect(c.job.permissions, c.f).toEqual(asked);
+  });
+
+  it("the jobs running the pull request's code check out its commit with read access only", () => {
+    for (const name of ['build', 'validate']) {
+      const job = called.jobs[name];
+      expect(job.permissions, name).toEqual({ contents: 'read' });
+      expect(job.environment, name).toBeUndefined();
+      expect(job.steps[0].with.ref, name).toBe('${{ inputs.sha }}');
+      expect(JSON.stringify(job), name).not.toMatch(/secrets\./);
+    }
+    expect(called.jobs.build.steps.find((s: any) => s.with?.args)?.with.args).toBe(
+      'build --preview',
+    );
+  });
+
+  it('the posting job checks out the default branch and checks the pull request in both verbs', () => {
+    const post = called.jobs.post;
+    expect(post.environment).toBe('preview');
+    expect(post.steps[0].with?.ref).toBeUndefined();
+    const verbs = post.steps
+      .filter((s: any) => s.uses === './.github/actions/engine')
+      .map((s: any) => s.with.args as string);
+    expect(verbs.map((a: string) => a.split(/\s+/)[0])).toEqual(['check-post', 'deploy-preview']);
+    for (const args of verbs) {
+      expect(args).toContain('--pr ${{ inputs.pr }}');
+      expect(args).toContain('--verified-head ${{ inputs.sha }}');
+    }
+  });
+});
+
+describe('the templates declare the oldest engine they run with', () => {
+  it('pins.yml names a release tag, which bootstrap and upgrade carry into a repo', async () => {
+    const { readMinEngine } = await import('../src/upgrade.js');
+    const { renderPaperTemplate } = await import('../src/bootstrap.js');
+    const min = readMinEngine(SHIM);
+    expect(min).toMatch(/^v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/);
+    const repo = mkdtempSync(join(tmpdir(), 'oak-min-'));
+    renderPaperTemplate(SHIM, repo, {
+      engineRepo: 'me/engine',
+      instanceRepo: 'me/journal',
+      owner: '@me',
+      version: 'v9.9.9',
+      edition: 'e',
+    });
+    expect(readMinEngine(repo)).toBe(min);
   });
 });

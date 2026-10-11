@@ -21,28 +21,16 @@ jobs:
   build:
     runs-on: ubuntu-latest
     outputs:
-      placeholder: ${{ steps.id.outputs.placeholder }}
+      # The starter paper is not deployed to Pages until myst.yml has a real id.
+      placeholder: ${{ fromJSON(steps.build.outputs.result || '{}').placeholder }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # The starter paper is not deployed to Pages until myst.yml has a real id.
-      - id: id
-        run: |
-          if [ "$(yq '.project.id // ""' myst.yml)" = "CHANGE-ME-template-placeholder" ]; then
-            echo "placeholder=true" >> "$GITHUB_OUTPUT"
-            echo "::notice::project.id in myst.yml is still the template placeholder; GitHub Pages is not deployed until it is set"
-          fi
-      - uses: ./.github/actions/engine
+      # Also drops symlinks from the site, and on a pull request leaves .pr-number for Stage 2.
+      - id: build
+        uses: ./.github/actions/engine
         with:
           args: build
           paper-env: true
-      # upload-artifact follows symlinks, so a link would publish a runner file.
-      - name: Drop symlinks from the build output
-        run: find _build/html -type l -delete
-      - name: Stash PR number
-        if: ${{ github.event_name == 'pull_request' }}
-        env:
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: printf '%s\n' "$PR_NUMBER" > _build/html/.pr-number
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: paper-build

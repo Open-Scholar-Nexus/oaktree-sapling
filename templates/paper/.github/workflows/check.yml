@@ -23,32 +23,12 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # Stage 1 passes on a failing verdict, or Stage 2 never posts it; only a missing report fails.
-      - id: validate
-        continue-on-error: true
-        uses: ./.github/actions/engine
+      # Passes on a failing result, which check-post.yml posts; fails only when no report was
+      # written. On a pull request it leaves pr-number and paper beside the report.
+      - uses: ./.github/actions/engine
         with:
           args: validate --report report.json
           paper-env: true
-
-      - name: Ensure a valid report was produced
-        env:
-          VALIDATE_OUTCOME: ${{ steps.validate.outcome }}
-        run: |
-          if ! jq -e '.checkRun.conclusion' report.json >/dev/null 2>&1; then
-            echo "::error::oak validate wrote no report at all. The engine died before it could report. The real error is in the '$VALIDATE_OUTCOME' validate step's log above; nothing was posted to the PR."
-            exit 1
-          fi
-          echo "report ok; conclusion: $(jq -r '.checkRun.conclusion' report.json)"
-
-      - name: Record PR number
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: |
-          if [ "$EVENT_NAME" = "pull_request" ]; then
-            printf '%s\n' "$PR_NUMBER" > pr-number
-          fi
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -56,4 +36,5 @@ jobs:
           path: |
             report.json
             pr-number
+            paper
           if-no-files-found: error
