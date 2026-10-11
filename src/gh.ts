@@ -222,11 +222,26 @@ export function originRepo(repoRoot: string): string | null {
   }
 }
 
+/** A pull request opened or updated, with the commit pushed to it. */
+export interface PushedPr {
+  url: string;
+  number: string;
+  head: string;
+}
+
+/** The number at the end of a pull request URL. Throws on anything else, since the number
+ *  reaches the checks that write to that pull request. */
+function prNumberFromUrl(url: string): string {
+  const m = /\/pull\/([0-9]{1,10})\/?$/.exec(url.trim());
+  if (!m) throw new Error(msg.workflow.notAPrUrl(url));
+  return m[1]!;
+}
+
 /**
  * Opens the DOI pull request for the myst.yml write [R3]: a branch, a commit of myst.yml only,
- * a push and `gh pr create`. Returns its URL. Needs `gh` with a token.
+ * a push and `gh pr create`. Returns it with the pushed commit. Needs `gh` with a token.
  */
-export function openDoiPr(repoRoot: string, opts: { conceptDoi: string }): string {
+export function openDoiPr(repoRoot: string, opts: { conceptDoi: string }): PushedPr {
   // One branch name for every version: prepare reserves the concept DOI, and the version comes
   // from the tag at publish. Preparing again force-pushes the same branch.
   const branch = 'zenodo-doi';
@@ -244,6 +259,7 @@ export function openDoiPr(repoRoot: string, opts: { conceptDoi: string }): strin
   git(repoRoot, ['add', 'myst.yml']);
   git(repoRoot, [...BOT_ID, 'commit', '-m', `chore: reserve Zenodo DOI ${opts.conceptDoi}`]);
   git(repoRoot, ['push', '-u', 'origin', branch, '--force']);
+  const head = git(repoRoot, ['rev-parse', 'HEAD']);
   // `--repo`: the git calls use `-C repoRoot`, while `gh` would read the current directory's
   // repo. `realUpgradePr` uses `cwd` for the same.
   const scope = repo ? ['--repo', repo] : [];
@@ -260,15 +276,17 @@ export function openDoiPr(repoRoot: string, opts: { conceptDoi: string }): strin
     '--head',
     branch,
   ];
+  let url: string;
   try {
-    return gh(create);
+    url = gh(create);
   } catch (e) {
     // Preparing again is allowed [design §13], and `gh pr create` refuses a second pull request
     // for a branch, so return the open one.
     const existing = openPrUrl(repo, branch);
-    if (existing) return existing;
-    throw e;
+    if (!existing) throw e;
+    url = existing;
   }
+  return { url, number: prNumberFromUrl(url), head };
 }
 
 /** The repo's default branch, the base every DOI or upgrade pull request targets. */
@@ -276,24 +294,27 @@ function defaultBranch(repo: string): string {
   return gh(['api', `repos/${repo}`, '--jq', '.default_branch']) || 'main';
 }
 
+/** `gh pr list` arguments for the open pull request from `branch` of this repo. A fork's pull
+ *  request can come from a branch of the same name, so those are left out. */
+function openPrQuery(branch: string): string[] {
+  return [
+    'pr',
+    'list',
+    '--head',
+    branch,
+    '--state',
+    'open',
+    '--json',
+    'url,isCrossRepository',
+    '--jq',
+    '[.[] | select(.isCrossRepository | not)][0].url // empty',
+  ];
+}
+
 /** The open pull request for `branch`, or null. */
 function openPrUrl(repo: string | null, branch: string): string | null {
   try {
-    return (
-      gh([
-        'pr',
-        'list',
-        ...(repo ? ['--repo', repo] : []),
-        '--head',
-        branch,
-        '--state',
-        'open',
-        '--json',
-        'url',
-        '--jq',
-        '.[0].url // empty',
-      ]) || null
-    );
+    return gh([...openPrQuery(branch), ...(repo ? ['--repo', repo] : [])]) || null;
   } catch {
     return null;
   }
@@ -394,6 +415,10 @@ export const realGhPr: GhPr = {
       .split('\n')
       .map((t) => t.trim())
       .filter((t) => t.startsWith('v'));
+  },
+
+  prHead(repo, pr) {
+    return gh(['api', `repos/${assertRepoName(repo)}/pulls/${pr}`, '--jq', '.head.sha']);
   },
 };
 
@@ -863,33 +888,19 @@ export const realUpgradePr: UpgradePr = {
     // Run `gh` inside the clone so it finds the repo from the remote: in CI the cwd is
     // already the repo, while a local `oak upgrade` works in a temporary clone.
     const cwd = repoRoot;
-    const existing =
-      gh(
-        [
-          'pr',
-          'list',
-          '--head',
-          opts.branch,
-          '--state',
-          'open',
-          '--json',
-          'url',
-          '--jq',
-          '.[0].url // empty',
-        ],
-        { cwd },
-      ) || null;
+    const existing = gh(openPrQuery(opts.branch), { cwd }) || null;
     // The open pull request already has these changes.
     if (existing && sameTreeAsRemote(repoRoot, opts.branch))
-      return { url: existing, action: 'current' };
+      return { url: existing, action: 'current', number: prNumberFromUrl(existing) };
     git(repoRoot, ['push', '-u', 'origin', opts.branch, '--force']);
+    const head = git(repoRoot, ['rev-parse', 'HEAD']);
     if (existing) {
       gh(['pr', 'edit', existing, '--title', opts.title, '--body', opts.body], { cwd });
-      return { url: existing, action: 'updated' };
+      return { url: existing, action: 'updated', number: prNumberFromUrl(existing), head };
     }
     const create = ['pr', 'create', '--title', opts.title, '--body', opts.body];
     const url = gh([...create, '--head', opts.branch], { cwd });
-    return { url, action: 'opened' };
+    return { url, action: 'opened', number: prNumberFromUrl(url), head };
   },
 };
 
