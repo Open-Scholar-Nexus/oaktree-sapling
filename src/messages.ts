@@ -200,47 +200,44 @@ export const prompt = {
  * ═════════════════════════════════════════════════════════════════════════════════════════ */
 
 /**
- * The plan's opening block: every value the run will use, and whether it came from a flag or a
- * default. Most end up in files that are awkward to change later, so `Proceed? [y/N]` covers
- * them all.
+ * The plan's opening block: every value the run will use, one row per flag, with `(default)`
+ * on the ones no flag set. Most end up in files that are awkward to change later, so
+ * `Proceed? [y/N]` covers them all.
  */
 export const declared = {
-  journalRepoCoLocated: 'this repo itself (--instance .)',
-  journalRepo: (repo: string): string => `${repo}: the journal this paper belongs to (--instance)`,
+  journalRepoCoLocated: '. (this repo itself)',
+  journalRepo: (repo: string): string => `${repo}: the journal this paper belongs to`,
 
-  journalNameGiven: (name: string): string => `${name} (--name)`,
-  journalNameDefault:
-    'not given; journal.yml, brand/brand.yml and the edition file keep the "CHANGE-ME ' +
-    'Journal" placeholder (set it now with --name "Your Journal")',
+  journalNameGiven: (name: string): string => name,
+  journalNameDefault: (name: string): string =>
+    `${name} (default): a placeholder in journal.yml, brand/brand.yml and the edition file`,
 
-  editionGiven: (edition: string): string => `${edition} (--edition)`,
+  editionGiven: (edition: string): string => edition,
   editionDefault: (edition: string): string =>
-    `${edition} (placeholder; no --edition given). The scaffold writes editions/${edition}.yml ` +
-    `and every paper must name the same id (pass --edition 2026, say, to use your own)`,
+    `${edition} (default): written as editions/${edition}.yml; papers name this id`,
 
-  engineVersionGiven: (tag: string): string => `${tag} (--engine-version)`,
+  engineVersionGiven: (tag: string): string => tag,
   engineVersionDefault: (tag: string): string =>
-    `${tag}: the newest engine release right now, no --engine-version given ` +
-    `(pass one to pin a version you have tested)`,
+    `${tag} (default): the newest engine release, looked up just now`,
 
-  engineRepoGiven: (repo: string): string => `${repo} (--engine-repo)`,
+  engineRepoGiven: (repo: string): string => repo,
   engineRepoDefault: (repo: string): string =>
-    `${repo}: built-in default, no --engine-repo given (where the workflows fetch the engine from)`,
+    `${repo} (default): where the workflows fetch the engine from`,
 
   ownerGiven: (owner: string): string =>
-    `${owner} (--owner); written into CODEOWNERS, so this is who must approve changes`,
+    `${owner}: written into CODEOWNERS, so this is who must approve changes`,
   ownerDefault: (owner: string): string =>
-    `${owner}: your own GitHub login, no --owner given; written into CODEOWNERS, so this ` +
-    `is who must approve changes (pass --owner @org/team for a team)`,
+    `${owner} (default): your own GitHub login; written into CODEOWNERS, so this ` +
+    `is who must approve changes`,
 
-  /** Row labels, in the order they print. */
+  /** Row labels, in the order they print: the flag that sets each value. */
   labels: {
-    journalRepo: 'journal repo',
-    journalName: 'journal name',
-    edition: 'edition',
-    engineVersion: 'engine version',
-    engineRepo: 'engine repo',
-    owner: 'review owner',
+    journalRepo: '--instance',
+    journalName: '--name',
+    edition: '--edition',
+    engineVersion: '--engine-version',
+    engineRepo: '--engine-repo',
+    owner: '--owner',
   },
 };
 
@@ -287,31 +284,31 @@ export const bootstrap = {
   planCreateRepo: (isPrivate: boolean): string =>
     `  ○ create repo (${isPrivate ? 'private' : 'public'})`,
   planCreateJournalRepo: (external: boolean): string =>
-    `  ○ create repo (public${external ? '; it must stay public: every paper build reads the journal settings from it, without a token' : ''})`,
+    `  ○ create repo (public${external ? ', and it must stay so: paper builds read it without a token' : ''})`,
   planPrivate:
     "  ! on GitHub's free plan a private repo cannot have repo rulesets or Pages, so those " +
     'steps will fail late in this run (403), after the repo and its content are already in ' +
     'place. Create the repo public, or confirm your GitHub plan covers private repos, before ' +
     'proceeding.',
 
-  planMainSeeded: '  ✓ main seeded',
+  planMainSeeded: '  ✓ main exists',
   planSeedPaper:
-    '  ○ seed main with the starter manuscript + the GitHub Actions workflows that build and check it',
+    '  ○ commit to main: the starter manuscript and the GitHub Actions workflows that build and check it',
   planSeedJournal: (withSite: boolean): string =>
-    `  ○ seed main with the journal's settings, branding and paper list${withSite ? ', plus the journal website' : ''} (no paper workflows; this repo publishes nothing itself)`,
+    `  ○ commit to main: the journal's settings, branding and paper list${withSite ? ', plus the journal website' : ''} (${docsUrl(DOCS.files)})`,
   planSeedCoLocated:
-    "  ○ seed main with the journal's settings AND a starter paper, plus the workflows that build and check it",
+    "  ○ commit to main: the journal's settings, a starter paper and the workflows that build and check it",
 
-  /** A rerun that changes an answer does not reseed, so it would succeed while changing
-   *  nothing. */
+  /** A rerun that changes an answer does not commit to main again, so it would succeed
+   *  while changing nothing. */
   planAlreadySeededPaper: (instanceRepo: string): string =>
-    `  ! main is already seeded; this run will NOT rewrite the workflows or` +
+    `  ! main already exists; this run will NOT rewrite the workflows or` +
     ` .github/actions/engine/pins.yml, so the journal repo and engine version an earlier` +
     ` bootstrap wrote stay as they are (this run would have set instance_repo:` +
     ` ${instanceRepo}). To change them, run \`oak upgrade\` or edit` +
     ` .github/actions/engine/pins.yml in a pull request.`,
   planAlreadySeededJournal:
-    '  ! main is already seeded; this run will NOT rewrite the files there, so a changed' +
+    '  ! main already exists; this run will NOT rewrite the files there, so a changed' +
     ' --name/--edition/--engine-version will not reach them. Edit the repo directly.',
 
   planReviewBranchExists: '  ✓ review branch exists',
@@ -328,18 +325,13 @@ export const bootstrap = {
   planReviewPr: '  ○ open the review → main pull request',
 
   planProvisioning:
-    '  ○ repo settings: branch + tag rules, GitHub Pages and the repo website link, the zenodo-publish ' +
-    'environment (v* tags only) and the main-only zenodo-prepare and preview ones, permission for Actions ' +
-    'to open pull requests, issue labels (safe to re-run)',
-  planProvisioningCoLocated:
-    '  ○ repo settings: branch + tag rules, GitHub Pages and the repo website link, the zenodo-publish ' +
-    'environment (v* tags only) and the main-only zenodo-prepare and preview ones, permission for Actions ' +
-    'to open pull requests, issue labels',
+    '  ○ repo settings: branch and tag rules, GitHub Pages, Zenodo environments, Actions ' +
+    'permissions, issue labels',
   planSecrets: (names: string): string =>
     `  ○ secrets: ${names || 'none given; you get a list of what to set by hand'}`,
   planPages: (siteUrl: string): string =>
-    `  ○ turn on GitHub Pages for the journal website (${siteUrl}) and link it from the repo page; no branch rules, no environments`,
-  planNoSite: '  ○ (--no-site: settings only; no website, no branch rules, no environments)',
+    `  ○ turn on GitHub Pages for the journal website (${siteUrl}) and link it from the repo page`,
+  planNoSite: '  ○ no journal website (--no-site)',
 
   // ── the issue labels oak creates, shown in the repo's labels list ──────────────────────
   labelEditorAction: 'An editor must take action before this can proceed',
@@ -357,7 +349,7 @@ export const bootstrap = {
   logCreatedPublic: (repo: string): string => `  ✓ created ${repo} (public)`,
   logMadePublic:
     '  ✓ made the repo public (paper builds read these settings from here with no token)',
-  logSeeded: '  ✓ seeded main',
+  logSeeded: '  ✓ committed to main',
   /** A repo that already existed may not default to `main` [R127]. */
   logDefaultBranch: (from: string): string => `  ✓ default branch switched from ${from} to main`,
   logReviewBranch:
@@ -435,31 +427,11 @@ export const bootstrap = {
     `(they can then push branches here; main still needs a pull request and only editors can ` +
     `create v* tags).`,
 
-  runbookStartHere: (repo: string): string =>
-    `Start here: edit journal.yml (your journal's name and the rules papers are checked against) ` +
-    `and brand/ (logo + colours). Papers read both at build time, so a change here reaches ` +
-    `every paper's next build. Clone it with: git clone https://github.com/${repo}.git\n` +
-    `The whole first pass, in order: ${docsUrl(DOCS.journalStart)}`,
-
-  runbookNoProtection:
-    'This repo has no branch protection: adding a paper to the list, or changing the branding, ' +
-    'is an ordinary commit or pull request. If you want those changes reviewed, add a branch ' +
-    'protection rule yourself.',
+  runbookStartHere: `Next: clone the repo and edit journal.yml and brand/. See ${docsUrl(DOCS.journalStart)}`,
 
   runbookSite: (siteUrl: string): string =>
-    `The journal website is built from this repo and goes live at ${siteUrl} once the first ` +
-    '"Journal site" workflow run finishes (watch it in the Actions tab). GitHub Pages takes a ' +
-    'minute or two to serve a new site, so a 404 immediately after this command is normal. Every ' +
-    'file in it is yours to edit: oak writes them once and never again, so an upgrade will not ' +
-    'overwrite your design. Three version pins you bump by hand when you want newer: the gallery plugin URL ' +
-    'and `site.template` in myst.yml, and `mystmd` in package.json. What each one moves, and ' +
-    'how to tell a bump worked: ' +
-    docsUrl(DOCS.pins),
-
-  runbookSiteFailure:
-    'If a website build ever fails, the version already published keeps serving; a bad entry ' +
-    'in registry/papers.yml (the list of published papers) cannot take the journal offline. ' +
-    'Fix the entry and push again.',
+    `The website goes live at ${siteUrl} a few minutes after the first "Journal site" run ` +
+    'finishes (Actions tab).',
 };
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════

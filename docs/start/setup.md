@@ -31,7 +31,7 @@ Then pass the team with `--owner @my-journal/editors` when you create each paper
 oak bootstrap journal --repo <owner>/<journal-repo> --name "My Journal" --edition 2026
 ```
 
-`oak` prints what it is about to do, including every value it took a default for, and asks before changing anything. `--edition` names the first edition; without it the edition is called `edition`. The engine version defaults to the newest stable release.
+`oak` prints what it is about to do, including every value it took a default for, and asks before changing anything. `--edition` names the first edition; without it the edition is called `seedling`. The engine version defaults to the newest stable release.
 
 Running the same command again finishes a run that failed partway and skips what is already there. It does not rewrite files already on `main`, so a different `--name` or `--edition` on a second run changes nothing: edit the files instead.
 

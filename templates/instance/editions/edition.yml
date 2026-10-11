@@ -4,7 +4,7 @@ version: 1
 # https://scholar.nexus/oaktree-sapling/reference/files#file-editions
 project:
   subject: Article
-  venue: CHANGE-ME Journal
+  venue: Acorn Annals
   license: CC-BY-4.0
   open_access: true
   # funding: |

@@ -1,6 +1,6 @@
 # Your journal's settings, read by every paper build.
 # https://scholar.nexus/oaktree-sapling/guide/journal-yml
-name: CHANGE-ME Journal
+name: Acorn Annals
 # url: https://example.org
 
 tier: paper
@@ -20,7 +20,7 @@ preview:
 zenodo: {}
   # community: your-zenodo-community
   # description_blurb: >-
-  #   Published in CHANGE-ME Journal.
+  #   Published in Acorn Annals.
 
 # editorial checks a paper must pass in CI. https://scholar.nexus/oaktree-sapling/guide/checks
 checks:
