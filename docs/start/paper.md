@@ -15,14 +15,11 @@ npm install -g oaktree-sapling
 
 ## 1. Fork and clone
 
-On the paper repository's GitHub page, click **Fork**. Then clone your fork, and the journal's repository beside it:
+On the paper repository's GitHub page, click **Fork**. Then clone your fork:
 
 ```bash
 git clone https://github.com/<you>/<paper-repo>.git
-git clone https://github.com/<owner>/<journal-repo>.git
 ```
-
-The journal's repository holds the logo, colours and settings every paper in the journal is built with. It is public, so anyone can clone it. Its name is on the `instance_repo:` line of `.github/actions/engine/pins.yml` in the paper repository.
 
 If an editor gave you push access to the paper repository, clone it directly and skip the fork.
 
@@ -31,12 +28,12 @@ If an editor gave you push access to the paper repository, clone it directly and
 
 ```bash
 cd <paper-repo>
-oak start --instance ../<journal-repo>
+oak start
 ```
 
 Open the address `oak start` prints. The preview reloads as you edit.
 
-`--instance` is the path to your clone of the journal. With `--no-instance` in its place, the preview skips the journal's settings: no logo, no venue on the paper.
+The preview is styled with the journal's logo, colours and settings, which `oak start` downloads from the journal's repository each time it starts. `--no-instance` previews without them: no logo, no venue on the paper.
 
 ## 3. Write the paper
 
@@ -74,18 +71,20 @@ Once a week the repository also opens an **Engine version bump** pull request, w
 (paper-journal-link)=
 ## Where the journal's settings come from
 
-`.github/actions/engine/pins.yml` names the journal's repository. Every build, in CI and with `oak start --instance`, reads from it:
+`.github/actions/engine/pins.yml` names the journal's repository, on its `instance_repo:` line. Every build, in CI and on your machine, reads from it:
 
 - `editions/<edition>.yml`, for the edition named in `myst.yml`: the venue, licence and other frontmatter shared by the edition;
 - `brand/brand.yml`: the logo, colours and the mark on the PDF;
 - `journal.yml`: the id rule, the editorial checks and the PDF template.
 
-A field set in your `myst.yml` takes precedence over the same field from the edition. CI reads the journal's latest commit, so a change the editors make applies from your paper's next build; `git pull` in your clone to preview with it.
+A field set in your `myst.yml` takes precedence over the same field from the edition. Every build reads the journal's latest commit, so a change the editors make applies from your paper's next build.
+
+To build with a local copy of the journal instead, for example while editing its settings, pass its path: `oak start --instance ../<journal-repo>`.
 
 ## Building the PDF locally
 
 ```bash
-oak build --instance ../<journal-repo>
+oak build
 ```
 
 This writes the website to `_build/html` and the PDF to `_build/exports/paper.pdf`; `--exports-only` builds only the PDF. The PDF needs [typst](https://github.com/typst/typst) on your `PATH`, at the version in oak's [`typst.version`](src:typst.version) file.

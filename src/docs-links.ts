@@ -17,7 +17,7 @@ export const DOCS = {
   paperStart: 'start/paper',
   /** How a paper repo reaches the journal's settings: `pins.yml`, resolved at build time. */
   paperJournalLink: 'start/paper#paper-journal-link',
-  /** Previewing a paper locally, and why `--instance` has to be given a path. */
+  /** Previewing a paper locally with `oak start`. */
   paperPreviewLocally: 'start/paper#paper-preview-locally',
 
   /** `journal.yml` field by field. */

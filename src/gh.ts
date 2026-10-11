@@ -768,6 +768,22 @@ export function tempClone(repo: string): string {
 }
 
 /**
+ * A shallow clone of the journal repo at its default branch, for a local `oak build`, `start` or
+ * `validate` given no `--instance`; CI clones it in ci/run.sh. Plain git over https, as there:
+ * journal repos are public, so an author needs no `gh` login. The clone is removed on exit.
+ * Ctrl-C, the only way `oak start` ends, skips exit handlers unless SIGINT has a listener, so it
+ * gets one.
+ */
+export function cloneJournal(repo: string): string {
+  assertRepoName(repo);
+  const tmp = mkdtempSync(join(tmpdir(), 'oak-journal-'));
+  process.on('exit', () => rmSync(tmp, { recursive: true, force: true }));
+  process.once('SIGINT', () => process.exit(130));
+  run('git', ['clone', '--depth', '1', '--quiet', `https://github.com/${repo}.git`, tmp]);
+  return tmp;
+}
+
+/**
  * The latest stable release tag of `engineRepo`, from the `releases/latest` API: the newest
  * release that is neither a draft nor a pre-release, so `oak bootstrap` and the weekly upgrade
  * never pick a pre-release (RELEASING.md). One is used only when named (`--engine-version`,
