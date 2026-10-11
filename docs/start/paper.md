@@ -1,7 +1,7 @@
 (start-paper)=
 # Your paper repository
 
-An editor has created a repository for your paper. You write the paper there in [MyST markdown](https://mystmd.org/guide), and its workflows turn it into a website and a PDF in the journal's style, using oaktree-sapling.
+An editor has created a repository for your paper. You write the paper there in [MyST markdown](https://mystmd.org/guide), and its workflows turn it into a website and a PDF in the journal's style, using oaktree-sapling, the engine that builds, checks and publishes the journal's papers.
 
 The steps below get you from that repository to a preview on your own machine, then to a pull request the editors can merge.
 

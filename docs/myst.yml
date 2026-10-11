@@ -7,9 +7,6 @@ project:
   id: oaktree-sapling-docs
   title: Oaktree Sapling
   description: Documentation for the oaktree-sapling journal engine.
-  # Each plain-text occurrence gets this as a tooltip, on every page.
-  abbreviations:
-    oaktree-sapling: the engine that builds, checks and publishes a journal's papers
   # `[text](src:path#L1-L9)` links to oak's source at a release tag.
   plugins:
     - plugins/source-links.mjs
