@@ -56,7 +56,7 @@ A bot then comments on the pull request with the result of the journal's checks,
 
 Once the checks pass and an editor approves, the pull request can merge, and the paper's website at `https://<owner>.github.io/<paper-repo>/` updates.
 
-Once a week the bot also opens a pull request updating the engine version in `myst.yml`. Merge it like any other once its checks pass.
+Once a week the bot also opens a pull request updating the engine version in `myst.yml`, which goes through the same checks and review.
 
 ## Building the PDF
 
