@@ -1,13 +1,13 @@
 (start-paper)=
 # Your paper repository
 
-An editor has created a repository for your paper. You write the paper there in [MyST markdown](https://mystmd.org/guide), and its workflows turn it into a website and a PDF in the journal's style.
+An editor has created a repository for your paper. You write the paper there in [MyST markdown](https://mystmd.org/guide), and its workflows turn it into a website and a PDF in the journal's style, using oaktree-sapling, the engine that builds, checks and publishes the journal's papers.
 
 The steps below get you from that repository to a preview on your own machine, then to a pull request the editors can merge.
 
 ## Before you start
 
-You need a GitHub account, `git`, and Node 22 or later. Then install `oak`:
+You need a GitHub account, `git`, and Node 22 or later. Then install `oak`, oaktree-sapling's command-line tool:
 
 ```bash
 npm install -g oaktree-sapling
@@ -56,7 +56,7 @@ A bot then comments on the pull request with the result of the journal's checks,
 
 Once the checks pass and an editor approves, the pull request can merge, and the paper's website at `https://<owner>.github.io/<paper-repo>/` updates.
 
-Once a week the bot also opens a pull request updating the engine version in `myst.yml`, which goes through the same checks and review.
+Once a week the bot also opens a pull request updating the oaktree-sapling version in `myst.yml`, which goes through the same checks and review.
 
 ## Building the PDF
 
