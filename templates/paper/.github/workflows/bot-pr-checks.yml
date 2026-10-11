@@ -1,0 +1,114 @@
+name: Bot pull request checks
+
+# Paper CI and Journal checks for a pull request github-actions[bot] opened, whose pull_request
+# runs GitHub holds: both stages in one run, called by version-bump.yml and prepare.yml.
+# https://scholar.nexus/oaktree-sapling/design/paper-ci#design-paper-ci-two-stages
+
+on:
+  workflow_call:
+    inputs:
+      pr:
+        description: "the pull request number"
+        type: string
+        required: true
+      sha:
+        description: "the commit the caller pushed to it"
+        type: string
+        required: true
+      paper:
+        description: "the paper's folder, relative to the repository root"
+        type: string
+        default: "."
+
+jobs:
+  # The pull request's code runs in build and validate, so they hold no write scope and no secret.
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.sha }}
+      # --preview: served from the domain root, as a pull_request build is.
+      - uses: ./.github/actions/engine
+        with:
+          args: build --preview
+          paper-env: true
+          paper-dir: ${{ inputs.paper }}
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: paper-build
+          path: ${{ inputs.paper }}/_build/html
+          if-no-files-found: error
+          include-hidden-files: true
+
+  validate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.sha }}
+      # Passes on a failing result; fails only when no report was written.
+      - uses: ./.github/actions/engine
+        with:
+          args: validate --report report.json
+          paper-env: true
+          paper-dir: ${{ inputs.paper }}
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: journal-checks
+          path: report.json
+          if-no-files-found: error
+
+  # The default branch's checkout and engine; both verbs check the pull request heads at sha.
+  # As in the pull_request path, a failed build loses the preview and keeps the Check Run.
+  post:
+    needs: [build, validate]
+    if: ${{ !cancelled() && needs.validate.result == 'success' }}
+    environment: preview # Cloudflare secrets; main only
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write # post the "Journal checks" Check Run
+      pull-requests: write # the sticky preview and checks comments
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1; default branch, never the PR head
+      - if: ${{ needs.build.result == 'success' }}
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: paper-build
+          path: site
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: journal-checks
+          path: journal-checks
+
+      # Best-effort: https://scholar.nexus/oaktree-sapling/reference/cli#check-post
+      - uses: ./.github/actions/engine
+        with:
+          paper-dir: ${{ inputs.paper }}
+          args: >-
+            check-post
+            --report journal-checks/report.json
+            --repo ${{ github.repository }}
+            --sha ${{ inputs.sha }}
+            --base ${{ github.ref_name }}
+            --verified-head ${{ inputs.sha }}
+            --pr ${{ inputs.pr }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - if: ${{ !cancelled() && needs.build.result == 'success' }}
+        uses: ./.github/actions/engine
+        with:
+          paper-dir: ${{ inputs.paper }}
+          args: deploy-preview site --pr ${{ inputs.pr }} --verified-head ${{ inputs.sha }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          # for the artifact-link fallback comment
+          PAPER_BUILD_RUN_ID: ${{ github.run_id }}

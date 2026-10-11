@@ -9,6 +9,14 @@ inputs:
   paper-env:
     description: "install paper-environment.yml; only for a job holding no secret"
     default: "false"
+  paper-dir:
+    description: "the paper's folder, relative to the repository root"
+    default: "."
+
+outputs:
+  result:
+    description: "the verb's result as JSON; read it with fromJSON"
+    value: ${{ steps.dispatch.outputs.result }}
 
 runs:
   using: composite
@@ -16,10 +24,13 @@ runs:
     # The paper's own myst.yml, before extends. Key quoted: yq versions disagree on a bare hyphen.
     - id: ref
       shell: bash
+      env:
+        PAPER_DIR: ${{ inputs.paper-dir }}
       run: |
-        ref=$(yq '.project.options["oaktree-sapling"].version // ""' myst.yml)
+        myst="${PAPER_DIR:-.}/myst.yml"
+        ref=$(yq '.project.options["oaktree-sapling"].version // ""' "$myst")
         if [ -z "$ref" ] || [ "$ref" = "null" ]; then
-          echo "::error::project.options.oaktree-sapling.version missing from myst.yml"
+          echo "::error::project.options.oaktree-sapling.version missing from $myst"
           exit 1
         fi
         # fork-controlled: a newline would forge a second $GITHUB_OUTPUT line
@@ -74,6 +85,7 @@ runs:
       shell: bash
       env:
         INSTANCE_REPO: ${{ steps.pins.outputs.instance }}
+        PAPER_DIR: ${{ inputs.paper-dir }}
         ARGS: ${{ inputs.args }}
       run: |
         set -f
