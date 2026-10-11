@@ -32,6 +32,7 @@ As with the journal, `oak` prints a plan, including every default it took, and a
 - Environments that keep each secret to the branch or tag that needs it: `zenodo-prepare` and `preview` for `main`, `zenodo-publish` for `v*` tags.
 - Permission for the workflows to open pull requests, which they use to write the paper's DOI into `myst.yml`.
 
+(paper-secrets)=
 ## Secrets
 
 Two features need tokens, set on the paper repository's environments:
@@ -40,7 +41,7 @@ Two features need tokens, set on the paper repository's environments:
 : Depositing the paper on Zenodo, or on the Zenodo sandbox for a test.
 
 `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`
-: A live preview link on each pull request. Without them, a pull request gets a downloadable copy of the built site.
+: A live preview link on each pull request, once the journal also [turns previews on](journal-yml.md#live-previews). Until then, a pull request gets a downloadable copy of the built site.
 
 Pass them to `oak bootstrap paper` as `--zenodo-token`, `--zenodo-token-sandbox`, `--cf-token` and `--cf-account`, or set the environment variables of the same names before running it. `oak` lists any that are still missing when it finishes, with the page to set them on.
 
@@ -55,9 +56,10 @@ Authors work from a fork of the paper repository and open pull requests from it.
 
 What the author sees is described in [Your paper repository](../start/paper.md).
 
+(list-on-site)=
 ## List it on the journal website
 
-The journal website shows the papers listed in the journal repository's `registry/papers.yml`. When a paper should appear there, add an entry for it to that file, usually once the paper is published. `doi` can be left out until it has one.
+The journal website shows the papers listed in the journal repository's `registry/papers.yml`. When a paper should appear there, add an entry for it to that file, usually once the paper is [published](publish.md). `doi` can be left out until it has one.
 
 ```yaml
 - id: oak-2026-tidal-flats
@@ -67,4 +69,4 @@ The journal website shows the papers listed in the journal repository's `registr
   doi: 10.5281/zenodo.1234567
 ```
 
-`id` is the paper's `project.id`, and the Journal checks of every paper use this list to keep ids unique. The website reads each paper's title, authors and thumbnail from its repository, so the paper repository has to be public. See [the registry file](../reference/files.md#file-registry) for every field.
+`id` is the paper's `project.id`, and the Journal checks of every paper use this list to keep ids unique. The website reads each paper's title, keywords and thumbnail from its repository, so the paper repository has to be public. See [the registry file](../reference/files.md#file-registry) for every field.

@@ -54,7 +54,7 @@ Commit, push to your fork, and open a pull request against the paper repository.
 
 A bot then comments on the pull request with the result of the journal's checks, including anything to fix, and a preview of the paper's website. It updates the comments on every push.
 
-Once the checks pass and an editor approves, the pull request can merge, and the paper's website at `https://<owner>.github.io/<paper-repo>/` updates.
+Once the checks pass and an editor approves, the pull request can merge, and the paper's website at `https://<owner>.github.io/<paper-repo>/` updates. The editors then [publish it](../guide/publish.md) on Zenodo, which gives it a DOI.
 
 Once a week the bot also opens a pull request updating the oaktree-sapling version in `myst.yml`, which goes through the same checks and review.
 
