@@ -29,7 +29,8 @@ cd <paper-repo>
 oak start
 ```
 
-Open the address `oak start` prints. The preview reloads as you edit, and shows the paper in the journal's style (see [the journal's settings](#paper-journal-link)).
+(paper-journal-link)=
+Open the address `oak start` prints. The preview reloads as you edit, and shows the paper in the journal's style.[^settings]
 
 ## 3. Write the paper
 
@@ -57,13 +58,6 @@ Once the checks pass and an editor approves, the pull request can merge, and the
 
 Once a week the bot also opens a pull request updating the engine version in `myst.yml`. Merge it like any other once its checks pass.
 
-(paper-journal-link)=
-## The journal's settings
-
-Your paper is built with the journal's look and rules: its logo and colours, the venue and licence of its edition, and the checks every paper has to pass. The editors keep them in the journal's own repository, which your paper repository names, and your paper's builds read them from there.
-
-[How a paper gets the journal's settings](../guide/journal-settings.md) has the details.
-
 ## Building the PDF
 
 ```bash
@@ -71,3 +65,5 @@ oak build
 ```
 
 This writes the PDF to `_build/exports/paper.pdf`. It needs [typst](https://github.com/typst/typst) installed.
+
+[^settings]: The journal's logo, colours, edition and checks live in the journal's own repository, which the editors maintain and your paper repository names. Your paper's builds read them from there. [How a paper gets the journal's settings](../guide/journal-settings.md) has the details.
