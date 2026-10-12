@@ -225,7 +225,7 @@ describe('checkTemplates [R76]', () => {
     const f = checkTemplates({ instanceRoot: '/i', authorTemplate: './mine' }, allFalse);
     const override = f.find((x) => x.check === 'template-override')!;
     expect(override.severity).toBe('warn');
-    expect(override.message).toMatch(/overriding oak's/);
+    expect(override.message).toMatch(/overriding oaktree-sapling's/);
   });
 
   it('warns on an unpinned template from either the author or the journal', () => {
