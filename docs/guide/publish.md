@@ -49,11 +49,12 @@ The journal website shows the papers listed in the journal repository's `registr
 
 A published paper keeps one DOI for all its versions, and each version gets a DOI of its own as well.[^dois] For each new version:
 
-1. On the paper's Zenodo record, click **New version**. This creates the empty draft the next tag fills.
+1. (click-new-version)=
+   On the paper's Zenodo record, click **New version**. This creates the empty draft the next tag fills.
 2. Tag the new version, as in [step 2](#tag-version).
 3. Click **Publish** on the new draft.
 
-Once a paper is published, every pull request to it gets a comment reminding the editors to click [**New version**](#new-version) on Zenodo, and the `editor-action-needed` label.
+Once a paper is published, every pull request to it gets a comment reminding the editors to click [**New version**](#click-new-version) on Zenodo, and the `editor-action-needed` label.
 
 (sandbox)=
 ## Test on the Zenodo sandbox
