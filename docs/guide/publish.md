@@ -1,7 +1,7 @@
 (guide-publish)=
-# Publish a version
+# Publish a paper on Zenodo
 
-Publishing a version deposits the paper on Zenodo, which gives it a DOI. An editor does it from the paper repository on GitHub once `main` holds the version to publish. The paper repository needs `ZENODO_TOKEN` set, or `ZENODO_TOKEN_SANDBOX` for a test (see [Secrets](add-paper.md#paper-secrets)).
+Publishing a paper deposits it on Zenodo, which gives it a DOI. An editor does it from the paper repository on GitHub once `main` holds the paper as it should be published, and again for each [new version](#new-version). The paper repository needs `ZENODO_TOKEN` set, or `ZENODO_TOKEN_SANDBOX` for a test (see [Secrets](add-paper.md#paper-secrets)).
 
 ## 1. Reserve the DOI
 
@@ -31,6 +31,7 @@ Open the draft on Zenodo, check it, and click **Publish**. The DOI resolves from
 
 To show the paper on the journal website, add its entry, with the DOI, to the journal's registry: see [List it on the journal website](add-paper.md#list-on-site).
 
+(new-version)=
 ## Publish a new version
 
 A published paper keeps one DOI for all its versions, and each version gets a DOI of its own as well. For each new version:
