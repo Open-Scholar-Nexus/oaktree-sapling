@@ -61,9 +61,9 @@ export function readEngineCoordinateRaw(
 }
 
 /** Reads the asset fields from `<instanceRoot>/brand/brand.yml` itself, not the merged config,
- *  so only the brand's own assets are resolved against it and a paper's relative path is left
- *  alone [R62]. Returns `site.options` (HTML) and `project.options.logo` (the PDF watermark);
- *  empty when absent. */
+ *  so only the brand's own assets are resolved against the journal root and a paper's relative
+ *  path is left alone [R62]. Returns `site.options` (HTML) and `project.options.logo` (the PDF
+ *  watermark); empty when absent. */
 export function readBrandAssetOptions(instanceRoot: string): {
   site: Record<string, string>;
   project: Record<string, string>;

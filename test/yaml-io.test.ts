@@ -108,8 +108,8 @@ describe('readBrandAssetOptions ([R62])', () => {
   it("reads the asset fields from the journal's brand.yml, for site and project", () => {
     // the fixture brand has a relative site logo and favicon, and a typst watermark
     expect(readBrandAssetOptions(fixtureInstance)).toEqual({
-      site: { logo: './logo.svg', favicon: './favicon.svg' },
-      project: { logo: './logo-watermark.svg' },
+      site: { logo: 'brand/logo.svg', favicon: 'brand/favicon.svg' },
+      project: { logo: 'brand/logo-watermark.svg' },
     });
   });
 

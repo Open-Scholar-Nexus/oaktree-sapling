@@ -27,8 +27,9 @@ export const TYPST_OUTPUT = '_build/exports/paper.pdf';
 /** The id of the typst export `paper-base.yml` declares, which the PDF download points at. */
 export const TYPST_EXPORT_ID = 'typst-pdf';
 
-/** Brand fields holding a path, which myst resolves against the paper root rather than the
- *  brand directory [R62], so compose makes them absolute against `<instanceRoot>/brand`. By
+/** Brand fields holding a path. They are written from the journal repo root, which is where
+ *  myst resolves them on the journal website, so compose makes them absolute against
+ *  `<instanceRoot>` for a paper, whose root is elsewhere [R62]. By
  *  namespace: `site.options.*` for the HTML theme (logo, logo_dark, favicon, style), and
  *  `project.options.logo` for the PDF watermark, which oak's template has no default for. One
  *  definition, so yaml-io and compose agree. */
@@ -57,7 +58,7 @@ export function isInstanceRelativeTemplate(value: string): boolean {
 }
 
 /** Makes a journal's template path absolute against the journal repo root, where
- *  `journal.yml` lives (brand assets use `brand/`). Only `./` and `../` values change; see
+ *  `journal.yml` lives. Only `./` and `../` values change; see
  *  {@link isInstanceRelativeTemplate}. Exported so `oak validate` checks the path compose emits
  *  [R62]. */
 export function resolveJournalTemplate(instanceRoot: string, value: string): string {
@@ -69,15 +70,15 @@ function needsAbsolutizing(value: string): boolean {
   return !isBrandAssetUrl(value);
 }
 
-/** Resolves one brand asset as compose does: a relative value against `<instanceRoot>/brand/`,
+/** Resolves one brand asset as compose does: a relative value against `<instanceRoot>`,
  *  URLs and absolute paths as they are. Exported so `oak validate` checks the path compose emits
  *  [R62]. */
 export function resolveBrandAssetPath(instanceRoot: string, value: string): string {
-  return needsAbsolutizing(value) ? join(instanceRoot, 'brand', value.replace(/^\.\//, '')) : value;
+  return needsAbsolutizing(value) ? join(instanceRoot, value) : value;
 }
 
 /** Makes the relative values in `raw` (one namespace of {@link BRAND_ASSET_KEYS}) absolute
- *  against `<instanceRoot>/brand`. */
+ *  against `<instanceRoot>`. */
 function absolutizeBrandAssets(
   instanceRoot: string,
   raw: Record<string, string> | undefined,
@@ -139,7 +140,7 @@ export interface ComposeInput {
   /** false leaves the PDF download out of the site, for `oak start` while there is no PDF. */
   pdfDownload?: boolean;
   /** The brand's asset fields ({@link BRAND_ASSET_KEYS}), read as written from
-   *  `brand/brand.yml`. compose makes relative values absolute against `<instanceRoot>/brand`,
+   *  `brand/brand.yml`. compose makes relative values absolute against `<instanceRoot>`,
    *  since myst resolves them against the paper root [R62]. Read from brand.yml itself so a
    *  paper's own relative asset is never taken for the brand's. */
   brandAssets?: { site?: Record<string, string>; project?: Record<string, string> };
@@ -272,8 +273,8 @@ export function compose(input: ComposeInput): ComposeResult {
     site.template = siteTemplate;
   }
 
-  // Brand assets [R62]: relative values made absolute against `brand/`, since MyST resolves them
-  // against the paper root, where the journal's files are not. HTML assets go in site.options,
+  // Brand assets [R62]: relative values made absolute against the journal root, since MyST
+  // resolves them against the paper root, where the journal's files are not. HTML assets go in site.options,
   // the PDF watermark in project.options.logo.
   if (instanceRoot && input.brandAssets) {
     const siteOptions = absolutizeBrandAssets(
