@@ -8,13 +8,17 @@ Each submission gets a repository of its own, created by an editor with `oak boo
 For a new paper, starting from the starter manuscript:
 
 ```bash
-oak bootstrap paper --repo <owner>/<paper-repo> --instance <owner>/<journal-repo> --edition 2026
+oak bootstrap paper --repo <owner>/<paper-repo> \
+  --instance <owner>/<journal-repo> \
+  --edition 2026
 ```
 
 For a paper the author already wrote in a repository of their own:
 
 ```bash
-oak bootstrap paper --repo <owner>/<paper-repo> --instance <owner>/<journal-repo> --edition 2026 \
+oak bootstrap paper --repo <owner>/<paper-repo> \
+  --instance <owner>/<journal-repo> \
+  --edition 2026 \
   --from https://github.com/<author>/<their-repo>
 ```
 
