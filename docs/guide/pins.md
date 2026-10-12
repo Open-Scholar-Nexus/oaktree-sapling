@@ -13,7 +13,7 @@ That pull request changes only `myst.yml`. To bring the workflows under `.github
 oak upgrade --repo <owner>/<paper-repo>
 ```
 
-`oak` prints a plan, then opens a pull request that sets the version and replaces those files with the release's own. A hand edit to them shows in that pull request's diff. `--to <tag>` picks a release other than the newest.
+`oak` prints a plan, then opens a pull request that sets the version and replaces those files with the release's own, keeping any code owner added to `CODEOWNERS`. A hand edit to them shows in that pull request's diff. `--to <tag>` picks a release other than the newest.
 
 (site-pins)=
 ## The journal website's versions
