@@ -808,3 +808,47 @@ describe('the id policy cannot be turned off by the journal [R119]', () => {
     expect(found?.severity).toBe('error');
   });
 });
+
+describe("the registry in runLayerA: one bad entry warns, the paper's own entry must match", () => {
+  const instanceWith = (registry: string): string => {
+    const dir = mkdtempSync(join(tmpdir(), 'oak-reg-'));
+    writeFileSync(join(dir, 'journal.yml'), 'name: J\nid_pattern: "^j-"\n');
+    mkdirSync(join(dir, 'registry'), { recursive: true });
+    writeFileSync(join(dir, 'registry', 'papers.yml'), registry);
+    return dir;
+  };
+  const run = (registry: string, id: string) =>
+    runLayerA(
+      {
+        paperRoot: mkdtempSync(join(tmpdir(), 'oak-paper-')),
+        instanceRoot: instanceWith(registry),
+        project: { id },
+        repo: 'me/this-paper',
+      },
+      allTrue,
+    );
+
+  it("skips another paper's bad entry with a warning and still checks the rest", () => {
+    const findings = run(
+      '- id: j-old\n  location: { repo: me/old-paper, path: . }\n' +
+        '- id: j-taken\n  location: me/other-paper\n',
+      'j-taken',
+    );
+    const skipped = findings.find((f) => f.check === 'registry-entry');
+    expect(skipped?.severity).toBe('warn');
+    expect(skipped?.message).toContain('write "location: me/old-paper"');
+    expect(findings.find((f) => f.check === 'id-uniqueness')?.severity).toBe('error');
+  });
+
+  it("fails when the paper's own entry has another id", () => {
+    const findings = run('- id: j-before\n  location: Me/This-Paper\n', 'j-after');
+    const stale = findings.find((f) => f.check === 'id-registered');
+    expect(stale?.severity).toBe('error');
+    expect(stale?.message).toContain('"j-before"');
+  });
+
+  it('passes when the own entry matches', () => {
+    const findings = run('- id: j-now\n  location: me/this-paper\n', 'j-now');
+    expect(findings.filter((f) => f.klass === 'identity')).toEqual([]);
+  });
+});

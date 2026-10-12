@@ -13,10 +13,15 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { parse } from 'yaml';
 import {
   JournalConfig,
-  Registry,
   checkIdShape,
   checkIdUniqueness,
+  checkOwnEntryId,
+  locationRepo,
+  readRegistry,
+  sameRepo,
   type IdCheckResult,
+  type Registry,
+  type RegistryEntry,
 } from './schema.js';
 import { dirname, isAbsolute, join } from 'node:path';
 import { resolveBrandAssetPath, isBrandAssetUrl, isInstanceRelativeTemplate } from './compose.js';
@@ -275,19 +280,33 @@ function loadJournal(instanceRoot: string | null, probes: FsProbes): JournalConf
   return emptyJournal();
 }
 
-function loadRegistry(instanceRoot: string | null, probes: FsProbes): Registry | null {
-  if (instanceRoot) {
-    const p = join(instanceRoot, 'registry', 'papers.yml');
-    if (probes.existsProbe(p)) return Registry.parse(parse(readFileSync(p, 'utf8')));
-  }
-  return null;
+/** The registry's valid entries, or null when the journal repo has none, plus a warning for
+ *  each entry skipped (see {@link readRegistry}). */
+function loadRegistry(
+  instanceRoot: string | null,
+  probes: FsProbes,
+): { registry: Registry | null; warnings: string[] } {
+  if (!instanceRoot) return { registry: null, warnings: [] };
+  const p = join(instanceRoot, 'registry', 'papers.yml');
+  if (!probes.existsProbe(p)) return { registry: null, warnings: [] };
+  const read = readRegistry(parse(readFileSync(p, 'utf8')));
+  if (!read) return { registry: [], warnings: [msg.validate.registryNotList] };
+  const warnings = read.skipped.map((e) =>
+    e.reason === 'location'
+      ? msg.validate.registryLocationSkipped(e.label, e.hint)
+      : msg.validate.registryEntrySkipped(e.label),
+  );
+  return { registry: read.entries, warnings };
 }
 
-/** The paper's own registry entry, found by its repo, so the uniqueness check skips it.
- *  Without a repo it cannot be found, so callers pass one (environment or git origin). */
-function findSelf(registry: Registry | null, repo: string | null): { repo: string } | undefined {
-  if (!registry || !repo) return undefined;
-  return registry.some((x) => x.location.repo === repo) ? { repo } : undefined;
+/** The paper's own registry entries, found by its repo. Without a repo they cannot be found,
+ *  so callers pass one (environment or git origin). */
+function findSelf(registry: Registry | null, repo: string | null): RegistryEntry[] {
+  if (!registry || !repo) return [];
+  return registry.filter((e) => {
+    const entryRepo = locationRepo(e.location);
+    return !!entryRepo && sameRepo(entryRepo, repo);
+  });
 }
 
 /* ---- overlapping keys between layers ([R72]) ---------------------------- */
@@ -419,7 +438,10 @@ export function runLayerA(
   };
 
   const loaded = loadJournal(instanceRoot, probes);
-  const registry = loadRegistry(instanceRoot, probes);
+  const { registry, warnings: registryWarnings } = loadRegistry(instanceRoot, probes);
+  for (const message of registryWarnings) {
+    findings.push({ check: 'registry-entry', severity: 'warn', message, klass: 'config' });
+  }
 
   // No journal settings is not a pass: every id rule and Layer B check would do nothing [R116].
   if (loaded === null) {
@@ -459,13 +481,15 @@ export function runLayerA(
         id_pattern: journal.id_pattern,
       }),
     );
+    const own = findSelf(registry, repo);
     add(
       'id-uniqueness',
       'identity',
-      checkIdUniqueness(project.id, registry, findSelf(registry, repo), {
+      checkIdUniqueness(project.id, registry, own.length && repo ? { repo } : undefined, {
         selfIdentifiable: repo != null,
       }),
     );
+    add('id-registered', 'identity', checkOwnEntryId(project.id, own));
   }
 
   for (const r of checkLayout(paperRoot, probes)) {

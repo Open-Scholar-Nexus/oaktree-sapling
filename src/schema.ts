@@ -109,37 +109,58 @@ export const JournalConfig = z
 export type JournalConfig = z.infer<typeof JournalConfig>;
 
 /* --------------------------------------------------------------------------
- * 3. registry/papers.yml: the paper registry (additive-only)
+ * 3. registry/papers.yml: the paper registry
  *
  * Two coordinates:
  *   - id       → the deposit and dedup key, myst's project.id [R7]
- *   - location → {repo, path}, where the paper lives [design §9]
- * An entry may carry a `slug`; nothing reads it.
+ *   - location → where the paper lives, read by {@link parseLocation} [design §9]
+ * An entry may carry `slug`, `edition` and `doi`; nothing reads them. The website reads the
+ * edition and the DOI from the paper's own `myst.yml`.
  * ------------------------------------------------------------------------ */
 
-export const PaperLocation = z
-  .object({
-    /** owner/repo on GitHub. */
-    repo: z.string().min(1),
-    /** path within the repo to the paper project root; '.' for repo=paper. */
-    path: z.string().default('.'),
-  })
-  .loose();
+/** A registry `location`, read: a GitHub repository with the paper at its root, or a folder in
+ *  the journal repo, relative to its root. */
+export type PaperLocation = { repo: string } | { path: string };
+
+const GITHUB_REPO = /^[A-Za-z0-9][A-Za-z0-9-]*\/(?!\.\.?$)[A-Za-z0-9._-]+$/;
+
+/**
+ * Reads a registry `location`, or returns null. `owner/name` is a GitHub repository; a `./` or
+ * `../` value is a folder in the journal repo, the prefix rule `typst_template` uses [R76].
+ * `plugins/gallery.mjs` keeps a copy, held to this one by `location rule parity` in
+ * `test/gallery.test.ts`.
+ */
+export function parseLocation(value: unknown): PaperLocation | null {
+  if (typeof value !== 'string') return null;
+  if (/^\.\.?\//.test(value)) return { path: value };
+  if (GITHUB_REPO.test(value)) return { repo: value };
+  return null;
+}
+
+/** The repository of a `location`, or null for a folder in the journal repo or a bad value. */
+export function locationRepo(value: unknown): string | null {
+  const location = parseLocation(value);
+  return location && 'repo' in location ? location.repo : null;
+}
+
+/** GitHub repository names compare case-insensitively. */
+export function sameRepo(a: string, b: string): boolean {
+  return a.toLowerCase() === b.toLowerCase();
+}
 
 export const RegistryEntry = z
   .object({
     id: z.string().min(1),
+    location: z.string().refine((v) => parseLocation(v) !== null),
     slug: z.string().min(1).optional(),
-    location: PaperLocation,
-    /** Concept DOI; absent until the paper is deposited. */
+    edition: EDITION_ID.optional(),
     doi: z.string().optional(),
     /**
      * Where the paper is published, when that is not `https://<owner>.github.io/<name>`, which
-     * the gallery otherwise derives from `location.repo`. Display data such as the title is
+     * the gallery otherwise derives from the location. Display data such as the title is
      * still fetched from the paper, never stored here [R197].
      */
     site_url: z.string().optional(),
-    edition: EDITION_ID,
   })
   .loose();
 export type RegistryEntry = z.infer<typeof RegistryEntry>;
@@ -218,7 +239,11 @@ export function checkIdUniqueness(
       message: msg.validate.idRegistryUnavailable(id),
     };
   }
-  const clash = registry.find((e) => e.id === id && e.location.repo !== self?.repo);
+  const isSelf = (e: RegistryEntry) => {
+    const repo = locationRepo(e.location);
+    return !!self && !!repo && sameRepo(repo, self.repo);
+  };
+  const clash = registry.find((e) => e.id === id && !isSelf(e));
   if (clash) {
     // Without the repo (no GITHUB_REPOSITORY, a checkout with no matching origin) the
     // paper's own entry cannot be told from a duplicate, so this only warns. CI always sets it.
@@ -226,16 +251,61 @@ export function checkIdUniqueness(
       return {
         ok: false,
         severity: 'warn',
-        message: msg.validate.idMaybeOwnEntry(id, clash.location.repo),
+        message: msg.validate.idMaybeOwnEntry(id, clash.location),
       };
     }
     return {
       ok: false,
       severity: 'error',
-      message: msg.validate.idTaken(id, clash.location.repo),
+      message: msg.validate.idTaken(id, clash.location),
     };
   }
   return { ok: true };
+}
+
+/** Check C: the paper's own registry entries carry its id, so check B tests the id the paper
+ *  has. `own` holds the entries whose location is the paper's repo. */
+export function checkOwnEntryId(id: string, own: RegistryEntry[]): IdCheckResult {
+  const stale = own.find((e) => e.id !== id);
+  if (!stale) return { ok: true };
+  return {
+    ok: false,
+    severity: 'error',
+    message: msg.validate.idRegistryMismatch(stale.id, id),
+  };
+}
+
+/** An entry {@link readRegistry} skipped: its id, or its position from 1, and why. */
+export type SkippedEntry = { label: string; reason: 'location' | 'other'; hint?: string };
+
+/**
+ * Splits a parsed `registry/papers.yml` into its valid entries and the ones it skips, so one bad
+ * entry does not stop every paper's checks. Returns null when the file is not a list. An entry
+ * in the `{ repo, path: . }` form gets the string to write as its `hint`.
+ */
+export function readRegistry(raw: unknown): { entries: Registry; skipped: SkippedEntry[] } | null {
+  const list = raw ?? [];
+  if (!Array.isArray(list)) return null;
+  const entries: Registry = [];
+  const skipped: SkippedEntry[] = [];
+  list.forEach((value: unknown, i) => {
+    const parsed = RegistryEntry.safeParse(value);
+    if (parsed.success) {
+      entries.push(parsed.data);
+      return;
+    }
+    const obj = (value ?? {}) as Record<string, unknown>;
+    const label = typeof obj.id === 'string' && obj.id ? obj.id : `#${i + 1}`;
+    if (parseLocation(obj.location) === null) {
+      const old = (obj.location ?? {}) as Record<string, unknown>;
+      const atRoot = old.path === undefined || old.path === '.';
+      const hint = atRoot ? locationRepo(old.repo) : null;
+      skipped.push({ label, reason: 'location', ...(hint ? { hint } : {}) });
+    } else {
+      skipped.push({ label, reason: 'other' });
+    }
+  });
+  return { entries, skipped };
 }
 
 /* --------------------------------------------------------------------------

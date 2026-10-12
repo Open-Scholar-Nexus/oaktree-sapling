@@ -1,9 +1,5 @@
 # Fixture registry (design §9). `id` is the deposit/dedup key (myst-native project.id);
-# `location` is where the paper lives (repo + path, so a paper can move or share a repo
-# without changing its identity). Additive-only ([R197]).
+# `location` is where the paper lives (an `owner/name` GitHub repository, or a `./path`
+# folder in the journal repo).
 - id: fixture-2026-sample-paper
-  location:
-    repo: open-scholar-nexus/fixture-sample-paper
-    path: .
-  edition: fixture-edition
-  # doi absent until deposited
+  location: open-scholar-nexus/fixture-sample-paper
