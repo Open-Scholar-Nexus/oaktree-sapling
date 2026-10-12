@@ -138,8 +138,14 @@ export function paperUrls(entry) {
   };
 }
 
-/** The Zenodo sandbox's DOI prefix. A sandbox DOI never resolves, so no card shows one. */
+/** The Zenodo sandbox's DOI prefix. A sandbox DOI never resolves, so its paper is left out. */
 export const SANDBOX_DOI_PREFIX = '10.5072/';
+
+/** The paper's sandbox DOI, from its fetched `myst.yml`, or undefined. */
+export function sandboxDoi(config) {
+  const doi = config?.project?.doi;
+  return typeof doi === 'string' && doi.startsWith(SANDBOX_DOI_PREFIX) ? doi : undefined;
+}
 
 /**
  * One card node, PURE: (registry entry, that paper's fetched myst config) → mdast. Title,
@@ -151,10 +157,7 @@ export function cardFrom(entry, config, opts = {}) {
   const project = config?.project ?? {};
   const title = project.title || entry.id;
   const keywords = project.keywords ?? [];
-  const doi =
-    typeof project.doi === 'string' && !project.doi.startsWith(SANDBOX_DOI_PREFIX)
-      ? project.doi
-      : undefined;
+  const doi = typeof project.doi === 'string' ? project.doi : undefined;
 
   const children = [{ type: 'header', children: [{ type: 'text', value: title }] }];
   if (opts.thumbnail !== false) {
@@ -239,14 +242,23 @@ export function clearCache() {
 /**
  * The nodes one `paper-cards` block becomes: a grid of cards, or "No papers found." Fetches
  * every registered paper's `myst.yml`, since the edition is in it, and probes thumbnails only
- * for the papers shown. Each card warns when its picture is missing, or when its DOI is a
- * sandbox one.
+ * for the papers shown. A paper with a sandbox DOI is left out, with a warning; a card with no
+ * picture warns too.
  */
 export async function renderCards(registry, opts = {}, fetchImpl = fetch) {
   const papers = await Promise.all(
     registry.map(async (entry) => ({ entry, config: await cachedPaperConfig(entry, fetchImpl) })),
   );
-  const shown = selectEntries(papers, { edition: opts.edition });
+  const shown = selectEntries(papers, { edition: opts.edition }).filter(({ entry, config }) => {
+    const doi = sandboxDoi(config);
+    if (doi) {
+      console.warn(
+        `paper-cards: "${entry.id}" has a Zenodo sandbox DOI (${doi}), so it is left out of ` +
+          `the list; run Prepare Zenodo deposit with the sandbox unticked and merge its pull request.`,
+      );
+    }
+    return !doi;
+  });
   if (shown.length === 0) {
     return { type: 'paragraph', children: [{ type: 'text', value: 'No papers found.' }] };
   }
@@ -257,12 +269,6 @@ export async function renderCards(registry, opts = {}, fetchImpl = fetch) {
         console.warn(
           `paper-cards: no image at ${paperUrls(entry).thumbUrl} for ` +
             `"${entry.id}"; its card has no picture.`,
-        );
-      }
-      const doi = config?.project?.doi;
-      if (typeof doi === 'string' && doi.startsWith(SANDBOX_DOI_PREFIX)) {
-        console.warn(
-          `paper-cards: "${entry.id}" has a Zenodo sandbox DOI (${doi}); its card shows none.`,
         );
       }
       return cardFrom(entry, config, { thumbnail });

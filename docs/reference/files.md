@@ -40,7 +40,7 @@ The papers the journal website lists, one entry each, in the order the website s
 | `location` | | Where the paper is. Required. `owner/name` is a GitHub repository, with the paper at its root. A `./` or `../` path is a folder in the journal repository, relative to its root; the website cannot list one yet. |
 | `site_url` | `https://<owner>.github.io/<name>` | The paper's website, when it is published somewhere else. |
 
-The website reads each paper's title, keywords, edition and DOI from the paper's `myst.yml`. An entry oak cannot read is skipped by the Journal checks, with a warning, and fails the website build, naming the entry.
+The website reads each paper's title, keywords, edition and DOI from the paper's `myst.yml`. It lists every entry except a paper whose DOI is a Zenodo sandbox one (`10.5072/…`), which it leaves out with a warning in the build log. A paper with no DOI is listed. An entry oak cannot read is skipped by the Journal checks, with a warning, and fails the website build, naming the entry.
 
 (file-pages-index)=
 ## pages/index.md

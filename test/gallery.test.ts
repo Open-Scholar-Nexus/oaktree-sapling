@@ -4,7 +4,7 @@
  * myst or the network. Whether a card renders needs an HTML build, which needs the theme from
  * the network, so it is not tested here.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -161,11 +161,6 @@ describe('cardFrom', () => {
     expect(JSON.stringify(card)).not.toContain('doi.org');
   });
 
-  it('leaves out a Zenodo sandbox DOI, which never resolves', () => {
-    const card = cardFrom(entry(), config({ doi: '10.5072/zenodo.612991' }));
-    expect(kinds(card)).not.toContain('footer');
-  });
-
   it('omits keywords and DOI when there are none', () => {
     const card = cardFrom(entry(), config({ keywords: undefined }));
     expect(kinds(card)).toEqual(['header', 'image']);
@@ -264,6 +259,27 @@ describe('renderCards: one fetch per paper per build', () => {
     expect(all.children).toHaveLength(2);
     expect(calls.filter((c) => c.startsWith('GET'))).toHaveLength(2);
     expect(calls.filter((c) => c.startsWith('HEAD'))).toHaveLength(2);
+  });
+
+  it('leaves out a paper with a Zenodo sandbox DOI, with a warning, and lists one with no DOI or a real one', async () => {
+    clearCache();
+    const { calls, fetchImpl } = counting();
+    papers.s = 'project:\n  title: S\n  doi: 10.5072/zenodo.612991\n';
+    papers.r = 'project:\n  title: R\n  doi: 10.5281/zenodo.123\n';
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const out = await renderCards(
+      [...registry, entry({ id: 's', location: 'me/s' }), entry({ id: 'r', location: 'me/r' })],
+      {},
+      fetchImpl,
+    );
+    expect(out.children.map((c: any) => c.children[0].children[0].value)).toEqual(['A', 'B', 'R']);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('"s" has a Zenodo sandbox DOI'));
+    expect(calls).not.toContain(
+      'HEAD https://raw.githubusercontent.com/me/s/HEAD/thumbnails/thumbnail.png',
+    );
+    warn.mockRestore();
+    delete papers.s;
+    delete papers.r;
   });
 
   it('says "No papers found." when no paper is in the edition', async () => {

@@ -16,7 +16,7 @@ The **Journal site** workflow builds it and deploys it to GitHub Pages on every 
 :::
 ```
 
-`paper-cards` shows one card per paper in `registry/papers.yml`, in the order of the file: the title, keywords and DOI, read from the paper's `myst.yml` at build time, and the thumbnail. A Zenodo sandbox DOI is left off the card. The card links to the paper's website. [Publish a paper](publish.md#list-on-site) covers the registry entry.
+`paper-cards` shows one card per paper in `registry/papers.yml`, in the order of the file: the title, keywords and DOI, read from the paper's `myst.yml` at build time, and the thumbnail. A paper with a Zenodo sandbox DOI is left out, with a warning in the build log. The card links to the paper's website. [Publish a paper](publish.md#list-on-site) covers the registry entry.
 
 With `:edition:`, it shows only the papers whose `myst.yml` sets that edition, for a page per edition:
 
