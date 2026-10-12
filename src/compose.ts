@@ -46,7 +46,7 @@ export function isBrandAssetUrl(value: string): boolean {
 
 /**
  * Whether a journal's `typst_template:` is a path in the journal repo, rather than a myst
- * template name or a URL [R74]. A bare string is ambiguous (`lapreprint-typst` is both a valid
+ * template name or a URL [R76]. A bare string is ambiguous (`lapreprint-typst` is both a valid
  * name and a valid directory), and the brand-asset rule would take it for a path, so this rule is
  * explicit: only a `./` or `../` value is a path, and everything else goes to myst unchanged.
  * Checking the disk instead would turn a mistyped path into a name lookup. `oak validate` warns

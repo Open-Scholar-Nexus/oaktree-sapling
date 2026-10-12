@@ -1,4 +1,4 @@
-# Fixture INSTANCE-CONFIG manifest (design §3). Data only: the tenant's journal
+# Fixture INSTANCE-CONFIG manifest. Data only: the tenant's journal
 # identity. Additive-only per [R197]: an older engine ignores unknown keys.
 name: Fixture Journal
 url: https://fixture.example.org

@@ -49,7 +49,7 @@ export interface MystEdge {
   start(dir: string, opts: StartOpts, configFile?: string): Promise<void>;
   /**
    * Loads and processes the project, then runs `fn` with the session, for the editorial checks
-   * [R59]. They need processed mdast, not a build.
+   * They need processed mdast, not a build.
    */
   withProjectSession<T>(
     dir: string,

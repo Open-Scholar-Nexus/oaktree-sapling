@@ -16,13 +16,15 @@ The journal repository holds the journal-level configuration, such as the brandi
 
 So adding a paper means adding a repository. There is no server: each paper's own CI does the work, which is why a published paper keeps building after the journal moves on. The cost is that a change to how papers build has to reach every paper repository, which is what `oak upgrade` is for.
 
-<!-- One repository per paper is the only topology the engine builds today, and it is what this page describes. A co-located tier, where a single repository holds the journal and many papers at once, is designed but not built ([R188]). It is the part of this model most likely to be revisited. -->
+<!-- One repository per paper is the only topology the engine builds today, and it is what this page describes. A co-located tier, where a single repository holds the journal and many papers at once, is designed but not built. It is the part of this model most likely to be revisited. -->
 
 (processing-myst)=
 ## Processing MyST markdown
 
+(design-7a)=
 [MyST](https://mystmd.org) does the rendering: it converts markdown into an AST, and is able to render that to a website or a PDF. See [their docs](https://mystmd.org/guide) to learn more. Oaktree-sapling adds everything around a build that a single paper cannot know by itself[^around], calling MyST as a library.
 
+(design-6)=
 Most of what it adds is configuration, assembled at build time. A paper's `myst.yml` is an ordinary MyST project file, and its one engine-specific line names the engine version, under `project.options.oaktree-sapling.version`.
 
 Everything else is worked out when the paper builds. `oak build` assembles this chain:
@@ -38,6 +40,7 @@ Both external repositories are fetched before the engine runs: oaktree-sapling a
 
 [^pinning]: The journal repository is deliberately not pinned. A new logo or an extra editorial check reaches every paper on its next build, with nobody re-pinning anything. The price is that rebuilding a published paper does not reproduce the original build, because it picks up the journal's settings as they stand today. 
 
+(r71)=
 The assembled result is written to **`myst.oak.yml`**, next to the paper's `myst.yml`, and MyST is pointed at that file instead[^compose]. It opens with a banner saying it is generated, the paper template gitignores it, and it is rewritten on every build.[^cleanup]
 
 ## The pages here

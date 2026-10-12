@@ -1,5 +1,5 @@
 /**
- * deploy-preview and notify [R69], with fakes for Cloudflare, git and gh: a failed Cloudflare
+ * deploy-preview and notify, with fakes for Cloudflare, git and gh: a failed Cloudflare
  * deploy falls back to an artifact link [R16], `.pr-number` is removed before serving [R26],
  * Cloudflare settings come from journal.yml [R27], and the new-version reminder [R23].
  */

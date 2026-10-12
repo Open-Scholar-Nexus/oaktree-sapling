@@ -120,7 +120,7 @@ function gh(args: string[], opts: { input?: string; cwd?: string; quiet?: boolea
 }
 
 /** An absent ref: the refs API answers 422 "Reference does not exist" where most endpoints say
- *  404, so every ref delete passes this to {@link ghOk} [R149]. */
+ *  404, so every ref delete passes this to {@link ghOk}. */
 export const ABSENT_REF = /Reference does not exist/i;
 
 /** The answer when approving a run that needs no approval [R150]. */
@@ -155,7 +155,7 @@ function ghOkAs(token: string, args: string[], alsoAbsent?: RegExp): boolean {
 }
 
 /** `owner/name`, the shape every verb's usage line promises. Checked because the value reaches
- *  `gh` as a positional argument, where a leading dash is read as an option [R138]. */
+ *  `gh` as a positional argument, where a leading dash is read as an option. */
 const REPO_NAME = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/;
 
 export function assertRepoName(repo: string): string {
@@ -328,14 +328,14 @@ export function openFailureIssue(repoRoot: string, title: string, body: string):
 }
 
 /* --------------------------------------------------------------------------
- * For preview.ts: deploy-preview and notify [R69]
+ * For preview.ts: deploy-preview and notify
  * ------------------------------------------------------------------------ */
 
 /** The real pull request calls for `cmdDeployPreview` and the new-version reminder. A sticky
  *  comment carries a hidden HTML marker, so a rerun edits it in place. */
 export const realGhPr: GhPr = {
   sticky(repoRoot, prNumber, header, body) {
-    // Throws on failure, so check-post never reports a comment it did not post [R69].
+    // Throws on failure, so check-post never reports a comment it did not post.
     const repo = originRepo(repoRoot);
     if (!repo) throw new Error(msg.workflow.noOriginRepo(repoRoot));
     const marker = msg.stickyMarker(header);

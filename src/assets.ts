@@ -15,7 +15,7 @@ export const THEME_VERSION = 'v0.2.0';
  */
 export const DOCS_BASE = 'https://scholar.nexus/oaktree-sapling';
 
-/** A typst template zip on the release [R175]. No release attaches one yet; it is only reached
+/** A typst template zip on the release. No release attaches one yet; it is only reached
  *  when no `templates/typst` sits beside the build. */
 export function typstTemplateUrl(engineRepo: string, engineVersion: string): string {
   return `https://github.com/${engineRepo}/releases/download/${engineVersion}/typst-template.zip`;

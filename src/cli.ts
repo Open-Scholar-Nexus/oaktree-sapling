@@ -53,7 +53,7 @@ function engineRoot(): string {
  * another `--flag`) throws, since several callers read `flag(...) ?? process.env.X` and a
  * missing value must not fall through to the environment.
  *
- * An empty value is returned as it is [R147]: `??` keeps `''`, and some flags mean something by
+ * An empty value is returned as it is: `??` keeps `''`, and some flags mean something by
  * it (`--base-url ""` serves at the root). Flags where empty is wrong check it themselves.
  */
 function flag(argv: string[], name: string): string | undefined {
@@ -116,7 +116,7 @@ async function resolveInstanceRoot(
 ): Promise<{ root: string | null } | { error: string }> {
   if (has(argv, 'no-instance')) return { root: null };
   const explicit = flag(argv, 'instance');
-  // Refused, since the error below would ask for the flag that was just passed [R147].
+  // Refused, since the error below would ask for the flag that was just passed.
   if (explicit === '') throw new UserError(msg.flagNeedsValue('instance'));
   if (explicit) return { root: resolve(explicit) };
   if (existsSync(join(paperRoot, 'journal.yml'))) return { root: paperRoot };
@@ -241,7 +241,7 @@ function startOptsFrom(argv: string[]): StartOpts {
  */
 async function cmdStart(argv: string[]): Promise<number> {
   const paperRoot = resolve(flag(argv, 'paper') ?? '.');
-  // Parsed before anything else, so a typo costs no build [R131].
+  // Parsed before anything else, so a typo costs no build.
   const startOpts = startOptsFrom(argv);
   const { createMystEdge } = await import('./myst.js');
   const edge = createMystEdge();
@@ -393,7 +393,7 @@ async function cmdDeposit(argv: string[]): Promise<number> {
   const sandbox = has(rest, 'sandbox');
   const siteUrl = flag(rest, 'site-url') ?? process.env.SITE_URL;
   // The environment picks the token, as in `oak release` [R102]; a sandbox run never uses the
-  // production one [R133].
+  // production one [R102].
   const token =
     flag(rest, 'token') ?? (sandbox ? process.env.ZENODO_TOKEN_SANDBOX : process.env.ZENODO_TOKEN);
   if (!token) {

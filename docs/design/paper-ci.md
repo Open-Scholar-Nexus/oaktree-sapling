@@ -13,6 +13,7 @@ Two terms recur below. A flow that needs a token runs as two workflows: **Stage 
 :::{tip} In short
 An author with push access opens a pull request from a branch. Stage 1 runs their content on a GitHub-hosted runner, a fresh machine discarded after the job, with a read-only token. Their pull request reaches `main` through the `protect-main` rule, which requires the editorial checks to pass and requires an editor's review for any change under `CODEOWNERS`. The author's code runs only in jobs that hold no secret, and every job that holds a secret runs code from `main` or from an editor's `v*` tag.
 
+(r83)=
 A pull request from a fork, the default for an outside contributor, adds a step before anything runs: GitHub holds the run for a maintainer's approval when the contributor has never had anything merged into the repository. That is GitHub's default for a public repository, `oak bootstrap` leaves it there, and the [runbook](src:src/messages.ts#L427-L430) tells the editor to expect the approval click. Once approved, the fork's run builds like any other, and any edit it makes to a gated file needs an editor's review before it can merge. The checks comment also [flags](src:src/checks.ts#L199-L206) a pull request that touches `.github/`, `CODEOWNERS` or `paper-environment.yml`.
 :::
 
@@ -23,6 +24,8 @@ A pull request from a fork, the default for an outside contributor, adds a step 
 (design-paper-ci-files)=
 
 ### The files
+
+(r194)=
 
 - [`ci.yml`](src:templates/paper/.github/workflows/ci.yml) and [`preview-deploy.yml`](src:templates/paper/.github/workflows/preview-deploy.yml) are the two stages of the site preview. On a push to `main`, `ci.yml` also deploys to GitHub Pages.
 - [`check.yml`](src:templates/paper/.github/workflows/check.yml) and [`check-post.yml`](src:templates/paper/.github/workflows/check-post.yml) are the two stages of the editorial checks.
@@ -75,7 +78,7 @@ A branch pull request goes through the same two stages. A check then behaves the
 
 (r207)=
 
-Branches cannot reach the tokens at all. A repository secret is readable by every workflow on every branch, and an author with push access can push a branch carrying a workflow of their own, so `oak bootstrap` stores every secret in a GitHub environment instead. The Cloudflare secrets live on `preview` and the Zenodo tokens on `zenodo-prepare`, both admitting only `main`, and on `zenodo-publish`, which admits only `v*` tags; only editors can push one. Each job that reads a secret declares its environment, and a job on any other ref is refused before it starts. Re-running `oak bootstrap` with the values sets them on the environments and deletes the repository-level copies.
+Branches cannot reach the tokens at all. A repository secret is readable by every workflow on every branch, and an author with push access can push a branch carrying a workflow of their own, so `oak bootstrap` stores every secret in a GitHub environment instead. The Cloudflare secrets live on `preview` and the Zenodo tokens on `zenodo-prepare`, both admitting only `main`, and on `zenodo-publish`, which admits only `v*` tags; only editors can push one. Each job that reads a secret declares its environment, and a job on any other ref is refused before it starts. Re-running `oak bootstrap` with the values sets them on the environments and deletes the repository-level copies of those secrets.
 
 Inside those jobs the paper's code never runs. `publish.yml` builds in a job with no secrets and hands the output to the deposit job, which runs `oak release --no-build`. The action installs `paper-environment.yml` only when a job asks, and only the build jobs ask. And the engine runs `wrangler` from an empty directory, so a `.npmrc` or `node_modules` in the paper cannot choose which wrangler receives the Cloudflare token.
 
@@ -94,6 +97,7 @@ The artifact carries the built site or the checks report, plus a file with the p
 - **Shape.** Digits, anchored to the whole string, by the rule for [values written to `$GITHUB_OUTPUT`](#r155).
 - **Ownership.** The API is asked which commit that pull request heads at, and the answer must be the commit this run built. A fork that writes a well-formed number belonging to somebody else's open pull request would otherwise have the repository comment on that pull request, with a verdict or a preview link the fork chose.
 
+(r26)=
 The engine [checks the shape again](src:src/preview.ts#L100-L119) when it reads the number, because the value also becomes part of a `gh api` path, and deletes the file before deploying.
 
 (r154)=
