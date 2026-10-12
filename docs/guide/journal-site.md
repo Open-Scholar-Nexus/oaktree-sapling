@@ -16,9 +16,9 @@ The **Journal site** workflow builds it and deploys it to GitHub Pages on every 
 :::
 ```
 
-`paper-cards` shows one card per paper in `registry/papers.yml`, in the order of the file: the title and keywords, read from the paper's `myst.yml` at build time, the thumbnail, and the DOI from the registry. The card links to the paper's website. [Publish a paper](publish.md#list-on-site) covers the registry entry.
+`paper-cards` shows one card per paper in `registry/papers.yml`, in the order of the file: the title, keywords and DOI, read from the paper's `myst.yml` at build time, and the thumbnail. A paper with a Zenodo sandbox DOI is left out, with a warning in the build log. The card links to the paper's website. [Publish a paper](publish.md#list-on-site) covers the registry entry.
 
-With `:edition:`, it shows the papers of one edition only, for a page per edition:
+With `:edition:`, it shows only the papers whose `myst.yml` sets that edition, for a page per edition:
 
 ```markdown
 :::{paper-cards}
@@ -26,9 +26,9 @@ With `:edition:`, it shows the papers of one edition only, for a page per editio
 :::
 ```
 
-The website reads each paper when it builds. To show a change to a paper's title or thumbnail, run **Journal site** again from the **Actions** tab (**Run workflow**).
+The website reads each paper when it builds. To show a change to a paper's `myst.yml` or thumbnail, run **Journal site** again from the **Actions** tab (**Run workflow**).
 
-A paper whose `myst.yml` cannot be fetched fails the build, for example a private repository or a wrong `location.repo`; the error names the entry. A paper with no `thumbnails/thumbnail.png` gets a card without a picture.
+A paper whose `myst.yml` cannot be fetched fails the build, for example a private repository or a wrong `location`; the error names the entry. A paper with no `thumbnails/thumbnail.png` gets a card without a picture.
 
 ## Previewing it
 
@@ -37,7 +37,7 @@ npm install
 oak start
 ```
 
-`npm install` fetches `js-yaml`, which the `paper-cards` plugin needs to read the registry, once per clone.
+`npm install` fetches `js-yaml`, which the `paper-cards` plugin needs to read the registry, once per clone. `oak start` reads each paper once, when it starts; restart it to show a change to a paper.
 
 ## A journal without a website
 

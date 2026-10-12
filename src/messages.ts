@@ -697,11 +697,26 @@ export const validate = {
     `${docsUrl(DOCS.idPattern)}`,
   idRegistryUnavailable: (id: string): string =>
     `registry unavailable; cannot check id "${id}" for uniqueness`,
-  idMaybeOwnEntry: (id: string, repo: string, slug: string): string =>
-    `paper id "${id}" is registered to ${repo} (slug ${slug}); cannot confirm it is not this ` +
+  idMaybeOwnEntry: (id: string, repo: string): string =>
+    `paper id "${id}" is registered to ${repo}; cannot confirm it is not this ` +
     `paper's own entry without a repo context`,
-  idTaken: (id: string, repo: string, slug: string): string =>
-    `paper id "${id}" already registered to ${repo} (slug ${slug})`,
+  idTaken: (id: string, repo: string): string => `paper id "${id}" already registered to ${repo}`,
+  idRegistryMismatch: (registeredId: string, id: string): string =>
+    `registry/papers.yml lists this repository as paper "${registeredId}", but myst.yml has ` +
+    `project.id "${id}"; change one so they match`,
+  registryNotList:
+    'registry/papers.yml is not a list of entries, so paper ids were not checked against it: ' +
+    docsUrl(DOCS.fileRegistry),
+  registryLocationSkipped: (label: string, hint?: string): string =>
+    `registry/papers.yml entry "${label}" has a location oak cannot read, so the id checks ` +
+    `skipped it; ` +
+    (hint
+      ? `write "location: ${hint}"`
+      : 'write "owner/name" for a GitHub repository or "./path" for a folder in the journal ' +
+        'repository'),
+  registryEntrySkipped: (label: string): string =>
+    `registry/papers.yml entry "${label}" is not a valid entry, so the id checks skipped it: ` +
+    docsUrl(DOCS.fileRegistry),
 
   // ── thumbnail / typst template hygiene ─────────────────────────────────────────────────
   thumbnailUnresolved: (thumbnail: string): string =>

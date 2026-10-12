@@ -36,13 +36,10 @@ The journal website shows the papers listed in the journal repository's `registr
 
 ```yaml
 - id: oak-2026-tidal-flats
-  slug: tidal-flats
-  location: { repo: <owner>/<paper-repo>, path: . }
-  edition: "2026"
-  doi: 10.5281/zenodo.1234567
+  location: <owner>/<paper-repo>
 ```
 
-`id` is the paper's `project.id`, and the Journal checks of every paper use this list to keep ids unique. The website reads each paper's title, keywords and thumbnail from its repository, so the paper repository has to be public. See [the registry file](../reference/files.md#file-registry) for every field.
+`id` is the paper's `project.id`, and the Journal checks of every paper use this list to keep ids unique. `location` is the paper's GitHub repository. The website reads each paper's title, keywords, edition, DOI and thumbnail from its repository, so the paper repository has to be public. See [the registry file](../reference/files.md#file-registry) for every field.
 
 (new-version)=
 ## Publish a new version
@@ -62,7 +59,7 @@ The run opens an issue titled **Zenodo publish failed for** the tag, labelled `z
 
 (sandbox)=
 :::{dropdown} Testing on the Zenodo sandbox
-With **Use the Zenodo sandbox** ticked, the DOI is a sandbox one (`10.5072/zenodo.…`), and tags deposit on [sandbox.zenodo.org](https://sandbox.zenodo.org) with `ZENODO_TOKEN_SANDBOX`. A sandbox DOI never resolves.
+With **Use the Zenodo sandbox** ticked, the DOI is a sandbox one (`10.5072/zenodo.…`), and tags deposit on [sandbox.zenodo.org](https://sandbox.zenodo.org) with `ZENODO_TOKEN_SANDBOX`. A sandbox DOI never resolves, and the journal website leaves out a paper that has one. A paper with no DOI yet is listed.
 
 To move to the real Zenodo, run **Prepare Zenodo deposit** again with the box unticked. Its pull request replaces the sandbox DOI with a real one.
 :::

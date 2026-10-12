@@ -10,6 +10,9 @@ import {
   Pins,
   checkIdShape,
   checkIdUniqueness,
+  checkOwnEntryId,
+  readRegistry,
+  RegistryEntry,
   ENGINE_ID_SENTINEL,
   toJsonSchemas,
 } from '../src/schema.js';
@@ -75,13 +78,12 @@ describe('fixtures parse against the schemas', () => {
     expect(j.zenodo.community).toBe('fixture-community');
   });
 
-  it('fixture registry is a valid Registry with distinct id/slug/location', () => {
+  it('fixture registry is a valid Registry with distinct id and location', () => {
     const r = Registry.parse(read('./fixture-instance/registry/papers.yml'));
     expect(r).toHaveLength(1);
     const e = r[0]!;
     expect(e.id).toBe('fixture-2026-sample-paper');
-    expect(e.slug).toBe('fixture-sample-paper'); // slug ≠ id
-    expect(e.location.repo).toBe('open-scholar-nexus/fixture-sample-paper');
+    expect(e.location).toBe('open-scholar-nexus/fixture-sample-paper');
   });
 
   it('fixture paper options round-trip through readEngineOptions', () => {
@@ -139,7 +141,7 @@ describe('checkIdUniqueness (check B, needs the registry)', () => {
 
   it('flags a duplicate id owned by another paper', () => {
     const r = checkIdUniqueness('fixture-2026-sample-paper', registry, {
-      slug: 'a-different-paper',
+      repo: 'someone/a-different-paper',
     });
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.severity).toBe('error');
@@ -147,9 +149,32 @@ describe('checkIdUniqueness (check B, needs the registry)', () => {
 
   it('does not flag a paper against its own registry entry', () => {
     const r = checkIdUniqueness('fixture-2026-sample-paper', registry, {
-      slug: 'fixture-sample-paper',
+      repo: 'open-scholar-nexus/fixture-sample-paper',
     });
     expect(r.ok).toBe(true);
+  });
+
+  it('accepts an entry with no slug, edition or doi, and ignores them when set', () => {
+    const r = Registry.parse([
+      { id: 'a', location: 'o/a' },
+      { id: 'b', slug: 'b', edition: 'e', doi: '10.5281/zenodo.1', location: 'o/b' },
+    ]);
+    expect(r).toHaveLength(2);
+    expect(checkIdUniqueness('b', r, { repo: 'o/a' }).ok).toBe(false);
+  });
+
+  it('matches its own entry whatever the case of the repository name', () => {
+    const r = checkIdUniqueness('fixture-2026-sample-paper', registry, {
+      repo: 'Open-Scholar-Nexus/Fixture-Sample-Paper',
+    });
+    expect(r.ok).toBe(true);
+  });
+
+  it('counts a folder entry in the journal repository as another paper', () => {
+    const r = Registry.parse([{ id: 'a', location: './papers/a' }]);
+    const out = checkIdUniqueness('a', r, { repo: 'o/journal' });
+    expect(out.ok).toBe(false);
+    if (!out.ok) expect(out.message).toContain('./papers/a');
   });
 
   it('soft-warns when the registry is unavailable (bare local validate)', () => {
@@ -166,6 +191,57 @@ describe('checkIdUniqueness (check B, needs the registry)', () => {
     });
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.severity).toBe('warn');
+  });
+});
+
+describe('checkOwnEntryId (check C: the registry holds the id the paper has)', () => {
+  it('passes when every own entry has the paper id, or there is none', () => {
+    expect(checkOwnEntryId('a', [{ id: 'a', location: 'o/a' }]).ok).toBe(true);
+    expect(checkOwnEntryId('a', []).ok).toBe(true);
+  });
+
+  it('fails naming both ids when the registry has an old one', () => {
+    const r = checkOwnEntryId('new-id', [{ id: 'old-id', location: 'o/a' }]);
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.severity).toBe('error');
+      expect(r.message).toContain('"old-id"');
+      expect(r.message).toContain('"new-id"');
+    }
+  });
+});
+
+describe('registry location: one string', () => {
+  it('rejects a URL, a nested path, and the { repo, path } form', () => {
+    for (const location of ['https://github.com/o/a', 'papers/a/b', { repo: 'o/a', path: '.' }]) {
+      expect(RegistryEntry.safeParse({ id: 'a', location }).success).toBe(false);
+    }
+  });
+
+  it('readRegistry keeps the valid entries and skips the rest, naming each', () => {
+    const read = readRegistry([
+      { id: 'good', location: 'o/good' },
+      { id: 'old', location: { repo: 'o/old', path: '.' } },
+      { id: 'sub', location: { repo: 'o/journal', path: 'papers/sub' } },
+      { id: 'url', location: 'https://gitlab.com/o/url' },
+      { location: 'o/no-id' },
+    ])!;
+    expect(read.entries.map((e) => e.id)).toEqual(['good']);
+    expect(read.skipped).toEqual([
+      { label: 'old', reason: 'location', hint: 'o/old' },
+      { label: 'sub', reason: 'location' },
+      { label: 'url', reason: 'location' },
+      { label: '#5', reason: 'other' },
+    ]);
+  });
+
+  it('readRegistry reads an empty file as no entries, and a non-list as null', () => {
+    expect(readRegistry(null)).toEqual({ entries: [], skipped: [] });
+    expect(readRegistry({ papers: [] })).toBeNull();
+  });
+
+  it('exports a JSON Schema for the registry', () => {
+    expect(JSON.stringify(toJsonSchemas().registry)).toContain('location');
   });
 });
 

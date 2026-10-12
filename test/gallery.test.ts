@@ -4,7 +4,7 @@
  * myst or the network. Whether a card renders needs an HTML build, which needs the theme from
  * the network, so it is not tested here.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -16,14 +16,16 @@ import {
   loadRegistry,
   fetchPaperConfig,
   thumbnailAvailable,
+  renderCards,
+  clearCache,
+  parseLocation as galleryParseLocation,
   REGISTRY_PATH,
 } from '../plugins/gallery.mjs';
+import { parseLocation } from '../src/schema.js';
 
 const entry = (over: Record<string, unknown> = {}) => ({
   id: 'j-2026-alpha',
-  slug: 'alpha',
-  location: { repo: 'me/alpha-paper', path: '.' },
-  edition: 'ed-2026',
+  location: 'me/alpha-paper',
   ...over,
 });
 
@@ -31,38 +33,68 @@ const config = (over: Record<string, unknown> = {}) => ({
   project: { title: 'An Alpha Paper', keywords: ['neuro', 'imaging'], ...over },
 });
 
+const withEdition = (edition: string) => ({
+  project: { options: { 'oaktree-sapling': { edition } } },
+});
+
 /* -------------------------------------------------------------------------- */
 
 describe('selectEntries', () => {
-  const registry = [
-    entry({ slug: 'a', edition: 'ed-2026' }),
-    entry({ slug: 'b', edition: 'ed-2025' }),
-    entry({ slug: 'c', edition: 'ed-2026' }),
+  const papers = [
+    { entry: entry({ id: 'a' }), config: withEdition('ed-2026') },
+    { entry: entry({ id: 'b' }), config: withEdition('ed-2025') },
+    { entry: entry({ id: 'c' }), config: withEdition('ed-2026') },
   ];
+  const ids = (list: Array<{ entry: { id: string } }>) => list.map((p) => p.entry.id);
 
   it('returns every paper when :edition: is omitted (the single page the template starts with)', () => {
-    expect(selectEntries(registry).map((e: { slug: string }) => e.slug)).toEqual(['a', 'b', 'c']);
-    expect(selectEntries(registry, {}).map((e: { slug: string }) => e.slug)).toEqual([
-      'a',
-      'b',
-      'c',
-    ]);
+    expect(ids(selectEntries(papers))).toEqual(['a', 'b', 'c']);
+    expect(ids(selectEntries(papers, {}))).toEqual(['a', 'b', 'c']);
   });
 
-  it('filters by edition when given', () => {
-    expect(
-      selectEntries(registry, { edition: 'ed-2026' }).map((e: { slug: string }) => e.slug),
-    ).toEqual(['a', 'c']);
+  it("filters by the edition in each paper's own myst.yml", () => {
+    expect(ids(selectEntries(papers, { edition: 'ed-2026' }))).toEqual(['a', 'c']);
+  });
+
+  it('ignores an edition left in the registry entry', () => {
+    const stale = [
+      { entry: entry({ id: 'a', edition: 'ed-2026' }), config: withEdition('ed-2025') },
+    ];
+    expect(ids(selectEntries(stale, { edition: 'ed-2026' }))).toEqual([]);
   });
 
   it("keeps the registry's order, which the editor sets", () => {
-    const reversed = [...registry].reverse();
-    expect(selectEntries(reversed).map((e: { slug: string }) => e.slug)).toEqual(['c', 'b', 'a']);
+    expect(ids(selectEntries([...papers].reverse()))).toEqual(['c', 'b', 'a']);
+  });
+});
+
+describe('location rule parity', () => {
+  // gallery.mjs cannot import TypeScript, so it keeps its own copy of parseLocation.
+  const cases: Array<[unknown, unknown]> = [
+    ['me/alpha-paper', { repo: 'me/alpha-paper' }],
+    ['Open-Scholar-Nexus/conformance.paper_2', { repo: 'Open-Scholar-Nexus/conformance.paper_2' }],
+    ['./papers/alpha', { path: './papers/alpha' }],
+    ['../alpha', { path: '../alpha' }],
+    ['https://github.com/me/alpha-paper', null],
+    ['gitlab.com/me/alpha', null],
+    ['me/alpha/sub', null],
+    ['me', null],
+    ['papers/alpha/', null],
+    ['me/..', null],
+    ['-me/alpha', null],
+    ['me/${{ x }}', null],
+    ['', null],
+    [{ repo: 'me/alpha-paper', path: '.' }, null],
+    [undefined, null],
+  ];
+  it.each(cases)('%j reads the same in src/schema.ts and gallery.mjs', (value, expected) => {
+    expect(parseLocation(value)).toEqual(expected);
+    expect(galleryParseLocation(value)).toEqual(expected);
   });
 });
 
 describe('paperUrls', () => {
-  it('derives the Pages URL from location.repo when site_url is absent', () => {
+  it('derives the Pages URL from the repository when site_url is absent', () => {
     const u = paperUrls(entry());
     expect(u.siteUrl).toBe('https://me.github.io/alpha-paper');
     expect(u.configUrl).toBe('https://raw.githubusercontent.com/me/alpha-paper/HEAD/myst.yml');
@@ -77,13 +109,15 @@ describe('paperUrls', () => {
     expect(u.configUrl).toBe('https://raw.githubusercontent.com/me/alpha-paper/HEAD/myst.yml');
   });
 
-  it('respects location.path: what keeps the n>1 tier reachable', () => {
-    const u = paperUrls(entry({ location: { repo: 'me/journal', path: 'papers/alpha' } }));
-    expect(u.configUrl).toBe(
-      'https://raw.githubusercontent.com/me/journal/HEAD/papers/alpha/myst.yml',
+  it('refuses a relative path, naming the entry', () => {
+    expect(() => paperUrls(entry({ location: './papers/alpha' }))).toThrow(
+      '"j-2026-alpha": relative paths are not supported (./papers/alpha)',
     );
-    expect(u.thumbUrl).toBe(
-      'https://raw.githubusercontent.com/me/journal/HEAD/papers/alpha/thumbnails/thumbnail.png',
+  });
+
+  it('lowercases the owner in the Pages URL, as GitHub serves it', () => {
+    expect(paperUrls(entry({ location: 'Me/Alpha-Paper' })).siteUrl).toBe(
+      'https://me.github.io/Alpha-Paper',
     );
   });
 
@@ -92,9 +126,17 @@ describe('paperUrls', () => {
     expect(paperUrls(entry()).configUrl).not.toContain('/main/');
   });
 
-  it('throws naming the entry when location.repo is missing or malformed', () => {
-    expect(() => paperUrls(entry({ location: { path: '.' } }))).toThrow(/alpha/);
-    expect(() => paperUrls(entry({ location: { repo: 'nope' } }))).toThrow(/location\.repo/);
+  it('throws naming the entry and the registry for a location it cannot read', () => {
+    expect(() => paperUrls(entry({ location: undefined }))).toThrow(/"j-2026-alpha"/);
+    expect(() => paperUrls(entry({ location: 'https://gitlab.com/me/alpha' }))).toThrow(
+      REGISTRY_PATH,
+    );
+  });
+
+  it('names the string to write for the { repo, path } form', () => {
+    expect(() => paperUrls(entry({ location: { repo: 'me/alpha-paper', path: '.' } }))).toThrow(
+      'write "location: me/alpha-paper"',
+    );
   });
 });
 
@@ -111,8 +153,11 @@ describe('cardFrom', () => {
     expect(card.children[2].children[0].value).toBe('neuro | imaging');
   });
 
-  it('renders the DOI as text, since a DOI link becomes a citation', () => {
-    const card = cardFrom(entry({ doi: '10.5281/zenodo.123' }), config());
+  it("renders the paper's own DOI as text, since a DOI link becomes a citation", () => {
+    const card = cardFrom(
+      entry({ doi: '10.5281/zenodo.999' }),
+      config({ doi: '10.5281/zenodo.123' }),
+    );
     expect(kinds(card)).toContain('footer');
     const node = card.children.at(-1).children[0].children[0];
     expect(node.type).toBe('text');
@@ -127,8 +172,8 @@ describe('cardFrom', () => {
     expect(kinds(card)).toEqual(['header', 'image']);
   });
 
-  it('falls back to the slug when the fetched config has no title', () => {
-    expect(cardFrom(entry(), { project: {} }).children[0].children[0].value).toBe('alpha');
+  it('falls back to the id when the fetched config has no title', () => {
+    expect(cardFrom(entry(), { project: {} }).children[0].children[0].value).toBe('j-2026-alpha');
   });
 
   it('carries the remote thumbnail URL; myst downloads it (stage: document)', () => {
@@ -171,10 +216,10 @@ describe('thumbnailAvailable: a missing thumbnail drops the image, not the site 
 });
 
 describe('fetchPaperConfig: a failure stops the build, since a broken registry must be fixed', () => {
-  it('throws with the slug and the URL, which the registry fix needs', async () => {
+  it('throws with the id and the URL, which the registry fix needs', async () => {
     const notFound = async () => ({ ok: false, status: 404, statusText: 'Not Found' });
     await expect(fetchPaperConfig(entry(), notFound)).rejects.toThrow(
-      /alpha.*raw\.githubusercontent\.com\/me\/alpha-paper\/HEAD\/myst\.yml.*404/s,
+      /j-2026-alpha.*raw\.githubusercontent\.com\/me\/alpha-paper\/HEAD\/myst\.yml.*404/s,
     );
     await expect(fetchPaperConfig(entry(), notFound)).rejects.toThrow(REGISTRY_PATH);
   });
@@ -192,14 +237,74 @@ describe('fetchPaperConfig: a failure stops the build, since a broken registry m
   });
 });
 
+describe('renderCards: one fetch per paper per build', () => {
+  const papers: Record<string, string> = {
+    a: 'project:\n  title: A\n  options:\n    oaktree-sapling:\n      edition: ed-2026\n',
+    b: 'project:\n  title: B\n  options:\n    oaktree-sapling:\n      edition: ed-2025\n',
+  };
+  const counting = () => {
+    const calls: string[] = [];
+    const fetchImpl = async (url: string, init?: { method?: string }) => {
+      calls.push(`${init?.method ?? 'GET'} ${url}`);
+      if (init?.method === 'HEAD') return { ok: true, headers: { get: () => 'image/png' } };
+      const name = url.match(/me\/(\w+)\//)![1]!;
+      return { ok: true, text: async () => papers[name]! };
+    };
+    return { calls, fetchImpl };
+  };
+  const registry = [entry({ id: 'a', location: 'me/a' }), entry({ id: 'b', location: 'me/b' })];
+
+  it('filters on the fetched edition, and a second block reuses the fetches', async () => {
+    clearCache();
+    const { calls, fetchImpl } = counting();
+    const first = await renderCards(registry, { edition: 'ed-2026' }, fetchImpl);
+    const second = await renderCards(registry, { edition: 'ed-2025' }, fetchImpl);
+    const all = await renderCards(registry, {}, fetchImpl);
+    expect(first.children.map((c: any) => c.children[0].children[0].value)).toEqual(['A']);
+    expect(second.children.map((c: any) => c.children[0].children[0].value)).toEqual(['B']);
+    expect(all.children).toHaveLength(2);
+    expect(calls.filter((c) => c.startsWith('GET'))).toHaveLength(2);
+    expect(calls.filter((c) => c.startsWith('HEAD'))).toHaveLength(2);
+  });
+
+  it('leaves out a paper with a Zenodo sandbox DOI, with a warning, and lists one with no DOI or a real one', async () => {
+    clearCache();
+    const { calls, fetchImpl } = counting();
+    papers.s = 'project:\n  title: S\n  doi: 10.5072/zenodo.612991\n';
+    papers.r = 'project:\n  title: R\n  doi: 10.5281/zenodo.123\n';
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const out = await renderCards(
+      [...registry, entry({ id: 's', location: 'me/s' }), entry({ id: 'r', location: 'me/r' })],
+      {},
+      fetchImpl,
+    );
+    expect(out.children.map((c: any) => c.children[0].children[0].value)).toEqual(['A', 'B', 'R']);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('"s" has a Zenodo sandbox DOI'));
+    expect(calls).not.toContain(
+      'HEAD https://raw.githubusercontent.com/me/s/HEAD/thumbnails/thumbnail.png',
+    );
+    warn.mockRestore();
+    delete papers.s;
+    delete papers.r;
+  });
+
+  it('says "No papers found." when no paper is in the edition', async () => {
+    clearCache();
+    const { fetchImpl } = counting();
+    const out = await renderCards(registry, { edition: 'ed-1999' }, fetchImpl);
+    expect(out).toEqual({
+      type: 'paragraph',
+      children: [{ type: 'text', value: 'No papers found.' }],
+    });
+  });
+});
+
 describe('loadRegistry', () => {
   it('reads a list of entries', () => {
     const dir = mkdtempSync(join(tmpdir(), 'oak-reg-'));
     const file = join(dir, 'papers.yml');
-    writeFileSync(file, '- id: x\n  slug: x\n  edition: e\n  location:\n    repo: me/x\n');
-    expect(loadRegistry(file)).toEqual([
-      { id: 'x', slug: 'x', edition: 'e', location: { repo: 'me/x' } },
-    ]);
+    writeFileSync(file, '- id: x\n  location: me/x\n');
+    expect(loadRegistry(file)).toEqual([{ id: 'x', location: 'me/x' }]);
   });
 
   it('an empty registry is a valid empty list (the directive renders "No papers found.")', () => {
