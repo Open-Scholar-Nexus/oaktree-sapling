@@ -50,7 +50,7 @@ Pass them to `oak bootstrap paper` as `--zenodo-token`, `--zenodo-token-sandbox`
 `oak bootstrap paper` ends by listing what is left to do:
 
 - **A new paper.** The starter `myst.yml` still has the placeholder id. The author fills in `project.id`, in the shape the journal's `id_pattern` asks for, plus the title and the authors, in a pull request. Until the id is set, the Journal checks fail and the paper's website is not deployed.
-- **A paper imported with `--from`.** The author's files are copied onto a branch called `review`, with this repository's workflows put back over any the author had, and `oak` opens a pull request from it. The author's own `myst.yml` replaces the starter one, so the pull request has to add the engine version and edition under `project.options.oaktree-sapling` before it builds; copy them from `myst.yml` on `main`.
+- **A paper imported with `--from`.** The author's files are copied onto a branch called `review`, with `.github/` and `CODEOWNERS` taken from `main` in place of the author's, and `oak` opens a pull request from it. The author's own `myst.yml` replaces the starter one, so the pull request has to add the engine version and edition under `project.options.oaktree-sapling` before it builds; copy them from `myst.yml` on `main`.
 
 Authors work from a fork of the paper repository and open pull requests from it. The first time someone does, GitHub asks an editor to approve the workflow run, once per new contributor, in the repository's **Actions** tab. To give an author push access instead, `oak` prints the command; they can then push branches, but `main` still needs a pull request and only editors can create `v*` tags.
 
