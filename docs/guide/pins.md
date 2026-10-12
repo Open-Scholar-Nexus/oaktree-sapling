@@ -7,7 +7,7 @@ Each paper builds with the oaktree-sapling version it names, and the journal web
 
 A paper names its oaktree-sapling version under `project.options.oaktree-sapling.version` in its `myst.yml`. Every Monday, the paper's **Engine version bump** workflow opens a pull request moving it to the newest release, or updates the one already open. It goes through the Journal checks and review like any other pull request, and merging it is all there is to do. A version newer than the newest release, a branch or a commit is left as it is.
 
-That pull request changes only `myst.yml`. To bring the workflows under `.github/` and `CODEOWNERS` up to a release as well, run, for each paper repository:
+That pull request changes only `myst.yml`, because GitHub does not let a workflow change workflow files ([why](../design/paper-ci.md#design-paper-ci-weekly-bump)). To bring the workflows under `.github/` and `CODEOWNERS` up to a release as well, run, for each paper repository:
 
 ```bash
 oak upgrade --repo <owner>/<paper-repo>

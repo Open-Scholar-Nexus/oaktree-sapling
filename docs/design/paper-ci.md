@@ -51,6 +51,9 @@ The author changes the content and `myst.yml`, including the engine version, wit
 - `CODEOWNERS` itself, so a pull request cannot remove the gate in the same change.
 - `paper-environment.yml`. Installing a conda package runs its install scripts, so the file decides code that runs in every build. The action installs it only in jobs that hold no secret, as [below](#r207).
 
+(design-paper-ci-weekly-bump)=
+The weekly [`version-bump.yml`](src:templates/paper/.github/workflows/version-bump.yml) follows the same split: it changes only the version in `myst.yml`. It runs with the workflow's own `GITHUB_TOKEN`, and GitHub only accepts a change under `.github/workflows/` from a token with the `workflows` permission, which is not among the [permissions a `GITHUB_TOKEN` can have](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#permissions). The launchers move to a new release when an editor runs `oak upgrade` with their own login, and that pull request goes through the code-owner review like any other change under `.github/`.
+
 (design-paper-ci-two-stages)=
 
 ### Keeping the build away from the token
