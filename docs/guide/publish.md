@@ -29,7 +29,20 @@ The tag starts the **Publish Zenodo deposit** workflow, which builds the paper a
 
 Open the draft on Zenodo, check it, and click **Publish**. The DOI resolves from then on.
 
-To show the paper on the journal website, add its entry, with the DOI, to the journal's registry: see [List it on the journal website](add-paper.md#list-on-site).
+(list-on-site)=
+## 4. List it on the journal website
+
+The journal website shows the papers listed in the journal repository's `registry/papers.yml`. Add an entry for the paper to that file, then push it:
+
+```yaml
+- id: oak-2026-tidal-flats
+  slug: tidal-flats
+  location: { repo: <owner>/<paper-repo>, path: . }
+  edition: "2026"
+  doi: 10.5281/zenodo.1234567
+```
+
+`id` is the paper's `project.id`, and the Journal checks of every paper use this list to keep ids unique. The website reads each paper's title, keywords and thumbnail from its repository, so the paper repository has to be public. See [the registry file](../reference/files.md#file-registry) for every field.
 
 (new-version)=
 ## Publish a new version

@@ -59,18 +59,3 @@ Pass them to `oak bootstrap paper` as `--zenodo-token`, `--zenodo-token-sandbox`
 Authors work from a fork of the paper repository and open pull requests from it. The first time someone does, GitHub asks an editor to approve the workflow run, once per new contributor, in the repository's **Actions** tab. To give an author push access instead, `oak` prints the command; they can then push branches, but `main` still needs a pull request and only editors can create `v*` tags.
 
 What the author sees is described in [Your paper repository](../start/paper.md).
-
-(list-on-site)=
-## List it on the journal website
-
-The journal website shows the papers listed in the journal repository's `registry/papers.yml`. When a paper should appear there, add an entry for it to that file, usually once the paper is [published](publish.md). `doi` can be left out until it has one.
-
-```yaml
-- id: oak-2026-tidal-flats
-  slug: tidal-flats
-  location: { repo: <owner>/<paper-repo>, path: . }
-  edition: "2026"
-  doi: 10.5281/zenodo.1234567
-```
-
-`id` is the paper's `project.id`, and the Journal checks of every paper use this list to keep ids unique. The website reads each paper's title, keywords and thumbnail from its repository, so the paper repository has to be public. See [the registry file](../reference/files.md#file-registry) for every field.

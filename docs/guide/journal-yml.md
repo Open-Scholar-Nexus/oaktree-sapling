@@ -14,7 +14,7 @@ id_pattern: "^[a-z0-9]+-\\d{4}-[a-z0-9-]+$"
 
 Keep the `^` and `$`: without them, an id only has to contain a match. Inside double quotes, a backslash is written twice.
 
-A paper whose id does not match, or is still a placeholder, fails its Journal checks, so its pull request cannot merge. The checks comment names the id and the pattern. An id also has to be unused in the journal's [registry](add-paper.md#list-on-site).
+A paper whose id does not match, or is still a placeholder, fails its Journal checks, so its pull request cannot merge. The checks comment names the id and the pattern. An id also has to be unused in the journal's [registry](publish.md#list-on-site).
 
 To turn the rule off, delete the `id_pattern` line. Ids are then checked only for placeholders and duplicates, and the checks report that no pattern is set.
 

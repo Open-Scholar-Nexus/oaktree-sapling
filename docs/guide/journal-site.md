@@ -16,7 +16,7 @@ The **Journal site** workflow builds it and deploys it to GitHub Pages on every 
 :::
 ```
 
-`paper-cards` shows one card per paper in `registry/papers.yml`, in the order of the file: the title and keywords, read from the paper's `myst.yml` at build time, the thumbnail, and the DOI from the registry. The card links to the paper's website. [Add a paper](add-paper.md#list-on-site) covers the registry entry.
+`paper-cards` shows one card per paper in `registry/papers.yml`, in the order of the file: the title and keywords, read from the paper's `myst.yml` at build time, the thumbnail, and the DOI from the registry. The card links to the paper's website. [Publish a paper](publish.md#list-on-site) covers the registry entry.
 
 With `:edition:`, it shows the papers of one edition only, for a page per edition:
 
