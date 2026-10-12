@@ -2,7 +2,7 @@
 
 # How it works
 
-This section answers why oaktree-sapling is shaped the way it is. It is for somebody changing it, forking it, or trying to understand a decision they disagree with. If you only want to run a journal or publish a paper, start from [Run a journal](../start/journal.md) or [Write a paper](../start/paper.md); from there the guides take each setting one at a time, beginning with [journal.yml](../guide/journal-yml.md).
+This section answers why oaktree-sapling is shaped the way it is. It is for somebody changing it, forking it, or trying to understand a decision they disagree with. If you only want to run a journal or publish a paper, start from [Run a journal](../start/journal.md) or [Write a paper](../start/paper.md); from there the guides take each setting one at a time, beginning with [Configure the journal](../guide/journal-yml.md).
 
 Nothing here is required reading; if you want to know more, start with this page.
 

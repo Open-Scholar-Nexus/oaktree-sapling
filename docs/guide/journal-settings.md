@@ -1,7 +1,13 @@
 (guide-journal-settings)=
-# How a paper gets the journal's settings
+# Journal settings in a paper
 
-A paper repository names its journal on the `instance_repo:` line of `.github/actions/engine/pins.yml`, which `oak bootstrap paper --instance` writes. Every build of the paper reads the journal's settings from that repository.
+A paper repository names its journal on the [`instance_repo:` line](src:templates/paper/.github/actions/engine/pins.yml#L7) of `.github/actions/engine/pins.yml`, which `oak bootstrap paper --instance` writes:
+
+```yaml
+instance_repo: <owner>/<journal-repo>
+```
+
+Every build of the paper reads the journal's settings from that repository.
 
 ## What a paper takes from the journal
 
@@ -12,7 +18,7 @@ A paper repository names its journal on the `instance_repo:` line of `.github/ac
 : The logo, colours and the mark on the PDF. See [branding](branding.md).
 
 `journal.yml`
-: The paper id rule, the editorial checks and the PDF template. See [journal.yml](journal-yml.md) and [editorial checks](checks.md).
+: The paper id rule, the editorial checks and the PDF template. See [Configure the journal](journal-yml.md) and [editorial checks](checks.md).
 
 A field set in the paper's own `myst.yml` takes precedence over the same field from the edition.
 
@@ -22,7 +28,7 @@ A field set in the paper's own `myst.yml` takes precedence over the same field f
 
 In CI, every build clones the journal repository at its latest commit, so a change the editors push applies from each paper's next build.
 
-On your machine, `oak` clones the journal into the paper's `_build/journal/<owner>/<repo>` and reuses that copy for a week, then fetches it again. If the fetch fails, for example offline, it keeps using the old copy and prints a warning. Each run prints which copy it used. To fetch the journal now, delete `_build/journal`.
+On your machine, `oak` keeps a cached clone of the journal in the paper's `_build/journal/<owner>/<repo>` and reuses it for a week, then fetches it again. If the fetch fails, for example offline, it keeps using the cache and prints a warning. Each run prints which copy it used. To clear the cache and fetch the journal now, delete `_build/journal`.
 
 ## Previewing with other settings
 

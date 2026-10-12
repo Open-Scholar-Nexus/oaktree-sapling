@@ -60,7 +60,7 @@ The website is served at `https://<owner>.github.io/<journal-repo>/`, or at your
 
 ## 5. Create a repository for each paper
 
-A paper is built, checked and published from a repository of its own, so the journal has no papers until you create one. [Add a paper](../guide/add-paper.md) covers creating it with `oak bootstrap paper`, what the author finds there, and listing the paper on the journal website once it is published.
+A paper is built, checked and published from a repository of its own, so the journal has no papers until you create one. [Add a paper](../guide/add-paper.md) covers creating it with `oak bootstrap paper` and what the author finds there, and [Publish a paper](../guide/publish.md) covers depositing it on Zenodo and listing it on the journal website.
 
 ## Previewing before you push
 

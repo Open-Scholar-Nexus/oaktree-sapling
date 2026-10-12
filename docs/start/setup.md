@@ -28,7 +28,9 @@ Then pass the team with `--owner @my-journal/editors` when you create each paper
 ## Create the journal
 
 ```bash
-oak bootstrap journal --repo <owner>/<journal-repo> --name "My Journal" --edition 2026
+oak bootstrap journal --repo <owner>/<journal-repo> \
+  --name "My Journal" \
+  --edition 2026
 ```
 
 `oak` prints what it is about to do, including every value it took a default for, and asks before changing anything. `--edition` names the first edition; without it the edition is called `seedling`. The engine version defaults to the newest stable release.
