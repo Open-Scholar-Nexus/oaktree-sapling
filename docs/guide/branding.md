@@ -17,7 +17,7 @@ project:
     theme: green.darken(30%)
 ```
 
-A path in this file is relative to `brand/`, and the file has to be committed there.
+Papers extend this file like any MyST config, so `site.options` takes any of MyST's [site options](https://mystmd.org/guide/website-templates#site-options). A path in this file is relative to `brand/`, and the file has to be committed there.
 
 (website-paths)=
 :::{note} Paths on the journal website
@@ -42,7 +42,7 @@ The journal website reads this file too, but resolves its paths from the reposit
 (colours)=
 ## Colours
 
-On the websites, colours come from a CSS file named by `style`. The theme reads its colours from CSS variables named `--myst-color-…`, so the file sets the ones to change, for light mode under `:root` and dark mode under `.dark`:
+On the websites, colours come from a CSS file named by `style`, MyST's [custom stylesheet](https://mystmd.org/guide/website-style). The theme reads its colours from CSS variables named `--myst-color-…`, so the file sets the ones to change, for light mode under `:root` and dark mode under `.dark`:
 
 ```css
 :root {
@@ -55,11 +55,11 @@ On the websites, colours come from a CSS file named by `style`. The theme reads 
 }
 ```
 
-The variables and their defaults are in the theme's [`theme-colors.css`](https://github.com/impact-scholars/myst-theme/blob/v0.2.0/styles/theme-colors.css), and its [styling guide](https://github.com/impact-scholars/myst-theme/blob/v0.2.0/docs/theming.md) explains what each one colours.
+MyST's [styling guide](https://myst-theme.netlify.app/theming) explains what each variable colours, and its [colour picker](https://myst-theme.netlify.app/color-picker) shows the result live. The variables the papers' theme reads, with their defaults, are in its [`theme-colors.css`](https://github.com/impact-scholars/myst-theme/blob/v0.2.0/styles/theme-colors.css).
 
 On the PDF, `theme` under `project.options` sets the colour of the title and links, as a [typst colour](https://typst.app/docs/reference/visualize/color/), such as `rgb("#2f6b3a")` or `green.darken(30%)`.
 
 (pdf-logo)=
 ## The logo on the PDF
 
-`logo` under `project.options` is the image at the top right of the PDF's first page. It has to be a file committed in the journal repository: typst cannot fetch a URL, and the Journal checks warn about one. A new journal starts with a placeholder, `brand/logo.svg`, to replace.
+`logo` under `project.options` is the image at the top right of the PDF's first page. It has to be a file committed in the journal repository: typst cannot fetch a URL. A new journal starts with a placeholder, `brand/logo.svg`, to replace.

@@ -6,7 +6,7 @@
 (file-journal-yml)=
 ## journal.yml
 
-The journal's settings, read by every paper build. Every field but `name` is optional, and oak ignores fields it does not know. How to use them: [journal.yml](../guide/journal-yml.md).
+The journal's settings, read by every paper build. Every field but `name` is optional, and oak ignores fields it does not know. How to use them: [Configure the journal](../guide/journal-yml.md).
 
 | field | default | |
 |---|---|---|

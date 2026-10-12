@@ -39,11 +39,7 @@ oak start
 
 `npm install` fetches `js-yaml`, which the `paper-cards` plugin needs to read the registry, once per clone.
 
-## Who can change it
-
-Anyone with write access to the journal repository can push to `main`, which redeploys the website. To require a reviewed pull request, add a branch rule in the repository's **Settings**.
-
-## Leaving out the website
+## A journal without a website
 
 `oak bootstrap journal --no-site` leaves out the website and its workflow. The repository then holds only the settings papers read.
 

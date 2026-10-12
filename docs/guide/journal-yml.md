@@ -1,7 +1,7 @@
 (guide-journal-yml)=
-# journal.yml
+# Configure the journal
 
-`journal.yml`, at the root of the journal repository, holds the settings every paper build reads. This page covers the ones a journal changes; [the reference](../reference/files.md#file-journal-yml) lists every field, and [editorial checks](checks.md) covers `checks`.
+`journal.yml`, at the root of the journal repository, holds the settings every paper build reads. This page covers the ones most journals change; [the reference](../reference/files.md#file-journal-yml) lists every field, and [editorial checks](checks.md) covers `checks`. The logo, colours and favicon are set in `brand/brand.yml`: see [branding](branding.md).
 
 (id-pattern)=
 ## The paper id rule
