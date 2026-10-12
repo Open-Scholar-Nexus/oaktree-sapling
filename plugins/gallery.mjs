@@ -107,7 +107,7 @@ export function selectEntries(papers, opts = {}) {
  * derived from the repository. Raw URLs go through **`HEAD`**, not `main`, so a tenant
  * whose default branch is named otherwise still resolves. The thumbnail path is not a
  * guess: `paper-base.yml` pins `project.thumbnail: thumbnails/thumbnail.png` for every paper.
- * Throws for a folder in the journal repo, a paper layout the website does not list yet.
+ * Throws for a relative path, a folder in the journal repo, which the website does not list yet.
  */
 export function paperUrls(entry) {
   const id = entry?.id ?? '?';
@@ -124,15 +124,15 @@ export function paperUrls(entry) {
   }
   if (!location.repo) {
     throw new Error(
-      `paper-cards: registry entry "${id}" is a folder in the journal repository ` +
-        `(${location.path}), which the website cannot list yet; remove it from ${REGISTRY_PATH}.`,
+      `paper-cards: registry entry "${id}": relative paths are not supported ` +
+        `(${location.path}); write "owner/name" in ${REGISTRY_PATH}.`,
     );
   }
   const { repo } = location;
   const [owner, name] = repo.split('/');
   const raw = `https://raw.githubusercontent.com/${repo}/HEAD/`;
   return {
-    siteUrl: entry.site_url ?? `https://${owner}.github.io/${name}`,
+    siteUrl: entry.site_url ?? `https://${owner.toLowerCase()}.github.io/${name}`,
     configUrl: `${raw}myst.yml`,
     thumbUrl: `${raw}thumbnails/thumbnail.png`,
   };

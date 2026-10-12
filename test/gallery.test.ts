@@ -109,9 +109,15 @@ describe('paperUrls', () => {
     expect(u.configUrl).toBe('https://raw.githubusercontent.com/me/alpha-paper/HEAD/myst.yml');
   });
 
-  it('refuses a folder in the journal repository, which the website cannot list yet', () => {
+  it('refuses a relative path, naming the entry', () => {
     expect(() => paperUrls(entry({ location: './papers/alpha' }))).toThrow(
-      /"j-2026-alpha" is a folder in the journal repository \(\.\/papers\/alpha\)/,
+      '"j-2026-alpha": relative paths are not supported (./papers/alpha)',
+    );
+  });
+
+  it('lowercases the owner in the Pages URL, as GitHub serves it', () => {
+    expect(paperUrls(entry({ location: 'Me/Alpha-Paper' })).siteUrl).toBe(
+      'https://me.github.io/Alpha-Paper',
     );
   });
 
