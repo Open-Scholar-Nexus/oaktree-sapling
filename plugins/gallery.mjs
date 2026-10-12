@@ -4,7 +4,8 @@
  * A port of `impact-scholars.github.io/plugins/paper-gallery.mjs`, re-pointed from
  * `papers.txt` + a hardcoded org constant to the **registry** (`registry/papers.yml`,
  * design §9). Every URL is derived from a registry entry's `location`, never from an org
- * constant, so the same plugin serves any tenant.
+ * constant, so the same plugin serves any tenant. Title, keywords, edition and DOI come from
+ * the paper's own `myst.yml`, fetched once per paper per build.
  *
  * This file is ENGINE-owned but is NOT engine TypeScript: myst consumes it at runtime by
  * tag-pinned raw URL (`project.plugins:` accepts remote `.mjs`, myst-cli `config.ts:415-419`),
@@ -68,24 +69,34 @@ export function loadRegistry(file = REGISTRY_PATH) {
   return entries;
 }
 
+const GITHUB_REPO = /^[A-Za-z0-9][A-Za-z0-9-]*\/(?!\.\.?$)[A-Za-z0-9._-]+$/;
+
+/** A registry `location`: `{ repo }` for `owner/name`, `{ path }` for a `./` or `../` folder in
+ *  the journal repo, else null. A copy of `parseLocation` in `src/schema.ts`, held to it by
+ *  `location rule parity` in `test/gallery.test.ts`. */
+export function parseLocation(value) {
+  if (typeof value !== 'string') return null;
+  if (/^\.\.?\//.test(value)) return { path: value };
+  if (GITHUB_REPO.test(value)) return { repo: value };
+  return null;
+}
+
+/** A paper's edition, from its fetched `myst.yml`, or undefined. */
+export function editionOf(config) {
+  return config?.project?.options?.['oaktree-sapling']?.edition;
+}
+
 /**
  * The papers a `:::{paper-cards}` block shows, in **registry file order**: the editor
  * controls sequence by where they insert the entry, which is the one ordering rule that
  * needs no extra field. `edition` omitted → every registered paper (what the scaffold's
  * single page uses); a fresh journal has exactly one edition, and a tenant who grows a
- * second one adds a page and filters it ([S6]).
+ * second one adds a page and filters it ([S6]). `papers` pairs each entry with its fetched
+ * `myst.yml`, which holds the edition.
  */
-export function selectEntries(registry, opts = {}) {
+export function selectEntries(papers, opts = {}) {
   const { edition } = opts;
-  return edition ? registry.filter((entry) => entry.edition === edition) : [...registry];
-}
-
-/** `location.path` as a URL prefix: '.' / '' → '', 'papers/x' → 'papers/x/'. Kept even
- *  though every entry is `.` today: it is what keeps the repo=journal (n>1) tier reachable
- *  without touching this plugin ([S7]). */
-function pathPrefix(path) {
-  const trimmed = (path ?? '.').replace(/^\.$/, '').replace(/^\/+|\/+$/g, '');
-  return trimmed ? `${trimmed}/` : '';
+  return edition ? papers.filter(({ config }) => editionOf(config) === edition) : [...papers];
 }
 
 /**
@@ -93,21 +104,33 @@ function pathPrefix(path) {
  * place that changes if we ever read a built `myst.json` instead of the raw `myst.yml`.
  *
  * `site_url` is honored when present (custom domains, non-Pages hosting) and otherwise
- * derived from `location.repo`. Raw URLs go through **`HEAD`**, not `main`, so a tenant
+ * derived from the repository. Raw URLs go through **`HEAD`**, not `main`, so a tenant
  * whose default branch is named otherwise still resolves. The thumbnail path is not a
  * guess: `paper-base.yml` pins `project.thumbnail: thumbnails/thumbnail.png` for every paper.
+ * Throws for a folder in the journal repo, a paper layout the website does not list yet.
  */
 export function paperUrls(entry) {
-  const repo = entry?.location?.repo;
-  if (typeof repo !== 'string' || !repo.includes('/')) {
+  const id = entry?.id ?? '?';
+  const location = parseLocation(entry?.location);
+  if (!location) {
+    const old = entry?.location?.repo;
+    const fix =
+      typeof old === 'string' && parseLocation(old)?.repo
+        ? `write "location: ${old}"`
+        : 'write "owner/name" for a GitHub repository';
     throw new Error(
-      `paper-cards: registry entry "${entry?.id ?? '?'}" has no valid ` +
-        `location.repo ("owner/name"). Fix the entry in ${REGISTRY_PATH}.`,
+      `paper-cards: registry entry "${id}" has a location oak cannot read; ${fix} in ${REGISTRY_PATH}.`,
     );
   }
+  if (!location.repo) {
+    throw new Error(
+      `paper-cards: registry entry "${id}" is a folder in the journal repository ` +
+        `(${location.path}), which the website cannot list yet; remove it from ${REGISTRY_PATH}.`,
+    );
+  }
+  const { repo } = location;
   const [owner, name] = repo.split('/');
-  const prefix = pathPrefix(entry.location.path);
-  const raw = `https://raw.githubusercontent.com/${repo}/HEAD/${prefix}`;
+  const raw = `https://raw.githubusercontent.com/${repo}/HEAD/`;
   return {
     siteUrl: entry.site_url ?? `https://${owner}.github.io/${name}`,
     configUrl: `${raw}myst.yml`,
@@ -115,10 +138,12 @@ export function paperUrls(entry) {
   };
 }
 
+/** The Zenodo sandbox's DOI prefix. A sandbox DOI never resolves, so no card shows one. */
+export const SANDBOX_DOI_PREFIX = '10.5072/';
+
 /**
- * One card node, PURE: (registry entry, that paper's fetched myst config) → mdast. Title and
- * keywords come from the paper (the registry stays a thin pointer list, [S4]); the DOI comes
- * from the registry, since that is the one display field the registry actually owns.
+ * One card node, PURE: (registry entry, that paper's fetched myst config) → mdast. Title,
+ * keywords and DOI come from the paper (the registry stays a thin pointer list, [S4]).
  * `opts.thumbnail: false` leaves the image out (see `thumbnailAvailable`).
  */
 export function cardFrom(entry, config, opts = {}) {
@@ -126,6 +151,10 @@ export function cardFrom(entry, config, opts = {}) {
   const project = config?.project ?? {};
   const title = project.title || entry.id;
   const keywords = project.keywords ?? [];
+  const doi =
+    typeof project.doi === 'string' && !project.doi.startsWith(SANDBOX_DOI_PREFIX)
+      ? project.doi
+      : undefined;
 
   const children = [{ type: 'header', children: [{ type: 'text', value: title }] }];
   if (opts.thumbnail !== false) {
@@ -141,10 +170,10 @@ export function cardFrom(entry, config, opts = {}) {
   // metadata fetch per build: rate-limited upstream, and one unreachable DOI fails the
   // whole journal under `--strict`. Found on the first live run, with a sandbox DOI.
   // The card itself already links to the paper, whose own page carries a real DOI link.
-  if (entry.doi) {
+  if (doi) {
     children.push({
       type: 'footer',
-      children: [{ type: 'paragraph', children: [{ type: 'text', value: `DOI: ${entry.doi}` }] }],
+      children: [{ type: 'paragraph', children: [{ type: 'text', value: `DOI: ${doi}` }] }],
     });
   }
   return { type: 'card', url: siteUrl, children };
@@ -186,52 +215,87 @@ export async function thumbnailAvailable(entry, fetchImpl = fetch) {
   }
 }
 
+/** One fetch per URL per process: a page per edition reads every paper's `myst.yml`. `myst
+ *  start` keeps this module loaded across rebuilds, so it shows each paper as it was at start. */
+const cache = new Map();
+function once(key, load) {
+  if (!cache.has(key)) cache.set(key, load());
+  return cache.get(key);
+}
+
+/** {@link fetchPaperConfig} and {@link thumbnailAvailable}, each run once per paper per process. */
+export function cachedPaperConfig(entry, fetchImpl = fetch) {
+  return once(`config ${paperUrls(entry).configUrl}`, () => fetchPaperConfig(entry, fetchImpl));
+}
+export function cachedThumbnail(entry, fetchImpl = fetch) {
+  return once(`thumb ${paperUrls(entry).thumbUrl}`, () => thumbnailAvailable(entry, fetchImpl));
+}
+
+/** Empties the fetch cache. For tests. */
+export function clearCache() {
+  cache.clear();
+}
+
+/**
+ * The nodes one `paper-cards` block becomes: a grid of cards, or "No papers found." Fetches
+ * every registered paper's `myst.yml`, since the edition is in it, and probes thumbnails only
+ * for the papers shown. Each card warns when its picture is missing, or when its DOI is a
+ * sandbox one.
+ */
+export async function renderCards(registry, opts = {}, fetchImpl = fetch) {
+  const papers = await Promise.all(
+    registry.map(async (entry) => ({ entry, config: await cachedPaperConfig(entry, fetchImpl) })),
+  );
+  const shown = selectEntries(papers, { edition: opts.edition });
+  if (shown.length === 0) {
+    return { type: 'paragraph', children: [{ type: 'text', value: 'No papers found.' }] };
+  }
+  const cards = await Promise.all(
+    shown.map(async ({ entry, config }) => {
+      const thumbnail = await cachedThumbnail(entry, fetchImpl);
+      if (!thumbnail) {
+        console.warn(
+          `paper-cards: no image at ${paperUrls(entry).thumbUrl} for ` +
+            `"${entry.id}"; its card has no picture.`,
+        );
+      }
+      const doi = config?.project?.doi;
+      if (typeof doi === 'string' && doi.startsWith(SANDBOX_DOI_PREFIX)) {
+        console.warn(
+          `paper-cards: "${entry.id}" has a Zenodo sandbox DOI (${doi}); its card shows none.`,
+        );
+      }
+      return cardFrom(entry, config, { thumbnail });
+    }),
+  );
+  return { type: 'grid', columns: [1, 1, 2, 3], children: cards };
+}
+
 const paperCardsDirective = {
   name: 'paper-cards',
   doc: 'A gallery of cards, one per registered paper.',
   options: {
     edition: {
       type: String,
-      doc: 'Only show papers whose registry `edition` matches. Omit for every registered paper.',
+      doc: 'Only show papers whose own myst.yml sets this edition. Omit for every registered paper.',
     },
   },
   run(data) {
-    const entries = selectEntries(loadRegistry(), { edition: data.options?.edition });
-    if (entries.length === 0) {
-      return [{ type: 'paragraph', children: [{ type: 'text', value: 'No papers found.' }] }];
-    }
-    // The directive is sync, so the per-paper fetch happens in the transform below; these
-    // placeholder nodes carry the entry across.
-    return [
-      {
-        type: 'grid',
-        columns: [1, 1, 2, 3],
-        children: entries.map((entry) => ({ type: 'paper-card-ref', entry, children: [] })),
-      },
-    ];
+    // The directive is sync and the edition is in each paper's myst.yml, so the transform
+    // below fetches and filters; this placeholder carries the block across.
+    return [{ type: 'paper-cards-ref', registry: loadRegistry(), edition: data.options?.edition }];
   },
 };
 
 function paperCardsTransform(opts, utils) {
   return async (mdast) => {
-    const nodes = utils.selectAll('paper-card-ref', mdast);
-    if (nodes.length === 0) return;
+    const nodes = utils.selectAll('paper-cards-ref', mdast);
     await Promise.all(
       nodes.map(async (node) => {
-        const { entry } = node;
-        const [config, thumbnail] = await Promise.all([
-          fetchPaperConfig(entry),
-          thumbnailAvailable(entry),
-        ]);
-        if (!thumbnail) {
-          console.warn(
-            `paper-cards: no image at ${paperUrls(entry).thumbUrl} for ` +
-              `"${entry.id}"; its card has no picture.`,
-          );
-        }
-        const card = cardFrom(entry, config, { thumbnail });
-        delete node.entry;
-        Object.assign(node, card);
+        const rendered = await renderCards(node.registry, { edition: node.edition });
+        delete node.registry;
+        delete node.edition;
+        Object.assign(node, rendered);
       }),
     );
   };
