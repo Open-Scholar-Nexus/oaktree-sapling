@@ -1,7 +1,7 @@
 (guide-publish)=
 # Publish a paper on Zenodo
 
-Publishing a paper deposits it on Zenodo, which gives it a DOI. An editor does it from the paper repository on GitHub once `main` holds the paper as it should be published, and again for each [new version](#new-version). The paper repository needs `ZENODO_TOKEN` set, or `ZENODO_TOKEN_SANDBOX` for a test (see [Secrets](add-paper.md#paper-secrets)).
+Publishing a paper deposits it on Zenodo, which gives it a DOI. An editor does it from the paper repository on GitHub once `main` holds the paper as it should be published, and again for each [new version](#new-version). It needs the paper repository's [Zenodo tokens](add-paper.md#paper-secrets).
 
 ## 1. Reserve the DOI
 
