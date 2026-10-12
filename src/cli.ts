@@ -917,8 +917,8 @@ async function cmdCheckPost(argv: string[]): Promise<number> {
     process.stderr.write(msg.workflow.checkPostNoReport(reportPath) + '\n');
     return 2;
   }
-  // The report comes from the fork's code, and so does the `pull_request` job's jq check of it
-  // [R137], so it is untrusted input. A bad one gets a sentence, not a stack.
+  // The report comes from the fork's code [R137], so it is untrusted input. A bad one gets a
+  // sentence, not a stack.
   let report;
   try {
     report = JSON.parse(readFileSync(reportPath, 'utf8'));
