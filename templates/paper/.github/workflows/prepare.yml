@@ -49,3 +49,6 @@ jobs:
     with:
       pr: ${{ needs.prepare.outputs.pr }}
       sha: ${{ needs.prepare.outputs.sha }}
+    secrets:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
