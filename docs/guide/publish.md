@@ -36,7 +36,6 @@ The journal website shows the papers listed in the journal repository's `registr
 
 ```yaml
 - id: oak-2026-tidal-flats
-  slug: tidal-flats
   location: { repo: <owner>/<paper-repo>, path: . }
   edition: "2026"
   doi: 10.5281/zenodo.1234567

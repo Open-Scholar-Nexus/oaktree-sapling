@@ -75,12 +75,11 @@ describe('fixtures parse against the schemas', () => {
     expect(j.zenodo.community).toBe('fixture-community');
   });
 
-  it('fixture registry is a valid Registry with distinct id/slug/location', () => {
+  it('fixture registry is a valid Registry with distinct id and location', () => {
     const r = Registry.parse(read('./fixture-instance/registry/papers.yml'));
     expect(r).toHaveLength(1);
     const e = r[0]!;
     expect(e.id).toBe('fixture-2026-sample-paper');
-    expect(e.slug).toBe('fixture-sample-paper'); // slug ≠ id
     expect(e.location.repo).toBe('open-scholar-nexus/fixture-sample-paper');
   });
 
@@ -139,7 +138,7 @@ describe('checkIdUniqueness (check B, needs the registry)', () => {
 
   it('flags a duplicate id owned by another paper', () => {
     const r = checkIdUniqueness('fixture-2026-sample-paper', registry, {
-      slug: 'a-different-paper',
+      repo: 'someone/a-different-paper',
     });
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.severity).toBe('error');
@@ -147,9 +146,18 @@ describe('checkIdUniqueness (check B, needs the registry)', () => {
 
   it('does not flag a paper against its own registry entry', () => {
     const r = checkIdUniqueness('fixture-2026-sample-paper', registry, {
-      slug: 'fixture-sample-paper',
+      repo: 'open-scholar-nexus/fixture-sample-paper',
     });
     expect(r.ok).toBe(true);
+  });
+
+  it('accepts an entry with no slug, and ignores one that is set', () => {
+    const r = Registry.parse([
+      { id: 'a', edition: 'e', location: { repo: 'o/a' } },
+      { id: 'b', slug: 'b', edition: 'e', location: { repo: 'o/b' } },
+    ]);
+    expect(r).toHaveLength(2);
+    expect(checkIdUniqueness('b', r, { repo: 'o/a' }).ok).toBe(false);
   });
 
   it('soft-warns when the registry is unavailable (bare local validate)', () => {

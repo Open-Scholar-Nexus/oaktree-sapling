@@ -697,11 +697,10 @@ export const validate = {
     `${docsUrl(DOCS.idPattern)}`,
   idRegistryUnavailable: (id: string): string =>
     `registry unavailable; cannot check id "${id}" for uniqueness`,
-  idMaybeOwnEntry: (id: string, repo: string, slug: string): string =>
-    `paper id "${id}" is registered to ${repo} (slug ${slug}); cannot confirm it is not this ` +
+  idMaybeOwnEntry: (id: string, repo: string): string =>
+    `paper id "${id}" is registered to ${repo}; cannot confirm it is not this ` +
     `paper's own entry without a repo context`,
-  idTaken: (id: string, repo: string, slug: string): string =>
-    `paper id "${id}" already registered to ${repo} (slug ${slug})`,
+  idTaken: (id: string, repo: string): string => `paper id "${id}" already registered to ${repo}`,
 
   // ── thumbnail / typst template hygiene ─────────────────────────────────────────────────
   thumbnailUnresolved: (thumbnail: string): string =>

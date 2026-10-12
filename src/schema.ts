@@ -111,10 +111,10 @@ export type JournalConfig = z.infer<typeof JournalConfig>;
 /* --------------------------------------------------------------------------
  * 3. registry/papers.yml: the paper registry (additive-only)
  *
- * Three separate coordinates:
+ * Two coordinates:
  *   - id       → the deposit and dedup key, myst's project.id [R7]
- *   - slug     → the `/<slug>/` URL path and thumbnail location
  *   - location → {repo, path}, where the paper lives [design §9]
+ * An entry may carry a `slug`; nothing reads it.
  * ------------------------------------------------------------------------ */
 
 export const PaperLocation = z
@@ -129,7 +129,7 @@ export const PaperLocation = z
 export const RegistryEntry = z
   .object({
     id: z.string().min(1),
-    slug: z.string().min(1),
+    slug: z.string().min(1).optional(),
     location: PaperLocation,
     /** Concept DOI; absent until the paper is deposited. */
     doi: z.string().optional(),
@@ -203,12 +203,12 @@ export function checkIdShape(
 
 /**
  * Check B: the id is unique in the registry. Fails when the registry is present, and only warns
- * without one, as in a bare local validate [R193]. `self` excludes the paper's own entry.
+ * without one, as in a bare local validate [R193]. `self` excludes the paper's own entry, by repo.
  */
 export function checkIdUniqueness(
   id: string,
   registry: Registry | null,
-  self?: { slug?: string },
+  self?: { repo: string },
   opts: { selfIdentifiable?: boolean } = {},
 ): IdCheckResult {
   if (registry === null) {
@@ -218,7 +218,7 @@ export function checkIdUniqueness(
       message: msg.validate.idRegistryUnavailable(id),
     };
   }
-  const clash = registry.find((e) => e.id === id && e.slug !== self?.slug);
+  const clash = registry.find((e) => e.id === id && e.location.repo !== self?.repo);
   if (clash) {
     // Without the repo (no GITHUB_REPOSITORY, a checkout with no matching origin) the
     // paper's own entry cannot be told from a duplicate, so this only warns. CI always sets it.
@@ -226,13 +226,13 @@ export function checkIdUniqueness(
       return {
         ok: false,
         severity: 'warn',
-        message: msg.validate.idMaybeOwnEntry(id, clash.location.repo, clash.slug),
+        message: msg.validate.idMaybeOwnEntry(id, clash.location.repo),
       };
     }
     return {
       ok: false,
       severity: 'error',
-      message: msg.validate.idTaken(id, clash.location.repo, clash.slug),
+      message: msg.validate.idTaken(id, clash.location.repo),
     };
   }
   return { ok: true };

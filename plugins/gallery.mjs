@@ -101,7 +101,7 @@ export function paperUrls(entry) {
   const repo = entry?.location?.repo;
   if (typeof repo !== 'string' || !repo.includes('/')) {
     throw new Error(
-      `paper-cards: registry entry "${entry?.slug ?? entry?.id ?? '?'}" has no valid ` +
+      `paper-cards: registry entry "${entry?.id ?? '?'}" has no valid ` +
         `location.repo ("owner/name"). Fix the entry in ${REGISTRY_PATH}.`,
     );
   }
@@ -124,7 +124,7 @@ export function paperUrls(entry) {
 export function cardFrom(entry, config, opts = {}) {
   const { siteUrl, thumbUrl } = paperUrls(entry);
   const project = config?.project ?? {};
-  const title = project.title || entry.slug || entry.id;
+  const title = project.title || entry.id;
   const keywords = project.keywords ?? [];
 
   const children = [{ type: 'header', children: [{ type: 'text', value: title }] }];
@@ -150,7 +150,7 @@ export function cardFrom(entry, config, opts = {}) {
   return { type: 'card', url: siteUrl, children };
 }
 
-/** Fetch one paper's myst config. Throws naming BOTH the slug and the URL, because the fix
+/** Fetch one paper's myst config. Throws naming BOTH the entry's id and the URL, because the fix
  *  is a registry edit and the editor needs to know which line to edit. */
 export async function fetchPaperConfig(entry, fetchImpl = fetch) {
   const { configUrl } = paperUrls(entry);
@@ -159,13 +159,13 @@ export async function fetchPaperConfig(entry, fetchImpl = fetch) {
     response = await fetchImpl(configUrl);
   } catch (err) {
     throw new Error(
-      `paper-cards: failed to fetch the config for "${entry.slug ?? entry.id}" from ${configUrl} ` +
+      `paper-cards: failed to fetch the config for "${entry.id}" from ${configUrl} ` +
         `(${err.message}). Fix or remove the entry in ${REGISTRY_PATH}.`,
     );
   }
   if (!response.ok) {
     throw new Error(
-      `paper-cards: failed to fetch the config for "${entry.slug ?? entry.id}" from ${configUrl} ` +
+      `paper-cards: failed to fetch the config for "${entry.id}" from ${configUrl} ` +
         `(${response.status} ${response.statusText}). Fix or remove the entry in ${REGISTRY_PATH}.`,
     );
   }
@@ -226,7 +226,7 @@ function paperCardsTransform(opts, utils) {
         if (!thumbnail) {
           console.warn(
             `paper-cards: no image at ${paperUrls(entry).thumbUrl} for ` +
-              `"${entry.slug ?? entry.id}"; its card has no picture.`,
+              `"${entry.id}"; its card has no picture.`,
           );
         }
         const card = cardFrom(entry, config, { thumbnail });

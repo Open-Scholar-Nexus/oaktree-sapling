@@ -285,10 +285,9 @@ function loadRegistry(instanceRoot: string | null, probes: FsProbes): Registry |
 
 /** The paper's own registry entry, found by its repo, so the uniqueness check skips it.
  *  Without a repo it cannot be found, so callers pass one (environment or git origin). */
-function findSelf(registry: Registry | null, repo: string | null): { slug: string } | undefined {
+function findSelf(registry: Registry | null, repo: string | null): { repo: string } | undefined {
   if (!registry || !repo) return undefined;
-  const e = registry.find((x) => x.location.repo === repo);
-  return e ? { slug: e.slug } : undefined;
+  return registry.some((x) => x.location.repo === repo) ? { repo } : undefined;
 }
 
 /* ---- overlapping keys between layers ([R72]) ---------------------------- */
