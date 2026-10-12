@@ -53,7 +53,7 @@ A published paper keeps one DOI for all its versions, and each version gets a DO
 2. Tag the new version, as in [step 2](#tag-version).
 3. Click **Publish** on the new draft.
 
-Once a paper is published, every pull request to it gets a comment reminding the editors of step 1, and the `editor-action-needed` label.
+Once a paper is published, every pull request to it gets a comment reminding the editors to click [**New version**](#new-version) on Zenodo, and the `editor-action-needed` label.
 
 (sandbox)=
 ## Test on the Zenodo sandbox
