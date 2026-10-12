@@ -74,17 +74,17 @@ describe("compose: what oak sets on the paper's own config [R5] [R52]", () => {
 describe('compose: brand paths made absolute [R62]', () => {
   const brandAssets = {
     site: {
-      logo: './logo.svg',
-      favicon: 'favicon.svg', // a relative path without ./ is made absolute too
+      logo: './brand/logo.svg',
+      favicon: 'brand/favicon.svg', // a relative path without ./ is made absolute too
       logo_dark: 'https://cdn.example.org/logo-dark.svg', // a URL is left alone
       style: '/already/absolute.css', // an absolute path is left alone
     },
     project: {
-      logo: './logo-watermark.svg', // typst watermark → project.options.logo
+      logo: 'brand/logo-watermark.svg', // typst watermark → project.options.logo
     },
   };
 
-  it('rewrites relative site paths to <instanceRoot>/brand/<x>', () => {
+  it('rewrites relative site paths to <instanceRoot>/<x>', () => {
     const r = compose(base({ brandAssets }));
     expect(r.ownOverride.site!.options).toMatchObject({
       logo: `${INSTANCE}/brand/logo.svg`,

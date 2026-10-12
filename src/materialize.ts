@@ -125,8 +125,8 @@ export async function materializeDerived(
 
   preflight?.(resolvedProject, { edition });
 
-  // Read from brand.yml itself, so compose resolves only the brand's own assets against
-  // `brand/` [R62].
+  // Read from brand.yml itself, so compose resolves only the brand's own assets against the
+  // journal root [R62].
   const brandAssets = instanceRoot ? readBrandAssetOptions(instanceRoot) : undefined;
 
   // The journal's typst template, read the same way from journal.yml [R76].

@@ -7,22 +7,20 @@
 site:
   options:
     logo_text: My Journal
-    logo: https://example.org/logo.svg
-    favicon: https://example.org/favicon.svg
+    logo: brand/logo.svg
+    favicon: brand/favicon.svg
     logo_url: https://<owner>.github.io/<journal-repo>/
-    style: ./journal.css
+    style: brand/journal.css
 project:
   options:
-    logo: ./logo.svg
+    logo: brand/logo.svg
     theme: green.darken(30%)
 ```
 
-Papers extend this file like any MyST config, so `site.options` takes any of MyST's [site options](https://mystmd.org/guide/website-templates#site-options). A path in this file is relative to `brand/`, and the file has to be committed there.
+Papers extend this file like any MyST config, so `site.options` takes any of MyST's [site options](https://mystmd.org/guide/website-templates#site-options). A path in this file starts at the journal repository root, as in `brand/logo.svg`, and the file has to be committed there. The same path works on every paper and on the journal website. `logo`, `favicon` and `style` can also be full URLs.
 
 (website-paths)=
-:::{note} Paths on the journal website
-The journal website reads this file too, but resolves its paths from the repository root, where they find no file, so the website goes without them. For the website, set `logo`, `favicon` and `style` again under `site.options` in its `myst.yml`, as paths from the repository root (`brand/logo.svg`), or give `logo` and `favicon` as full URLs here.
-:::
+On the journal website, a path that finds no file fails the build: MyST itself only warns, so the site workflow checks its log for the warning.
 
 (logo-text)=
 ## The header

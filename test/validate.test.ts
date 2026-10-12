@@ -84,10 +84,14 @@ describe('checkBrandFavicon [R61]', () => {
     );
   });
   it('warns an unresolvable local favicon', () => {
-    expect(checkBrandFavicon({ instanceRoot: '/i', favicon: './f.svg' }, allFalse).ok).toBe(false);
+    expect(checkBrandFavicon({ instanceRoot: '/i', favicon: 'brand/f.svg' }, allFalse).ok).toBe(
+      false,
+    );
   });
   it('passes a resolvable local favicon', () => {
-    expect(checkBrandFavicon({ instanceRoot: '/i', favicon: './f.svg' }, allTrue).ok).toBe(true);
+    expect(checkBrandFavicon({ instanceRoot: '/i', favicon: 'brand/f.svg' }, allTrue).ok).toBe(
+      true,
+    );
   });
 });
 
@@ -98,7 +102,7 @@ describe('checkBrandWatermark [R62]', () => {
     );
   });
   it('passes a resolvable local watermark', () => {
-    expect(checkBrandWatermark({ instanceRoot: '/i', logo: './w.svg' }, allTrue).ok).toBe(true);
+    expect(checkBrandWatermark({ instanceRoot: '/i', logo: 'brand/w.svg' }, allTrue).ok).toBe(true);
   });
   it('warns when no watermark is declared', () => {
     expect(checkBrandWatermark({ instanceRoot: '/i' }, allTrue).ok).toBe(false);
@@ -447,8 +451,8 @@ describe('checkLayerDisjointness: extends layers must not share keys [R72]', () 
     project: { subject: 'Micropublication', venue: 'Fixture 2026', license: 'CC-BY-4.0' },
   };
   const brand = {
-    site: { options: { logo: './logo.svg', favicon: './favicon.svg' }, nav: [] },
-    project: { options: { logo: './logo-watermark.svg' } },
+    site: { options: { logo: 'brand/logo.svg', favicon: 'brand/favicon.svg' }, nav: [] },
+    project: { options: { logo: 'brand/logo-watermark.svg' } },
   };
 
   it("passes for oak's own layers", () => {
