@@ -66,4 +66,4 @@ oak build
 
 This writes the PDF to `_build/exports/paper.pdf`. It needs [typst](https://github.com/typst/typst) installed.
 
-[^settings]: The journal's logo, colours, edition and checks live in the journal's own repository, which the editors maintain and your paper repository names. Your paper's builds read them from there. [How a paper gets the journal's settings](../guide/journal-settings.md) has the details.
+[^settings]: The journal's logo, colours, edition and checks live in the journal's own repository, which the editors maintain and your paper repository names. Your paper's builds read them from there. [Journal settings in a paper](../guide/journal-settings.md) has the details.

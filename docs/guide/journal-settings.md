@@ -1,5 +1,5 @@
 (guide-journal-settings)=
-# How a paper gets the journal's settings
+# Journal settings in a paper
 
 A paper repository names its journal on the `instance_repo:` line of `.github/actions/engine/pins.yml`, which `oak bootstrap paper --instance` writes. Every build of the paper reads the journal's settings from that repository.
 
