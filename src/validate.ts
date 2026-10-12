@@ -231,7 +231,7 @@ export function checkTemplates(
   const warn = (check: string, message: string) =>
     out.push({ check, severity: 'warn', message, klass: 'config' });
 
-  if (authorTemplate && journalTemplate) {
+  if (authorTemplate) {
     warn('template-override', msg.validate.templateOverride(authorTemplate, journalTemplate));
   }
 

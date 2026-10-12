@@ -221,10 +221,11 @@ describe('checkTemplates [R76]', () => {
     expect(override.message).toMatch(/overriding the journal's/);
   });
 
-  it('says nothing when the author declares one and the journal does not', () => {
-    expect(
-      ids(checkTemplates({ instanceRoot: '/i', authorTemplate: './mine' }, allFalse)),
-    ).not.toContain('template-override');
+  it("warns when the author's template overrides oak's, with no journal template set", () => {
+    const f = checkTemplates({ instanceRoot: '/i', authorTemplate: './mine' }, allFalse);
+    const override = f.find((x) => x.check === 'template-override')!;
+    expect(override.severity).toBe('warn');
+    expect(override.message).toMatch(/overriding oaktree-sapling's/);
   });
 
   it('warns on an unpinned template from either the author or the journal', () => {

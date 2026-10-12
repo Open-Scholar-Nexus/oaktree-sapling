@@ -708,10 +708,9 @@ export const validate = {
     `thumbnail "${thumbnail}" does not resolve to a file under the paper root; the ` +
     `paper will ship with NO thumbnail (a declared thumbnail disables myst's ` +
     `first-image fallback) and its gallery card renders blank`,
-  templateOverride: (authorTemplate: string, journalTemplate: string): string =>
-    `this paper declares its own typst template ("${authorTemplate}"), overriding the ` +
-    `journal's ("${journalTemplate}"). Allowed and applied; flagged so a reviewer ` +
-    `sees it.`,
+  templateOverride: (authorTemplate: string, journalTemplate?: string): string =>
+    `this paper declares its own typst template ("${authorTemplate}"), overriding ` +
+    (journalTemplate ? `the journal's ("${journalTemplate}").` : "oaktree-sapling's."),
   templateFloating: (layer: string, value: string): string =>
     `${layer} typst template "${value}" is not pinned, so the file it points to can change ` +
     `without this value changing. Prefer a release URL or a local path. (Published PDFs stay ` +
