@@ -118,8 +118,8 @@ export type JournalConfig = z.infer<typeof JournalConfig>;
  * edition and the DOI from the paper's own `myst.yml`.
  * ------------------------------------------------------------------------ */
 
-/** A registry `location`, read: a GitHub repository with the paper at its root, or a folder in
- *  the journal repo, relative to its root. */
+/** What {@link parseLocation} returns: a GitHub repository with the paper at its root, or a
+ *  folder in the journal repo, relative to its root. */
 export type PaperLocation = { repo: string } | { path: string };
 
 const GITHUB_REPO = /^[A-Za-z0-9][A-Za-z0-9-]*\/(?!\.\.?$)[A-Za-z0-9._-]+$/;

@@ -287,8 +287,8 @@ const paperCardsDirective = {
     },
   },
   run(data) {
-    // The directive is sync and the edition is in each paper's myst.yml, so the transform
-    // below fetches and filters; this placeholder carries the block across.
+    // The directive is sync and the edition is in each paper's myst.yml, so
+    // {@link paperCardsTransform} fetches and filters; this placeholder carries the block across.
     return [{ type: 'paper-cards-ref', registry: loadRegistry(), edition: data.options?.edition }];
   },
 };

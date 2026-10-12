@@ -708,14 +708,14 @@ export const validate = {
     'registry/papers.yml is not a list of entries, so paper ids were not checked against it: ' +
     docsUrl(DOCS.fileRegistry),
   registryLocationSkipped: (label: string, hint?: string): string =>
-    `registry/papers.yml entry "${label}" has a location oak cannot read, so this check ` +
+    `registry/papers.yml entry "${label}" has a location oak cannot read, so the id checks ` +
     `skipped it; ` +
     (hint
       ? `write "location: ${hint}"`
       : 'write "owner/name" for a GitHub repository or "./path" for a folder in the journal ' +
         'repository'),
   registryEntrySkipped: (label: string): string =>
-    `registry/papers.yml entry "${label}" is not a valid entry, so this check skipped it: ` +
+    `registry/papers.yml entry "${label}" is not a valid entry, so the id checks skipped it: ` +
     docsUrl(DOCS.fileRegistry),
 
   // ── thumbnail / typst template hygiene ─────────────────────────────────────────────────
