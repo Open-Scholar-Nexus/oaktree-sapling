@@ -56,15 +56,15 @@ A published paper keeps one DOI for all its versions, and each version gets a DO
 
 Once a paper is published, every pull request to it gets a comment reminding the editors to click [**New version**](#click-new-version) on Zenodo, and the `editor-action-needed` label.
 
-(sandbox)=
-## Test on the Zenodo sandbox
-
-With **Use the Zenodo sandbox** ticked, the DOI is a sandbox one (`10.5072/zenodo.…`), and tags deposit on [sandbox.zenodo.org](https://sandbox.zenodo.org) with `ZENODO_TOKEN_SANDBOX`. A sandbox DOI never resolves.
-
-To move to the real Zenodo, run **Prepare Zenodo deposit** again with the box unticked. Its pull request replaces the sandbox DOI with a real one.
-
 ## When the publish run fails
 
 The run opens an issue titled **Zenodo publish failed for** the tag, labelled `zenodo-publish-failed`, with the reason. A common one is a new version tagged before **New version** was clicked on Zenodo. Fix the cause, then open the failed run and click **Re-run failed jobs**.
+
+(sandbox)=
+:::{dropdown} Testing on the Zenodo sandbox
+With **Use the Zenodo sandbox** ticked, the DOI is a sandbox one (`10.5072/zenodo.…`), and tags deposit on [sandbox.zenodo.org](https://sandbox.zenodo.org) with `ZENODO_TOKEN_SANDBOX`. A sandbox DOI never resolves.
+
+To move to the real Zenodo, run **Prepare Zenodo deposit** again with the box unticked. Its pull request replaces the sandbox DOI with a real one.
+:::
 
 [^dois]: Zenodo calls the DOI for all versions the concept DOI. It resolves to the newest version, and it is the one written into `myst.yml`. A version's own DOI always resolves to that version.
