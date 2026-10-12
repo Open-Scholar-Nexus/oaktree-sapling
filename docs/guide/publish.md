@@ -36,12 +36,10 @@ The journal website shows the papers listed in the journal repository's `registr
 
 ```yaml
 - id: oak-2026-tidal-flats
-  location: { repo: <owner>/<paper-repo>, path: . }
-  edition: "2026"
-  doi: 10.5281/zenodo.1234567
+  location: <owner>/<paper-repo>
 ```
 
-`id` is the paper's `project.id`, and the Journal checks of every paper use this list to keep ids unique. The website reads each paper's title, keywords and thumbnail from its repository, so the paper repository has to be public. See [the registry file](../reference/files.md#file-registry) for every field.
+`id` is the paper's `project.id`, and the Journal checks of every paper use this list to keep ids unique. `location` is the paper's GitHub repository. The website reads each paper's title, keywords, edition, DOI and thumbnail from its repository, so the paper repository has to be public. See [the registry file](../reference/files.md#file-registry) for every field.
 
 (new-version)=
 ## Publish a new version
