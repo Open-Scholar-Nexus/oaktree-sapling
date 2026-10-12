@@ -17,7 +17,7 @@ project:
     theme: green.darken(30%)
 ```
 
-Papers extend this file like any MyST config, so `site.options` takes any of MyST's [site options](https://mystmd.org/guide/website-templates#site-options). A path in this file starts at the journal repository root, as in `brand/logo.svg`, and the file has to be committed there. The same path works on every paper and on the journal website. `logo`, `favicon` and `style` can also be full URLs.
+Papers extend this file like any MyST config, so `site.options` takes any of MyST's [site options](https://mystmd.org/guide/website-templates#site-options). A path in this file starts at the journal repository root, as in `brand/logo.svg`, and the file has to be committed in that repository. The same path works on every paper and on the journal website. `logo`, `favicon` and `style` can also be full URLs.
 
 (website-paths)=
 On the journal website, a path that finds no file fails the build: MyST itself only warns, so the site workflow checks its log for the warning.

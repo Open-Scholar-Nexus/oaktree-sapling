@@ -274,8 +274,8 @@ export function compose(input: ComposeInput): ComposeResult {
   }
 
   // Brand assets [R62]: relative values made absolute against the journal root, since MyST
-  // resolves them against the paper root, where the journal's files are not. HTML assets go in site.options,
-  // the PDF watermark in project.options.logo.
+  // resolves them against the paper root, where the journal's files are not. HTML assets go in
+  // site.options, the PDF watermark in project.options.logo.
   if (instanceRoot && input.brandAssets) {
     const siteOptions = absolutizeBrandAssets(
       instanceRoot,
