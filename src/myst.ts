@@ -4,7 +4,7 @@
  *
  * `loadConfig` alone does not set the current site and project, which `build` needs for HTML
  * ("No site configuration found"). So each call first runs `findCurrentProjectAndLoad` and
- * `findCurrentSiteAndLoad`, as the myst CLI does [R59].
+ * `findCurrentSiteAndLoad`, as the myst CLI does.
  */
 import {
   Session,
@@ -64,7 +64,7 @@ export function createMystEdge(): MystEdge {
       // Permanent, unlike build's: the server keeps running and resolves paths from cwd, and oak
       // does nothing after this.
       process.chdir(dir);
-      // Without these the server has no site to serve [R59].
+      // Without these the server has no site to serve.
       await findCurrentProjectAndLoad(session, dir);
       await findCurrentSiteAndLoad(session, dir);
       await startServer(session, opts);
@@ -80,7 +80,7 @@ export function createMystEdge(): MystEdge {
       const prev = process.cwd();
       process.chdir(dir);
       try {
-        // The curvenote checks read the project from cwd, so cwd must be the paper root [R59].
+        // The curvenote checks read the project from cwd, so cwd must be the paper root.
         // Processing to mdast without writing files is enough for the frontmatter and abstract
         // checks.
         await findCurrentProjectAndLoad(session, '.');

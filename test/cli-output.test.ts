@@ -482,7 +482,7 @@ describe('a flag passed without a value is refused', () => {
     expect(r.stderr).toContain('--instance needs a value');
   });
 
-  it('accepts an empty value where empty means something [R147]', () => {
+  it('accepts an empty value where empty means something', () => {
     // `ci/run.sh` passes `--base-url ""` on every pull request build: empty means served at
     // the root.
     const r = oak(['validate', '--paper', fixturePaper, '--no-instance', '--base-url', '']);
@@ -496,7 +496,7 @@ describe('a flag passed without a value is refused', () => {
   });
 });
 
-describe('--repo takes owner/name [R138]', () => {
+describe('--repo takes owner/name', () => {
   it('refuses a value gh would read as an option or a foreign URL', () => {
     for (const bad of ['-u', 'https://evil.example/x/y', 'notarepo']) {
       const r = oak(['upgrade', '--repo', bad, '--yes']);
@@ -557,7 +557,7 @@ describe('a pull request number is a number [R136]', () => {
   });
 });
 
-describe('a sandbox deposit never uses the production token [R133]', () => {
+describe('a sandbox deposit never uses the production token [R102]', () => {
   it('refuses when only the production token is set', () => {
     const env = { ZENODO_TOKEN: 'production-secret', ZENODO_TOKEN_SANDBOX: undefined };
     const r = oak(['deposit', 'prepare', '--sandbox', '--paper', fixturePaper], env);

@@ -2,7 +2,7 @@
  * The journal website's `paper-cards` plugin [R80]. It is a plain `.mjs` that myst loads by URL,
  * so vitest imports it directly. Its decisions are exported as pure functions, testable without
  * myst or the network. Whether a card renders needs an HTML build, which needs the theme from
- * the network [R60], so it is not tested here.
+ * the network, so it is not tested here.
  */
 import { describe, it, expect } from 'vitest';
 import { mkdtempSync, writeFileSync } from 'node:fs';

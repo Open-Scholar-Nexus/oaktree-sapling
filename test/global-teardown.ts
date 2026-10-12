@@ -1,5 +1,5 @@
 /**
- * Removes the temporary directories the tests create [R152]. The tests call `mkdtempSync` in
+ * Removes the temporary directories the tests create. The tests call `mkdtempSync` in
  * many places without cleaning up, and a full /tmp fails unrelated tests; one teardown covers
  * every call, including new ones. Only directories changed since the run started are removed,
  * so another run's survive.

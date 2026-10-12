@@ -762,7 +762,7 @@ describe('cmdBootstrapPaper', () => {
     expect(runbook).not.toContain('CLOUDFLARE_ACCOUNT_ID is still');
   });
 
-  it('creates the labels the workflows use, and no others [R127] [R128]', async () => {
+  it('creates the labels the workflows use, and no others [R127]', async () => {
     const { prov, calls } = fakeProv();
     await cmdBootstrapPaper(paperInput(), deps(prov));
     expect((calls.createLabel as Array<{ n: string }>).map((c) => c.n)).toEqual([
@@ -781,7 +781,7 @@ describe('cmdBootstrapPaper', () => {
     expect(already.calls.setDefaultBranch).toHaveLength(0);
   });
 
-  it('the merge rule is what protect-main says it is [R128]', async () => {
+  it('the merge rule is what protect-main says it is', async () => {
     const { prov, calls } = fakeProv();
     await cmdBootstrapPaper(paperInput(), deps(prov));
     const pm = (calls.createRuleset as Array<{ b: any }>).find(
@@ -795,7 +795,7 @@ describe('cmdBootstrapPaper', () => {
     expect(checks.parameters.required_status_checks).toEqual([{ context: 'Journal checks' }]);
   });
 
-  it('the v* tag rule stops a tag being moved or deleted, not only created [R128]', async () => {
+  it('the v* tag rule stops a tag being moved or deleted, not only created', async () => {
     const { prov, calls } = fakeProv();
     await cmdBootstrapPaper(paperInput(), deps(prov));
     const vt = (calls.createRuleset as Array<{ b: any }>).find(
@@ -804,7 +804,7 @@ describe('cmdBootstrapPaper', () => {
     expect(vt.rules.map((r: any) => r.type).sort()).toEqual(['creation', 'deletion', 'update']);
   });
 
-  it('a paper repo is public unless the editor asks otherwise [R128]', async () => {
+  it('a paper repo is public unless the editor asks otherwise', async () => {
     const open = fakeProv();
     await cmdBootstrapPaper(paperInput(), deps(open.prov));
     expect((open.calls.createRepo[0] as { o: { private: boolean } }).o.private).toBe(false);

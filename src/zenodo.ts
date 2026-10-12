@@ -495,7 +495,7 @@ export interface BundleProvenance {
   version_doi: string;
   review_pr: string | null;
   built_at: string;
-  // What it takes to render the deposit again [R34] [R66]: engine.zip carries everything but
+  // What it takes to render the deposit again [R66]: engine.zip carries everything but
   // node, so this platform and node.
   platform: string;
   typst_version: string | null;
@@ -538,7 +538,7 @@ export function readStampedTemplate(paperRoot: string): string | null {
  * documented mapping) so this module needs no myst dependency. A local path is used in place; a
  * URL goes to `_build/templates/<kind>/<sha256(url)>`; a bare name to
  * `_build/templates/<kind>/<namespace>/<name>`. Every form ends up as a directory, so one
- * bundling rule covers all three [R74].
+ * bundling rule covers all three [R76].
  */
 export function resolveTemplateDir(template: string, paperRoot: string): string {
   const buildTemplates = join(paperRoot, '_build', 'templates');
@@ -624,7 +624,7 @@ export function assertBundlePreconditions(repoRoot: string, engineRoot: string):
  * Assembles the deposit: oak's five fixed files plus every file in the paper's `deposit/`
  * folder, as they are [R28]; a clash with a fixed name is an error. Returns the paths, sorted.
  *
- * `engine.zip` is a `git archive` of oak at its pinned release [R34] [R66], which carries
+ * `engine.zip` is a `git archive` of oak at its pinned release [R66], which carries
  * `bin/typst`, `dist/cli.cjs` and `templates/typst/`: everything but node needed to render the
  * PDF again, on linux x86_64. A sixth file, `template.zip`, holds a template that is not oak's
  * own [R76]; see {@link templateArchiveDir}.
@@ -676,7 +676,7 @@ export class BundleCollisionError extends Error {}
 /** oak's checkout could not produce an `engine.zip` that renders on its own [R107]. */
 export class EngineArchiveError extends Error {}
 
-/** What `engine.zip` must carry to render the PDF again [R34] [R66]. Both are committed only at
+/** What `engine.zip` must carry to render the PDF again [R66]. Both are committed only at
  *  release tags, so any other ref archives a zip without them [R107]. */
 const ENGINE_ARCHIVE_REQUIRED = ['dist/cli.cjs', 'bin/typst'];
 

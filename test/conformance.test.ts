@@ -713,13 +713,13 @@ describe('the conformance workflow cannot pass without a result', () => {
   });
 
   it('fails the fixture build when no PDF is produced', () => {
-    // A build that passes without a PDF fails [R67].
+    // A build that passes without a PDF fails.
     const f = read('scripts/build-fixture.mjs');
     expect(f).toMatch(/if \(!pdf\)[\s\S]*process\.exit\(1\)/);
   });
 });
 
-describe('RELEASING.md matches the scripts it describes [R115]', () => {
+describe('RELEASING.md matches the scripts it describes', () => {
   const read = (p: string) => readFileSync(join(import.meta.dirname, '..', p), 'utf8');
 
   it('prunes by tag, not by the listing’s first column', () => {
@@ -734,7 +734,7 @@ describe('RELEASING.md matches the scripts it describes [R115]', () => {
     const files = (JSON.parse(read('package.json')) as { files: string[] }).files;
     const npmSection = read('RELEASING.md').split('## The npm package')[1] ?? '';
     // The code spans as a set: `ci/` is a substring of `ci/run.sh`, so a `toContain` over the
-    // text would pass for a narrower path than the one in `files` [R115].
+    // text would pass for a narrower path than the one in `files`.
     const spans = new Set([...npmSection.matchAll(/`([^`]+)`/g)].map((m) => m[1]!));
     for (const entry of files) expect([...spans], `files entry ${entry}`).toContain(entry);
   });

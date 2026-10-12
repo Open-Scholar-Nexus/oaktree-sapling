@@ -145,7 +145,7 @@ export function checkBrandWatermark(
  *
  * myst resolves it against the paper's source folder, not the layer that set it, so it is
  * checked against the paper root and needs no rewriting, unlike brand assets [R62] [R68] or
- * templates [R74]. When unset, the fallback works again; a URL passes, since myst downloads it
+ * templates [R76]. When unset, the fallback works again; a URL passes, since myst downloads it
  * [R80].
  */
 export function checkThumbnail(
@@ -478,9 +478,8 @@ export function runLayerA(
     });
   }
 
-  // A missing thumbnail is `structural` but only a warning, so a draft without one still builds.
-  // It becomes required at registration: the journal site's `--strict` build fails on a
-  // registered paper without one [R80].
+  // A missing thumbnail is `structural` but only a warning, so a draft without one still builds,
+  // and a registered paper without one gets a card with no picture on the journal site [R80].
   add(
     'thumbnail',
     'structural',
@@ -531,7 +530,7 @@ export function runLayerA(
 
   // The author's template is read from their own myst.yml, not `project` [R82]: the composed
   // export carries compose's choice, so `template-override` would fire on every paper. As with
-  // brand assets [R68] and the journal's template [R79], a value whose source matters is read
+  // brand assets [R68] and the journal's template [R76], a value whose source matters is read
   // outside the merge.
   findings.push(
     ...checkTemplates(

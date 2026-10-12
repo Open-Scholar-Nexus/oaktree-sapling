@@ -1,6 +1,6 @@
 /**
  * gh.ts runs commands, so these check the arguments it passes: no secret in argv, no captured
- * stderr where it would be posted, and validation before `git fetch` [R103] [R104] [R105].
+ * stderr where it would be posted, and validation before `git fetch` [R103] [R104].
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -265,9 +265,9 @@ describe('the tolerant probes tell absent from forbidden [R113]', () => {
     expect(() => realConformanceGh.deleteBranch('o/r', 'cert-1')).toThrow(/403/);
   });
 
-  it('treats an absent tag as already gone, which the refs API answers with 422 [R149]', () => {
+  it('treats an absent tag as already gone, which the refs API answers with 422', () => {
     // `DELETE /git/refs/tags/x` on a missing ref answers 422 "Reference does not exist", not
-    // 404, and every conformance run deletes a deposit tag that may not exist [R149].
+    // 404, and every conformance run deletes a deposit tag that may not exist.
     child.respond = () => ({
       status: 1,
       stdout: '',
@@ -300,7 +300,7 @@ describe('the tolerant probes tell absent from forbidden [R113]', () => {
     expect(() => realConformanceGh.approveWorkflowRun('o/r', 9)).toThrow(/403/);
   });
 
-  it('every ref delete accepts it [R149]', () => {
+  it('every ref delete accepts it', () => {
     child.respond = () => ({
       status: 1,
       stdout: '',

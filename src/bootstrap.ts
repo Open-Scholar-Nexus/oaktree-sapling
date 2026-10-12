@@ -2,7 +2,7 @@
  * `oak bootstrap paper` and `oak bootstrap journal`: sets up a paper repo (new, or from an
  * author's repo with `--from`) or a journal repo from the templates. Every step reads
  * the current state first, so a rerun repairs a partial bootstrap. Content only arrives through a
- * pull request, and a missing secret is listed in the closing runbook rather than set [R25].
+ * pull request, and a missing secret is listed in the closing runbook rather than set.
  */
 import * as msg from './messages.js';
 import { firstLine } from './messages.js';
@@ -891,7 +891,7 @@ function applyProvisioning(
 }
 
 /** Sets secrets on their environments, then deletes the repo-level copies those
- *  environments now hold; any other copy is kept, since its value cannot be read back [R25]. */
+ *  environments now hold; any other copy is kept, since its value cannot be read back. */
 function applySecrets(
   repo: string,
   secrets: SecretInputs,

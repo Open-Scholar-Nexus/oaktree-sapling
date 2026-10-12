@@ -97,7 +97,7 @@ export function readJournalTypstTemplate(instanceRoot: string): string | undefin
 }
 
 /** Reads the author's own typst `template:` from `<paperRoot>/myst.yml`. The composed config
- *  cannot say who set it, since compose always stamps one [R79] [R82], so the override check
+ *  cannot say who set it, since compose always stamps one [R82], so the override check
  *  [R76] reads it here. Undefined when absent or unreadable; that is another check's finding. */
 export function readAuthorTypstTemplate(paperRoot: string): string | undefined {
   const authorPath = join(paperRoot, 'myst.yml');
