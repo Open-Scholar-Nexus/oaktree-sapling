@@ -34,7 +34,7 @@ To show the paper on the journal website, add its entry, with the DOI, to the jo
 (new-version)=
 ## Publish a new version
 
-A published paper keeps one DOI for all its versions, and each version gets a DOI of its own as well. For each new version:
+A published paper keeps one DOI for all its versions, and each version gets a DOI of its own as well.[^dois] For each new version:
 
 1. On the paper's Zenodo record, click **New version**. This creates the empty draft the next tag fills.
 2. Tag the new version, as in [step 2](#tag-version).
@@ -52,3 +52,5 @@ To move to the real Zenodo, run **Prepare Zenodo deposit** again with the box un
 ## When the publish run fails
 
 The run opens an issue titled **Zenodo publish failed for** the tag, labelled `zenodo-publish-failed`, with the reason. A common one is a new version tagged before **New version** was clicked on Zenodo. Fix the cause, then open the failed run and click **Re-run failed jobs**.
+
+[^dois]: Zenodo calls the DOI for all versions the concept DOI. It resolves to the newest version, and it is the one written into `myst.yml`. A version's own DOI always resolves to that version.
