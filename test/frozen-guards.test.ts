@@ -276,6 +276,8 @@ describe('every secret a job reads comes from an environment', () => {
         jobs: Record<string, Job>;
       };
       for (const [name, job] of Object.entries(doc.jobs)) {
+        // A caller only names secrets; the called workflow's job reads them, and is checked here.
+        if ((job as { uses?: string }).uses?.startsWith('./.github/workflows/')) continue;
         const secrets = [...JSON.stringify(job).matchAll(/\bsecrets\.(\w+)/g)].map((m) => m[1]!);
         const env =
           typeof job.environment === 'string' ? job.environment : (job.environment?.name ?? null);
@@ -384,6 +386,18 @@ describe('the bot pull request checks (bot-pr-checks.yml)', () => {
         pr: `\${{ needs.${c.job.needs}.outputs.pr }}`,
         sha: `\${{ needs.${c.job.needs}.outputs.sha }}`,
       });
+    }
+  });
+
+  it('each caller passes every secret the called workflow reads, which is empty otherwise', () => {
+    const read = [...JSON.stringify(called.jobs).matchAll(/secrets\.([A-Z_]+)/g)].map((m) => m[1]);
+    const names = [...new Set(read)].sort();
+    expect(names.length).toBeGreaterThan(0);
+    expect(Object.keys(called.on.workflow_call.secrets).sort()).toEqual(names);
+    for (const c of callers) {
+      expect(c.job.secrets, c.f).toEqual(
+        Object.fromEntries(names.map((n) => [n, `\${{ secrets.${n} }}`])),
+      );
     }
   });
 

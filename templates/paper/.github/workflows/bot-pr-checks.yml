@@ -19,6 +19,13 @@ on:
         description: "the paper's folder, relative to the repository root"
         type: string
         default: "."
+    # The post job's preview environment holds these, but a called workflow reads only the
+    # secrets its caller passes, and an unpassed one is empty without an error.
+    secrets:
+      CLOUDFLARE_API_TOKEN:
+        required: false
+      CLOUDFLARE_ACCOUNT_ID:
+        required: false
 
 jobs:
   # The pull request's code runs in build and validate, so they hold no write scope and no secret.
