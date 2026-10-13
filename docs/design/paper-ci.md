@@ -40,7 +40,7 @@ A pull request from a fork, the default for an outside contributor, adds a step 
 ### Who can change what
 
 :::{figure} img/paper-ci-code.svg
-:alt: Every workflow calls action.yml. The action takes the engine repository from pins.yml, installs paper-environment.yml in the build jobs, and takes the version from myst.yml, then checks out the engine at that version and runs the verb. Everything except myst.yml is inside the CODEOWNERS gate. Local oak also reads pins.yml.
+:alt: Every workflow calls action.yml, and prepare.yml and version-bump.yml also call bot-pr-checks.yml. The action takes the engine repository from pins.yml, installs paper-environment.yml in the build jobs, and takes the version from myst.yml, then checks out the engine at that version and runs the verb. Everything except myst.yml is inside the CODEOWNERS gate. Local oak also reads pins.yml.
 
 The gate covers the launchers, the repository pins and the environment. `myst.yml`, with its plugins and the engine version, stays with the author.
 :::
@@ -63,7 +63,7 @@ The weekly [`version-bump.yml`](src:templates/paper/.github/workflows/version-bu
 ### Keeping the build away from the token
 
 :::{figure} img/paper-ci-stages.svg
-:alt: Two flows start from a pull request or a push. Stage 1 builds or validates with a read-only token and passes an artifact to Stage 2, which runs from the base branch with tokens and posts the preview or the check result. Tag, dispatch and schedule workflows run once, after merge.
+:alt: Two flows start from a pull request or a push. Stage 1 builds or validates with a read-only token and passes an artifact to Stage 2, which runs from the base branch with tokens and posts the preview or the check result. A tag workflow runs once, after merge. The dispatch and schedule workflows open a pull request, then run both stages for it in one run.
 
 The arrow between stages is the only thing that crosses from the read-only side to the side with tokens, and it carries files, not code.
 :::
