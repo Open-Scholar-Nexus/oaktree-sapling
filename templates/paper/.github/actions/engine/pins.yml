@@ -6,5 +6,5 @@ engine_repo: Open-Scholar-Nexus/oaktree-sapling
 # "." when this repository is the journal
 instance_repo: pollomarzo/CHANGE-ME-instance-config
 
-# The oldest engine these workflows run with; oak upgrade keeps myst.yml's version at or above it
+# The oldest engine these workflows run with; the engine action refuses an older one in myst.yml
 min_engine_version: v0.3.0-0

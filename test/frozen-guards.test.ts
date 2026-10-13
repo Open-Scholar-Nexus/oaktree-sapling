@@ -49,50 +49,54 @@ function run(script: string, env: Record<string, string>, cwd?: string) {
   return { code: r.status ?? 1, out: (r.stdout ?? '') + (r.stderr ?? '') };
 }
 
-describe('the engine action refuses an untrusted ref class ([R41])', () => {
-  const script = stepScript('.github/actions/engine/action.yml', 'refclass');
-
-  it('refuses an unmerged oak pull request from a fork', () => {
-    const r = run(script, { REF: 'refs/pull/7/merge', IS_FORK: 'true' });
-    expect(r.code).toBe(1);
-    expect(r.out).toContain('unmerged pull request');
-  });
-
-  it('refuses a raw commit from a fork', () => {
-    const r = run(script, { REF: 'a'.repeat(40), IS_FORK: 'true' });
-    expect(r.code).toBe(1);
-  });
-
-  it('allows the refs a paper is supposed to pin', () => {
-    for (const ref of ['v1.2.3', 'v0.0.0-dev.18', 'main']) {
-      expect(run(script, { REF: ref, IS_FORK: 'true' }).code).toBe(0);
-    }
-  });
-
-  it('leaves same-repo dogfooding alone', () => {
-    expect(run(script, { REF: 'refs/pull/7/merge', IS_FORK: 'false' }).code).toBe(0);
-  });
-});
-
 describe('the engine action refuses a malformed ref before echoing it ([R155])', () => {
   const script = stepScript('.github/actions/engine/action.yml', 'ref');
 
-  /** Runs the ref step with `yq` stubbed to print `value`, and a real GITHUB_OUTPUT file. */
-  function refStep(value: string) {
+  /** Runs the ref step with `yq` stubbed to print `value` for myst.yml and `min` for pins.yml,
+   *  and a real GITHUB_OUTPUT file. */
+  function refStep(value: string, min = '') {
     const dir = mkdtempSync(join(tmpdir(), 'oak-ref-'));
     const bin = mkdtempSync(join(tmpdir(), 'oak-bin-'));
     writeFileSync(join(dir, 'myst.yml'), 'project: {}');
-    writeFileSync(join(bin, 'yq'), `#!/bin/sh\nprintf '%s' "$YQ_VALUE"\n`);
+    writeFileSync(
+      join(bin, 'yq'),
+      `#!/bin/sh\ncase "$2" in *pins.yml) printf '%s' "$YQ_MIN" ;; *) printf '%s' "$YQ_VALUE" ;; esac\n`,
+    );
     chmodSync(join(bin, 'yq'), 0o755);
     const outFile = join(dir, 'gh_output');
     writeFileSync(outFile, '');
     const r = run(
       script,
-      { PATH: `${bin}:${process.env.PATH}`, YQ_VALUE: value, GITHUB_OUTPUT: outFile },
+      { PATH: `${bin}:${process.env.PATH}`, YQ_VALUE: value, YQ_MIN: min, GITHUB_OUTPUT: outFile },
       dir,
     );
     return { ...r, output: readFileSync(outFile, 'utf8') };
   }
+
+  // [R41]: myst.yml is ungated, so the rule holds on every event.
+  it('refuses an unmerged oak pull request, a raw commit or a branch, on any event', () => {
+    for (const v of ['refs/pull/7/merge', 'a'.repeat(40), 'main']) {
+      const r = refStep(v);
+      expect(r.code).toBe(1);
+      expect(r.out).toContain('not a release tag');
+      expect(r.output).toBe('');
+    }
+  });
+
+  it('refuses a version below min_engine_version, which skips checks the workflows need', () => {
+    for (const v of ['v0.2.0', 'v0.2.10', 'v0.0.0-dev.49']) {
+      const r = refStep(v, 'v0.3.0-0');
+      expect(r.code).toBe(1);
+      expect(r.out).toContain('need v0.3.0-0 or newer');
+      expect(r.output).toBe('');
+    }
+  });
+
+  it('allows min_engine_version and above, its pre-releases included', () => {
+    for (const v of ['v0.3.0-0', 'v0.3.0-dev.2', 'v0.3.0', 'v0.3.1', 'v0.10.0', 'v1.0.0']) {
+      expect(refStep(v, 'v0.3.0-0').code).toBe(0);
+    }
+  });
 
   it('refuses a block-scalar version that injects a second $GITHUB_OUTPUT line', () => {
     const r = refStep('v0.0.3\ninjected=PWNED');
@@ -119,7 +123,7 @@ describe('the engine action refuses a malformed ref before echoing it ([R155])',
   });
 
   it('writes exactly one ref= line for the versions a paper actually pins', () => {
-    for (const v of ['v1.2.3', 'v0.0.0-dev.35', 'refs/pull/7/merge', 'a'.repeat(40), 'main']) {
+    for (const v of ['v1.2.3', 'v0.0.0-dev.35']) {
       const r = refStep(v);
       expect(r.code).toBe(0);
       expect(r.output.trim()).toBe(`ref=${v}`);
@@ -209,7 +213,7 @@ describe('no template run: script puts an expression in the script [R153]', () =
   });
 
   it('finds the scripts it claims to check', () => {
-    expect(runScripts().length).toBeGreaterThanOrEqual(4);
+    expect(runScripts().length).toBeGreaterThanOrEqual(3);
   });
 });
 
