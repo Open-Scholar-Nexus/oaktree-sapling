@@ -78,7 +78,7 @@ svg{font-family:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif}
         <line x1="600" y1="153" x2="688" y2="153" class="l g" marker-end="url(#ag)"/>
 
         <!-- after merge -->
-        <text x="20" y="232" class="t-hd">after merge · from main, holds tokens</text>
+        <text x="20" y="232" class="t-hd">after merge · on main or a tag</text>
         <rect x="20" y="242" width="140" height="40" rx="6" class="box q"/>
         <text x="90" y="266" text-anchor="middle">tag</text>
         <rect x="195" y="242" width="405" height="40" rx="6" class="box n"/>
@@ -113,7 +113,8 @@ svg{font-family:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif}
         <line x1="350" y1="393" x2="443" y2="393" class="l n" marker-end="url(#an)"/>
         <text x="397" y="386" text-anchor="middle" class="t-k">site, report</text>
         <rect x="690" y="370" width="170" height="46" rx="6" class="box q"/>
-        <text x="775" y="397" text-anchor="middle">check run + preview</text>
+        <text x="775" y="389" text-anchor="middle">check run + comment</text>
+        <text x="775" y="405" text-anchor="middle">preview + link comment</text>
         <line x1="600" y1="393" x2="688" y2="393" class="l n" marker-end="url(#an)"/>
         <text x="190" y="434" class="t-sm">the pushed commit · read-only</text>
         <text x="440" y="434" class="t-sm">same run · preview environment</text>

@@ -40,7 +40,7 @@ A pull request from a fork, the default for an outside contributor, adds a step 
 ### Who can change what
 
 :::{figure} img/paper-ci-code.svg
-:alt: Every workflow calls action.yml, and prepare.yml and version-bump.yml also call bot-pr-checks.yml. The action takes the engine repository from pins.yml, installs paper-environment.yml in the build jobs, and takes the version from myst.yml, then checks out the engine at that version and runs the verb. Everything except myst.yml is inside the CODEOWNERS gate. Local oak also reads pins.yml.
+:alt: Every workflow calls action.yml, and prepare.yml and version-bump.yml also call bot-pr-checks.yml. The action takes the engine repository and the oldest engine version it accepts from pins.yml, installs paper-environment.yml in the build jobs, and takes the version from myst.yml, then checks out the engine at that version and runs the verb. Everything except myst.yml is inside the CODEOWNERS gate. Local oak also reads pins.yml.
 
 The gate covers the launchers, the repository pins and the environment. `myst.yml`, with its plugins and the engine version, stays with the author.
 :::
