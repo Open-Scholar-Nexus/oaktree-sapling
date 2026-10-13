@@ -140,7 +140,7 @@ Beyond the summary at the top of this page, these gaps remain:
 - **The check verdict is authored by Stage 1.** Stage 2 posts the report Stage 1 computed, so a fork that rewrites `check.yml` can post a passing report. That rewrite is itself a change under `.github/`, so the comment flags it and merging it needs an editor. The verdict is a signal for the editor and not an authorisation decision, and the code-owner review is what stands between such a pull request and `main`.
 - **The engine version on `main` is ungated.** `protect-main` requires no approval for `myst.yml`, and `refclass` fires only on fork pull requests, so an author can merge a version pointing at another engine pull request's merge ref, and the jobs on `main` that hold secrets then run that engine. Closing it needs an allowlist of release and dev tags enforced on every event.
 - **The branch rule can be removed.** An admin who deletes `protect-main` turns `CODEOWNERS` back into documentation.
-- **Anything we didn't consider.** See a gap in our design? Let us know through our issues or contact us at `<hidden for now>`
+- **Anything we didn't consider.** See a gap in our design? [Open an issue](https://github.com/Open-Scholar-Nexus/oaktree-sapling/issues) to tell us.
 
 (design-paper-ci-rules)=
 
