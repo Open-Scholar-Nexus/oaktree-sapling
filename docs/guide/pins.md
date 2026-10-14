@@ -13,7 +13,7 @@ That pull request changes only `myst.yml`, because GitHub does not let a workflo
 oak upgrade --repo <owner>/<paper-repo>
 ```
 
-`oak` prints a plan, then opens a pull request that sets the version and replaces those files with the release's own, keeping any code owner added to `CODEOWNERS`. A hand edit to them shows in that pull request's diff. `--to <tag>` picks a release other than the newest.
+`oak` prints a plan, then opens a pull request that sets the version and replaces those files with the release's own, keeping any code owner added to `CODEOWNERS`. A hand edit to them shows in that pull request's diff. `--to <tag>` picks a release other than the newest. When the release's workflows need a newer engine than the version that pull request would set, `oak` stops before changing anything and names the oldest version they run with.
 
 (site-pins)=
 ## The journal website's versions
