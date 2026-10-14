@@ -1,7 +1,7 @@
 name: Bot pull request checks
 
 # Paper CI and Journal checks for a pull request github-actions[bot] opened, whose pull_request
-# runs GitHub holds: both stages in one run, called by version-bump.yml and prepare.yml.
+# runs GitHub holds: both stages in one run, called by prepare.yml.
 # https://scholar.nexus/oaktree-sapling/design/paper-ci#design-paper-ci-two-stages
 
 on:

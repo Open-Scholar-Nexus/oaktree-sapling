@@ -854,7 +854,7 @@ export function cachedJournal(
 
 /**
  * The latest stable release tag of `engineRepo`, from the `releases/latest` API: the newest
- * release that is neither a draft nor a pre-release, so `oak bootstrap` and the weekly upgrade
+ * release that is neither a draft nor a pre-release, so `oak bootstrap` and `oak upgrade`
  * never pick a pre-release (RELEASING.md). One is used only when named (`--engine-version`,
  * `--to`). A 404 means no stable release yet: the probe is quiet, and `oak bootstrap` and
  * `oak upgrade` say how to proceed.
@@ -879,7 +879,7 @@ export function materializeTemplate(engineRepo: string, tag: string): string {
 }
 
 /** The upgrade pull request: branch, commit as the bot, push, then open one or update the
- *  branch's open one, so the weekly run keeps a single pull request. */
+ *  branch's open one, so running again for the same target keeps a single pull request. */
 export const realUpgradePr: UpgradePr = {
   open(repoRoot, opts) {
     git(repoRoot, ['checkout', '-B', opts.branch]);
@@ -891,16 +891,15 @@ export const realUpgradePr: UpgradePr = {
     const existing = gh(openPrQuery(opts.branch), { cwd }) || null;
     // The open pull request already has these changes.
     if (existing && sameTreeAsRemote(repoRoot, opts.branch))
-      return { url: existing, action: 'current', number: prNumberFromUrl(existing) };
+      return { url: existing, action: 'current' };
     git(repoRoot, ['push', '-u', 'origin', opts.branch, '--force']);
-    const head = git(repoRoot, ['rev-parse', 'HEAD']);
     if (existing) {
       gh(['pr', 'edit', existing, '--title', opts.title, '--body', opts.body], { cwd });
-      return { url: existing, action: 'updated', number: prNumberFromUrl(existing), head };
+      return { url: existing, action: 'updated' };
     }
     const create = ['pr', 'create', '--title', opts.title, '--body', opts.body];
     const url = gh([...create, '--head', opts.branch], { cwd });
-    return { url, action: 'opened', number: prNumberFromUrl(url), head };
+    return { url, action: 'opened' };
   },
 };
 

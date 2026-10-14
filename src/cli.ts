@@ -17,7 +17,6 @@ import {
 import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { parseDocument } from 'yaml';
-import type { UpgradeMode } from './upgrade.js';
 import type { ComposeInput } from './compose.js';
 import type { MaterializeInput, StartOpts } from './materialize.js';
 import * as msg from './messages.js';
@@ -1126,15 +1125,10 @@ async function cmdUpgrade(argv: string[]): Promise<number> {
     process.stderr.write(msg.upgrade.missingTarget + '\n');
     return 2;
   }
-  const mode: UpgradeMode = has(argv, 'version-only')
-    ? 'version-only'
-    : has(argv, 'files-only')
-      ? 'files-only'
-      : 'both';
   const repoRoot = paper ? resolve(paper) : gh.tempClone(gh.assertRepoName(repo!));
 
   const out = await upgrade.cmdUpgrade(
-    { repoRoot, to: flag(argv, 'to'), mode },
+    { repoRoot, to: flag(argv, 'to'), filesOnly: has(argv, 'files-only') },
     {
       resolveTarget: gh.latestEngineRelease,
       materializeTemplate: gh.materializeTemplate,
@@ -1191,11 +1185,11 @@ async function cmdConformance(argv: string[]): Promise<number> {
             return 0;
           }
         },
-        // Installs the release on the test repo as a journal would: `oak upgrade --both` on a
-        // fresh clone, in-process.
+        // Installs the release on the test repo as a journal would: `oak upgrade` on a fresh
+        // clone, in-process.
         installEngine: async (r, t) => {
           const up = await upgrade.cmdUpgrade(
-            { repoRoot: gh.tempClone(r), to: t, mode: 'both' },
+            { repoRoot: gh.tempClone(r), to: t },
             {
               resolveTarget: gh.latestEngineRelease,
               materializeTemplate: gh.materializeTemplate,
