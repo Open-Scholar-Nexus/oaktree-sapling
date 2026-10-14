@@ -14,7 +14,7 @@ Two terms recur below. A flow that needs a token runs as two workflows: **Stage 
 An author with push access opens a pull request from a branch. Stage 1 runs their content on a GitHub-hosted runner, a fresh machine discarded after the job, with a read-only token. Their pull request reaches `main` through the `protect-main` rule, which requires the editorial checks to pass and requires an editor's review for any change under `CODEOWNERS`. The author's code runs only in jobs that hold no secret, and every job that holds a secret runs code from `main` or from an editor's `v*` tag.
 
 (r83)=
-A pull request from a fork, the default for an outside contributor, adds a step before anything runs: GitHub holds the run for a maintainer's approval when the contributor has never had anything merged into the repository. That is GitHub's default for a public repository, `oak bootstrap` leaves it there, and the [runbook](src:src/messages.ts#L430-L433) tells the editor to expect the approval click. Once approved, the fork's run builds like any other, and any edit it makes to a gated file needs an editor's review before it can merge. The checks comment also [flags](src:src/checks.ts#L199-L206) a pull request that touches `.github/`, `CODEOWNERS` or `paper-environment.yml`.
+A pull request from a fork, the default for an outside contributor, adds a step before anything runs: GitHub holds the run for a maintainer's approval when the contributor has never had anything merged into the repository. That is GitHub's default for a public repository, `oak bootstrap` leaves it there, and the [runbook](src:src/messages.ts#L429-L432) tells the editor to expect the approval click. Once approved, the fork's run builds like any other, and any edit it makes to a gated file needs an editor's review before it can merge. The checks comment also [flags](src:src/checks.ts#L199-L206) a pull request that touches `.github/`, `CODEOWNERS` or `paper-environment.yml`.
 :::
 
 (design-paper-ci-trust)=
@@ -29,8 +29,8 @@ A pull request from a fork, the default for an outside contributor, adds a step 
 
 - [`ci.yml`](src:templates/paper/.github/workflows/ci.yml) and [`preview-deploy.yml`](src:templates/paper/.github/workflows/preview-deploy.yml) are the two stages of the site preview. On a push to `main`, `ci.yml` also deploys to GitHub Pages.
 - [`check.yml`](src:templates/paper/.github/workflows/check.yml) and [`check-post.yml`](src:templates/paper/.github/workflows/check-post.yml) are the two stages of the editorial checks.
-- [`publish.yml`](src:templates/paper/.github/workflows/publish.yml), [`prepare.yml`](src:templates/paper/.github/workflows/prepare.yml) and [`version-bump.yml`](src:templates/paper/.github/workflows/version-bump.yml) handle publishing actions, and are started by a `v*` tag, an editor's manual dispatch and a weekly schedule. Author content reaches them only after it has merged.
-- [`bot-pr-checks.yml`](src:templates/paper/.github/workflows/bot-pr-checks.yml) runs both stages for a pull request that `prepare.yml` or `version-bump.yml` opens, as [below](#design-paper-ci-bot-prs).
+- [`publish.yml`](src:templates/paper/.github/workflows/publish.yml) and [`prepare.yml`](src:templates/paper/.github/workflows/prepare.yml) handle publishing actions, and are started by a `v*` tag and an editor's manual dispatch. Author content reaches them only after it has merged.
+- [`bot-pr-checks.yml`](src:templates/paper/.github/workflows/bot-pr-checks.yml) runs both stages for the pull request that `prepare.yml` opens, as [below](#design-paper-ci-bot-prs).
 - [`.github/actions/engine/action.yml`](src:templates/paper/.github/actions/engine/action.yml) is the composite action every workflow calls, and [`pins.yml`](src:templates/paper/.github/actions/engine/pins.yml) beside it, which names the engine and journal repositories for the action and for local `oak`.
 - [`CODEOWNERS`](src:templates/paper/CODEOWNERS), and the optional `paper-environment.yml`, a conda environment the action installs before the engine runs, in the jobs that build.
 
@@ -40,7 +40,7 @@ A pull request from a fork, the default for an outside contributor, adds a step 
 ### Who can change what
 
 :::{figure} img/paper-ci-code.svg
-:alt: Every workflow calls action.yml, and prepare.yml and version-bump.yml also call bot-pr-checks.yml. The action takes the engine repository and the oldest engine version it accepts from pins.yml, installs paper-environment.yml in the build jobs, and takes the version from myst.yml, then checks out the engine at that version and runs the verb. Everything except myst.yml is inside the CODEOWNERS gate. Local oak also reads pins.yml.
+:alt: Every workflow calls action.yml, and prepare.yml also calls bot-pr-checks.yml. The action takes the engine repository and the oldest engine version it accepts from pins.yml, installs paper-environment.yml in the build jobs, and takes the version from myst.yml, then checks out the engine at that version and runs the verb. Everything except myst.yml is inside the CODEOWNERS gate. Local oak also reads pins.yml.
 
 The gate covers the launchers, the repository pins and the environment. `myst.yml`, with its plugins and the engine version, stays with the author.
 :::
@@ -55,15 +55,17 @@ The author changes the content and `myst.yml`, including the engine version, wit
 - `CODEOWNERS` itself, so a pull request cannot remove the gate in the same change.
 - `paper-environment.yml`. Installing a conda package runs its install scripts, so the file decides code that runs in every build. The action installs it only in jobs that hold no secret, as [below](#r207).
 
-(design-paper-ci-weekly-bump)=
-The weekly [`version-bump.yml`](src:templates/paper/.github/workflows/version-bump.yml) follows the same split: it changes only the version in `myst.yml`. It runs with the workflow's own `GITHUB_TOKEN`, and GitHub only accepts a change under `.github/workflows/` from a token with the `workflows` permission, which is not among the [permissions a `GITHUB_TOKEN` can have](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#permissions). The launchers move to a new release when an editor runs `oak upgrade` with their own login, and that pull request goes through the code-owner review like any other change under `.github/`.
+(design-paper-ci-upgrade)=
+A paper moves to a new release when an editor runs `oak upgrade` with their own login. It opens one pull request that sets the version in `myst.yml` and replaces the launchers with the release's own, and that pull request goes through the code-owner review like any other change under `.github/`.[^why-no-scheduled-upgrade]
+
+[^why-no-scheduled-upgrade]: A scheduled workflow could change only the version: it runs with its own `GITHUB_TOKEN`, and GitHub only accepts a change under `.github/workflows/` from a token with the `workflows` permission, which is not among the [permissions a `GITHUB_TOKEN` can have](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#permissions). That version works only while the new engine still runs with the paper's launchers, and nothing records which launchers a paper has, so nothing can check it; when it fails, the author is left with a red pull request that only an editor can fix. A paper needs the engine for the few weeks of its review, and a fix that matters in that time usually changes both the engine and the launchers.
 
 (design-paper-ci-two-stages)=
 
 ### Keeping the build away from the token
 
 :::{figure} img/paper-ci-stages.svg
-:alt: Two flows start from a pull request or a push. Stage 1 builds or validates with a read-only token and passes an artifact to Stage 2, which runs from the base branch with tokens and posts the preview or the check result. A tag workflow runs once, after merge. The dispatch and schedule workflows open a pull request, then run both stages for it in one run.
+:alt: Two flows start from a pull request or a push. Stage 1 builds or validates with a read-only token and passes an artifact to Stage 2, which runs from the base branch with tokens and posts the preview or the check result. A tag workflow runs once, after merge. The dispatch workflow opens a pull request, then runs both stages for it in one run.
 
 The arrow between stages is the only thing that crosses from the read-only side to the side with tokens, and it carries files, not code.
 :::
@@ -90,16 +92,16 @@ Inside those jobs the paper's code never runs. `publish.yml` builds in a job wit
 
 ### Pull requests a workflow opens
 
-`prepare.yml` and `version-bump.yml` open their pull requests with the workflow's own `GITHUB_TOKEN`, and GitHub holds the `pull_request` runs of such a pull request for a maintainer's approval. So each of them [calls `bot-pr-checks.yml`](src:templates/paper/.github/workflows/version-bump.yml#L31-L47) after pushing, with the pull request number and the commit its engine step reports, and that one run does both stages:
+`prepare.yml` opens the DOI pull request with the workflow's own `GITHUB_TOKEN`, and GitHub holds the `pull_request` runs of such a pull request for a maintainer's approval. So it [calls `bot-pr-checks.yml`](src:templates/paper/.github/workflows/prepare.yml#L38-L54) after pushing, with the pull request number and the commit its engine step reports, and that one run does both stages:
 
 - `build` and `validate` check out the pushed commit with [`contents: read`](src:templates/paper/.github/workflows/bot-pr-checks.yml#L31-L39) and no secret, as Stage 1 does.
 - `post` checks out the default branch in the `preview` environment and runs `check-post` and `deploy-preview`, each with `--pr` and `--verified-head`, so the [pull request check](#r136) applies with the commit taken from the job that pushed it.
 
-How GitHub runs a called workflow shapes the callers:
+How GitHub runs a called workflow shapes the caller:
 
-- **Permissions.** The calling job's grant caps every job in the called workflow, so each caller grants exactly what the called jobs ask for, and [`test/frozen-guards.test.ts`](src:test/frozen-guards.test.ts#L408-L412) compares the two.
-- **Ref.** The called jobs run on the caller's ref, and `preview` admits only `main`, so a caller runs it only from the default branch. A scheduled run always starts there.
-- **Secrets.** A called workflow reads only the secrets its caller passes, environment secrets included, and an unpassed one is an empty string with no error. Both callers pass the Cloudflare secrets by name, and [a guard](src:test/frozen-guards.test.ts#L396-L406) fails when the called workflow reads a secret that is not declared and passed.
+- **Permissions.** The calling job's grant caps every job in the called workflow, so `prepare.yml` grants exactly what the called jobs ask for, and [`test/frozen-guards.test.ts`](src:test/frozen-guards.test.ts#L409-L413) compares the two.
+- **Ref.** The called jobs run on the caller's ref, and `preview` admits only `main`, so `prepare.yml` runs it only from the default branch.
+- **Secrets.** A called workflow reads only the secrets its caller passes, environment secrets included, and an unpassed one is an empty string with no error. `prepare.yml` passes the Cloudflare secrets by name, and [a guard](src:test/frozen-guards.test.ts#L397-L407) fails when the called workflow reads a secret that is not declared and passed.
 
 (design-paper-ci-stage2-inputs)=
 
@@ -183,9 +185,9 @@ The engine repository in `pins.yml` and the version in `myst.yml` both fail loud
 
 (r137)=
 
-Stage 2 rejects malformed input with a clear error. A report that is not JSON, or JSON without the `checkRun.conclusion` field, makes `check-post` [exit 1](src:src/cli.ts#L920-L933) naming the file and what is wrong with it. An absent `pr-number` file means a push build and is not an error, and an absent `paper` file means `.`. A present and malformed one is a corrupt or hostile artifact, so Stage 2 fails.
+Stage 2 rejects malformed input with a clear error. A report that is not JSON, or JSON without the `checkRun.conclusion` field, makes `check-post` [exit 1](src:src/cli.ts#L919-L932) naming the file and what is wrong with it. An absent `pr-number` file means a push build and is not an error, and an absent `paper` file means `.`. A present and malformed one is a corrupt or hostile artifact, so Stage 2 fails.
 
-[`oak validate --report`](src:src/cli.ts#L881-L893) exits 0 whenever it wrote a report, a failing one included, because `check-post.yml` runs only after a successful Stage 1. It exits non-zero only when no report was written.
+[`oak validate --report`](src:src/cli.ts#L880-L892) exits 0 whenever it wrote a report, a failing one included, because `check-post.yml` runs only after a successful Stage 1. It exits non-zero only when no report was written.
 
 (design-paper-ci-artifact-contract)=
 
@@ -197,7 +199,7 @@ The artifact is an interface between two versions of the launchers. Stage 1 runs
 
 (design-paper-ci-min-engine)=
 
-The launchers and the engine version also have to agree. Launchers call verbs and read outputs that an older engine lacks, and a missing output reads as empty, so the run quietly skips whatever needed it. [`pins.yml`](src:templates/paper/.github/actions/engine/pins.yml#L9-L10) declares the oldest engine its launchers run with, and [`oak upgrade`](src:src/upgrade.ts#L305-L320) refuses to leave `myst.yml` below it. A release that raises it is pinned on `main` before the new launchers go in.
+The launchers and the engine version also have to agree. Launchers call verbs and read outputs that an older engine lacks, and a missing output reads as empty, so the run quietly skips whatever needed it. [`pins.yml`](src:templates/paper/.github/actions/engine/pins.yml#L9-L10) declares the oldest engine its launchers run with, and [`oak upgrade`](src:src/upgrade.ts#L290-L305) refuses to leave `myst.yml` below it. A release that raises it is pinned on `main` before the new launchers go in.
 
 (design-paper-ci-concurrency)=
 
