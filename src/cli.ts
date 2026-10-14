@@ -434,8 +434,8 @@ function recordResult(result: Record<string, unknown>): void {
 }
 
 /**
- * Prints a verb's result, and records it ({@link recordResult}). The JSON is opt-in (`--json`),
- * since otherwise it repeats the prose the verb already printed. Human output goes to stderr, so
+ * Prints a verb's result, and records it ({@link recordResult}). The JSON is opt-in (`--json`):
+ * it repeats the prose the verb already printed. Human output goes to stderr, so
  * with `--json` stdout carries only the JSON.
  */
 function emit(
@@ -933,7 +933,7 @@ async function cmdCheckPost(argv: string[]): Promise<number> {
 
   const gh = await import('./gh.js');
   const artifact = await import('./artifact.js');
-  // Old artifacts carry no `paper`; it is read here so a malformed one is refused.
+  // Stage 1 may run an engine that writes no `paper`; it is read here so a malformed one is refused.
   const artifactDir = dirname(resolve(reportPath));
   const paper = artifact.resolvePaperDir(
     flag(argv, 'paper'),
