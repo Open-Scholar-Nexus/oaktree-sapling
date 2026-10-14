@@ -24,8 +24,7 @@
  *   templates/paper/CODEOWNERS .............. its header comment
  *   templates/paper/.github/workflows/*.yml . job names and `::error::` annotations (ci, check,
  *                                             check-post, preview-deploy, prepare, publish,
- *                                             version-bump, bot-pr-checks: the names show in
- *                                             the Actions tab)
+ *                                             bot-pr-checks: the names show in the Actions tab)
  *   templates/instance/README.md ............ what a journal editor reads first
  *   templates/instance/journal.yml .......... the journal's settings and their comments
  *   templates/instance/brand/brand.yml ...... the branding settings and their comments
@@ -141,7 +140,7 @@ export const usage = (): string =>
   `                        [--private] [--no-require-checks] [--yes]\n` +
   `      --instance    the journal repo this paper belongs to ('.' only if the journal\n` +
   `                    settings live in this same repo); --edition names one of its editions\n` +
-  `  oak upgrade (--repo <owner/name> | --paper <dir>) [--to <tag>] [--version-only|--files-only|--both] [--yes]\n` +
+  `  oak upgrade (--repo <owner/name> | --paper <dir>) [--to <tag>] [--files-only] [--yes]\n` +
   `                    move a paper repo to a newer engine version, as a pull request\n` +
   `\n` +
   `Working on a paper\n` +
@@ -463,11 +462,11 @@ export const upgrade = {
     `branch or commit; no pull request. Pass --to <tag> to move it.`,
 
   /** The pin this run leaves is older than the workflows it leaves need. */
-  belowMinimum: (pin: string, min: string, mode: 'version-only' | 'files-only' | 'both'): string =>
+  belowMinimum: (pin: string, min: string, filesOnly: boolean): string =>
     `oak upgrade: the workflows need engine ${min} or newer, and this run would leave ` +
     `myst.yml at ${pin}; nothing was changed. ` +
-    (mode === 'files-only'
-      ? `Run it without --files-only, which moves the version too, or pass --to <tag> naming ${min} or newer.`
+    (filesOnly
+      ? `Run it without --files-only, which moves the version too.`
       : `Pass --to <tag> naming ${min} or newer.`),
 
   planHeader: (repoRoot: string, target: string): string => `upgrade ${repoRoot} → ${target}`,

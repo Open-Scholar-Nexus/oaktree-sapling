@@ -75,7 +75,7 @@ describe('renderPaperTemplate', () => {
     // oak's own README is not copied; the journal template is a separate tree.
     expect(existsSync(join(dest, 'README.md'))).toBe(false);
     expect(existsSync(join(dest, 'journal.yml'))).toBe(false);
-    expect(written).toContain('.github/workflows/version-bump.yml');
+    expect(written).toContain(rel);
   });
 
   it('seeds a LICENSE for the licence the edition states [R127]', () => {

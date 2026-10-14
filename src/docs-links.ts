@@ -43,7 +43,7 @@ export const DOCS = {
   /** The image the PDF puts on the first page. */
   pdfLogo: 'guide/branding#pdf-logo',
 
-  /** The three versions in the journal repo that nothing bumps for you. */
+  /** Moving a paper to a newer engine, and the versions in the journal repo. */
   pins: 'guide/pins',
 
   /** Every file in a journal repo and who reads it. */

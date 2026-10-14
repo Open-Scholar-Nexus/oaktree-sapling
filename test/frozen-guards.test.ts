@@ -354,16 +354,17 @@ describe('the engine action returns the verb result', () => {
 
 describe('the bot pull request checks (bot-pr-checks.yml)', () => {
   const called = workflow('bot-pr-checks.yml');
-  const callers = ['version-bump.yml', 'prepare.yml'].map((f) => {
+  const callers = readdirSync(join(SHIM, '.github/workflows')).flatMap((f) => {
     const jobs = workflow(f).jobs as Record<string, any>;
-    const [name, job] = Object.entries(jobs).find(([, j]) => j.uses)!;
-    return { f, name, job, jobs };
+    return Object.entries(jobs)
+      .filter(([, j]) => j.uses === './.github/workflows/bot-pr-checks.yml')
+      .map(([name, job]) => ({ f, name, job, jobs }));
   });
 
-  it('is a reusable workflow, called by the bump and the DOI prepare', () => {
+  it('is a reusable workflow, called by the DOI prepare', () => {
     expect(Object.keys(called.on)).toEqual(['workflow_call']);
     expect(called.on.workflow_call.inputs.paper.default).toBe('.');
-    for (const c of callers) expect(c.job.uses, c.f).toBe('./.github/workflows/bot-pr-checks.yml');
+    expect(callers.map((c) => c.f)).toEqual(['prepare.yml']);
   });
 
   it('each caller runs it only on the default branch, which the preview environment admits', () => {
