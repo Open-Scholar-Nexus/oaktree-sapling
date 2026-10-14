@@ -30,6 +30,7 @@ A pull request from a fork, the default for an outside contributor, adds a step 
 - [`ci.yml`](src:templates/paper/.github/workflows/ci.yml) and [`preview-deploy.yml`](src:templates/paper/.github/workflows/preview-deploy.yml) are the two stages of the site preview. On a push to `main`, `ci.yml` also deploys to GitHub Pages.
 - [`check.yml`](src:templates/paper/.github/workflows/check.yml) and [`check-post.yml`](src:templates/paper/.github/workflows/check-post.yml) are the two stages of the editorial checks.
 - [`publish.yml`](src:templates/paper/.github/workflows/publish.yml), [`prepare.yml`](src:templates/paper/.github/workflows/prepare.yml) and [`version-bump.yml`](src:templates/paper/.github/workflows/version-bump.yml) handle publishing actions, and are started by a `v*` tag, an editor's manual dispatch and a weekly schedule. Author content reaches them only after it has merged.
+- [`bot-pr-checks.yml`](src:templates/paper/.github/workflows/bot-pr-checks.yml) runs both stages for a pull request that `prepare.yml` or `version-bump.yml` opens, as [below](#design-paper-ci-bot-prs).
 - [`.github/actions/engine/action.yml`](src:templates/paper/.github/actions/engine/action.yml) is the composite action every workflow calls, and [`pins.yml`](src:templates/paper/.github/actions/engine/pins.yml) beside it, which names the engine and journal repositories for the action and for local `oak`.
 - [`CODEOWNERS`](src:templates/paper/CODEOWNERS), and the optional `paper-environment.yml`, a conda environment the action installs before the engine runs, in the jobs that build.
 
@@ -39,7 +40,7 @@ A pull request from a fork, the default for an outside contributor, adds a step 
 ### Who can change what
 
 :::{figure} img/paper-ci-code.svg
-:alt: Every workflow calls action.yml. The action takes the engine repository and the oldest engine version it accepts from pins.yml, installs paper-environment.yml in the build jobs, and takes the version from myst.yml, then checks out the engine at that version and runs the verb. Everything except myst.yml is inside the CODEOWNERS gate. Local oak also reads pins.yml.
+:alt: Every workflow calls action.yml, and prepare.yml and version-bump.yml also call bot-pr-checks.yml. The action takes the engine repository and the oldest engine version it accepts from pins.yml, installs paper-environment.yml in the build jobs, and takes the version from myst.yml, then checks out the engine at that version and runs the verb. Everything except myst.yml is inside the CODEOWNERS gate. Local oak also reads pins.yml.
 
 The gate covers the launchers, the repository pins and the environment. `myst.yml`, with its plugins and the engine version, stays with the author.
 :::
@@ -62,7 +63,7 @@ The weekly [`version-bump.yml`](src:templates/paper/.github/workflows/version-bu
 ### Keeping the build away from the token
 
 :::{figure} img/paper-ci-stages.svg
-:alt: Two flows start from a pull request or a push. Stage 1 builds or validates with a read-only token and passes an artifact to Stage 2, which runs from the base branch with tokens and posts the preview or the check result. Tag, dispatch and schedule workflows run once, after merge.
+:alt: Two flows start from a pull request or a push. Stage 1 builds or validates with a read-only token and passes an artifact to Stage 2, which runs from the base branch with tokens and posts the preview or the check result. A tag workflow runs once, after merge. The dispatch and schedule workflows open a pull request, then run both stages for it in one run.
 
 The arrow between stages is the only thing that crosses from the read-only side to the side with tokens, and it carries files, not code.
 :::
@@ -84,6 +85,21 @@ A branch pull request goes through the same two stages. A check then behaves the
 Branches cannot reach the tokens at all. A repository secret is readable by every workflow on every branch, and an author with push access can push a branch carrying a workflow of their own, so `oak bootstrap` stores every secret in a GitHub environment instead. The Cloudflare secrets live on `preview` and the Zenodo tokens on `zenodo-prepare`, both admitting only `main`, and on `zenodo-publish`, which admits only `v*` tags; only editors can push one. Each job that reads a secret declares its environment, and a job on any other ref is refused before it starts. Re-running `oak bootstrap` with the values sets them on the environments and deletes the repository-level copies of those secrets.
 
 Inside those jobs the paper's code never runs. `publish.yml` builds in a job with no secrets and hands the output to the deposit job, which runs `oak release --no-build`. The action installs `paper-environment.yml` only when a job asks, and only the build jobs ask. And the engine runs `wrangler` from an empty directory, so a `.npmrc` or `node_modules` in the paper cannot choose which wrangler receives the Cloudflare token.
+
+(design-paper-ci-bot-prs)=
+
+### Pull requests a workflow opens
+
+`prepare.yml` and `version-bump.yml` open their pull requests with the workflow's own `GITHUB_TOKEN`, and GitHub holds the `pull_request` runs of such a pull request for a maintainer's approval. So each of them [calls `bot-pr-checks.yml`](src:templates/paper/.github/workflows/version-bump.yml#L31-L47) after pushing, with the pull request number and the commit its engine step reports, and that one run does both stages:
+
+- `build` and `validate` check out the pushed commit with [`contents: read`](src:templates/paper/.github/workflows/bot-pr-checks.yml#L31-L39) and no secret, as Stage 1 does.
+- `post` checks out the default branch in the `preview` environment and runs `check-post` and `deploy-preview`, each with `--pr` and `--verified-head`, so the [pull request check](#r136) applies with the commit taken from the job that pushed it.
+
+How GitHub runs a called workflow shapes the callers:
+
+- **Permissions.** The calling job's grant caps every job in the called workflow, so each caller grants exactly what the called jobs ask for, and [`test/frozen-guards.test.ts`](src:test/frozen-guards.test.ts#L408-L412) compares the two.
+- **Ref.** The called jobs run on the caller's ref, and `preview` admits only `main`, so a caller runs it only from the default branch. A scheduled run always starts there.
+- **Secrets.** A called workflow reads only the secrets its caller passes, environment secrets included, and an unpassed one is an empty string with no error. Both callers pass the Cloudflare secrets by name, and [a guard](src:test/frozen-guards.test.ts#L396-L406) fails when the called workflow reads a secret that is not declared and passed.
 
 (design-paper-ci-stage2-inputs)=
 
@@ -201,7 +217,7 @@ Both stages key on the head repository, and the pull request group in each Stage
 
 (r172)=
 
-A workflow reads a secret into `env:` and tests it in `run:`[^why-test-secret-in-run]. A `secrets` reference in a step's `if:` makes GitHub reject the whole workflow file. For a file that only runs on `workflow_dispatch`, such as `prepare.yml`, the rejection shows only when someone runs it. `prepare.yml` [tests the sandbox token](src:templates/paper/.github/workflows/prepare.yml#L26-L34) this way, and [`test/frozen-guards.test.ts`](src:test/frozen-guards.test.ts#L244-L249) fails on any frozen `if:` that reads `secrets`.
+A workflow reads a secret into `env:` and tests it in `run:`[^why-test-secret-in-run]. A `secrets` reference in a step's `if:` makes GitHub reject the whole workflow file. For a file that only runs on `workflow_dispatch`, such as `prepare.yml`, the rejection shows only when someone runs it. [`test/frozen-guards.test.ts`](src:test/frozen-guards.test.ts#L244-L249) fails on any frozen `if:` that reads `secrets`.
 
 [^why-test-secret-in-run]: The `secrets` context does not exist in a step-level `if:`.
 
