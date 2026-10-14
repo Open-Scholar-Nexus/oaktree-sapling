@@ -39,7 +39,7 @@ A pull request from a fork, the default for an outside contributor, adds a step 
 ### Who can change what
 
 :::{figure} img/paper-ci-code.svg
-:alt: Every workflow calls action.yml. The action takes the engine repository from pins.yml, installs paper-environment.yml in the build jobs, and takes the version from myst.yml, then checks out the engine at that version and runs the verb. Everything except myst.yml is inside the CODEOWNERS gate. Local oak also reads pins.yml.
+:alt: Every workflow calls action.yml. The action takes the engine repository and the oldest engine version it accepts from pins.yml, installs paper-environment.yml in the build jobs, and takes the version from myst.yml, then checks out the engine at that version and runs the verb. Everything except myst.yml is inside the CODEOWNERS gate. Local oak also reads pins.yml.
 
 The gate covers the launchers, the repository pins and the environment. `myst.yml`, with its plugins and the engine version, stays with the author.
 :::
@@ -201,7 +201,7 @@ Both stages key on the head repository, and the pull request group in each Stage
 
 (r172)=
 
-A workflow reads a secret into `env:` and tests it in `run:`[^why-test-secret-in-run]. A `secrets` reference in a step's `if:` makes GitHub reject the whole workflow file. For a file that only runs on `workflow_dispatch`, such as `prepare.yml`, the rejection shows only when someone runs it. `prepare.yml` [tests the sandbox token](src:templates/paper/.github/workflows/prepare.yml#L26-L34) this way, and [`test/frozen-guards.test.ts`](src:test/frozen-guards.test.ts#L352-L358) fails on any frozen `if:` that reads `secrets`.
+A workflow reads a secret into `env:` and tests it in `run:`[^why-test-secret-in-run]. A `secrets` reference in a step's `if:` makes GitHub reject the whole workflow file. For a file that only runs on `workflow_dispatch`, such as `prepare.yml`, the rejection shows only when someone runs it. `prepare.yml` [tests the sandbox token](src:templates/paper/.github/workflows/prepare.yml#L26-L34) this way, and [`test/frozen-guards.test.ts`](src:test/frozen-guards.test.ts#L244-L249) fails on any frozen `if:` that reads `secrets`.
 
 [^why-test-secret-in-run]: The `secrets` context does not exist in a step-level `if:`.
 
