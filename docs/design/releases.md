@@ -41,7 +41,7 @@ The release script downloads typst at the version in `typst.version` and runs th
 
 ## A stable release is `latest` before it is tested
 
-A stable `vX.Y.Z` enters `releases/latest` as soon as it is released, and `latest` is what `oak bootstrap` and the scheduled `oak upgrade --version-only` resolve. Conformance runs after the release, so a journal can pick up a release that has not passed it, and a release that fails stays `latest` until someone deletes it or makes a newer one.
+A stable `vX.Y.Z` enters `releases/latest` as soon as it is released, and `latest` is what `oak bootstrap` and `oak upgrade` resolve when no version is given. Conformance runs after the release, so a journal can pick up a release that has not passed it, and a release that fails stays `latest` until someone deletes it or makes a newer one.
 
 ## Conformance runs on releases
 
