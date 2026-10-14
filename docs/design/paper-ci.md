@@ -113,7 +113,7 @@ Stage 2 runs in the base context, but everything in the artifact is under the pu
 
 (r136)=
 
-The artifact carries the built site or the checks report, plus a file with the pull request number and one with the paper's folder, which is `.` in a paper repository. The number is the one value Stage 2 cannot get from its own event, because `workflow_run.pull_requests` is empty when the pull request came from a fork. `check-post` and `deploy-preview` both read it and pass it to the engine's [`verifyPrHead`](src:src/artifact.ts#L141-L157) before writing anything to a pull request, which checks two things:
+The artifact carries the built site or the checks report, plus a file with the pull request number and one with the paper's folder, which is `.` in a paper repository. The number is the one value Stage 2 cannot get from its own event, because `workflow_run.pull_requests` is empty when the pull request came from a fork. `check-post` and `deploy-preview` both read it and pass it to the engine's [`verifyPrHead`](src:src/artifact.ts#L141-L157) before writing anything to a pull request. `verifyPrHead` checks the number's shape and who owns it:
 
 - **Shape.** [Digits](src:src/artifact.ts#L19-L29), anchored to the whole string, because the value becomes part of a `gh api` path.
 - **Ownership.** The API is asked which commit that pull request heads at, and the answer must be the commit this run built, from `workflow_run.head_sha` or the job that pushed it. A fork that writes a well-formed number belonging to somebody else's open pull request would otherwise have the repository comment on that pull request, with a verdict or a preview link the fork chose.
@@ -145,7 +145,7 @@ Pinning the repository and letting only the version float keeps the version insi
 
 The action's [`ref` step](src:templates/paper/.github/actions/engine/action.yml#L36-L49) limits the version to a release tag, `vX.Y.Z` or a pre-release like `vX.Y.Z-dev.N`, on every event, before the engine is checked out. A raw commit, a `refs/pull/N/merge` or a branch is refused, so a paper's pull request naming one goes red while it is still under review, and a version on `main` that names one stops every job there. The rule holds on `main` too because `myst.yml` is ungated, and because GitHub serves a commit pushed to any fork of the engine under the engine repository's own name. Engine changes are tested from a `-dev.N` pre-release ([Releasing](src:RELEASING.md)). The engine's [`ci/run.sh`](src:ci/run.sh#L10-L15) also refuses to run without `dist/cli.cjs`, which is committed onto release tags and nothing else.
 
-The same step refuses a version below `min_engine_version` in `pins.yml`, the oldest engine the workflows beside it work with. The workflows leave some checks to the engine, such as [checking the pull request number](#design-paper-ci-stage2-inputs) a fork's artifact names, and an older engine would skip them without an error. `oak upgrade` keeps the version at or above it too, but the version can also change in an ordinary pull request.
+The same step refuses a version below `min_engine_version` in `pins.yml`, the oldest engine the workflows beside it work with. The workflows leave some checks to the engine, such as [checking the pull request number](#design-paper-ci-stage2-inputs) a fork's artifact names, and read outputs an older engine lacks. A missing output reads as empty, so an older engine skips those checks without an error. [`oak upgrade`](src:src/upgrade.ts#L290-L305) keeps the version at or above it too, but the version can also change in an ordinary pull request.
 
 The check runs in the workflow because it decides which engine to fetch, so there is no engine yet to run it.
 
@@ -173,7 +173,7 @@ A workflow passes a value to a `run:` script through `env:`, not by splicing `${
 
 (r155)=
 
-Any value written to `$GITHUB_OUTPUT` is checked before writing. The file is line-oriented, so a value containing a newline appends a second `name=value` pair of the writer's choosing to the step's outputs. Two values written there can carry fork-controlled text. The engine version: the action's [`ref` step](src:templates/paper/.github/actions/engine/action.yml#L24-L50) reads it out of the paper's own `myst.yml`, where a YAML block scalar can span two lines, and refuses anything that is not a release tag. The verb's result: [`ci/run.sh`](src:ci/run.sh#L64-L72) writes it as one `result=` line of JSON, with any line break removed, and the workflows read it with `fromJSON`.
+Any value written to `$GITHUB_OUTPUT` is checked before writing. The file is line-oriented, so a value containing a newline appends a second `name=value` pair of the writer's choosing to the step's outputs. The engine version can carry fork-controlled text: the action's [`ref` step](src:templates/paper/.github/actions/engine/action.yml#L24-L50) reads it out of the paper's own `myst.yml`, where a YAML block scalar can span two lines, and refuses anything that is not a release tag. So can the verb's result: [`ci/run.sh`](src:ci/run.sh#L64-L72) writes it as one `result=` line of JSON, with any line break removed, and the workflows read it with `fromJSON`.
 
 (design-paper-ci-bad-input)=
 
@@ -199,7 +199,7 @@ The artifact is an interface between two versions of the launchers. Stage 1 runs
 
 (design-paper-ci-min-engine)=
 
-The launchers and the engine version also have to agree. Launchers call verbs and read outputs that an older engine lacks, and a missing output reads as empty, so the run quietly skips whatever needed it. [`pins.yml`](src:templates/paper/.github/actions/engine/pins.yml#L9-L10) declares the oldest engine its launchers run with, and [`oak upgrade`](src:src/upgrade.ts#L290-L305) refuses to leave `myst.yml` below it. A release that raises it is pinned on `main` before the new launchers go in.
+A launcher change that needs a verb or an output an older engine lacks raises `min_engine_version` in [`pins.yml`](src:templates/paper/.github/actions/engine/pins.yml#L9-L10) to the release that adds it, so the [`ref` step](#design-paper-ci-engine-ref) refuses an engine that would skip it.
 
 (design-paper-ci-concurrency)=
 

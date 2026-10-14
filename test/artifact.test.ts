@@ -88,7 +88,7 @@ describe('readPrNumber', () => {
 });
 
 describe('the paper folder in the artifact', () => {
-  it('an artifact from before the file existed reads as none, which means `.`', () => {
+  it('an artifact without the file reads as none, which means `.`', () => {
     const old = dirWith({ 'report.json': '{}', 'pr-number': '3\n' });
     expect(readPaperDir(old)).toBeNull();
     expect(resolvePaperDir(undefined, readPaperDir(old))).toBe('.');

@@ -34,8 +34,8 @@ export function assertPaperDir(p: string): string {
   return p;
 }
 
-/** The PR number in `dir/<name>`. null when absent or blank (a push); a malformed file throws,
- *  since it was tampered with rather than missing [R136]. */
+/** The PR number in `dir/<name>`, or null when absent or blank (a push). A malformed file was
+ *  tampered with, so it throws [R136]. */
 export function readPrNumber(dir: string, name: string = CHECKS_FILES.pr): string | null {
   const f = join(dir, name);
   if (!existsSync(f)) return null;
@@ -53,8 +53,8 @@ export function takePrNumber(siteDir: string): string | null {
   }
 }
 
-/** The paper folder in `dir/<name>`, or null when absent (an artifact from before the file
- *  existed means `.`). A malformed one throws. */
+/** The paper folder in `dir/<name>`, or null when absent, which means `.`: Stage 1 may run an
+ *  engine that writes none. A malformed one throws. */
 export function readPaperDir(dir: string, name: string = CHECKS_FILES.paper): string | null {
   const f = join(dir, name);
   if (!existsSync(f)) return null;
