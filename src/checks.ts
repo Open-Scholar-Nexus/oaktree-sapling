@@ -231,7 +231,7 @@ export interface CheckPostOutcome {
 }
 
 /**
- * `oak check-post`: posts the report's Check Run, and a commit status with its verdict, on the pull
+ * `oak check-post`: posts the report's Check Run, and a commit status with the same result, on the pull
  * request's head commit and, given a pull request number, updates the sticky comment. Posting
  * needs `GH_TOKEN`.
  */

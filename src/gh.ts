@@ -481,7 +481,7 @@ export function changedFiles(repo: string, base: string, head: string): string[]
 /** GitHub's limit on a commit status description. */
 const STATUS_DESCRIPTION_MAX = 140;
 
-/** The commit status that repeats a Check Run's verdict under the same name. */
+/** The commit status that repeats a Check Run's result under the same name. */
 export function commitStatusFor(
   name: string,
   run: CheckRun,
