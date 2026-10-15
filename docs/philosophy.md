@@ -1,0 +1,37 @@
+(philosophy)=
+# Philosophy
+
+Oaktree Sapling runs a journal on free services and on tools a researcher already uses or can learn in an afternoon. This page explains each choice, for anyone deciding whether to adopt it.
+
+## Papers are written in MyST
+
+[MyST](https://mystmd.org) is Markdown with what a paper needs added on top: citations, cross-references, equations, figures and Jupyter notebooks. If you have written a README, you can write a MyST paper.
+
+MyST reads a document into a structure where each figure, equation and citation is known for what it is, so one source becomes both a website and a PDF. The website is where most reading happens: references preview on hover, figures can stay interactive, and a notebook's outputs sit in the paper next to the code that produced them. The PDF is for printing and citing. MyST also exports JATS XML, the format indexers such as PubMed and Crossref read.
+
+:::{figure} #fig-gccm
+:label: fig-philosophy-gccm
+Cross-map skill between land surface temperature (LST) and each candidate driver of urban heat in Ouagadougou, in both directions, with 95% confidence intervals. Data from [Lindner et al. (2026)](https://doi.org/10.5281/zenodo.20606263), Fig. 1D. Hover over a point for its values; click a legend entry to highlight one direction. In the PDF, the same cell gives a static figure.
+:::
+
+MyST is open source and part of [Project Jupyter](https://jupyter.org).
+
+## Papers live on GitHub
+
+A paper is a folder of text files in a repository, so every change is recorded and every earlier version can be recovered[^versions]. Submission and review happen in pull requests: a reviewer's comment sits on the line it is about, and the author answers by changing that line[^review]. Many researchers already keep their code on GitHub, and the paper can sit next to it.
+
+GitHub also builds each paper and hosts its website, free for public repositories, so the journal has no server to pay for or maintain.
+
+[^versions]: A published version is a git tag, so the text behind each DOI stays in the repository, and the differences between two versions are one comparison away.
+
+[^review]: An author who has not used git before has to learn a few steps: fork, commit, push, open a pull request. [Your paper repository](start/paper.md) walks through each one.
+
+## Published versions go to Zenodo
+
+Publishing a version deposits it to [Zenodo](https://zenodo.org), which gives it a DOI and keeps a copy that outlives both the GitHub repository and the journal[^archive]. Zenodo is run by CERN and free to use.
+
+[^archive]: Each paper gets one DOI that always resolves to its latest version, and each version gets its own. Zenodo keeps records [for the lifetime of the repository](https://about.zenodo.org/policies/), which is tied to CERN's, and commits to moving them to another repository if it ever closes. A deposit holds the PDF, the paper's source and the version of the engine that built it, so the paper can be read and rebuilt without GitHub.
+
+## What it costs
+
+Nothing, for the journal or for its authors. What it asks for is a GitHub account and some comfort with git; the [guides](start/paper.md) walk an author through each step.

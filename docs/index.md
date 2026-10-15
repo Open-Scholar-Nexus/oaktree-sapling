@@ -23,10 +23,10 @@ Each file in a journal repository, and each `oak` command.
 [Files](reference/files.md) · [CLI](reference/cli.md)
 :::
 
-:::{card} How it works
-For anyone forking oaktree-sapling or deciding whether to run a journal on it.
+:::{card} Why it's built this way
+Why MyST, GitHub and Zenodo, for anyone deciding whether to run a journal on it. Then the design in detail, for anyone forking it.
 
-[Why it's built this way](design/index.md)
+[Philosophy](philosophy.md) · [How it works](design/index.md)
 :::
 
 ::::

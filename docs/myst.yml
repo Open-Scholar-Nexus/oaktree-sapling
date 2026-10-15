@@ -18,6 +18,10 @@ project:
       severity: error
   toc:
     - file: index.md
+    - file: philosophy.md
+    # Holds the chart philosophy.md embeds; an embed resolves only to a file in the toc.
+    - file: philosophy-figure.ipynb
+      hidden: true
     - title: Getting started
       children:
         - file: start/setup.md
