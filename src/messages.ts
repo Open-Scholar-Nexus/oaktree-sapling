@@ -22,9 +22,9 @@
  *   templates/paper/myst.yml ................ the commented starter config (CHANGE-ME lines)
  *   templates/paper/index.md ................ the starter manuscript
  *   templates/paper/CODEOWNERS .............. its header comment
- *   templates/paper/.github/workflows/*.yml . job names and `::error::` annotations (build, preview,
- *                                             check, check-report, reserve-doi, deposit-version:
- *                                             the names show in the Actions tab)
+ *   templates/paper/.github/workflows/*.yml . job names and `::error::` annotations (build-paper,
+ *                                             deploy-preview, check-paper, post-checks, reserve-doi,
+ *                                             deposit-version: the names show in the Actions tab)
  *   templates/instance/README.md ............ what a journal editor reads first
  *   templates/instance/journal.yml .......... the journal's settings and their comments
  *   templates/instance/brand/brand.yml ...... the branding settings and their comments

@@ -325,7 +325,7 @@ function workflow(file: string): any {
 
 describe('Build paper holds the Pages deploy while the id is the template placeholder', () => {
   it("the build job's output is the engine's placeholder flag", () => {
-    const ci = workflow('build.yml');
+    const ci = workflow('build-paper.yml');
     expect(ci.jobs.build.outputs.placeholder).toBe(
       "${{ fromJSON(steps.build.outputs.result || '{}').placeholder }}",
     );
@@ -333,7 +333,7 @@ describe('Build paper holds the Pages deploy while the id is the template placeh
   });
 
   it('the deploy job reads that output', () => {
-    expect(workflow('build.yml').jobs['deploy-pages'].if).toContain(
+    expect(workflow('build-paper.yml').jobs['deploy-pages'].if).toContain(
       "needs.build.outputs.placeholder != 'true'",
     );
   });

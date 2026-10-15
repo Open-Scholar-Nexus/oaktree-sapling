@@ -1,6 +1,6 @@
 name: Build paper
 
-# Stage 1 of the preview, no secrets; preview.yml deploys. A push also deploys Pages, once myst.yml has a real id.
+# Stage 1 of the preview, no secrets; deploy-preview.yml deploys. A push also deploys Pages, once myst.yml has a real id.
 # https://scholar.nexus/oaktree-sapling/design/paper-ci#design-paper-ci-two-stages
 
 on:

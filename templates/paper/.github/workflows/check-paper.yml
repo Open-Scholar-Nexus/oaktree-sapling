@@ -1,6 +1,6 @@
 name: Check paper
 
-# Stage 1 of the journal checks: validates with no secrets; check-report.yml posts the report.
+# Stage 1 of the journal checks: validates with no secrets; post-checks.yml posts the report.
 # https://scholar.nexus/oaktree-sapling/design/paper-ci#design-paper-ci-two-stages
 
 on:
@@ -23,7 +23,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # Passes on a failing result, which check-report.yml posts; fails only when no report was
+      # Passes on a failing result, which post-checks.yml posts; fails only when no report was
       # written. On a pull request it leaves pr-number and paper beside the report.
       - uses: ./.github/actions/engine
         with:

@@ -300,14 +300,14 @@ describe('frozenPathsTouched (the gated files)', () => {
   it('matches .github/**, CODEOWNERS and paper-environment.yml, ignores paper content', () => {
     const changed = [
       'index.md',
-      '.github/workflows/check.yml',
+      '.github/workflows/check-paper.yml',
       'CODEOWNERS',
       'data/x.csv',
       'paper-environment.yml',
       '.github/actions/engine/pins.yml',
     ];
     expect(frozenPathsTouched(changed)).toEqual([
-      '.github/workflows/check.yml',
+      '.github/workflows/check-paper.yml',
       'CODEOWNERS',
       'paper-environment.yml',
       '.github/actions/engine/pins.yml',
@@ -327,7 +327,7 @@ describe('cmdCheckPost: the gated-files warning', () => {
         repo: 'o/r',
         sha: 'abc',
         pr: '7',
-        shimTouched: ['.github/workflows/check.yml'],
+        shimTouched: ['.github/workflows/check-paper.yml'],
       },
       deps,
     );
@@ -337,7 +337,7 @@ describe('cmdCheckPost: the gated-files warning', () => {
     expect(runs[0]!.run.title).toContain('CI workflows modified');
     expect(runs[0]!.run.summary).toContain('changes the files that run the checks');
     expect(stickies[0]!.body).toContain('changes the files that run the checks');
-    expect(stickies[0]!.body).toContain('`.github/workflows/check.yml`');
+    expect(stickies[0]!.body).toContain('`.github/workflows/check-paper.yml`');
   });
 
   it('without shimTouched: posts the report as it is, with no warning', () => {

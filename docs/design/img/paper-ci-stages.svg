@@ -48,11 +48,11 @@ svg{font-family:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif}
         <rect x="20" y="40" width="140" height="46" rx="6" class="box q"/>
         <text x="90" y="67" text-anchor="middle">pull request, push</text>
         <rect x="195" y="40" width="155" height="46" rx="6" class="box b"/>
-        <text x="272" y="60" text-anchor="middle" class="t-mono">build.yml</text>
+        <text x="272" y="60" text-anchor="middle" class="t-mono">build-paper.yml</text>
         <text x="272" y="76" text-anchor="middle" class="t-verb">oak build</text>
         <text x="272" y="102" text-anchor="middle" class="t-sm">on push: also deploys Pages</text>
         <rect x="445" y="40" width="155" height="46" rx="6" class="box b"/>
-        <text x="522" y="60" text-anchor="middle" class="t-mono">preview.yml</text>
+        <text x="522" y="60" text-anchor="middle" class="t-mono">deploy-preview.yml</text>
         <text x="522" y="76" text-anchor="middle" class="t-verb">oak deploy-preview</text>
         <rect x="690" y="40" width="170" height="46" rx="6" class="box q"/>
         <text x="775" y="67" text-anchor="middle">preview + link comment</text>
@@ -65,10 +65,10 @@ svg{font-family:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif}
         <rect x="20" y="130" width="140" height="46" rx="6" class="box q"/>
         <text x="90" y="157" text-anchor="middle">pull request, push</text>
         <rect x="195" y="130" width="155" height="46" rx="6" class="box g"/>
-        <text x="272" y="150" text-anchor="middle" class="t-mono">check.yml</text>
+        <text x="272" y="150" text-anchor="middle" class="t-mono">check-paper.yml</text>
         <text x="272" y="166" text-anchor="middle" class="t-verb">oak validate</text>
         <rect x="445" y="130" width="155" height="46" rx="6" class="box g"/>
-        <text x="522" y="150" text-anchor="middle" class="t-mono">check-report.yml</text>
+        <text x="522" y="150" text-anchor="middle" class="t-mono">post-checks.yml</text>
         <text x="522" y="166" text-anchor="middle" class="t-verb">oak check-post</text>
         <rect x="690" y="130" width="170" height="46" rx="6" class="box q"/>
         <text x="775" y="157" text-anchor="middle">check run + comment</text>
