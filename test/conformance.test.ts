@@ -401,7 +401,7 @@ describe('cmdConformanceRun', () => {
     expect(out.result.failure).toContain('fork Build paper');
   });
 
-  it('fails without merging when the test repo already pins the release (no upgrade pull request)', async () => {
+  it('does not run, and exits 4, when the test repo already pins the release', async () => {
     const gh = fakeCertGh();
     const out = await cmdConformanceRun(
       { repo: REPO, tag: TAG },
@@ -409,8 +409,8 @@ describe('cmdConformanceRun', () => {
         installEngine: async () => ({ upToDate: true, prNumber: null, prUrl: null }),
       }),
     );
-    expect(out.exitCode).toBe(1);
-    expect(out.result).toMatchObject({ status: 'failed', path: 'install' });
+    expect(out.exitCode).toBe(4);
+    expect(out.result).toMatchObject({ status: 'not-run', path: 'install' });
     expect(gh.merged).toEqual([]);
   });
 

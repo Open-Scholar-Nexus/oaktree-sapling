@@ -360,14 +360,17 @@ export async function cmdConformanceRun(input: RunInput, deps: ConformanceDeps):
 
     // 2. Move onto the release through `oak upgrade`, so the upgrade itself is tested.
     const up = await installEngine(repo, tag);
+    // Exit 4 so the workflow keeps the release's earlier result: the test repo is on `tag`
+    // because an earlier run moved it there.
     if (up.upToDate || up.prNumber === null) {
+      log(`engine ${tag}: nothing to test, the test repo already pins it`);
       return {
-        exitCode: 1,
+        exitCode: 4,
         result: {
-          status: 'failed',
+          status: 'not-run',
           tag,
           path: 'install',
-          failure: `no upgrade PR: the test repo already pins ${tag}. Cut a fresh dev tag so push→main has a change to test.`,
+          reason: `the test repo already pins ${tag}, so there is no upgrade to test. Cut a fresh dev tag to test this code again.`,
         },
       };
     }
