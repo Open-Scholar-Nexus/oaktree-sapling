@@ -110,6 +110,6 @@ jobs:
           case "$CODE" in
             0) exit 0 ;;
             3) echo "::warning::INCONCLUSIVE: a third party did not respond in time"; exit 0 ;;
-            4) echo "::warning::NOT RUN: the test repo already pins this release; cut a fresh dev tag to test again"; exit 0 ;;
+            4) echo "::warning::NOT RUN: the test repo already pins this release; cut a new dev tag to test again"; exit 0 ;;
             *) exit 1 ;;
           esac
