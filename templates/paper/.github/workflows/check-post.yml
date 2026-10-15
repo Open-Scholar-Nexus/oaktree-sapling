@@ -12,6 +12,7 @@ permissions:
   contents: read
   actions: read # download the cross-run artifact
   checks: write # post the "Journal checks" Check Run
+  statuses: write # and the same verdict as a commit status
   pull-requests: write # upsert the sticky checks comment
 
 concurrency:

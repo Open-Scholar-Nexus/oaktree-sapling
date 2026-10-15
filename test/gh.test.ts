@@ -13,6 +13,7 @@ import {
   realPagesDeployer,
   realProvisioner,
   uploadReleaseAsset,
+  commitStatusFor,
 } from '../src/gh.js';
 import { UserError } from '../src/messages.js';
 import { readFileSync } from 'node:fs';
@@ -397,5 +398,28 @@ describe('realProvisioner.createLabel ([R127])', () => {
     expect(ghCall('label', 'create')!.args, 'the create is idempotent on its own').toContain(
       '--force',
     );
+  });
+});
+
+describe('commitStatusFor: the Journal checks verdict as a commit status', () => {
+  const run = (title: string, conclusion: 'success' | 'failure' = 'success') => ({
+    conclusion,
+    title,
+    summary: 'table',
+    annotations: [],
+  });
+
+  it('carries the name, the verdict and the title', () => {
+    expect(commitStatusFor('Journal checks', run('3 of 3 checks passed', 'failure'))).toEqual({
+      context: 'Journal checks',
+      state: 'failure',
+      description: '3 of 3 checks passed',
+    });
+  });
+
+  it("cuts the title to GitHub's 140 characters", () => {
+    const description = commitStatusFor('Journal checks', run('x'.repeat(200))).description;
+    expect(description).toHaveLength(140);
+    expect(description.endsWith('…')).toBe(true);
   });
 });

@@ -93,7 +93,7 @@ Inside those jobs the paper's code never runs. `publish.yml` builds in a job wit
 
 (r91)=
 
-Stage 2 runs in the base context, but everything in the artifact is under the pull request's control: the author's content runs in the job that writes it, and on a pull request GitHub runs the pull request's own copy of the Stage 1 workflow file. So Stage 2 takes every value it can from its own `workflow_run` event, which GitHub populates. For example, `check-post.yml` [posts the check run](src:templates/paper/.github/workflows/check-post.yml#L38-L48) on the commit in `workflow_run.head_sha`. A Stage 2 that took the commit from the artifact would put a green check on whichever commit the fork named.
+Stage 2 runs in the base context, but everything in the artifact is under the pull request's control: the author's content runs in the job that writes it, and on a pull request GitHub runs the pull request's own copy of the Stage 1 workflow file. So Stage 2 takes every value it can from its own `workflow_run` event, which GitHub populates. For example, `check-post.yml` [posts the check run](src:templates/paper/.github/workflows/check-post.yml#L39-L49) on the commit in `workflow_run.head_sha`. A Stage 2 that took the commit from the artifact would put a green check on whichever commit the fork named.
 
 (r136)=
 
@@ -140,7 +140,7 @@ The check runs in the workflow because it decides which engine to fetch, so ther
 Beyond the summary at the top of this page, these gaps remain:
 
 - **The check verdict is authored by Stage 1.** Stage 2 posts the report Stage 1 computed, so a fork that rewrites `check.yml` can post a passing report. That rewrite is itself a change under `.github/`, so the comment flags it and merging it needs an editor. The verdict is a signal for the editor and not an authorisation decision, and the code-owner review is what stands between such a pull request and `main`.
-- **The DOI pull request runs no checks by itself.** `prepare.yml` opens it with the workflow's own `GITHUB_TOKEN`, and GitHub starts no workflow for what that token does, so the editor closes and reopens it to run the usual two stages. Running both stages from `prepare.yml` instead [worked](https://github.com/Open-Scholar-Nexus/oaktree-sapling/pull/46), but it shipped a second path through both stages to every paper repository to save that click.
+- **The DOI pull request runs no checks by itself.** `prepare.yml` opens it with the workflow's own `GITHUB_TOKEN`. GitHub holds the runs on that pull request for approval, and approving them does not start the preview, so the editor closes and reopens it to run the usual two stages. The held runs keep their check suites, and GitHub files the `Journal checks` check run under the first of them, which the merge rule does not read, so `check-post` also posts the verdict as a [commit status](src:src/gh.ts#L506-L510) of the same name. Running both stages from `prepare.yml` instead [worked](https://github.com/Open-Scholar-Nexus/oaktree-sapling/pull/46), but it shipped a second path through both stages to every paper repository to save that click.
 - **The branch rule can be removed.** An admin who deletes `protect-main` turns `CODEOWNERS` back into documentation.
 - **Anything we didn't consider.** See a gap in our design? [Open an issue](https://github.com/Open-Scholar-Nexus/oaktree-sapling/issues) to tell us.
 
@@ -196,7 +196,7 @@ Runs are grouped so a new push supersedes an in-flight run for the same pull req
 
 (r94)=
 
-Both stages key on the head repository, and the pull request group in each Stage 1 workflow is distinct from its push-to-`main` group. A fork opening a pull request from a branch called `main` would otherwise land in the same group as the repository's own `main` and cancel an in-flight Pages deploy. The Stage 2 keys are in [`preview-deploy.yml`](src:templates/paper/.github/workflows/preview-deploy.yml#L16-L19) and [`check-post.yml`](src:templates/paper/.github/workflows/check-post.yml#L17-L20).
+Both stages key on the head repository, and the pull request group in each Stage 1 workflow is distinct from its push-to-`main` group. A fork opening a pull request from a branch called `main` would otherwise land in the same group as the repository's own `main` and cancel an in-flight Pages deploy. The Stage 2 keys are in [`preview-deploy.yml`](src:templates/paper/.github/workflows/preview-deploy.yml#L16-L19) and [`check-post.yml`](src:templates/paper/.github/workflows/check-post.yml#L18-L21).
 
 (design-paper-ci-secrets-in-if)=
 
