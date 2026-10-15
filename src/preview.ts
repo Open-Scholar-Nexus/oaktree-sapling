@@ -224,7 +224,7 @@ export function newVersionComment(doi: string, recordUrl: string): string {
 
 export interface DeployPreviewInput {
   siteDir: string;
-  /** The checkout of the default branch, never the pull request's. */
+  /** The default branch's checkout. */
   repoRoot: string;
   instanceRoot: string | null;
   /** GITHUB_REPOSITORY and GITHUB_SERVER_URL, for the fallback link and labels. */

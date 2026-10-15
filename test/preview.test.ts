@@ -407,7 +407,7 @@ describe('cmdDeployPreview', () => {
   });
 
   it('refuses a pull request whose head is not the commit Stage 1 built [R136]', async () => {
-    // A real pull request number, but another one's: a fork names a pull request it does not own.
+    // A fork names a pull request it does not own.
     const dir = siteWithPr('99');
     let deployed = false;
     const spy: PagesDeployer = {

@@ -25,7 +25,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # A sandbox run with no ZENODO_TOKEN_SANDBOX is refused, never sent to production.
+      # A sandbox run with no ZENODO_TOKEN_SANDBOX is refused.
       - id: deposit
         uses: ./.github/actions/engine
         with:

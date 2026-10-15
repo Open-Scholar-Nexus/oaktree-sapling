@@ -227,7 +227,7 @@ async function cmdBuild(argv: string[]): Promise<number> {
  * The build's last steps, run synchronously from the exit handler: drops symlinks from the site,
  * since upload-artifact follows them and would publish a runner file; on a `pull_request` run,
  * leaves the pull request number and the paper folder for Stage 2 (artifact.ts); and records the
- * result. A failure here fails the build.
+ * result.
  */
 function finishSite(
   paperRoot: string,
@@ -435,8 +435,7 @@ function recordResult(result: Record<string, unknown>): void {
 
 /**
  * Prints a verb's result, and records it ({@link recordResult}). The JSON is opt-in (`--json`):
- * it repeats the prose the verb already printed. Human output goes to stderr, so
- * with `--json` stdout carries only the JSON.
+ * it repeats the prose the verb already printed. Prose goes to stderr, so stdout is only JSON.
  */
 function emit(
   argv: string[],
@@ -790,7 +789,7 @@ function validateSummary(out: {
 
 /** `oak validate`: oak's own rules (Layer A) and the journal's editorial checks (Layer B), with
  *  `--report <path>` writing the JSON check-post posts. With `--report` it exits 0 once a report
- *  is written, failing or not, since check-post posts the result; nonzero means no report.
+ *  is written, failing or not, since check-post posts the result.
  *  Documented at DOCS.validate. */
 async function cmdValidate(argv: string[]): Promise<number> {
   const paperRoot = resolve(flag(argv, 'paper') ?? '.');

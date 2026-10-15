@@ -61,8 +61,7 @@ echo "ZENODO_TOKEN : ${ZENODO_TOKEN:+present}"
 echo "CLOUDFLARE   : ${CLOUDFLARE_API_TOKEN:+present}"
 echo "::endgroup::"
 
-# The verb's result, as one line of JSON, becomes the engine action's `result` output. oak
-# writes it to OAK_RESULT_FILE; a verb that stops before it has a result leaves the file empty.
+# oak writes the verb's JSON result to OAK_RESULT_FILE; it becomes the action's `result` output.
 OAK_RESULT_FILE="$(mktemp)"
 export OAK_RESULT_FILE
 code=0

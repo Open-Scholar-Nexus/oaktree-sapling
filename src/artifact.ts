@@ -10,25 +10,21 @@ import { join, posix, relative, sep } from 'node:path';
 import * as msg from './messages.js';
 import { UserError } from './messages.js';
 
-/** The two artifacts: the built site (`.`-names, since the site is served) and the checks
- *  report's folder. */
+/** Dot names: the site is served. */
 export const SITE_FILES = { pr: '.pr-number', paper: '.paper' } as const;
 export const CHECKS_FILES = { pr: 'pr-number', paper: 'paper' } as const;
 type Names = typeof SITE_FILES | typeof CHECKS_FILES;
 
-/** PR-number shape: the value reaches a `gh api` path ([R136]). */
 const PR_NUMBER = /^[0-9]{1,10}$/;
 const SHA = /^[0-9a-f]{40}$/;
 /** A folder below the repo root, or `.`: no segment starts with a dot, so none is `..`. */
 const PAPER_DIR = /^(\.|[A-Za-z0-9_][A-Za-z0-9._-]*(\/[A-Za-z0-9_][A-Za-z0-9._-]*)*)$/;
 
-/** Returns `n` when it is a pull request number; throws a UserError otherwise ([R136]). */
 export function assertPrNumber(n: string): string {
   if (!PR_NUMBER.test(n)) throw new UserError(msg.workflow.previewBadPrNumber(n));
   return n;
 }
 
-/** Returns `p` when it is a paper folder below the repo root; throws a UserError otherwise. */
 export function assertPaperDir(p: string): string {
   if (!PAPER_DIR.test(p)) throw new UserError(msg.workflow.badPaperDir(p));
   return p;
@@ -72,7 +68,7 @@ export function takePaperDir(siteDir: string): string | null {
 }
 
 /** The paper a Stage 2 verb works on: the artifact's, else `--paper`, else `.`. Throws when both
- *  are given and differ, since one of them is wrong. */
+ *  are given and differ. */
 export function resolvePaperDir(fromFlag: string | undefined, fromArtifact: string | null): string {
   const normal = fromFlag ? posix.normalize(fromFlag).replace(/(.)\/+$/, '$1') : undefined;
   const flagged = normal && normal !== '.' ? assertPaperDir(normal) : undefined;
@@ -116,8 +112,7 @@ export function eventHeadSha(env: GithubEnv): string | undefined {
 
 /**
  * Writes the pull request number and the paper folder into `dir` for Stage 2, on a
- * `pull_request` run only; any other run has no pull request to write to. `paperRoot` is made
- * relative to `repoRoot`. Returns whether it wrote.
+ * `pull_request` run only. `paperRoot` is made relative to `repoRoot`. Returns whether it wrote.
  */
 export function writeStage1Files(
   dir: string,
@@ -139,9 +134,9 @@ export function writeStage1Files(
  * ------------------------------------------------------------------------ */
 
 /**
- * Refuses unless `pr` is a pull request number and that pull request's head is `head`, the commit
- * this run built [R136]. `head` comes from GitHub (the `workflow_run` event, or the job that
- * pushed the commit), never from the artifact. Throws a UserError naming what disagreed.
+ * Throws a UserError unless `pr` is a pull request number whose head is `head`, the commit this
+ * run built [R136]. `head` comes from GitHub (the `workflow_run` event, or the job that pushed
+ * the commit), never from the artifact.
  */
 export function verifyPrHead(
   repo: string | null,

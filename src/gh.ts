@@ -229,8 +229,7 @@ export interface PushedPr {
   head: string;
 }
 
-/** The number at the end of a pull request URL. Throws on anything else, since the number
- *  reaches the checks that write to that pull request. */
+/** The number at the end of a pull request URL. Throws on anything else. */
 function prNumberFromUrl(url: string): string {
   const m = /\/pull\/([0-9]{1,10})\/?$/.exec(url.trim());
   if (!m) throw new Error(msg.workflow.notAPrUrl(url));
