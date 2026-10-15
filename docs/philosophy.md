@@ -34,6 +34,8 @@ Publishing a version deposits it to [Zenodo](https://zenodo.org), which gives it
 
 ## Costs and accounts
 
-A journal has little to run: a paper is built only when it changes, and what readers get is a static website, which costs little to serve. So every service it uses is free at its scale: GitHub Actions and Pages for public repositories, Cloudflare Pages for the previews, and Zenodo.
+A journal has little to run: a paper is built only when it changes, and what readers get is a static website, which costs little to serve[^scope]. So every service it uses is free at its scale: GitHub Actions and Pages for public repositories, Cloudflare Pages for the previews, and Zenodo.
 
 An author needs a GitHub account. The journal also needs a Cloudflare account for the previews and a Zenodo account for the deposits.
+
+[^scope]: This is a journal as Oaktree Sapling sets one up: review in pull requests, papers built by GitHub Actions, and a static website for readers. Each addition brings its own service and its own cost: collaborative editing, email reminders, an external review platform, other integrations, and above all running a paper's code for its readers, which needs servers.
