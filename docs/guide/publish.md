@@ -7,7 +7,7 @@ Publishing a paper deposits it on Zenodo, which gives it a DOI. An editor does i
 
 In the paper repository's **Actions** tab, open **Prepare Zenodo deposit** and click **Run workflow**. Untick **Use the Zenodo sandbox** for a real deposit: it is ticked by default, which deposits on the [Zenodo sandbox](#sandbox).
 
-The run creates a draft on Zenodo and opens a pull request, **Reserve Zenodo DOI**, that writes the DOI into `myst.yml`. GitHub runs no workflow on a pull request a workflow opens, so close and reopen it to run its checks, then merge it.
+The run creates a draft on Zenodo and opens a pull request, **Reserve Zenodo DOI**, that writes the DOI into `myst.yml`. GitHub holds the checks on a pull request a workflow opens, and approving them does not run the preview, so close and reopen it to run both, then merge it.
 
 (tag-version)=
 ## 2. Tag the version
