@@ -135,8 +135,7 @@ export function writeStage1Files(
 
 /**
  * Throws a UserError unless `pr` is a pull request number whose head is `head`, the commit this
- * run built [R136]. `head` comes from GitHub (the `workflow_run` event, or the job that pushed
- * the commit), never from the artifact.
+ * run built [R136]. `head` comes from the `workflow_run` event, never from the artifact.
  */
 export function verifyPrHead(
   repo: string | null,

@@ -253,7 +253,7 @@ describe('cmdCheckPost, with fakes for GitHub', () => {
     expect(stickies[0]!.body).toContain('| Check | Status | Detail |');
   });
 
-  it('without --pr posts the Check Run but no comment', () => {
+  it('without a pull request posts the Check Run but no comment', () => {
     const { deps, runs, stickies } = fakePost();
     const out = cmdCheckPost({ report: report(), repo: 'o/r', sha: 'abc' }, deps);
     expect(runs).toHaveLength(1);
