@@ -90,13 +90,14 @@ jobs:
           echo "code=$?" >> "$GITHUB_OUTPUT"
 
       - name: Upload the result to the release
-        if: ${{ steps.r.outputs.tag != '' && steps.r.outputs.only_reset != 'true' && hashFiles('conformance.json') != '' }}
+        # 4: the test repo already pins the release, so nothing ran and the release keeps its result.
+        if: ${{ steps.r.outputs.tag != '' && steps.r.outputs.only_reset != 'true' && steps.test.outputs.code != '4' && hashFiles('conformance.json') != '' }}
         env:
           GH_TOKEN: ${{ github.token }} # the PAT cannot write this repo
           TAG: ${{ steps.r.outputs.tag }}
         run: gh release upload "$TAG" conformance.json --clobber
 
-      # Fails on 1 or on no result [R111]; 3 means a third party timed out, which is not oak's fault.
+      # Exit codes [R111].
       - name: Fail if the test failed
         if: ${{ steps.r.outputs.tag != '' && steps.r.outputs.only_reset != 'true' }}
         env:
@@ -109,5 +110,6 @@ jobs:
           case "$CODE" in
             0) exit 0 ;;
             3) echo "::warning::INCONCLUSIVE: a third party did not respond in time"; exit 0 ;;
+            4) echo "::warning::NOT RUN: the test repo already pins this release; cut a new tag to test again"; exit 0 ;;
             *) exit 1 ;;
           esac

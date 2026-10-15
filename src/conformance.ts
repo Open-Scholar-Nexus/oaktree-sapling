@@ -127,7 +127,8 @@ export interface ConformanceDeps {
   /** The HTTP status of a GET to `url`, 0 on a network error. */
   probe(url: string): Promise<number>;
   /** Moves `repo` onto release `tag` with `oak upgrade --to`, so the upgrade path is tested
-   *  too. Returns its pull request, or `upToDate` when the pin is already `tag`. */
+   *  too. Returns its pull request, or `upToDate` when the pin is already `tag`; throws when
+   *  `oak upgrade` fails. */
   installEngine(
     repo: string,
     tag: string,
@@ -349,7 +350,7 @@ export async function cmdConformanceRun(input: RunInput, deps: ConformanceDeps):
     const runs = gh.workflowRunsForCommit(repo, sha);
     return runs.length > 0 && runs.every((r) => r.status === 'completed');
   };
-  let phase = 'push-main';
+  let phase = 'install';
   // The paths that passed, added as each phase passes (the fork phase adds its own).
   const paths: string[] = ['push-main', 'preview-same-repo', 'deposit'];
   const skipped: string[] = [];
@@ -360,18 +361,22 @@ export async function cmdConformanceRun(input: RunInput, deps: ConformanceDeps):
 
     // 2. Move onto the release through `oak upgrade`, so the upgrade itself is tested.
     const up = await installEngine(repo, tag);
-    if (up.upToDate || up.prNumber === null) {
+    // Exit 4, so the workflow keeps the release's earlier result [R111].
+    if (up.upToDate) {
+      log(`engine ${tag}: paper-CI NOT RUN: the test repo already pins it`);
       return {
-        exitCode: 1,
+        exitCode: 4,
         result: {
-          status: 'failed',
+          status: 'not-run',
           tag,
           path: 'install',
-          failure: `no upgrade PR: the test repo already pins ${tag}. Cut a fresh dev tag so push→main has a change to test.`,
+          reason: `the test repo already pins ${tag}, so there is no upgrade to test; cut a new tag to test again`,
         },
       };
     }
+    if (up.prNumber === null) throw new Error(`oak upgrade --to ${tag} opened no pull request`);
     const prNumber = up.prNumber;
+    phase = 'push-main';
     gh.labelPr(repo, prNumber, CONFORMANCE_LABEL);
     log(`upgrade PR #${prNumber}: ${up.prUrl}`);
 

@@ -401,7 +401,7 @@ describe('cmdConformanceRun', () => {
     expect(out.result.failure).toContain('fork Build paper');
   });
 
-  it('fails without merging when the test repo already pins the release (no upgrade pull request)', async () => {
+  it('exits 4 (not-run) without merging when the test repo already pins the release', async () => {
     const gh = fakeCertGh();
     const out = await cmdConformanceRun(
       { repo: REPO, tag: TAG },
@@ -409,9 +409,37 @@ describe('cmdConformanceRun', () => {
         installEngine: async () => ({ upToDate: true, prNumber: null, prUrl: null }),
       }),
     );
+    expect(out.exitCode).toBe(4);
+    expect(out.result).toMatchObject({ status: 'not-run', path: 'install' });
+    expect(gh.merged).toEqual([]);
+  });
+
+  it('fails at install when the upgrade opens no pull request on a release the test repo does not pin', async () => {
+    const gh = fakeCertGh();
+    const out = await cmdConformanceRun(
+      { repo: REPO, tag: TAG },
+      runDeps(gh, {
+        installEngine: async () => ({ upToDate: false, prNumber: null, prUrl: null }),
+      }),
+    );
     expect(out.exitCode).toBe(1);
     expect(out.result).toMatchObject({ status: 'failed', path: 'install' });
     expect(gh.merged).toEqual([]);
+  });
+
+  it('fails at install when oak upgrade fails', async () => {
+    const gh = fakeCertGh();
+    const out = await cmdConformanceRun(
+      { repo: REPO, tag: TAG },
+      runDeps(gh, {
+        installEngine: async () => {
+          throw new Error('oak upgrade: oak needs v0.3.0 or newer');
+        },
+      }),
+    );
+    expect(out.exitCode).toBe(1);
+    expect(out.result).toMatchObject({ status: 'failed', path: 'install' });
+    expect(out.result.failure).toContain('oak upgrade:');
   });
 
   it('fails when Build paper fails on main', async () => {
