@@ -1,4 +1,4 @@
-name: Prepare Zenodo deposit
+name: Reserve DOI
 
 # Editor-dispatched: reserves the concept DOI, opens the myst.yml PR. The version enters at publish.
 # https://scholar.nexus/oaktree-sapling/reference/cli#deposit

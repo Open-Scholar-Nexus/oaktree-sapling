@@ -142,11 +142,11 @@ describe('cmdConformanceReset', () => {
  * ------------------------------------------------------------------------ */
 
 const TAG = 'v0.0.0-dev.9';
-// Both events, so the push to main and the pull request build each find a passing Paper CI.
+// Both events, so the push to main and the pull request build each find a passing Build paper.
 const SUCCESS_CI: WorkflowRun[] = [
   {
     id: 1,
-    name: 'Paper CI',
+    name: 'Build paper',
     status: 'completed',
     conclusion: 'success',
     url: 'run-url',
@@ -154,7 +154,7 @@ const SUCCESS_CI: WorkflowRun[] = [
   },
   {
     id: 2,
-    name: 'Paper CI',
+    name: 'Build paper',
     status: 'completed',
     conclusion: 'success',
     url: 'pr-run-url',
@@ -207,7 +207,7 @@ function fakeCertGh(
       publishPolls += 1;
       runs.push({
         id: 3,
-        name: 'Publish Zenodo deposit',
+        name: 'Deposit version',
         event: 'push',
         url: 'publish-run-url',
         status: publishPolls === 1 ? 'in_progress' : 'completed',
@@ -338,7 +338,7 @@ describe('cmdConformanceRun', () => {
     });
     expect(gh.sweptForkBranches).toEqual([FORK.repo]);
     expect(gh.openedForkPr).toEqual([[FORK.repo, `${CERT_BRANCH_PREFIX}42`]]);
-    expect(gh.approvedRuns).toEqual([2]); // the fork pull request's Paper CI run (SUCCESS_CI pull_request)
+    expect(gh.approvedRuns).toEqual([2]); // the fork pull request's Build paper run (SUCCESS_CI pull_request)
     expect(gh.labeled).toContainEqual([31, CONFORMANCE_LABEL]);
     expect(gh.closed).toContain(31); // the fork pull request is closed on the test repo (main token)
     expect(gh.deletedForkBranches).toEqual([`${CERT_BRANCH_PREFIX}42`]);
@@ -363,14 +363,14 @@ describe('cmdConformanceRun', () => {
     expect(gh.closed).toContain(21); // the same-repo preview passed (closed) before the fork preview
   });
 
-  it('fails at the fork preview when its Paper CI fails', async () => {
+  it('fails at the fork preview when its Build paper fails', async () => {
     const gh = fakeCertGh({
       workflowRuns: (sha) => {
         if (sha === 'fork-head-sha') {
           return [
             {
               id: 5,
-              name: 'Paper CI',
+              name: 'Build paper',
               status: 'completed',
               conclusion: 'failure',
               url: 'bad-fork-run',
@@ -382,7 +382,7 @@ describe('cmdConformanceRun', () => {
         if (sha === 'main-sha') {
           runs.push({
             id: 3,
-            name: 'Publish Zenodo deposit',
+            name: 'Deposit version',
             event: 'push',
             url: 'publish-run-url',
             status: 'completed',
@@ -398,7 +398,7 @@ describe('cmdConformanceRun', () => {
     );
     expect(out.exitCode).toBe(1);
     expect(out.result).toMatchObject({ status: 'failed', path: 'preview-fork' });
-    expect(out.result.failure).toContain('fork Paper CI');
+    expect(out.result.failure).toContain('fork Build paper');
   });
 
   it('fails without merging when the test repo already pins the release (no upgrade pull request)', async () => {
@@ -414,12 +414,12 @@ describe('cmdConformanceRun', () => {
     expect(gh.merged).toEqual([]);
   });
 
-  it('fails when Paper CI fails on main', async () => {
+  it('fails when Build paper fails on main', async () => {
     const gh = fakeCertGh({
       workflowRuns: () => [
         {
           id: 9,
-          name: 'Paper CI',
+          name: 'Build paper',
           status: 'completed',
           conclusion: 'failure',
           url: 'bad-run',
@@ -430,7 +430,7 @@ describe('cmdConformanceRun', () => {
     const out = await cmdConformanceRun({ repo: REPO, tag: TAG }, runDeps(gh));
     expect(out.exitCode).toBe(1);
     expect(out.result).toMatchObject({ status: 'failed', path: 'push-main' });
-    expect(out.result.failure).toContain('Paper CI');
+    expect(out.result.failure).toContain('Build paper');
   });
 
   it('fails when Pages does not serve 200, even if CI passed', async () => {
@@ -473,7 +473,7 @@ describe('cmdConformanceRun', () => {
       workflowRuns: () => [
         {
           id: 9,
-          name: 'Paper CI',
+          name: 'Build paper',
           status: 'in_progress',
           conclusion: null,
           url: 'stuck',
@@ -619,7 +619,7 @@ describe('cmdConformanceRun', () => {
           ? [
               {
                 id: 3,
-                name: 'Publish Zenodo deposit',
+                name: 'Deposit version',
                 status: 'completed',
                 conclusion: 'failure',
                 url: 'bad-publish',
@@ -631,7 +631,7 @@ describe('cmdConformanceRun', () => {
     const out = await cmdConformanceRun({ repo: REPO, tag: TAG }, runDeps(gh));
     expect(out.exitCode).toBe(1);
     expect(out.result).toMatchObject({ status: 'failed', path: 'deposit' });
-    expect(out.result.failure).toContain('Publish Zenodo deposit');
+    expect(out.result.failure).toContain('Deposit version');
     expect(gh.deletedReleases).toEqual([CERT_DEPOSIT_TAG]); // only the cleanup before the push ran
   });
 });

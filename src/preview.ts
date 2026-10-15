@@ -224,7 +224,7 @@ export interface DeployPreviewInput {
   /** GITHUB_REPOSITORY and GITHUB_SERVER_URL, for the fallback link and labels. */
   repo: string | null;
   serverUrl: string;
-  /** The Paper CI run holding the build artifact (`workflow_run.id`), so the fallback comment
+  /** The Build paper run holding the build artifact (`workflow_run.id`), so the fallback comment
    *  links to that run. */
   artifactRunId?: string;
   cf: { apiToken?: string; accountId?: string };
@@ -267,7 +267,7 @@ export async function cmdDeployPreview(
 
   const { preview, problem } = loadJournalPreview(instanceRoot);
   if (problem) process.stderr.write(annotate('warning', problem) + '\n');
-  // Deep-link the Paper CI run holding the artifact (workflow_run.id), else the Actions tab.
+  // Deep-link the Build paper run holding the artifact (workflow_run.id), else the Actions tab.
   const runUrl = input.artifactRunId
     ? `${serverUrl}/${repo ?? ''}/actions/runs/${input.artifactRunId}`
     : `${serverUrl}/${repo ?? ''}/actions`;

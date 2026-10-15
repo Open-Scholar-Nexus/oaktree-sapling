@@ -27,9 +27,9 @@ A pull request from a fork, the default for an outside contributor, adds a step 
 
 (r194)=
 
-- [`ci.yml`](src:templates/paper/.github/workflows/ci.yml) and [`preview-deploy.yml`](src:templates/paper/.github/workflows/preview-deploy.yml) are the two stages of the site preview. On a push to `main`, `ci.yml` also deploys to GitHub Pages.
-- [`check.yml`](src:templates/paper/.github/workflows/check.yml) and [`check-post.yml`](src:templates/paper/.github/workflows/check-post.yml) are the two stages of the editorial checks.
-- [`publish.yml`](src:templates/paper/.github/workflows/publish.yml) and [`prepare.yml`](src:templates/paper/.github/workflows/prepare.yml) handle publishing actions, and are started by a `v*` tag and an editor's manual dispatch. Author content reaches them only after it has merged.
+- [`build-paper.yml`](src:templates/paper/.github/workflows/build-paper.yml) and [`deploy-preview.yml`](src:templates/paper/.github/workflows/deploy-preview.yml) are the two stages of the site preview. On a push to `main`, `build-paper.yml` also deploys to GitHub Pages.
+- [`check-paper.yml`](src:templates/paper/.github/workflows/check-paper.yml) and [`post-checks.yml`](src:templates/paper/.github/workflows/post-checks.yml) are the two stages of the editorial checks.
+- [`deposit-version.yml`](src:templates/paper/.github/workflows/deposit-version.yml) and [`reserve-doi.yml`](src:templates/paper/.github/workflows/reserve-doi.yml) handle publishing actions, and are started by a `v*` tag and an editor's manual dispatch. Author content reaches them only after it has merged.
 - [`.github/actions/engine/action.yml`](src:templates/paper/.github/actions/engine/action.yml) is the composite action every workflow calls, and [`pins.yml`](src:templates/paper/.github/actions/engine/pins.yml) beside it, which names the engine and journal repositories for the action and for local `oak`.
 - [`CODEOWNERS`](src:templates/paper/CODEOWNERS), and the optional `paper-environment.yml`, a conda environment the action installs before the engine runs, in the jobs that build.
 
@@ -73,11 +73,11 @@ Building a pull request runs the author's MyST configuration, their plugins, and
 
 GitHub's answer is `pull_request_target`, which runs with the base repository's secrets, and checking the pull request's code out under it is dangerous. A MyST plugin in the fork could read the token `actions/checkout` leaves in `.git/config` and send it anywhere, and that token can push to the paper repository.
 
-So each flow that needs a token is two workflows, as the figure shows: `ci.yml` and `preview-deploy.yml` for the preview, `check.yml` and `check-post.yml` for the editorial checks.
+So each flow that needs a token is two workflows, as the figure shows: `build-paper.yml` and `deploy-preview.yml` for the preview, `check-paper.yml` and `post-checks.yml` for the editorial checks.
 
 (r13)=
 
-Permissions are granted per job, so the job that builds author content never holds a write scope. In `ci.yml` the workflow default is [`contents: read`](src:templates/paper/.github/workflows/ci.yml#L12-L13), and [`pages: write` and `id-token: write`](src:templates/paper/.github/workflows/ci.yml#L41-L46) sit on the push-only `deploy-pages` job. Granted at workflow level, they would be held by the `build` job too, which on a push to `main` runs whatever content was just merged, and a plugin in that content could deploy its own site over the paper's.
+Permissions are granted per job, so the job that builds author content never holds a write scope. In `build-paper.yml` the workflow default is [`contents: read`](src:templates/paper/.github/workflows/build-paper.yml#L12-L13), and [`pages: write` and `id-token: write`](src:templates/paper/.github/workflows/build-paper.yml#L41-L46) sit on the push-only `deploy-pages` job. Granted at workflow level, they would be held by the `build` job too, which on a push to `main` runs whatever content was just merged, and a plugin in that content could deploy its own site over the paper's.
 
 A branch pull request goes through the same two stages. A check then behaves the same whoever opened the pull request.
 
@@ -85,7 +85,7 @@ A branch pull request goes through the same two stages. A check then behaves the
 
 Branches cannot reach the tokens at all. A repository secret is readable by every workflow on every branch, and an author with push access can push a branch carrying a workflow of their own, so `oak bootstrap` stores every secret in a GitHub environment instead. The Cloudflare secrets live on `preview` and the Zenodo tokens on `zenodo-prepare`, both admitting only `main`, and on `zenodo-publish`, which admits only `v*` tags; only editors can push one. Each job that reads a secret declares its environment, and a job on any other ref is refused before it starts. Re-running `oak bootstrap` with the values sets them on the environments and deletes the repository-level copies of those secrets.
 
-Inside those jobs the paper's code never runs. `publish.yml` builds in a job with no secrets and hands the output to the deposit job, which runs `oak release --no-build`. The action installs `paper-environment.yml` only when a job asks, and only the build jobs ask. And the engine runs `wrangler` from an empty directory, so a `.npmrc` or `node_modules` in the paper cannot choose which wrangler receives the Cloudflare token.
+Inside those jobs the paper's code never runs. `deposit-version.yml` builds in a job with no secrets and hands the output to the deposit job, which runs `oak release --no-build`. The action installs `paper-environment.yml` only when a job asks, and only the build jobs ask. And the engine runs `wrangler` from an empty directory, so a `.npmrc` or `node_modules` in the paper cannot choose which wrangler receives the Cloudflare token.
 
 (design-paper-ci-stage2-inputs)=
 
@@ -93,11 +93,11 @@ Inside those jobs the paper's code never runs. `publish.yml` builds in a job wit
 
 (r91)=
 
-Stage 2 runs in the base context, but everything in the artifact is under the pull request's control: the author's content runs in the job that writes it, and on a pull request GitHub runs the pull request's own copy of the Stage 1 workflow file. So Stage 2 takes every value it can from its own `workflow_run` event, which GitHub populates. For example, `check-post.yml` [posts the check run](src:templates/paper/.github/workflows/check-post.yml#L39-L49) on the commit in `workflow_run.head_sha`. A Stage 2 that took the commit from the artifact would put a green check on whichever commit the fork named.
+Stage 2 runs in the base context, but everything in the artifact is under the pull request's control: the author's content runs in the job that writes it, and on a pull request GitHub runs the pull request's own copy of the Stage 1 workflow file. So Stage 2 takes every value it can from its own `workflow_run` event, which GitHub populates. For example, `post-checks.yml` [posts the check run](src:templates/paper/.github/workflows/post-checks.yml#L39-L49) on the commit in `workflow_run.head_sha`. A Stage 2 that took the commit from the artifact would put a green check on whichever commit the fork named.
 
 (r136)=
 
-The artifact carries the built site or the checks report, plus a file with the pull request number and one with the paper's folder, which is `.` in a paper repository. The number is the one value Stage 2 cannot get from its own event, because `workflow_run.pull_requests` is empty when the pull request came from a fork. `check-post` and `deploy-preview` both read it and pass it to the engine's [`verifyPrHead`](src:src/artifact.ts#L141-L157) before writing anything to a pull request. `verifyPrHead` checks the number's shape and who owns it:
+The artifact carries the built site or the checks report, plus a file with the pull request number and one with the paper's folder, which is `.` in a paper repository. The number is the one value Stage 2 cannot get from its own event, because `workflow_run.pull_requests` is empty when the pull request came from a fork. `post-checks` and `deploy-preview` both read it and pass it to the engine's [`verifyPrHead`](src:src/artifact.ts#L141-L157) before writing anything to a pull request. `verifyPrHead` checks the number's shape and who owns it:
 
 - **Shape.** [Digits](src:src/artifact.ts#L19-L29), anchored to the whole string, because the value becomes part of a `gh api` path.
 - **Ownership.** The API is asked which commit that pull request heads at, and the answer must be the commit this run built, from `workflow_run.head_sha` or the job that pushed it. A fork that writes a well-formed number belonging to somebody else's open pull request would otherwise have the repository comment on that pull request, with a verdict or a preview link the fork chose.
@@ -107,7 +107,7 @@ The paper's folder must be a folder below the repository root, and a missing fil
 
 (r154)=
 
-The artifact's files are untrusted in the same way its values are. A paper preview is static MyST output, so before deploying, the engine [removes](src:src/preview.ts#L108-L131) the files that would let it run code or rewrite responses on the journal's Cloudflare Pages account.[^pages-control] The strip lives in the engine, which Stage 2 checks out at the base branch's version, because a fork could delete a strip in `ci.yml` in the same commit.
+The artifact's files are untrusted in the same way its values are. A paper preview is static MyST output, so before deploying, the engine [removes](src:src/preview.ts#L108-L131) the files that would let it run code or rewrite responses on the journal's Cloudflare Pages account.[^pages-control] The strip lives in the engine, which Stage 2 checks out at the base branch's version, because a fork could delete a strip in `build-paper.yml` in the same commit.
 
 [^pages-control]: The strip removes `_worker.js`, `functions/`, `_routes.json`, `_redirects`, `_headers` and `_middleware.js` from the deploy root. A `_worker.js` or `functions/` controls every response on the preview's URL, the page editors open to review the paper. And since `pages.dev` is on the Public Suffix List, every preview of a project shares `<project>.pages.dev`, so one preview can set cookies that all the others receive.
 
@@ -139,9 +139,9 @@ The check runs in the workflow because it decides which engine to fetch, so ther
 
 Beyond the summary at the top of this page, these gaps remain:
 
-- **The check verdict is authored by Stage 1.** Stage 2 posts the report Stage 1 computed, so a fork that rewrites `check.yml` can post a passing report. That rewrite is itself a change under `.github/`, so the comment flags it and merging it needs an editor. The verdict is a signal for the editor and not an authorisation decision, and the code-owner review is what stands between such a pull request and `main`.
-- **The DOI pull request's checks are held.** `prepare.yml` opens it with the workflow's own `GITHUB_TOKEN`. GitHub holds the runs on that pull request for approval, and approving them does not start the preview, so the editor closes and reopens it to run the usual two stages. Each held run keeps its check suite, and GitHub files the `Journal checks` check run under the first of those suites. The merge rule does not read that suite, so `check-post` also posts the same result as a [commit status](src:src/gh.ts#L506-L510) named `Journal checks`, which belongs to no suite. Running both stages from `prepare.yml` instead [worked](https://github.com/Open-Scholar-Nexus/oaktree-sapling/pull/46), but it shipped a second path through both stages to every paper repository to save that click.
-- **Anyone with write access can mark the Journal checks as passed.** The [branch rule](src:src/bootstrap.ts#L473-L478) asks for a passing result named `Journal checks` and accepts it from any source, so a collaborator can post one by hand through GitHub's API. What keeps such a pull request off `main` is the code-owner review. The DOI pull request that [`prepare.yml`](src:templates/paper/.github/workflows/prepare.yml) opens relies on this: its result reaches the rule only through the commit status `check-post` posts. Restricting the rule to results from GitHub Actions would close this gap: a passing result would have to come from a workflow run, and a hand-posted one would no longer count. Before doing that, check that a DOI pull request can still merge.
+- **The check verdict is authored by Stage 1.** Stage 2 posts the report Stage 1 computed, so a fork that rewrites `check-paper.yml` can post a passing report. That rewrite is itself a change under `.github/`, so the comment flags it and merging it needs an editor. The verdict is a signal for the editor and not an authorisation decision, and the code-owner review is what stands between such a pull request and `main`.
+- **The DOI pull request's checks are held.** `reserve-doi.yml` opens it with the workflow's own `GITHUB_TOKEN`. GitHub holds the runs on that pull request for approval, and approving them does not start the preview, so the editor closes and reopens it to run the usual two stages. Each held run keeps its check suite, and GitHub files the `Journal checks` check run under the first of those suites. The merge rule does not read that suite, so `post-checks` also posts the same result as a [commit status](src:src/gh.ts#L506-L510) named `Journal checks`, which belongs to no suite. Running both stages from `reserve-doi.yml` instead [worked](https://github.com/Open-Scholar-Nexus/oaktree-sapling/pull/46), but it shipped a second path through both stages to every paper repository to save that click.
+- **Anyone with write access can mark the Journal checks as passed.** The [branch rule](src:src/bootstrap.ts#L473-L478) asks for a passing result named `Journal checks` and accepts it from any source, so a collaborator can post one by hand through GitHub's API. What keeps such a pull request off `main` is the code-owner review. The DOI pull request that [`reserve-doi.yml`](src:templates/paper/.github/workflows/reserve-doi.yml) opens relies on this: its result reaches the rule only through the commit status `post-checks` posts. Restricting the rule to results from GitHub Actions would close this gap: a passing result would have to come from a workflow run, and a hand-posted one would no longer count. Before doing that, check that a DOI pull request can still merge.
 - **The branch rule can be removed.** An admin who deletes `protect-main` turns `CODEOWNERS` back into documentation.
 - **Anything we didn't consider.** See a gap in our design? [Open an issue](https://github.com/Open-Scholar-Nexus/oaktree-sapling/issues) to tell us.
 
@@ -171,9 +171,9 @@ The engine repository in `pins.yml` and the version in `myst.yml` both fail loud
 
 (r137)=
 
-Stage 2 rejects malformed input with a clear error. A report that is not JSON, or JSON without the `checkRun.conclusion` field, makes `check-post` [exit 1](src:src/cli.ts#L915-L926) naming the file and what is wrong with it. An absent `pr-number` file means a push build and is not an error, and an absent `paper` file means `.`. A present and malformed one is a corrupt or hostile artifact, so Stage 2 fails.
+Stage 2 rejects malformed input with a clear error. A report that is not JSON, or JSON without the `checkRun.conclusion` field, makes `post-checks` [exit 1](src:src/cli.ts#L915-L926) naming the file and what is wrong with it. An absent `pr-number` file means a push build and is not an error, and an absent `paper` file means `.`. A present and malformed one is a corrupt or hostile artifact, so Stage 2 fails.
 
-[`oak validate --report`](src:src/cli.ts#L785-L788) exits 0 whenever it wrote a report, a failing one included, because `check-post.yml` runs only after a successful Stage 1. It exits non-zero only when no report was written.
+[`oak validate --report`](src:src/cli.ts#L785-L788) exits 0 whenever it wrote a report, a failing one included, because `post-checks.yml` runs only after a successful Stage 1. It exits non-zero only when no report was written.
 
 (design-paper-ci-artifact-contract)=
 
@@ -193,11 +193,11 @@ A launcher change that needs a verb or an output an older engine lacks raises `m
 
 (r15)=
 
-Runs are grouped so a new push supersedes an in-flight run for the same pull request, and the group key includes the head repository as well as the branch, in [`ci.yml`](src:templates/paper/.github/workflows/ci.yml#L15-L18) and [`check.yml`](src:templates/paper/.github/workflows/check.yml#L15-L18). Two forks both working on a branch called `main` would otherwise share a group and cancel each other. A cancelled Stage 1 uploads no artifact, so Stage 2 never fires, and the required check never arrives, so the pull request cannot merge until someone pushes again.
+Runs are grouped so a new push supersedes an in-flight run for the same pull request, and the group key includes the head repository as well as the branch, in [`build-paper.yml`](src:templates/paper/.github/workflows/build-paper.yml#L15-L18) and [`check-paper.yml`](src:templates/paper/.github/workflows/check-paper.yml#L15-L18). Two forks both working on a branch called `main` would otherwise share a group and cancel each other. A cancelled Stage 1 uploads no artifact, so Stage 2 never fires, and the required check never arrives, so the pull request cannot merge until someone pushes again.
 
 (r94)=
 
-Both stages key on the head repository, and the pull request group in each Stage 1 workflow is distinct from its push-to-`main` group. A fork opening a pull request from a branch called `main` would otherwise land in the same group as the repository's own `main` and cancel an in-flight Pages deploy. The Stage 2 keys are in [`preview-deploy.yml`](src:templates/paper/.github/workflows/preview-deploy.yml#L16-L19) and [`check-post.yml`](src:templates/paper/.github/workflows/check-post.yml#L18-L21).
+Both stages key on the head repository, and the pull request group in each Stage 1 workflow is distinct from its push-to-`main` group. A fork opening a pull request from a branch called `main` would otherwise land in the same group as the repository's own `main` and cancel an in-flight Pages deploy. The Stage 2 keys are in [`deploy-preview.yml`](src:templates/paper/.github/workflows/deploy-preview.yml#L16-L19) and [`post-checks.yml`](src:templates/paper/.github/workflows/post-checks.yml#L18-L21).
 
 (design-paper-ci-secrets-in-if)=
 
@@ -205,7 +205,7 @@ Both stages key on the head repository, and the pull request group in each Stage
 
 (r172)=
 
-A workflow reads a secret into `env:` and tests it in `run:`[^why-test-secret-in-run]. A `secrets` reference in a step's `if:` makes GitHub reject the whole workflow file. For a file that only runs on `workflow_dispatch`, such as `prepare.yml`, the rejection shows only when someone runs it. [`test/frozen-guards.test.ts`](src:test/frozen-guards.test.ts#L244-L249) fails on any frozen `if:` that reads `secrets`.
+A workflow reads a secret into `env:` and tests it in `run:`[^why-test-secret-in-run]. A `secrets` reference in a step's `if:` makes GitHub reject the whole workflow file. For a file that only runs on `workflow_dispatch`, such as `reserve-doi.yml`, the rejection shows only when someone runs it. [`test/frozen-guards.test.ts`](src:test/frozen-guards.test.ts#L244-L249) fails on any frozen `if:` that reads `secrets`.
 
 [^why-test-secret-in-run]: The `secrets` context does not exist in a step-level `if:`.
 

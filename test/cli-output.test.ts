@@ -506,13 +506,13 @@ describe('--repo takes owner/name', () => {
   });
 });
 
-describe('check-post refuses a forged report [R137]', () => {
+describe('post-checks refuses a forged report [R137]', () => {
   const post = (body: string) => {
     const dir = mkdtempSync(join(tmpdir(), 'oak-report-'));
     const f = join(dir, 'report.json');
     writeFileSync(f, body);
     return oak([
-      'check-post',
+      'post-checks',
       '--report',
       f,
       '--repo',
@@ -534,7 +534,7 @@ describe('check-post refuses a forged report [R137]', () => {
 
   it('refuses valid JSON without a result', () => {
     // The `pull_request` job's `jq -e .checkRun.conclusion` check runs on the fork's code, so
-    // check-post checks again.
+    // post-checks checks again.
     for (const body of ['{}', '{"checkRun":{}}', '{"checkRun":{"conclusion":3}}', 'null']) {
       const r = post(body);
       expect(r.code, body).toBe(1);
@@ -543,7 +543,7 @@ describe('check-post refuses a forged report [R137]', () => {
   });
 
   it('refuses to run without --base and --verified-head from the event', () => {
-    const r = oak(['check-post', '--report', 'r.json', '--repo', 'o/r', '--sha', 'deadbeef']);
+    const r = oak(['post-checks', '--report', 'r.json', '--repo', 'o/r', '--sha', 'deadbeef']);
     expect(r.code).toBe(2);
     expect(r.stderr).toContain('--verified-head <headsha> are required');
   });
@@ -556,9 +556,9 @@ describe('a pull request number is a number [R136]', () => {
     expect(r.stderr).toContain('not a pull request number');
   });
 
-  /** check-post on a valid report, with `files` beside it, and no gh on PATH: a refusal has to
+  /** post-checks on a valid report, with `files` beside it, and no gh on PATH: a refusal has to
    *  come before any GitHub call. */
-  function checkPostWith(files: Record<string, string>) {
+  function postChecksWith(files: Record<string, string>) {
     const dir = mkdtempSync(join(tmpdir(), 'oak-checks-'));
     const report = {
       checkRun: { conclusion: 'success', title: 't', summary: 's', annotations: [] },
@@ -566,7 +566,7 @@ describe('a pull request number is a number [R136]', () => {
     writeFileSync(join(dir, 'report.json'), JSON.stringify(report));
     for (const [name, body] of Object.entries(files)) writeFileSync(join(dir, name), body);
     return oak(
-      ['check-post', '--report', join(dir, 'report.json'), '--repo', 'o/r'].concat([
+      ['post-checks', '--report', join(dir, 'report.json'), '--repo', 'o/r'].concat([
         '--sha',
         'a'.repeat(40),
         '--base',
@@ -578,14 +578,14 @@ describe('a pull request number is a number [R136]', () => {
     );
   }
 
-  it('check-post reads pr-number beside the report and refuses a forged one', () => {
-    const r = checkPostWith({ 'pr-number': '1/comments?x=' });
+  it('post-checks reads pr-number beside the report and refuses a forged one', () => {
+    const r = postChecksWith({ 'pr-number': '1/comments?x=' });
     expect(r.code).toBe(2);
     expect(r.stderr).toContain('not a pull request number');
   });
 
-  it('check-post refuses a paper folder outside the repo', () => {
-    const r = checkPostWith({ 'pr-number': '7', paper: '../../elsewhere' });
+  it('post-checks refuses a paper folder outside the repo', () => {
+    const r = postChecksWith({ 'pr-number': '7', paper: '../../elsewhere' });
     expect(r.code).toBe(2);
     expect(r.stderr).toContain('not a folder below the repo root');
   });

@@ -37,12 +37,12 @@ svg{font-family:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif}
         <text x="32" y="46" class="t-gate">gated by CODEOWNERS</text>
 
         <!-- callers -->
-        <rect x="40" y="58"  width="190" height="28" rx="5" class="box b"/><text x="52" y="77"  class="t-mono">ci.yml</text>
-        <rect x="40" y="94"  width="190" height="28" rx="5" class="box b"/><text x="52" y="113" class="t-mono">preview-deploy.yml</text>
-        <rect x="40" y="130" width="190" height="28" rx="5" class="box g"/><text x="52" y="149" class="t-mono">check.yml</text>
-        <rect x="40" y="166" width="190" height="28" rx="5" class="box g"/><text x="52" y="185" class="t-mono">check-post.yml</text>
-        <rect x="40" y="202" width="190" height="28" rx="5" class="box n"/><text x="52" y="221" class="t-mono">publish.yml</text>
-        <rect x="40" y="238" width="190" height="28" rx="5" class="box n"/><text x="52" y="257" class="t-mono">prepare.yml</text>
+        <rect x="40" y="58"  width="190" height="28" rx="5" class="box b"/><text x="52" y="77"  class="t-mono">build-paper.yml</text>
+        <rect x="40" y="94"  width="190" height="28" rx="5" class="box b"/><text x="52" y="113" class="t-mono">deploy-preview.yml</text>
+        <rect x="40" y="130" width="190" height="28" rx="5" class="box g"/><text x="52" y="149" class="t-mono">check-paper.yml</text>
+        <rect x="40" y="166" width="190" height="28" rx="5" class="box g"/><text x="52" y="185" class="t-mono">post-checks.yml</text>
+        <rect x="40" y="202" width="190" height="28" rx="5" class="box n"/><text x="52" y="221" class="t-mono">deposit-version.yml</text>
+        <rect x="40" y="238" width="190" height="28" rx="5" class="box n"/><text x="52" y="257" class="t-mono">reserve-doi.yml</text>
 
         <!-- bracket -->
         <path d="M230,72 H250 M230,108 H250 M230,144 H250 M230,180 H250 M230,216 H250 M230,252 H250 M250,72 V252" class="l k"/>

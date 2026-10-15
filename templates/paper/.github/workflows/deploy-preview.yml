@@ -1,11 +1,11 @@
-name: Preview deploy
+name: Deploy preview
 
 # Stage 2 of the preview: deploys Stage 1's artifact from the base context, never rebuilding.
 # https://scholar.nexus/oaktree-sapling/design/paper-ci#design-paper-ci-stage2-inputs
 
 on:
   workflow_run:
-    workflows: ["Paper CI"]
+    workflows: ["Build paper"]
     types: [completed]
 
 permissions:
@@ -15,7 +15,7 @@ permissions:
 
 concurrency:
   # Head repo in the key: forks share branch names.
-  group: preview-${{ github.event.workflow_run.head_repository.full_name }}-${{ github.event.workflow_run.head_branch }}
+  group: deploy-preview-${{ github.event.workflow_run.head_repository.full_name }}-${{ github.event.workflow_run.head_branch }}
   cancel-in-progress: true
 
 jobs:

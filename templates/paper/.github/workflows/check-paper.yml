@@ -1,6 +1,6 @@
-name: Journal checks
+name: Check paper
 
-# Stage 1 of the journal checks: validates with no secrets; check-post.yml posts the report.
+# Stage 1 of the journal checks: validates with no secrets; post-checks.yml posts the report.
 # https://scholar.nexus/oaktree-sapling/design/paper-ci#design-paper-ci-two-stages
 
 on:
@@ -14,7 +14,7 @@ permissions:
 
 concurrency:
   # Head repo in the key: forks share branch names.
-  group: ${{ github.event_name == 'pull_request' && format('check-pr-{0}-{1}', github.event.pull_request.head.repo.full_name, github.head_ref) || 'check-push-main' }}
+  group: ${{ github.event_name == 'pull_request' && format('check-paper-pr-{0}-{1}', github.event.pull_request.head.repo.full_name, github.head_ref) || 'check-paper-push-main' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -23,7 +23,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # Passes on a failing result, which check-post.yml posts; fails only when no report was
+      # Passes on a failing result, which post-checks.yml posts; fails only when no report was
       # written. On a pull request it leaves pr-number and paper beside the report.
       - uses: ./.github/actions/engine
         with:

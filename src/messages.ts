@@ -22,9 +22,9 @@
  *   templates/paper/myst.yml ................ the commented starter config (CHANGE-ME lines)
  *   templates/paper/index.md ................ the starter manuscript
  *   templates/paper/CODEOWNERS .............. its header comment
- *   templates/paper/.github/workflows/*.yml . job names and `::error::` annotations (ci, check,
- *                                             check-post, preview-deploy, prepare, publish:
- *                                             the names show in the Actions tab)
+ *   templates/paper/.github/workflows/*.yml . job names and `::error::` annotations (build-paper,
+ *                                             deploy-preview, check-paper, post-checks, reserve-doi,
+ *                                             deposit-version: the names show in the Actions tab)
  *   templates/instance/README.md ............ what a journal editor reads first
  *   templates/instance/journal.yml .......... the journal's settings and their comments
  *   templates/instance/brand/brand.yml ...... the branding settings and their comments
@@ -155,8 +155,8 @@ export const usage = (): string =>
   `                    journal website instead.\n` +
   `\n` +
   `Run by the workflows (rarely typed by hand)\n` +
-  `  oak check-post --report <path> --repo <owner/repo> --sha <headsha> --base <branch>\n` +
-  `                 --verified-head <headsha>\n` +
+  `  oak post-checks --report <path> --repo <owner/repo> --sha <headsha> --base <branch>\n` +
+  `                  --verified-head <headsha>\n` +
   `  oak deploy-preview <site> [--verified-head <headsha>] [--instance <dir>] [--repo <owner/repo>]\n` +
   `  oak notify new-version [--pr <n> | --site <dir>] [--repo <owner/repo>]\n` +
   `  oak deposit prepare --repo <owner/repo> [--site-url <url>] [--sandbox] [--instance <dir>]\n` +
@@ -802,7 +802,7 @@ export const pr = {
     [
       '**Preview build ready** 📦',
       '',
-      'No Cloudflare preview is configured, so the built site is attached to its Paper CI run as',
+      'No Cloudflare preview is configured, so the built site is attached to its "Build paper" run as',
       `the **paper-build** artifact; open the run and scroll to **Artifacts**: ${runUrl}`,
       '',
       `_(${reason}.)_`,
@@ -844,7 +844,7 @@ export const pr = {
 };
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════
- * The workflow-run verbs (deposit / release / preview / notify / check-post / conformance).
+ * The workflow-run verbs (deposit / release / preview / notify / post-checks / conformance).
  * Mostly read in a CI log, but every one of them can be typed by hand.
  * ═════════════════════════════════════════════════════════════════════════════════════════ */
 
@@ -858,7 +858,7 @@ export const workflow = {
     `${path} could not be read (${why}), so the preview fell back to an artifact link. ` +
     `Fix the journal config and re-run; nothing else in this run depends on it.`,
 
-  checkPostBadReport: (path: string): string =>
+  postChecksBadReport: (path: string): string =>
     `${path} is not a checks report (no checkRun.conclusion). It comes from the ` +
     `pull_request job's artifact, which is truncated, corrupt or hostile; nothing was posted.`,
 
@@ -947,17 +947,17 @@ export const workflow = {
     `notify: gh could not list the repo's version tags (${why}); whether the paper is ` +
     'already published is unknown, and the reminder is not skipped on a guess.',
 
-  // check-post
-  checkPostArgs:
-    'oak check-post: --report <path>, --repo <owner/repo>, --sha <headsha>, --base <branch> ' +
+  // post-checks
+  postChecksArgs:
+    'oak post-checks: --report <path>, --repo <owner/repo>, --sha <headsha>, --base <branch> ' +
     'and --verified-head <headsha> are required',
-  checkPostNoReport: (path: string): string => `oak check-post: report file not found: ${path}`,
-  checkPostCheckRunFailed: (message: string): string =>
-    `check-post: Check Run not posted (${message})`,
-  checkPostCommentFailed: (message: string): string =>
-    `check-post: comment not posted (${message})`,
+  postChecksNoReport: (path: string): string => `oak post-checks: report file not found: ${path}`,
+  postChecksCheckRunFailed: (message: string): string =>
+    `post-checks: Check Run not posted (${message})`,
+  postChecksCommentFailed: (message: string): string =>
+    `post-checks: comment not posted (${message})`,
 
-  // validate's own failure report (what check-post posts when the run could not happen)
+  // validate's own failure report (what post-checks posts when the run could not happen)
   validateCouldNotRun: 'oak validate could not run',
   validateCrashed: 'oak validate crashed',
   validateCrashLine: (details: string): string => `oak validate: ${details}`,
