@@ -1188,6 +1188,7 @@ async function cmdConformance(argv: string[]): Promise<number> {
               confirm: async () => true,
             },
           );
+          if (up.exitCode !== 0) throw new Error(`oak upgrade: ${String(up.result.message)}`);
           const prUrl = (up.result.pr as string | null) ?? null;
           return {
             upToDate: Boolean(up.result.up_to_date),

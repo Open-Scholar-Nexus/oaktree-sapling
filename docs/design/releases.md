@@ -46,7 +46,7 @@ A stable `vX.Y.Z` enters `releases/latest` as soon as it is released, and `lates
 ## Conformance runs on releases
 
 (r111)=
-A conformance run goes through several real CI runs on the test paper repository, so it tests releases rather than pull requests and is not a required check. It uses a personal access token because `GITHUB_TOKEN` does not reach another repository, and events it causes start no workflows. A run where a third party timed out exits 3 and stays green, so a red run points at oak rather than at GitHub, Cloudflare or Zenodo being slow. A run on a release the test repository is already on has no upgrade to test: it exits 4, stays green and leaves the release's earlier result in place.
+A conformance run goes through several real CI runs on the test paper repository, so it tests releases rather than pull requests and is not a required check. It uses a personal access token because `GITHUB_TOKEN` does not reach another repository, and events it causes start no workflows. A run where a third party timed out exits 3 and stays green, so a red run points at oak rather than at GitHub, Cloudflare or Zenodo being slow. A run on a release the test repository already pins has no upgrade to test: it exits 4, stays green and uploads nothing, so the release keeps the `conformance.json` that `npm-publish` checks before publishing a stable tag.
 
 ## Dev releases
 

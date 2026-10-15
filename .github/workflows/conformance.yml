@@ -97,7 +97,7 @@ jobs:
           TAG: ${{ steps.r.outputs.tag }}
         run: gh release upload "$TAG" conformance.json --clobber
 
-      # Fails on 1 or on no result [R111]; 3 means a third party timed out, which is not oak's fault.
+      # Exit codes [R111].
       - name: Fail if the test failed
         if: ${{ steps.r.outputs.tag != '' && steps.r.outputs.only_reset != 'true' }}
         env:
