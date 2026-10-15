@@ -375,7 +375,7 @@ export async function cmdConformanceRun(input: RunInput, deps: ConformanceDeps):
     gh.labelPr(repo, prNumber, CONFORMANCE_LABEL);
     log(`upgrade PR #${prNumber}: ${up.prUrl}`);
 
-    // 3. Wait for the required Journal checks on the pull request, which also tests check and
+    // 3. Wait for the required Journal checks on the pull request, which also tests check-paper and
     //    post-checks.
     const prSha = gh.prHeadSha(repo, prNumber);
     await pollUntil(
