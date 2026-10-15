@@ -97,7 +97,7 @@ Stage 2 runs in the base context, but everything in the artifact is under the pu
 
 (r136)=
 
-The artifact carries the built site or the checks report, plus a file with the pull request number and one with the paper's folder, which is `.` in a paper repository. The number is the one value Stage 2 cannot get from its own event, because `workflow_run.pull_requests` is empty when the pull request came from a fork. `check-post` and `deploy-preview` both read it and pass it to the engine's [`verifyPrHead`](src:src/artifact.ts#L141-L157) before writing anything to a pull request. `verifyPrHead` checks the number's shape and who owns it:
+The artifact carries the built site or the checks report, plus a file with the pull request number and one with the paper's folder, which is `.` in a paper repository. The number is the one value Stage 2 cannot get from its own event, because `workflow_run.pull_requests` is empty when the pull request came from a fork. `post-checks` and `deploy-preview` both read it and pass it to the engine's [`verifyPrHead`](src:src/artifact.ts#L141-L157) before writing anything to a pull request. `verifyPrHead` checks the number's shape and who owns it:
 
 - **Shape.** [Digits](src:src/artifact.ts#L19-L29), anchored to the whole string, because the value becomes part of a `gh api` path.
 - **Ownership.** The API is asked which commit that pull request heads at, and the answer must be the commit this run built, from `workflow_run.head_sha` or the job that pushed it. A fork that writes a well-formed number belonging to somebody else's open pull request would otherwise have the repository comment on that pull request, with a verdict or a preview link the fork chose.
@@ -140,7 +140,7 @@ The check runs in the workflow because it decides which engine to fetch, so ther
 Beyond the summary at the top of this page, these gaps remain:
 
 - **The check verdict is authored by Stage 1.** Stage 2 posts the report Stage 1 computed, so a fork that rewrites `check-paper.yml` can post a passing report. That rewrite is itself a change under `.github/`, so the comment flags it and merging it needs an editor. The verdict is a signal for the editor and not an authorisation decision, and the code-owner review is what stands between such a pull request and `main`.
-- **The DOI pull request's checks are held.** `reserve-doi.yml` opens it with the workflow's own `GITHUB_TOKEN`. GitHub holds the runs on that pull request for approval, and approving them does not start the preview, so the editor closes and reopens it to run the usual two stages. Each held run keeps its check suite, and GitHub files the `Journal checks` check run under the first of those suites. The merge rule does not read that suite, so `check-post` also posts the same result as a [commit status](src:src/gh.ts#L506-L510) named `Journal checks`, which belongs to no suite. Running both stages from `reserve-doi.yml` instead [worked](https://github.com/Open-Scholar-Nexus/oaktree-sapling/pull/46), but it shipped a second path through both stages to every paper repository to save that click.
+- **The DOI pull request's checks are held.** `reserve-doi.yml` opens it with the workflow's own `GITHUB_TOKEN`. GitHub holds the runs on that pull request for approval, and approving them does not start the preview, so the editor closes and reopens it to run the usual two stages. Each held run keeps its check suite, and GitHub files the `Journal checks` check run under the first of those suites. The merge rule does not read that suite, so `post-checks` also posts the same result as a [commit status](src:src/gh.ts#L506-L510) named `Journal checks`, which belongs to no suite. Running both stages from `reserve-doi.yml` instead [worked](https://github.com/Open-Scholar-Nexus/oaktree-sapling/pull/46), but it shipped a second path through both stages to every paper repository to save that click.
 - **The branch rule can be removed.** An admin who deletes `protect-main` turns `CODEOWNERS` back into documentation.
 - **Anything we didn't consider.** See a gap in our design? [Open an issue](https://github.com/Open-Scholar-Nexus/oaktree-sapling/issues) to tell us.
 
@@ -170,7 +170,7 @@ The engine repository in `pins.yml` and the version in `myst.yml` both fail loud
 
 (r137)=
 
-Stage 2 rejects malformed input with a clear error. A report that is not JSON, or JSON without the `checkRun.conclusion` field, makes `check-post` [exit 1](src:src/cli.ts#L915-L926) naming the file and what is wrong with it. An absent `pr-number` file means a push build and is not an error, and an absent `paper` file means `.`. A present and malformed one is a corrupt or hostile artifact, so Stage 2 fails.
+Stage 2 rejects malformed input with a clear error. A report that is not JSON, or JSON without the `checkRun.conclusion` field, makes `post-checks` [exit 1](src:src/cli.ts#L915-L926) naming the file and what is wrong with it. An absent `pr-number` file means a push build and is not an error, and an absent `paper` file means `.`. A present and malformed one is a corrupt or hostile artifact, so Stage 2 fails.
 
 [`oak validate --report`](src:src/cli.ts#L785-L788) exits 0 whenever it wrote a report, a failing one included, because `post-checks.yml` runs only after a successful Stage 1. It exits non-zero only when no report was written.
 

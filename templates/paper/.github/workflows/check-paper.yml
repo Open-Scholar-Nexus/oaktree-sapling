@@ -14,7 +14,7 @@ permissions:
 
 concurrency:
   # Head repo in the key: forks share branch names.
-  group: ${{ github.event_name == 'pull_request' && format('check-pr-{0}-{1}', github.event.pull_request.head.repo.full_name, github.head_ref) || 'check-push-main' }}
+  group: ${{ github.event_name == 'pull_request' && format('check-paper-pr-{0}-{1}', github.event.pull_request.head.repo.full_name, github.head_ref) || 'check-paper-push-main' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:

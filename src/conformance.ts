@@ -57,7 +57,7 @@ export interface ConformanceGh {
   mergePr(repo: string, prNumber: number): string;
   /** Workflow runs for commit `sha` (Build paper, Journal checks, ...). */
   workflowRunsForCommit(repo: string, sha: string): WorkflowRun[];
-  /** Check Runs on commit `sha`, such as the Journal checks one check-post posts. */
+  /** Check Runs on commit `sha`, such as the Journal checks one post-checks posts. */
   checkRunsForCommit(repo: string, sha: string): CheckRunRef[];
 
   // --- a same-repo pull request and its preview ---
@@ -336,7 +336,7 @@ function extractPreviewUrl(commentBody: string): string | null {
 
 /**
  * Tests a release: moves the test repo onto it through an upgrade pull request, lets the
- * required Journal checks pass before merging (which also tests check and check-post), then
+ * required Journal checks pass before merging (which also tests check-paper and post-checks), then
  * checks each result itself, not only run conclusions: Build paper passed, Pages serves 200, and
  * the Journal checks Check Run was posted on main. The preview, deposit and fork phases follow.
  */
@@ -376,7 +376,7 @@ export async function cmdConformanceRun(input: RunInput, deps: ConformanceDeps):
     log(`upgrade PR #${prNumber}: ${up.prUrl}`);
 
     // 3. Wait for the required Journal checks on the pull request, which also tests check and
-    //    check-post.
+    //    post-checks.
     const prSha = gh.prHeadSha(repo, prNumber);
     await pollUntil(
       `PR #${prNumber} Journal checks`,
@@ -416,7 +416,7 @@ export async function cmdConformanceRun(input: RunInput, deps: ConformanceDeps):
     await assertServes200({ probe, sleep }, pagesUrl, 'Pages');
     log(`Pages 200: ${pagesUrl}`);
 
-    // 7. The Journal checks Check Run was posted on main, so check-post ran.
+    // 7. The Journal checks Check Run was posted on main, so post-checks ran.
     await pollUntil(
       'Journal checks Check Run (push→main)',
       () => checkOutcome(gh.checkRunsForCommit(repo, mergeSha), 'Journal checks'),

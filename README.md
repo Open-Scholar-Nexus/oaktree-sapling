@@ -34,7 +34,7 @@ Working on a paper:
 - `oak build`: build the paper's website and PDF into `_build/`
 - `oak start`: preview it in a browser with the journal's settings applied
 
-The rest (`check-post`, `deploy-preview`, `deposit`, `release`, `notify`, `conformance`) are run by the generated workflows and are rarely typed by hand.
+The rest (`post-checks`, `deploy-preview`, `deposit`, `release`, `notify`, `conformance`) are run by the generated workflows and are rarely typed by hand.
 
 ## Known limitations of the npm package
 

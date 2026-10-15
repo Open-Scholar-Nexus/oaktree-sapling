@@ -58,8 +58,8 @@ export const DOCS = {
   start: 'reference/cli#start',
   /** `oak validate`: the checks it runs, the verdict it prints, and the `--report` envelope. */
   validate: 'reference/cli#validate',
-  /** `oak check-post`: the Check Run and sticky PR comment it posts from a validate report. */
-  checkPost: 'reference/cli#check-post',
+  /** `oak post-checks`: the Check Run and sticky PR comment it posts from a validate report. */
+  postChecks: 'reference/cli#post-checks',
   /** `oak deposit <prepare|publish|status>`: the Zenodo verbs, and what `--sandbox` isolates. */
   deposit: 'reference/cli#deposit',
   /** `oak release --tag vX`: build, deposit, Release asset, and the comment or issue it leaves. */

@@ -15,8 +15,8 @@
 (validate)=
 ## validate
 
-(check-post)=
-## check-post
+(post-checks)=
+## post-checks
 
 (deposit)=
 ## deposit

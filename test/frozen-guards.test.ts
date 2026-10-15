@@ -169,8 +169,8 @@ describe('the dispatch step takes args as data, not as script ([R153])', () => {
   });
 
   it('still splits the verb and its flags into words, as the workflows need', () => {
-    expect(dispatch('check-post --report journal-checks/report.json --repo o/r').argv).toEqual([
-      'check-post',
+    expect(dispatch('post-checks --report journal-checks/report.json --repo o/r').argv).toEqual([
+      'post-checks',
       '--report',
       'journal-checks/report.json',
       '--repo',

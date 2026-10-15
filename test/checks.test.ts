@@ -2,14 +2,14 @@ import { describe, it, expect } from 'vitest';
 import {
   toCheckRun,
   checksComment,
-  cmdCheckPost,
+  cmdPostChecks,
   frozenPathsTouched,
   STICKY_CHECKS,
   CheckStatus,
   type EngineCheckResult,
   type CheckRun,
   type ChecksReport,
-  type CheckPostDeps,
+  type PostChecksDeps,
 } from '../src/checks.js';
 
 // The editorial checks read myst's processed project, so they run only in a real session, in
@@ -175,7 +175,7 @@ describe('toCheckRun (reporting: GitHub Check Run, ours)', () => {
 });
 
 /* --------------------------------------------------------------------------
- * Posting: the comment, and `oak check-post`.
+ * Posting: the comment, and `oak post-checks`.
  * ------------------------------------------------------------------------ */
 
 const report = (over: Partial<CheckRun> = {}): ChecksReport => ({
@@ -212,7 +212,7 @@ describe('checksComment (the pull request comment)', () => {
   });
 
   it("carries an uncomposed run's note into the comment [R82]", () => {
-    // check-post does not handle notes; they are in checkRun.summary, which the comment shows,
+    // post-checks does not handle notes; they are in checkRun.summary, which the comment shows,
     // so an uncomposed run looks uncomposed on the pull request.
     const body = checksComment({
       status: 'ok',
@@ -224,14 +224,14 @@ describe('checksComment (the pull request comment)', () => {
   });
 });
 
-function fakePost(over: Partial<CheckPostDeps> = {}): {
-  deps: CheckPostDeps;
+function fakePost(over: Partial<PostChecksDeps> = {}): {
+  deps: PostChecksDeps;
   runs: Array<{ repo: string; sha: string; name: string; run: CheckRun }>;
   stickies: Array<{ pr: string; header: string; body: string }>;
 } {
   const runs: Array<{ repo: string; sha: string; name: string; run: CheckRun }> = [];
   const stickies: Array<{ pr: string; header: string; body: string }> = [];
-  const deps: CheckPostDeps = {
+  const deps: PostChecksDeps = {
     checkRun: { create: (repo, sha, name, run) => void runs.push({ repo, sha, name, run }) },
     sticky: (_root, pr, header, body) => void stickies.push({ pr, header, body }),
     ...over,
@@ -239,10 +239,10 @@ function fakePost(over: Partial<CheckPostDeps> = {}): {
   return { deps, runs, stickies };
 }
 
-describe('cmdCheckPost, with fakes for GitHub', () => {
+describe('cmdPostChecks, with fakes for GitHub', () => {
   it('posts the Check Run, and creates or updates the comment when a pull request is given', () => {
     const { deps, runs, stickies } = fakePost();
-    const out = cmdCheckPost({ report: report(), repo: 'o/r', sha: 'abc', pr: '7' }, deps);
+    const out = cmdPostChecks({ report: report(), repo: 'o/r', sha: 'abc', pr: '7' }, deps);
     expect(out.checkRunPosted).toBe(true);
     expect(out.commentPosted).toBe(true);
     expect(runs).toEqual([
@@ -255,7 +255,7 @@ describe('cmdCheckPost, with fakes for GitHub', () => {
 
   it('without a pull request posts the Check Run but no comment', () => {
     const { deps, runs, stickies } = fakePost();
-    const out = cmdCheckPost({ report: report(), repo: 'o/r', sha: 'abc' }, deps);
+    const out = cmdPostChecks({ report: report(), repo: 'o/r', sha: 'abc' }, deps);
     expect(runs).toHaveLength(1);
     expect(stickies).toHaveLength(0);
     expect(out.checkRunPosted).toBe(true);
@@ -270,7 +270,7 @@ describe('cmdCheckPost, with fakes for GitHub', () => {
         },
       },
     });
-    const out = cmdCheckPost({ report: report(), repo: 'o/r', sha: 'abc', pr: '7' }, deps);
+    const out = cmdPostChecks({ report: report(), repo: 'o/r', sha: 'abc', pr: '7' }, deps);
     expect(out.checkRunPosted).toBe(false);
     expect(out.commentPosted).toBe(true);
     expect(stickies).toHaveLength(1);
@@ -286,7 +286,7 @@ describe('cmdCheckPost, with fakes for GitHub', () => {
         throw new Error('boom');
       },
     });
-    const out = cmdCheckPost({ report: report(), repo: 'o/r', sha: 'abc', pr: '7' }, deps);
+    const out = cmdPostChecks({ report: report(), repo: 'o/r', sha: 'abc', pr: '7' }, deps);
     expect(out.checkRunPosted).toBe(true);
     expect(out.commentPosted).toBe(false);
     expect(runs).toHaveLength(1);
@@ -318,10 +318,10 @@ describe('frozenPathsTouched (the gated files)', () => {
   });
 });
 
-describe('cmdCheckPost: the gated-files warning', () => {
+describe('cmdPostChecks: the gated-files warning', () => {
   it('with shimTouched: warns in the comment and the Check Run title and summary, with the conclusion unchanged', () => {
     const { deps, runs, stickies } = fakePost();
-    const out = cmdCheckPost(
+    const out = cmdPostChecks(
       {
         report: report(),
         repo: 'o/r',
@@ -342,7 +342,7 @@ describe('cmdCheckPost: the gated-files warning', () => {
 
   it('without shimTouched: posts the report as it is, with no warning', () => {
     const { deps, runs, stickies } = fakePost();
-    cmdCheckPost({ report: report(), repo: 'o/r', sha: 'abc', pr: '7' }, deps);
+    cmdPostChecks({ report: report(), repo: 'o/r', sha: 'abc', pr: '7' }, deps);
     expect(runs[0]!.run.title).toBe(report().checkRun.title);
     expect(stickies[0]!.body).not.toContain('changes the files that run the checks');
   });
