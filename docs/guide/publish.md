@@ -5,7 +5,7 @@ Publishing a paper deposits it on Zenodo, which gives it a DOI. An editor does i
 
 ## 1. Reserve the DOI
 
-In the paper repository's **Actions** tab, open **Prepare Zenodo deposit** and click **Run workflow**. Untick **Use the Zenodo sandbox** for a real deposit: it is ticked by default, which deposits on the [Zenodo sandbox](#sandbox).
+In the paper repository's **Actions** tab, open **Reserve DOI** and click **Run workflow**. Untick **Use the Zenodo sandbox** for a real deposit: it is ticked by default, which deposits on the [Zenodo sandbox](#sandbox).
 
 The run creates a draft on Zenodo and opens a pull request, **Reserve Zenodo DOI**, that writes the DOI into `myst.yml`. GitHub holds the checks on a pull request a workflow opens, and approving them does not run the preview, so close and reopen it to run both, then merge it.
 
@@ -23,7 +23,7 @@ git push origin v1.0.0
 
 Creating a release with a new tag on GitHub does the same. Only editors can create `v*` tags.
 
-The tag starts the **Publish Zenodo deposit** workflow, which builds the paper and uploads the PDF, the sources and the engine that built them to the Zenodo draft. It attaches the same files to a GitHub release for the tag, and comments the draft's address on the tagged commit.
+The tag starts the **Deposit version** workflow, which builds the paper and uploads the PDF, the sources and the engine that built them to the Zenodo draft. It attaches the same files to a GitHub release for the tag, and comments the draft's address on the tagged commit.
 
 ## 3. Publish on Zenodo
 
@@ -61,7 +61,7 @@ The run opens an issue titled **Zenodo publish failed for** the tag, labelled `z
 :::{dropdown} Testing on the Zenodo sandbox
 With **Use the Zenodo sandbox** ticked, the DOI is a sandbox one (`10.5072/zenodo.…`), and tags deposit on [sandbox.zenodo.org](https://sandbox.zenodo.org) with `ZENODO_TOKEN_SANDBOX`. A sandbox DOI never resolves, and the journal website leaves out a paper that has one. A paper with no DOI yet is listed.
 
-To move to the real Zenodo, run **Prepare Zenodo deposit** again with the box unticked. Its pull request replaces the sandbox DOI with a real one.
+To move to the real Zenodo, run **Reserve DOI** again with the box unticked. Its pull request replaces the sandbox DOI with a real one.
 :::
 
 [^dois]: Zenodo calls the DOI for all versions the concept DOI. It resolves to the newest version, and it is the one written into `myst.yml`. A version's own DOI always resolves to that version.

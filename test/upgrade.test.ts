@@ -66,8 +66,8 @@ describe('computeDrift', () => {
     const repo = makeRepo();
     const target = tmp('oak-tmpl-');
     cpSync(TEMPLATE_ROOT, target, { recursive: true });
-    appendFileSync(join(target, '.github/workflows/ci.yml'), '\n# new template line\n');
-    expect(computeDrift(repo, target, readAnswers(repo))).toEqual(['.github/workflows/ci.yml']);
+    appendFileSync(join(target, '.github/workflows/build.yml'), '\n# new template line\n');
+    expect(computeDrift(repo, target, readAnswers(repo))).toEqual(['.github/workflows/build.yml']);
   });
 
   it('keeps a second code owner the journal added [R126]', () => {
@@ -118,7 +118,7 @@ describe('computeDrift', () => {
     const repo = makeRepo();
     const co = join(repo, 'CODEOWNERS');
     writeFileSync(co, readFileSync(co, 'utf8').replace(/@alice/g, '@org/editors @alice'));
-    appendFileSync(join(repo, '.github/workflows/ci.yml'), '\n# hand edit\n');
+    appendFileSync(join(repo, '.github/workflows/build.yml'), '\n# hand edit\n');
     const { pr } = fakePr();
     await cmdUpgrade(
       { repoRoot: repo, filesOnly: true },
@@ -129,9 +129,9 @@ describe('computeDrift', () => {
 
   it('reports a file edited in the repo, to reset to the template', () => {
     const repo = makeRepo();
-    appendFileSync(join(repo, '.github/workflows/publish.yml'), '\n# hand edit\n');
+    appendFileSync(join(repo, '.github/workflows/deposit-version.yml'), '\n# hand edit\n');
     expect(computeDrift(repo, TEMPLATE_ROOT, readAnswers(repo))).toEqual([
-      '.github/workflows/publish.yml',
+      '.github/workflows/deposit-version.yml',
     ]);
   });
 });
@@ -212,7 +212,7 @@ describe('cmdUpgrade', () => {
     const mystBefore = readFileSync(join(repo, 'myst.yml'), 'utf8');
     const target = tmp('oak-tmpl-');
     cpSync(TEMPLATE_ROOT, target, { recursive: true });
-    appendFileSync(join(target, '.github/workflows/ci.yml'), '\n# upgraded\n');
+    appendFileSync(join(target, '.github/workflows/build.yml'), '\n# upgraded\n');
 
     const { pr, opened } = fakePr();
     const out = await cmdUpgrade(
@@ -220,10 +220,10 @@ describe('cmdUpgrade', () => {
       deps(pr, 'v2.0.0', () => target),
     );
     expect(out.result.version_bumped).toBe(false);
-    expect(out.result.drift).toEqual(['.github/workflows/ci.yml']);
+    expect(out.result.drift).toEqual(['.github/workflows/build.yml']);
     expect(readFileSync(join(repo, 'myst.yml'), 'utf8')).toBe(mystBefore); // version not changed
-    expect(readFileSync(join(repo, '.github/workflows/ci.yml'), 'utf8')).toContain('# upgraded'); // resynced
-    expect(opened[0]!.paths).toEqual(['.github/workflows/ci.yml']);
+    expect(readFileSync(join(repo, '.github/workflows/build.yml'), 'utf8')).toContain('# upgraded'); // resynced
+    expect(opened[0]!.paths).toEqual(['.github/workflows/build.yml']);
     expect(opened[0]!.paths.every((p) => p.startsWith('.github/') || p === 'CODEOWNERS')).toBe(
       true,
     );
@@ -233,7 +233,7 @@ describe('cmdUpgrade', () => {
     const repo = makeRepo();
     const target = tmp('oak-tmpl-');
     cpSync(TEMPLATE_ROOT, target, { recursive: true });
-    appendFileSync(join(target, '.github/workflows/ci.yml'), '\n# upgraded\n');
+    appendFileSync(join(target, '.github/workflows/build.yml'), '\n# upgraded\n');
 
     const { pr, opened } = fakePr();
     const out = await cmdUpgrade(
@@ -241,11 +241,11 @@ describe('cmdUpgrade', () => {
       deps(pr, 'v3.0.0', () => target),
     );
     expect(out.result.version_bumped).toBe(true);
-    expect(out.result.drift).toEqual(['.github/workflows/ci.yml']);
+    expect(out.result.drift).toEqual(['.github/workflows/build.yml']);
     const myst = parseDocument(readFileSync(join(repo, 'myst.yml'), 'utf8'));
     expect(myst.getIn(['project', 'options', 'oaktree-sapling', 'version'])).toBe('v3.0.0');
     expect(opened[0]!.paths).toContain('myst.yml');
-    expect(opened[0]!.paths).toContain('.github/workflows/ci.yml');
+    expect(opened[0]!.paths).toContain('.github/workflows/build.yml');
     expect(opened[0]!.branch).toBe('oak/upgrade-v3.0.0');
   });
 

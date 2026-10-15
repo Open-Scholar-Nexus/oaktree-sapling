@@ -254,7 +254,7 @@ export async function renderCards(registry, opts = {}, fetchImpl = fetch) {
     if (doi) {
       console.warn(
         `paper-cards: "${entry.id}" has a Zenodo sandbox DOI (${doi}), so it is left out of ` +
-          `the list; run Prepare Zenodo deposit with the sandbox unticked and merge its pull request.`,
+          `the list; run the Reserve DOI workflow with the sandbox unticked and merge its pull request.`,
       );
     }
     return !doi;

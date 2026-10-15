@@ -1,11 +1,11 @@
-name: Journal checks post
+name: Report checks
 
 # Stage 2 of the journal checks: posts Stage 1's report from the base context, never rebuilding.
 # https://scholar.nexus/oaktree-sapling/design/paper-ci#design-paper-ci-stage2-inputs
 
 on:
   workflow_run:
-    workflows: ["Journal checks"]
+    workflows: ["Check paper"]
     types: [completed]
 
 permissions:

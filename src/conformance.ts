@@ -55,7 +55,7 @@ export interface ConformanceGh {
   prHeadSha(repo: string, prNumber: number): string;
   /** Merges pull request #n, deletes its branch, and returns the merge commit. */
   mergePr(repo: string, prNumber: number): string;
-  /** Workflow runs for commit `sha` (Paper CI, Journal checks, ...). */
+  /** Workflow runs for commit `sha` (Build paper, Journal checks, ...). */
   workflowRunsForCommit(repo: string, sha: string): WorkflowRun[];
   /** Check Runs on commit `sha`, such as the Journal checks one check-post posts. */
   checkRunsForCommit(repo: string, sha: string): CheckRunRef[];
@@ -75,7 +75,7 @@ export interface ConformanceGh {
   committedEngineVersion(repo: string): string | null;
   /** The head commit of `main`, where the deposit tag goes. */
   defaultBranchSha(repo: string): string;
-  /** Creates tag `tag` at `sha`; the `v*` push starts publish.yml. */
+  /** Creates tag `tag` at `sha`; the `v*` push starts deposit-version.yml. */
   pushTag(repo: string, tag: string, sha: string): void;
   /** Asset names on the release for `tag`; [] when there is no release yet. */
   releaseAssets(repo: string, tag: string): string[];
@@ -207,7 +207,7 @@ export async function cmdConformanceReset(input: ResetInput, deps: ResetDeps): P
  * Moving onto the release and testing the push to main
  * ======================================================================================== */
 
-/** How long to wait for real runs. A Paper CI run plus a Pages deploy takes minutes. Tests pass a
+/** How long to wait for real runs. A Build paper run plus a Pages deploy takes minutes. Tests pass a
  *  `sleep` that does nothing. */
 const POLL = { tries: 80, intervalMs: 15_000 };
 
@@ -337,7 +337,7 @@ function extractPreviewUrl(commentBody: string): string | null {
 /**
  * Tests a release: moves the test repo onto it through an upgrade pull request, lets the
  * required Journal checks pass before merging (which also tests check and check-post), then
- * checks each result itself, not only run conclusions: Paper CI passed, Pages serves 200, and
+ * checks each result itself, not only run conclusions: Build paper passed, Pages serves 200, and
  * the Journal checks Check Run was posted on main. The preview, deposit and fork phases follow.
  */
 export async function cmdConformanceRun(input: RunInput, deps: ConformanceDeps): Promise<Outcome> {
@@ -399,14 +399,14 @@ export async function cmdConformanceRun(input: RunInput, deps: ConformanceDeps):
     }
     log(`test repo pinned to ${pinned}`);
 
-    // 5. Paper CI (build and Pages deploy) succeeded on the merge commit.
+    // 5. Build paper (build and Pages deploy) succeeded on the merge commit.
     await pollUntil(
-      'Paper CI (push→main)',
+      'Build paper (push→main)',
       () =>
         runOutcome(
           gh.workflowRunsForCommit(repo, mergeSha),
-          (r) => r.name === 'Paper CI' && r.event === 'push',
-          'Paper CI',
+          (r) => r.name === 'Build paper' && r.event === 'push',
+          'Build paper',
         ),
       { sleep, log },
     );
@@ -433,14 +433,14 @@ export async function cmdConformanceRun(input: RunInput, deps: ConformanceDeps):
     gh.labelPr(repo, previewPr.number, CONFORMANCE_LABEL);
     log(`same-repo preview PR #${previewPr.number} (${branch})`);
 
-    // The `pull_request` job: Paper CI builds without secrets.
+    // The `pull_request` job: Build paper builds without secrets.
     await pollUntil(
-      `Paper CI (PR #${previewPr.number} build)`,
+      `Build paper (PR #${previewPr.number} build)`,
       () =>
         runOutcome(
           gh.workflowRunsForCommit(repo, previewPr.headSha),
-          (r) => r.name === 'Paper CI' && r.event === 'pull_request',
-          'Paper CI (PR)',
+          (r) => r.name === 'Build paper' && r.event === 'pull_request',
+          'Build paper (PR)',
         ),
       { sleep, log },
     );
@@ -470,7 +470,7 @@ export async function cmdConformanceRun(input: RunInput, deps: ConformanceDeps):
     gh.deleteBranch(repo, branch);
     log(`same-repo preview CERTIFIED for ${tag}`);
 
-    // ---- The deposit: publish.yml and `oak release` ----
+    // ---- The deposit: deposit-version.yml and `oak release` ----
     // The tag push, the publish run, and the five deposit files on the tag's release [R24].
     // Reserving a DOI is not tested: the test repo already has a sandbox DOI and `oak
     // deposit prepare` refuses when one is set. This holds no Zenodo token, so it checks the
@@ -498,12 +498,12 @@ export async function cmdConformanceRun(input: RunInput, deps: ConformanceDeps):
 
     // 3. Wait for the publish run for the tag to succeed.
     await pollUntil(
-      `Publish Zenodo deposit success for ${depositTag}`,
+      `Deposit version success for ${depositTag}`,
       () =>
         runOutcome(
           gh.workflowRunsForCommit(repo, tagSha),
-          (r) => r.name === 'Publish Zenodo deposit' && r.event === 'push',
-          'Publish Zenodo deposit',
+          (r) => r.name === 'Deposit version' && r.event === 'push',
+          'Deposit version',
         ),
       { sleep, log },
     );
@@ -537,26 +537,26 @@ export async function cmdConformanceRun(input: RunInput, deps: ConformanceDeps):
       gh.labelPr(repo, forkPr.number, CONFORMANCE_LABEL);
       log(`fork PR #${forkPr.number} from ${fork.repo}:${forkBranch}`);
 
-      // The fork's Paper CI run may wait for first-time-contributor approval: find it and
+      // The fork's Build paper run may wait for first-time-contributor approval: find it and
       // approve it (nothing happens when no approval is needed).
       const forkRun = await pollUntil(
-        `fork PR #${forkPr.number} Paper CI run`,
+        `fork PR #${forkPr.number} Build paper run`,
         () =>
           gh
             .workflowRunsForCommit(repo, forkPr.headSha)
-            .find((r) => r.name === 'Paper CI' && r.event === 'pull_request') ?? null,
+            .find((r) => r.name === 'Build paper' && r.event === 'pull_request') ?? null,
         { sleep, log },
       );
       gh.approveWorkflowRun(repo, forkRun.id);
 
       // The `pull_request` job: the build without secrets succeeds.
       await pollUntil(
-        `fork Paper CI (secretless Stage-1) #${forkPr.number}`,
+        `fork Build paper (secretless Stage-1) #${forkPr.number}`,
         () =>
           runOutcome(
             gh.workflowRunsForCommit(repo, forkPr.headSha),
-            (r) => r.name === 'Paper CI' && r.event === 'pull_request',
-            'fork Paper CI',
+            (r) => r.name === 'Build paper' && r.event === 'pull_request',
+            'fork Build paper',
           ),
         { sleep, log },
       );

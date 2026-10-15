@@ -22,8 +22,8 @@
  *   templates/paper/myst.yml ................ the commented starter config (CHANGE-ME lines)
  *   templates/paper/index.md ................ the starter manuscript
  *   templates/paper/CODEOWNERS .............. its header comment
- *   templates/paper/.github/workflows/*.yml . job names and `::error::` annotations (ci, check,
- *                                             check-post, preview-deploy, prepare, publish:
+ *   templates/paper/.github/workflows/*.yml . job names and `::error::` annotations (build, preview,
+ *                                             check, check-report, reserve-doi, deposit-version:
  *                                             the names show in the Actions tab)
  *   templates/instance/README.md ............ what a journal editor reads first
  *   templates/instance/journal.yml .......... the journal's settings and their comments
@@ -802,7 +802,7 @@ export const pr = {
     [
       '**Preview build ready** 📦',
       '',
-      'No Cloudflare preview is configured, so the built site is attached to its Paper CI run as',
+      'No Cloudflare preview is configured, so the built site is attached to its "Build paper" run as',
       `the **paper-build** artifact; open the run and scroll to **Artifacts**: ${runUrl}`,
       '',
       `_(${reason}.)_`,

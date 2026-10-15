@@ -69,7 +69,7 @@ describe('renderPaperTemplate', () => {
     expect(myst.getIn(['project', 'options', 'oaktree-sapling', 'edition'])).toBe('ed-2026');
 
     // A copied file is identical to its source.
-    const rel = '.github/workflows/ci.yml';
+    const rel = '.github/workflows/build.yml';
     expect(readFileSync(join(dest, rel), 'utf8')).toBe(readFileSync(join(PAPER_ROOT, rel), 'utf8'));
 
     // oak's own README is not copied; the journal template is a separate tree.
@@ -249,17 +249,17 @@ describe('buildReviewTree (--from)', () => {
     const author = {
       'index.md': 'author paper',
       '.github/actions/engine/pins.yml': 'engine_repo: EVIL/attacker',
-      '.github/workflows/ci.yml': 'malicious',
+      '.github/workflows/build.yml': 'malicious',
     };
     const main = {
       '.github/actions/engine/pins.yml': 'engine_repo: me/engine',
-      '.github/workflows/ci.yml': 'frozen ci',
+      '.github/workflows/build.yml': 'frozen ci',
       CODEOWNERS: '/.github/ @alice',
     };
     const review = buildReviewTree(author, main);
     expect(review['index.md']).toBe('author paper'); // author content survives
     expect(review['.github/actions/engine/pins.yml']).toBe('engine_repo: me/engine'); // the editor's
-    expect(review['.github/workflows/ci.yml']).toBe('frozen ci');
+    expect(review['.github/workflows/build.yml']).toBe('frozen ci');
     expect(review['CODEOWNERS']).toBe('/.github/ @alice');
   });
 });
@@ -1036,7 +1036,7 @@ describe('cmdBootstrapJournal', () => {
     // The seed holds both the paper workflows and the journal's settings, with
     // `instance_repo: .` in pins.yml.
     const seed = seedDirs[0]!;
-    expect(existsSync(join(seed, '.github/workflows/ci.yml'))).toBe(true);
+    expect(existsSync(join(seed, '.github/workflows/build.yml'))).toBe(true);
     expect(existsSync(join(seed, 'myst.yml'))).toBe(true);
     expect(existsSync(join(seed, 'journal.yml'))).toBe(true);
     const pins = parseDocument(readFileSync(join(seed, '.github/actions/engine/pins.yml'), 'utf8'));
@@ -1163,9 +1163,9 @@ describe("buildReviewTree drops the author's files under the editor's paths [R12
     // Here main lacks the author's path, so restoring main's `.github/` would not cover it.
     const tree = buildReviewTree(
       { 'index.md': 'a', '.github/workflows/evil.yml': 'on: push' },
-      { '.github/workflows/ci.yml': 'frozen' },
+      { '.github/workflows/build.yml': 'frozen' },
     );
-    expect(Object.keys(tree).sort()).toEqual(['.github/workflows/ci.yml', 'index.md']);
+    expect(Object.keys(tree).sort()).toEqual(['.github/workflows/build.yml', 'index.md']);
   });
 });
 

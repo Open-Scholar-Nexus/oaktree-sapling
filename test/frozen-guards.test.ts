@@ -323,9 +323,9 @@ function workflow(file: string): any {
   return parseDocument(readFileSync(join(SHIM, '.github/workflows', file), 'utf8')).toJS();
 }
 
-describe('Paper CI holds the Pages deploy while the id is the template placeholder', () => {
+describe('Build paper holds the Pages deploy while the id is the template placeholder', () => {
   it("the build job's output is the engine's placeholder flag", () => {
-    const ci = workflow('ci.yml');
+    const ci = workflow('build.yml');
     expect(ci.jobs.build.outputs.placeholder).toBe(
       "${{ fromJSON(steps.build.outputs.result || '{}').placeholder }}",
     );
@@ -333,7 +333,7 @@ describe('Paper CI holds the Pages deploy while the id is the template placehold
   });
 
   it('the deploy job reads that output', () => {
-    expect(workflow('ci.yml').jobs['deploy-pages'].if).toContain(
+    expect(workflow('build.yml').jobs['deploy-pages'].if).toContain(
       "needs.build.outputs.placeholder != 'true'",
     );
   });
