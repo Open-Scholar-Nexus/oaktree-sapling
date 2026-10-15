@@ -401,7 +401,7 @@ describe('realProvisioner.createLabel ([R127])', () => {
   });
 });
 
-describe('commitStatusFor: the Journal checks verdict as a commit status', () => {
+describe('commitStatusFor: the Journal checks result as a commit status', () => {
   const run = (title: string, conclusion: 'success' | 'failure' = 'success') => ({
     conclusion,
     title,
@@ -409,11 +409,11 @@ describe('commitStatusFor: the Journal checks verdict as a commit status', () =>
     annotations: [],
   });
 
-  it('carries the name, the verdict and the title', () => {
-    expect(commitStatusFor('Journal checks', run('3 of 3 checks passed', 'failure'))).toEqual({
+  it('carries the name, the conclusion and the title', () => {
+    expect(commitStatusFor('Journal checks', run('2 of 3 checks passed', 'failure'))).toEqual({
       context: 'Journal checks',
       state: 'failure',
-      description: '3 of 3 checks passed',
+      description: '2 of 3 checks passed',
     });
   });
 
