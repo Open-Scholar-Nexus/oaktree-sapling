@@ -32,6 +32,25 @@ Publishing a version deposits it to [Zenodo](https://zenodo.org), which gives it
 
 [^archive]: Each paper gets one DOI that always resolves to its latest version, and each version gets its own. Zenodo keeps records [for the lifetime of the repository](https://about.zenodo.org/policies/), which is tied to CERN's, and commits to moving them to another repository if it ever closes. A deposit holds the PDF, the paper's source and the version of the engine that built it, so the paper can be read and rebuilt without GitHub.
 
+## Alternatives
+
+These projects publish research with similar tools, and each one made different choices.
+
+[ReScience C](https://rescience.github.io)
+: Reviews each submission in a public GitHub issue and publishes through Zenodo, with no other infrastructure. It publishes replications of computational studies. Oaktree Sapling is the closest to it in setup, and packages that setup as a tool: `oak` creates the repositories, the editorial checks run on every pull request, and a journal upgrades when the engine does.
+
+[Journal of Open Source Software](https://joss.theoj.org)
+: Reviews in GitHub issues too, and publishes short Markdown papers about research software. It runs its own website and review bot, and registers DOIs with Crossref.
+
+[NeuroLibre](https://neurolibre.org)
+: Publishes preprints from Jupyter notebooks and MyST, and runs its own servers so readers can re-run the code.
+
+[Computo](https://computo-journal.org)
+: Builds each paper from a GitHub template repository with GitHub Actions, written in [Quarto](https://quarto.org). Review happens on OpenReview.
+
+[Open Journal Systems](https://pkp.sfu.ca/software/ojs/)
+: The most widely used journal platform. It runs on a server the journal installs or pays PKP to host, and handles submission and review through its web interface.
+
 ## What it costs
 
 Nothing, for the journal or for its authors. What it asks for is a GitHub account and some comfort with git; the [guides](start/paper.md) walk an author through each step.
