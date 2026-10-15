@@ -19,36 +19,14 @@ jobs:
   prepare:
     environment: zenodo-prepare # Zenodo tokens; main only
     runs-on: ubuntu-latest
-    outputs:
-      pr: ${{ fromJSON(steps.deposit.outputs.result || '{}').pr_number }}
-      sha: ${{ fromJSON(steps.deposit.outputs.result || '{}').head_sha }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # A sandbox run with no ZENODO_TOKEN_SANDBOX is refused.
-      - id: deposit
-        uses: ./.github/actions/engine
+      - uses: ./.github/actions/engine
         with:
           args: deposit prepare ${{ inputs.sandbox && '--sandbox' || '' }}
         env:
           GH_TOKEN: ${{ github.token }}
           ZENODO_TOKEN: ${{ secrets.ZENODO_TOKEN }}
           ZENODO_TOKEN_SANDBOX: ${{ secrets.ZENODO_TOKEN_SANDBOX }}
-
-  # GitHub holds the pull_request runs of a pull request github-actions[bot] opens, so the DOI
-  # pull request gets its preview and Journal checks here. The preview environment admits only
-  # the default branch.
-  checks:
-    needs: prepare
-    if: ${{ needs.prepare.outputs.sha != '' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
-    permissions:
-      contents: read
-      checks: write # post the "Journal checks" Check Run
-      pull-requests: write # the sticky preview and checks comments
-    uses: ./.github/workflows/bot-pr-checks.yml
-    with:
-      pr: ${{ needs.prepare.outputs.pr }}
-      sha: ${{ needs.prepare.outputs.sha }}
-    secrets:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

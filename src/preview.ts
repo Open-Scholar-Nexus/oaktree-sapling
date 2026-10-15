@@ -12,13 +12,7 @@ import { readDoc } from './yaml-io.js';
 import * as msg from './messages.js';
 import { annotate, firstLine, stickyMarker } from './messages.js';
 import { JournalConfig, type PreviewConfig } from './schema.js';
-import {
-  assertPrNumber,
-  resolvePaperDir,
-  takePaperDir,
-  takePrNumber,
-  verifyPrHead,
-} from './artifact.js';
+import { resolvePaperDir, takePaperDir, takePrNumber, verifyPrHead } from './artifact.js';
 
 /* --------------------------------------------------------------------------
  * Injected; the real ones are in gh.ts
@@ -234,8 +228,6 @@ export interface DeployPreviewInput {
    *  links to that run. */
   artifactRunId?: string;
   cf: { apiToken?: string; accountId?: string };
-  /** `--pr`, from a workflow that knows the pull request; else the artifact's `.pr-number`. */
-  pr?: string;
   /** The commit Stage 1 built: `--verified-head`, else the `workflow_run` event's. */
   verifiedHead?: string;
   /** `--paper`, checked against the artifact's `.paper` ({@link resolvePaperDir}). */
@@ -259,9 +251,8 @@ export async function cmdDeployPreview(
 ): Promise<Outcome> {
   const { siteDir, repoRoot, instanceRoot, repo, serverUrl, cf } = input;
   // Both files leave the site before anything else, so neither is served.
-  const fromArtifact = takePrNumber(siteDir);
+  const pr = takePrNumber(siteDir);
   const paper = resolvePaperDir(input.paper, takePaperDir(siteDir));
-  const pr = input.pr ? assertPrNumber(input.pr) : fromArtifact;
   if (!pr) {
     process.stderr.write(msg.workflow.noPrNumber + '\n');
     return ok({ preview: 'skipped', reason: msg.workflow.previewNoPrNumberReason });
