@@ -30,6 +30,7 @@ A pull request from a fork, the default for an outside contributor, adds a step 
 - [`ci.yml`](src:templates/paper/.github/workflows/ci.yml) and [`preview-deploy.yml`](src:templates/paper/.github/workflows/preview-deploy.yml) are the two stages of the site preview. On a push to `main`, `ci.yml` also deploys to GitHub Pages.
 - [`check.yml`](src:templates/paper/.github/workflows/check.yml) and [`check-post.yml`](src:templates/paper/.github/workflows/check-post.yml) are the two stages of the editorial checks.
 - [`publish.yml`](src:templates/paper/.github/workflows/publish.yml) and [`prepare.yml`](src:templates/paper/.github/workflows/prepare.yml) handle publishing actions, and are started by a `v*` tag and an editor's manual dispatch. Author content reaches them only after it has merged.
+- [`bot-pr-checks.yml`](src:templates/paper/.github/workflows/bot-pr-checks.yml) runs both stages for the pull request that `prepare.yml` opens, as [below](#design-paper-ci-bot-prs).
 - [`.github/actions/engine/action.yml`](src:templates/paper/.github/actions/engine/action.yml) is the composite action every workflow calls, and [`pins.yml`](src:templates/paper/.github/actions/engine/pins.yml) beside it, which names the engine and journal repositories for the action and for local `oak`.
 - [`CODEOWNERS`](src:templates/paper/CODEOWNERS), and the optional `paper-environment.yml`, a conda environment the action installs before the engine runs, in the jobs that build.
 
@@ -39,7 +40,7 @@ A pull request from a fork, the default for an outside contributor, adds a step 
 ### Who can change what
 
 :::{figure} img/paper-ci-code.svg
-:alt: Every workflow calls action.yml. The action takes the engine repository and the oldest engine version it accepts from pins.yml, installs paper-environment.yml in the build jobs, and takes the version from myst.yml, then checks out the engine at that version and runs the verb. Everything except myst.yml is inside the CODEOWNERS gate. Local oak also reads pins.yml.
+:alt: Every workflow calls action.yml, and prepare.yml also calls bot-pr-checks.yml. The action takes the engine repository and the oldest engine version it accepts from pins.yml, installs paper-environment.yml in the build jobs, and takes the version from myst.yml, then checks out the engine at that version and runs the verb. Everything except myst.yml is inside the CODEOWNERS gate. Local oak also reads pins.yml.
 
 The gate covers the launchers, the repository pins and the environment. `myst.yml`, with its plugins and the engine version, stays with the author.
 :::
@@ -64,7 +65,7 @@ A paper moves to a new release when an editor runs `oak upgrade` with their own 
 ### Keeping the build away from the token
 
 :::{figure} img/paper-ci-stages.svg
-:alt: Two flows start from a pull request or a push. Stage 1 builds or validates with a read-only token and passes an artifact to Stage 2, which runs from the base branch with tokens and posts the preview or the check result. Tag and dispatch workflows run once, after merge.
+:alt: Two flows start from a pull request or a push. Stage 1 builds or validates with a read-only token and passes an artifact to Stage 2, which runs from the base branch with tokens and posts the preview or the check result. A tag workflow runs once, after merge. The dispatch workflow opens a pull request, then runs both stages for it in one run.
 
 The arrow between stages is the only thing that crosses from the read-only side to the side with tokens, and it carries files, not code.
 :::
@@ -87,6 +88,21 @@ Branches cannot reach the tokens at all. A repository secret is readable by ever
 
 Inside those jobs the paper's code never runs. `publish.yml` builds in a job with no secrets and hands the output to the deposit job, which runs `oak release --no-build`. The action installs `paper-environment.yml` only when a job asks, and only the build jobs ask. And the engine runs `wrangler` from an empty directory, so a `.npmrc` or `node_modules` in the paper cannot choose which wrangler receives the Cloudflare token.
 
+(design-paper-ci-bot-prs)=
+
+### Pull requests a workflow opens
+
+`prepare.yml` opens the DOI pull request with the workflow's own `GITHUB_TOKEN`, and GitHub holds the `pull_request` runs of such a pull request for a maintainer's approval. So it [calls `bot-pr-checks.yml`](src:templates/paper/.github/workflows/prepare.yml#L38-L54) after pushing, with the pull request number and the commit its engine step reports, and that one run does both stages:
+
+- `build` and `validate` check out the pushed commit with [`contents: read`](src:templates/paper/.github/workflows/bot-pr-checks.yml#L31-L39) and no secret, as Stage 1 does.
+- `post` checks out the default branch in the `preview` environment and runs `check-post` and `deploy-preview`, each with `--pr` and `--verified-head`, so the [pull request check](#r136) applies with the commit taken from the job that pushed it.
+
+How GitHub runs a called workflow shapes the caller:
+
+- **Permissions.** The calling job's grant caps every job in the called workflow, so `prepare.yml` grants exactly what the called jobs ask for, and [`test/frozen-guards.test.ts`](src:test/frozen-guards.test.ts#L409-L413) compares the two.
+- **Ref.** The called jobs run on the caller's ref, and `preview` admits only `main`, so `prepare.yml` runs it only from the default branch.
+- **Secrets.** A called workflow reads only the secrets its caller passes, environment secrets included, and an unpassed one is an empty string with no error. `prepare.yml` passes the Cloudflare secrets by name, and [a guard](src:test/frozen-guards.test.ts#L397-L407) fails when the called workflow reads a secret that is not declared and passed.
+
 (design-paper-ci-stage2-inputs)=
 
 ### What Stage 2 takes from the artifact
@@ -107,7 +123,7 @@ The paper's folder must be a folder below the repository root, and a missing fil
 
 (r154)=
 
-The artifact's files are untrusted in the same way its values are. A paper preview is static MyST output, so before deploying, the engine [removes](src:src/preview.ts#L108-L131) the files that would let it run code or rewrite responses on the journal's Cloudflare Pages account.[^pages-control] The strip lives in the engine, which Stage 2 checks out at the base branch's version, because a fork could delete a strip in `ci.yml` in the same commit.
+The artifact's files are untrusted in the same way its values are. A paper preview is static MyST output, so before deploying, the engine [removes](src:src/preview.ts#L109-L132) the files that would let it run code or rewrite responses on the journal's Cloudflare Pages account.[^pages-control] The strip lives in the engine, which Stage 2 checks out at the base branch's version, because a fork could delete a strip in `ci.yml` in the same commit.
 
 [^pages-control]: The strip removes `_worker.js`, `functions/`, `_routes.json`, `_redirects`, `_headers` and `_middleware.js` from the deploy root. A `_worker.js` or `functions/` controls every response on the preview's URL, the page editors open to review the paper. And since `pages.dev` is on the Public Suffix List, every preview of a project shares `<project>.pages.dev`, so one preview can set cookies that all the others receive.
 
@@ -140,7 +156,6 @@ The check runs in the workflow because it decides which engine to fetch, so ther
 Beyond the summary at the top of this page, these gaps remain:
 
 - **The check verdict is authored by Stage 1.** Stage 2 posts the report Stage 1 computed, so a fork that rewrites `check.yml` can post a passing report. That rewrite is itself a change under `.github/`, so the comment flags it and merging it needs an editor. The verdict is a signal for the editor and not an authorisation decision, and the code-owner review is what stands between such a pull request and `main`.
-- **The DOI pull request runs no checks by itself.** `prepare.yml` opens it with the workflow's own `GITHUB_TOKEN`, and GitHub starts no workflow for what that token does, so the editor closes and reopens it to run the usual two stages. Running both stages from `prepare.yml` instead worked, but it shipped a second path through both stages to every paper repository to save that click.
 - **The branch rule can be removed.** An admin who deletes `protect-main` turns `CODEOWNERS` back into documentation.
 - **Anything we didn't consider.** See a gap in our design? [Open an issue](https://github.com/Open-Scholar-Nexus/oaktree-sapling/issues) to tell us.
 
@@ -170,9 +185,9 @@ The engine repository in `pins.yml` and the version in `myst.yml` both fail loud
 
 (r137)=
 
-Stage 2 rejects malformed input with a clear error. A report that is not JSON, or JSON without the `checkRun.conclusion` field, makes `check-post` [exit 1](src:src/cli.ts#L915-L926) naming the file and what is wrong with it. An absent `pr-number` file means a push build and is not an error, and an absent `paper` file means `.`. A present and malformed one is a corrupt or hostile artifact, so Stage 2 fails.
+Stage 2 rejects malformed input with a clear error. A report that is not JSON, or JSON without the `checkRun.conclusion` field, makes `check-post` [exit 1](src:src/cli.ts#L919-L932) naming the file and what is wrong with it. An absent `pr-number` file means a push build and is not an error, and an absent `paper` file means `.`. A present and malformed one is a corrupt or hostile artifact, so Stage 2 fails.
 
-[`oak validate --report`](src:src/cli.ts#L785-L788) exits 0 whenever it wrote a report, a failing one included, because `check-post.yml` runs only after a successful Stage 1. It exits non-zero only when no report was written.
+[`oak validate --report`](src:src/cli.ts#L880-L892) exits 0 whenever it wrote a report, a failing one included, because `check-post.yml` runs only after a successful Stage 1. It exits non-zero only when no report was written.
 
 (design-paper-ci-artifact-contract)=
 

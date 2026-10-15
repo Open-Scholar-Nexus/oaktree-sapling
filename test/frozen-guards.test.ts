@@ -280,6 +280,8 @@ describe('every secret a job reads comes from an environment', () => {
         jobs: Record<string, Job>;
       };
       for (const [name, job] of Object.entries(doc.jobs)) {
+        // A caller only names secrets; the called workflow's job reads them, and is checked here.
+        if ((job as { uses?: string }).uses?.startsWith('./.github/workflows/')) continue;
         const secrets = [...JSON.stringify(job).matchAll(/\bsecrets\.(\w+)/g)].map((m) => m[1]!);
         const env =
           typeof job.environment === 'string' ? job.environment : (job.environment?.name ?? null);
@@ -347,6 +349,94 @@ describe('the engine action returns the verb result', () => {
     expect(Object.keys(action.outputs)).toEqual(['result']);
     expect(action.outputs.result.value).toBe('${{ steps.dispatch.outputs.result }}');
     expect(action.inputs['paper-dir'].default).toBe('.');
+  });
+});
+
+describe('the bot pull request checks (bot-pr-checks.yml)', () => {
+  const called = workflow('bot-pr-checks.yml');
+  const callers = readdirSync(join(SHIM, '.github/workflows')).flatMap((f) => {
+    const jobs = workflow(f).jobs as Record<string, any>;
+    return Object.entries(jobs)
+      .filter(([, j]) => j.uses === './.github/workflows/bot-pr-checks.yml')
+      .map(([name, job]) => ({ f, name, job, jobs }));
+  });
+
+  it('is a reusable workflow, called by the DOI prepare', () => {
+    expect(Object.keys(called.on)).toEqual(['workflow_call']);
+    expect(called.on.workflow_call.inputs.paper.default).toBe('.');
+    expect(callers.map((c) => c.f)).toEqual(['prepare.yml']);
+  });
+
+  it('each caller runs it only on the default branch, which the preview environment admits', () => {
+    for (const c of callers) {
+      expect(c.job.if, c.f).toContain(
+        "github.ref == format('refs/heads/{0}', github.event.repository.default_branch)",
+      );
+      // Only once something was pushed: the engine names no commit otherwise.
+      expect(c.job.if, c.f).toContain("outputs.sha != ''");
+    }
+  });
+
+  it('each caller passes the number and commit its engine step reported', () => {
+    for (const c of callers) {
+      const opener = c.jobs[c.job.needs];
+      const step = opener.steps.find((s: any) => s.uses === './.github/actions/engine');
+      expect(opener.outputs.pr, c.f).toBe(
+        `\${{ fromJSON(steps.${step.id}.outputs.result || '{}').pr_number }}`,
+      );
+      expect(opener.outputs.sha, c.f).toBe(
+        `\${{ fromJSON(steps.${step.id}.outputs.result || '{}').head_sha }}`,
+      );
+      expect(c.job.with, c.f).toEqual({
+        pr: `\${{ needs.${c.job.needs}.outputs.pr }}`,
+        sha: `\${{ needs.${c.job.needs}.outputs.sha }}`,
+      });
+    }
+  });
+
+  it('each caller passes every secret the called workflow reads, which is empty otherwise', () => {
+    const read = [...JSON.stringify(called.jobs).matchAll(/secrets\.([A-Z_]+)/g)].map((m) => m[1]);
+    const names = [...new Set(read)].sort();
+    expect(names.length).toBeGreaterThan(0);
+    expect(Object.keys(called.on.workflow_call.secrets).sort()).toEqual(names);
+    for (const c of callers) {
+      expect(c.job.secrets, c.f).toEqual(
+        Object.fromEntries(names.map((n) => [n, `\${{ secrets.${n} }}`])),
+      );
+    }
+  });
+
+  it("each caller grants exactly what the called jobs ask for, since a caller's grant caps them", () => {
+    const asked: Record<string, string> = {};
+    for (const job of Object.values(called.jobs) as any[]) Object.assign(asked, job.permissions);
+    for (const c of callers) expect(c.job.permissions, c.f).toEqual(asked);
+  });
+
+  it("the jobs running the pull request's code check out its commit with read access only", () => {
+    for (const name of ['build', 'validate']) {
+      const job = called.jobs[name];
+      expect(job.permissions, name).toEqual({ contents: 'read' });
+      expect(job.environment, name).toBeUndefined();
+      expect(job.steps[0].with.ref, name).toBe('${{ inputs.sha }}');
+      expect(JSON.stringify(job), name).not.toMatch(/secrets\./);
+    }
+    expect(called.jobs.build.steps.find((s: any) => s.with?.args)?.with.args).toBe(
+      'build --preview',
+    );
+  });
+
+  it('the posting job checks out the default branch and checks the pull request in both verbs', () => {
+    const post = called.jobs.post;
+    expect(post.environment).toBe('preview');
+    expect(post.steps[0].with?.ref).toBeUndefined();
+    const verbs = post.steps
+      .filter((s: any) => s.uses === './.github/actions/engine')
+      .map((s: any) => s.with.args as string);
+    expect(verbs.map((a: string) => a.split(/\s+/)[0])).toEqual(['check-post', 'deploy-preview']);
+    for (const args of verbs) {
+      expect(args).toContain('--pr ${{ inputs.pr }}');
+      expect(args).toContain('--verified-head ${{ inputs.sha }}');
+    }
   });
 });
 

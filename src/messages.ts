@@ -23,8 +23,8 @@
  *   templates/paper/index.md ................ the starter manuscript
  *   templates/paper/CODEOWNERS .............. its header comment
  *   templates/paper/.github/workflows/*.yml . job names and `::error::` annotations (ci, check,
- *                                             check-post, preview-deploy, prepare, publish:
- *                                             the names show in the Actions tab)
+ *                                             check-post, preview-deploy, prepare, publish,
+ *                                             bot-pr-checks: the names show in the Actions tab)
  *   templates/instance/README.md ............ what a journal editor reads first
  *   templates/instance/journal.yml .......... the journal's settings and their comments
  *   templates/instance/brand/brand.yml ...... the branding settings and their comments
@@ -146,7 +146,7 @@ export const usage = (): string =>
   `Working on a paper\n` +
   `  oak validate [--paper <dir>] [--instance <dir> | --no-instance] [--strict] [--report <path>]\n` +
   `                    run the journal's checks over a manuscript and report what fails\n` +
-  `  oak build   [--paper <dir>] [--instance <dir> | --no-instance] [--base-url <url>] [--no-site-template]\n` +
+  `  oak build   [--paper <dir>] [--instance <dir> | --no-instance] [--base-url <url> | --preview] [--no-site-template]\n` +
   `                    build the paper's website + PDF into _build/\n` +
   `  oak start   [--paper <dir>] [--instance <dir> | --no-instance] [--port <n>] [--server-port <n>]\n` +
   `                    run mystmd's live preview of the paper, with the journal's settings\n` +
@@ -156,8 +156,8 @@ export const usage = (): string =>
   `\n` +
   `Run by the workflows (rarely typed by hand)\n` +
   `  oak check-post --report <path> --repo <owner/repo> --sha <headsha> --base <branch>\n` +
-  `                 --verified-head <headsha>\n` +
-  `  oak deploy-preview <site> [--verified-head <headsha>] [--instance <dir>] [--repo <owner/repo>]\n` +
+  `                 --verified-head <headsha> [--pr <n>]\n` +
+  `  oak deploy-preview <site> [--pr <n>] [--verified-head <headsha>] [--instance <dir>] [--repo <owner/repo>]\n` +
   `  oak notify new-version [--pr <n> | --site <dir>] [--repo <owner/repo>]\n` +
   `  oak deposit prepare --repo <owner/repo> [--site-url <url>] [--sandbox] [--instance <dir>]\n` +
   `  oak deposit publish --pdf <path> --tag <vX.Y.Z> [--site-url <url>] [--sandbox] [--instance <dir>]\n` +
@@ -894,18 +894,21 @@ export const workflow = {
   depositDoiPrFailed: (message: string): string =>
     `deposit prepare: DOI PR not opened (${message})`,
 
-  /** The DOI pull request `gh.openDoiPr` opens. GitHub starts no workflow for a pull request a
-   *  workflow opens, so the body says what the editor clicks. */
+  /** The DOI pull request `gh.openDoiPr` opens. GitHub holds the workflow runs of a pull
+   *  request a bot opens, so the body says what the editor clicks. */
   doiPrTitle: 'Reserve Zenodo DOI',
   doiPrBody: (conceptDoi: string): string =>
     [
       `Writes the reserved concept DOI \`${conceptDoi}\` into \`myst.yml\`. Merge before tagging.`,
       '',
       '<details>',
-      '<summary>Why have no checks run?</summary>',
+      '<summary>Why are some checks waiting for approval?</summary>',
       '',
-      'GitHub starts no workflow for a pull request a workflow opens. To run the preview and ' +
-        'Journal checks, close and reopen this pull request.',
+      'The preview and Journal checks for this pull request are posted by the "Prepare Zenodo ' +
+        'deposit" run that opened it. GitHub holds the workflow runs of a pull request a bot opens, so the ' +
+        'Paper CI and Journal checks runs here wait for approval; neither is needed to merge. ' +
+        'To run them anyway, approve them in the Actions tab, or close and reopen this pull ' +
+        'request.',
       '',
       '</details>',
     ].join('\n'),
@@ -1000,6 +1003,8 @@ export const workflow = {
   doiPrDiverged: (head: string, base: string): string =>
     `${head} carries commits that are not on ${base}, so the DOI pull request would not be ` +
     `the one-file change it claims to be. Run prepare on ${base}.`,
+  notAPrUrl: (got: string): string =>
+    `gh answered ${JSON.stringify(got.slice(0, 120))} where a pull request URL was expected`,
   wranglerNoUrl: 'wrangler did not report a *.pages.dev deployment URL',
   /** No detail from wrangler: this reaches a public pull request comment, and wrangler's output
    *  names the account id. The details stay in the workflow log, where Actions redacts

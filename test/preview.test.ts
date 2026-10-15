@@ -434,6 +434,35 @@ describe('cmdDeployPreview', () => {
     expect(stickies).toHaveLength(0);
   });
 
+  it('takes --pr over the artifact, and still checks it', async () => {
+    // The bot pull request checks pass the number; a .pr-number the build planted is not used.
+    const dir = siteWithPr('5');
+    const asked: string[] = [];
+    const { gh } = fakeGh({
+      prHead: (_r, n) => {
+        asked.push(n);
+        return HEAD;
+      },
+    });
+    const out = await cmdDeployPreview(baseInput(dir, { pr: '12', cf: {} }), {
+      deployer: okDeployer(),
+      gh,
+    });
+    expect(asked).toEqual(['12']);
+    expect(out.result.pr).toBe('12');
+    expect(existsSync(join(dir, '.pr-number'))).toBe(false);
+  });
+
+  it('refuses a --pr that is not a number', async () => {
+    const { gh } = fakeGh();
+    await expect(
+      cmdDeployPreview(baseInput(siteWithPr(null), { pr: '1/comments' }), {
+        deployer: okDeployer(),
+        gh,
+      }),
+    ).rejects.toThrow(/not a pull request number/);
+  });
+
   it("reads the paper's myst.yml from the artifact's .paper, and never serves the file", async () => {
     const dir = siteWithPr('7');
     writeFileSync(join(dir, '.paper'), 'papers/one\n');

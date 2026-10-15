@@ -170,7 +170,8 @@ function materializeInputFrom(
     engineRoot: engineRoot(),
     instanceRoot,
     engineRepo: flag(argv, 'engine-repo') ?? readEngineRepo(paperRoot),
-    baseUrl: flag(argv, 'base-url') ?? '',
+    // A preview is served from the domain root, whatever base URL ci/run.sh adds for the event.
+    baseUrl: has(argv, 'preview') ? '' : (flag(argv, 'base-url') ?? ''),
     assetOverrides: assetOverridesFrom(argv),
   };
 }
@@ -479,19 +480,22 @@ async function cmdDeposit(argv: string[]): Promise<number> {
     const out = await z.cmdPrepare({ mystPath, repo, siteUrl, api, instanceRoot });
     // Open the DOI pull request for the myst.yml write [R3]. Without gh or a token (a local
     // sandbox run) the write is left for a person to commit.
+    let pushed: Record<string, string> = {};
     if (out.exitCode === 0 && !has(rest, 'no-pr') && process.env.GH_TOKEN) {
       try {
-        const url = gh.openDoiPr(resolve(mystPath, '..'), {
+        const pr = gh.openDoiPr(resolve(mystPath, '..'), {
           conceptDoi: String(out.result.concept_doi),
         });
-        process.stderr.write(msg.workflow.depositDoiPrOpened(url) + '\n');
+        process.stderr.write(msg.workflow.depositDoiPrOpened(pr.url) + '\n');
+        // For the checks prepare.yml runs on this pull request.
+        pushed = { pr: pr.url, pr_number: pr.number, head_sha: pr.head };
       } catch (e) {
         process.stderr.write(
           annotate('warning', msg.workflow.depositDoiPrFailed((e as Error).message)) + '\n',
         );
       }
     }
-    emit(rest, out.result);
+    emit(rest, { ...out.result, ...pushed });
     return out.exitCode;
   }
 
@@ -621,7 +625,7 @@ async function cmdRelease(argv: string[]): Promise<number> {
   return out.exitCode;
 }
 
-/** `oak deploy-preview <site> [--verified-head <sha>]`: deploys the build artifact to
+/** `oak deploy-preview <site> [--pr N --verified-head <sha>]`: deploys the build artifact to
  *  Cloudflare Pages, or falls back to a link to it [R16], posts the preview comment, then runs
  *  the new-version reminder. */
 async function cmdDeployPreview(argv: string[]): Promise<number> {
@@ -642,6 +646,7 @@ async function cmdDeployPreview(argv: string[]): Promise<number> {
         apiToken: process.env.CLOUDFLARE_API_TOKEN,
         accountId: process.env.CLOUDFLARE_ACCOUNT_ID,
       },
+      pr: flag(argv, 'pr'),
       verifiedHead: flag(argv, 'verified-head') ?? eventHeadSha(process.env),
       paper: flag(argv, 'paper'),
       ...(myst ? { mystPath: resolve(myst) } : {}),
@@ -888,9 +893,9 @@ async function cmdValidate(argv: string[]): Promise<number> {
   return out.exitCode;
 }
 
-/** `oak check-post --report <path> --repo <o/r> --sha <headsha>`: posts the report
+/** `oak check-post --report <path> --repo <o/r> --sha <headsha> [--pr <n>]`: posts the report
  *  from the trusted `workflow_run` job (checks and pull-requests write). Never reruns validate or
- *  touches myst. The pull request is the `pr-number` beside the report, and is
+ *  touches myst. The pull request is `--pr`, else the `pr-number` beside the report, and is
  *  checked against `--verified-head` before anything is posted. Failing to post the Check Run
  *  fails the job; a failed comment only warns. Needs GH_TOKEN. Documented at DOCS.checkPost. */
 async function cmdCheckPost(argv: string[]): Promise<number> {
@@ -933,7 +938,11 @@ async function cmdCheckPost(argv: string[]): Promise<number> {
     flag(argv, 'paper'),
     artifact.readPaperDir(artifactDir, artifact.CHECKS_FILES.paper),
   );
-  const pr = artifact.readPrNumber(artifactDir, artifact.CHECKS_FILES.pr) ?? undefined;
+  const flagged = flag(argv, 'pr');
+  const pr =
+    (flagged ? artifact.assertPrNumber(flagged) : null) ??
+    artifact.readPrNumber(artifactDir, artifact.CHECKS_FILES.pr) ??
+    undefined;
   if (pr) artifact.verifyPrHead(repo, pr, verifiedHead, (r, n) => gh.realGhPr.prHead(r, n));
 
   const { cmdCheckPost: run, frozenPathsTouched } = await import('./checks.js');

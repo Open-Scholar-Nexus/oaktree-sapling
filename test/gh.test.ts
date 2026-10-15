@@ -181,6 +181,7 @@ describe('openDoiPr', () => {
       if (args[0] === 'api') return { status: 0, stdout: 'main', stderr: '' };
       if (args[0] === 'pr' && args[1] === 'create')
         return { status: 0, stdout: 'https://github.com/o/r/pull/7', stderr: '' };
+      if (args.includes('rev-parse')) return { status: 0, stdout: 'e'.repeat(40), stderr: '' };
       return { status: 0, stdout: '', stderr: '' };
     };
 
@@ -207,7 +208,7 @@ describe('openDoiPr', () => {
     expect(ghCall('pr', 'create'), 'no PR is opened from a diverged HEAD').toBeUndefined();
   });
 
-  it('the body tells the editor how to run the checks GitHub does not start', () => {
+  it('the body tells the editor what GitHub holds back on a bot pull request', () => {
     openDoiPr('/paper', { conceptDoi: '10.5072/zenodo.5' });
     const body = argAfter(ghCall('pr', 'create')!.args, '--body')!;
     expect(body).toContain('10.5072/zenodo.5');
@@ -223,9 +224,17 @@ describe('openDoiPr', () => {
         return { status: 0, stdout: 'https://github.com/o/r/pull/7' };
       return null;
     });
-    expect(openDoiPr('/paper', { conceptDoi: '10.5072/zenodo.5' })).toBe(
+    expect(openDoiPr('/paper', { conceptDoi: '10.5072/zenodo.5' }).url).toBe(
       'https://github.com/o/r/pull/7',
     );
+  });
+
+  it('returns the number and the commit it pushed, for the checks prepare runs', () => {
+    expect(openDoiPr('/paper', { conceptDoi: '10.5072/zenodo.5' })).toEqual({
+      url: 'https://github.com/o/r/pull/7',
+      number: '7',
+      head: 'e'.repeat(40),
+    });
   });
 
   it("never takes a fork's pull request from a branch of the same name", () => {
@@ -240,6 +249,15 @@ describe('openDoiPr', () => {
     const list = ghCall('pr', 'list')!.args;
     expect(argAfter(list, '--json')).toContain('isCrossRepository');
     expect(argAfter(list, '--jq')).toContain('select(.isCrossRepository | not)');
+  });
+
+  it('refuses an answer that is not a pull request URL', () => {
+    child.respond = answers((args) =>
+      args[0] === 'pr' && args[1] === 'create' ? { status: 0, stdout: 'created!' } : null,
+    );
+    expect(() => openDoiPr('/paper', { conceptDoi: '10.5072/zenodo.5' })).toThrow(
+      /pull request URL/,
+    );
   });
 });
 

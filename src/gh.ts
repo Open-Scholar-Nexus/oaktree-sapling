@@ -222,11 +222,25 @@ export function originRepo(repoRoot: string): string | null {
   }
 }
 
+/** A pull request opened or updated, with the commit pushed to it. */
+export interface PushedPr {
+  url: string;
+  number: string;
+  head: string;
+}
+
+/** The number at the end of a pull request URL. Throws on anything else. */
+function prNumberFromUrl(url: string): string {
+  const m = /\/pull\/([0-9]{1,10})\/?$/.exec(url.trim());
+  if (!m) throw new Error(msg.workflow.notAPrUrl(url));
+  return m[1]!;
+}
+
 /**
  * Opens the DOI pull request for the myst.yml write [R3]: a branch, a commit of myst.yml only,
- * a push and `gh pr create`. Returns its URL. Needs `gh` with a token.
+ * a push and `gh pr create`. Returns it with the pushed commit. Needs `gh` with a token.
  */
-export function openDoiPr(repoRoot: string, opts: { conceptDoi: string }): string {
+export function openDoiPr(repoRoot: string, opts: { conceptDoi: string }): PushedPr {
   // One branch name for every version: prepare reserves the concept DOI, and the version comes
   // from the tag at publish. Preparing again force-pushes the same branch.
   const branch = 'zenodo-doi';
@@ -244,6 +258,7 @@ export function openDoiPr(repoRoot: string, opts: { conceptDoi: string }): strin
   git(repoRoot, ['add', 'myst.yml']);
   git(repoRoot, [...BOT_ID, 'commit', '-m', `chore: reserve Zenodo DOI ${opts.conceptDoi}`]);
   git(repoRoot, ['push', '-u', 'origin', branch, '--force']);
+  const head = git(repoRoot, ['rev-parse', 'HEAD']);
   // `--repo`: the git calls use `-C repoRoot`, while `gh` would read the current directory's
   // repo. `realUpgradePr` uses `cwd` for the same.
   const scope = repo ? ['--repo', repo] : [];
@@ -260,15 +275,17 @@ export function openDoiPr(repoRoot: string, opts: { conceptDoi: string }): strin
     '--head',
     branch,
   ];
+  let url: string;
   try {
-    return gh(create);
+    url = gh(create);
   } catch (e) {
     // Preparing again is allowed [design §13], and `gh pr create` refuses a second pull request
     // for a branch, so return the open one.
     const existing = openPrUrl(repo, branch);
-    if (existing) return existing;
-    throw e;
+    if (!existing) throw e;
+    url = existing;
   }
+  return { url, number: prNumberFromUrl(url), head };
 }
 
 /** The repo's default branch, the base every DOI or upgrade pull request targets. */

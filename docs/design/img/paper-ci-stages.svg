@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 290" role="img" aria-label="Two flows start from a pull request or a push. Stage 1 builds or validates with a read-only token and passes an artifact to Stage 2, which runs from the base branch with tokens and posts the preview or the check result. Tag and dispatch workflows run once, after merge.">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 450" role="img" aria-label="Two flows start from a pull request or a push. Stage 1 builds or validates with a read-only token and passes an artifact to Stage 2, which runs from the base branch with tokens and posts the preview or the check result. A tag workflow runs once, after merge. The dispatch workflow opens a pull request, then runs both stages for it in one run.">
 <style>
 svg{--bg:#f6f7f5;--panel:#ffffff;--ink:#1c2320;--muted:#5b6762;--blue:#2f6fd6;--green:#23875a;--grey:#80878a;--gate:#b27417;--blue-soft:rgba(47,111,214,.10);--green-soft:rgba(35,135,90,.10);--grey-soft:rgba(128,135,138,.10);--band:rgba(28,35,32,.035);--gate-soft:rgba(178,116,23,.06)}
 @media (prefers-color-scheme: dark){svg{--panel:#1b201e;--ink:#e3e8e5;--muted:#9aa5a0;--blue:#72a4f7;--green:#5cc28c;--grey:#9ba3a6;--gate:#e2a64a;--blue-soft:rgba(114,164,247,.12);--green-soft:rgba(92,194,140,.12);--grey-soft:rgba(155,163,166,.12);--band:rgba(227,232,229,.04);--gate-soft:rgba(226,166,74,.07)}}
@@ -78,14 +78,44 @@ svg{font-family:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif}
         <line x1="600" y1="153" x2="688" y2="153" class="l g" marker-end="url(#ag)"/>
 
         <!-- after merge -->
-        <text x="20" y="232" class="t-hd">after merge · one stage, holds tokens</text>
+        <text x="20" y="232" class="t-hd">after merge · on main or a tag</text>
         <rect x="20" y="242" width="140" height="40" rx="6" class="box q"/>
-        <text x="90" y="266" text-anchor="middle">tag, dispatch</text>
+        <text x="90" y="266" text-anchor="middle">tag</text>
         <rect x="195" y="242" width="405" height="40" rx="6" class="box n"/>
-        <text x="215" y="258" class="t-mono">publish · prepare</text>
-        <text x="215" y="274" class="t-verb">oak release · deposit</text>
+        <text x="215" y="258" class="t-mono">publish.yml</text>
+        <text x="215" y="274" class="t-verb">oak release</text>
         <line x1="160" y1="262" x2="193" y2="262" class="l n" marker-end="url(#an)"/>
         <rect x="690" y="242" width="170" height="40" rx="6" class="box q"/>
-        <text x="775" y="266" text-anchor="middle">release, deposit, DOI PR</text>
+        <text x="775" y="266" text-anchor="middle">release, deposit</text>
         <line x1="600" y1="262" x2="688" y2="262" class="l n" marker-end="url(#an)"/>
+
+        <rect x="20" y="296" width="140" height="40" rx="6" class="box q"/>
+        <text x="90" y="320" text-anchor="middle">dispatch</text>
+        <rect x="195" y="296" width="405" height="40" rx="6" class="box n"/>
+        <text x="215" y="312" class="t-mono">prepare.yml</text>
+        <text x="215" y="328" class="t-verb">oak deposit prepare</text>
+        <line x1="160" y1="316" x2="193" y2="316" class="l n" marker-end="url(#an)"/>
+        <rect x="690" y="296" width="170" height="40" rx="6" class="box q"/>
+        <text x="775" y="320" text-anchor="middle">DOI PR</text>
+        <line x1="600" y1="316" x2="688" y2="316" class="l n" marker-end="url(#an)"/>
+
+        <!-- the bot pull request, checked in the same run -->
+        <rect x="180" y="362" width="185" height="80" rx="8" class="band"/>
+        <rect x="430" y="362" width="185" height="80" rx="8" class="band"/>
+        <line x1="272" y1="336" x2="272" y2="368" class="l n" marker-end="url(#an)"/>
+        <text x="280" y="356" class="t-k">calls bot-pr-checks.yml</text>
+        <rect x="195" y="370" width="155" height="46" rx="6" class="box n"/>
+        <text x="272" y="390" text-anchor="middle" class="t-verb">oak build</text>
+        <text x="272" y="406" text-anchor="middle" class="t-verb">oak validate</text>
+        <rect x="445" y="370" width="155" height="46" rx="6" class="box n"/>
+        <text x="522" y="390" text-anchor="middle" class="t-verb">oak check-post</text>
+        <text x="522" y="406" text-anchor="middle" class="t-verb">oak deploy-preview</text>
+        <line x1="350" y1="393" x2="443" y2="393" class="l n" marker-end="url(#an)"/>
+        <text x="397" y="386" text-anchor="middle" class="t-k">site, report</text>
+        <rect x="690" y="370" width="170" height="46" rx="6" class="box q"/>
+        <text x="775" y="389" text-anchor="middle">check run + comment</text>
+        <text x="775" y="405" text-anchor="middle">preview + link comment</text>
+        <line x1="600" y1="393" x2="688" y2="393" class="l n" marker-end="url(#an)"/>
+        <text x="190" y="434" class="t-sm">the pushed commit · read-only</text>
+        <text x="440" y="434" class="t-sm">same run · preview environment</text>
       </svg>
