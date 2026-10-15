@@ -26,33 +26,15 @@ jobs:
     environment: preview # Cloudflare secrets; main only (workflow_run always runs there)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1; base branch, never the PR head
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1; base branch
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: paper-build
           path: site
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ github.token }}
-      # .pr-number is fork-controlled: same checks as check-post.yml's meta step.
-      - id: pr-owner
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
-        run: |
-          [ -f site/.pr-number ] || exit 0
-          pr=$(cat site/.pr-number)
-          if [[ ! "$pr" =~ ^[0-9]{1,10}$ ]]; then
-            echo "::error::.pr-number in the artifact is not a number; refusing to comment"
-            exit 1
-          fi
-          pr_head=$(gh api "repos/$REPO/pulls/$pr" --jq .head.sha)
-          if [ "$pr_head" != "$HEAD_SHA" ]; then
-            echo "::error::PR #$pr heads at $pr_head, not the $HEAD_SHA this run built; refusing to comment"
-            exit 1
-          fi
-        shell: bash
-
+      # .pr-number is fork-controlled: deploy-preview checks that pull request heads at the
+      # commit this run built (workflow_run.head_sha), and never serves the file.
       - uses: ./.github/actions/engine
         with:
           args: deploy-preview site

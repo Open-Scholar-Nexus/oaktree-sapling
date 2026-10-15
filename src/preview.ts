@@ -5,13 +5,14 @@
  * pull request, so the new-version reminder runs there too. Cloudflare, git and gh are
  * injected; the real ones are in gh.ts.
  */
-import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { readDoc } from './yaml-io.js';
 import * as msg from './messages.js';
-import { annotate, firstLine, stickyMarker, UserError } from './messages.js';
+import { annotate, firstLine, stickyMarker } from './messages.js';
 import { JournalConfig, type PreviewConfig } from './schema.js';
+import { resolvePaperDir, takePaperDir, takePrNumber, verifyPrHead } from './artifact.js';
 
 /* --------------------------------------------------------------------------
  * Injected; the real ones are in gh.ts
@@ -41,6 +42,8 @@ export interface GhPr {
   /** `v*` tags through `gh api` [R23], since this job's checkout is shallow. `repo` null means
    *  no tags. */
   versionTags(repoRoot: string, repo: string | null): string[];
+  /** The head commit of pull request `pr`, for {@link verifyPrHead}. */
+  prHead(repo: string, pr: string): string;
 }
 
 /* --------------------------------------------------------------------------
@@ -96,27 +99,6 @@ export function loadJournalPreview(instanceRoot: string | null): {
 /* --------------------------------------------------------------------------
  * Pure logic
  * ------------------------------------------------------------------------ */
-
-/** PR-number shape: the file is untrusted and the value reaches a `gh api` path ([R136]). */
-const PR_NUMBER = /^[0-9]{1,10}$/;
-
-/** Reads and deletes `.pr-number` [R26]. null when absent (a push, not a pull request); a
- *  malformed file throws, since it was tampered with rather than missing [R136]. */
-export function takePrNumber(siteDir: string): string | null {
-  const f = join(siteDir, '.pr-number');
-  if (!existsSync(f)) return null;
-  const n = readFileSync(f, 'utf8').trim();
-  rmSync(f, { force: true });
-  if (!n) return null;
-  if (!PR_NUMBER.test(n)) throw new UserError(msg.workflow.previewBadPrNumber(n));
-  return n;
-}
-
-/** The same shape check for a PR number reaching `oak notify` by flag or by file ([R136]). */
-export function assertPrNumber(n: string): string {
-  if (!PR_NUMBER.test(n)) throw new UserError(msg.workflow.previewBadPrNumber(n));
-  return n;
-}
 
 /** Cloudflare Pages runs these from the deploy root: `_worker.js`/`functions/` are code,
  *  `_redirects`/`_headers`/`_routes.json` rewrite responses. A fork controls the artifact, so a
@@ -236,6 +218,7 @@ export function newVersionComment(doi: string, recordUrl: string): string {
 
 export interface DeployPreviewInput {
   siteDir: string;
+  /** The default branch's checkout. */
   repoRoot: string;
   instanceRoot: string | null;
   /** GITHUB_REPOSITORY and GITHUB_SERVER_URL, for the fallback link and labels. */
@@ -245,8 +228,12 @@ export interface DeployPreviewInput {
    *  links to that run. */
   artifactRunId?: string;
   cf: { apiToken?: string; accountId?: string };
-  /** myst.yml path in base context (for the notify DOI read). */
-  mystPath: string;
+  /** The commit Stage 1 built: `--verified-head`, else the `workflow_run` event's. */
+  verifiedHead?: string;
+  /** `--paper`, checked against the artifact's `.paper` ({@link resolvePaperDir}). */
+  paper?: string;
+  /** `--myst`; else the paper's myst.yml in `repoRoot`, for the notify DOI read. */
+  mystPath?: string;
 }
 
 export interface PreviewDeps {
@@ -255,18 +242,23 @@ export interface PreviewDeps {
 }
 
 /** `oak deploy-preview <site>` [R16]: deploys the build artifact to a preview URL, or falls
- *  back to a link to it, and comments on the pull request. Never fails the run; without
- *  `.pr-number` it does nothing. Documented at DOCS.deployPreview. */
+ *  back to a link to it, and comments on the pull request. Without a pull request it does
+ *  nothing. It fails only when the pull request check refuses ({@link verifyPrHead}) or the
+ *  new-version reminder fails. Documented at DOCS.deployPreview. */
 export async function cmdDeployPreview(
   input: DeployPreviewInput,
   deps: PreviewDeps,
 ): Promise<Outcome> {
-  const { siteDir, repoRoot, instanceRoot, repo, serverUrl, cf, mystPath } = input;
+  const { siteDir, repoRoot, instanceRoot, repo, serverUrl, cf } = input;
+  // Both files leave the site before anything else, so neither is served.
   const pr = takePrNumber(siteDir);
+  const paper = resolvePaperDir(input.paper, takePaperDir(siteDir));
   if (!pr) {
     process.stderr.write(msg.workflow.noPrNumber + '\n');
     return ok({ preview: 'skipped', reason: msg.workflow.previewNoPrNumberReason });
   }
+  verifyPrHead(repo, pr, input.verifiedHead, (r, n) => deps.gh.prHead(r, n));
+  const mystPath = input.mystPath ?? join(repoRoot, paper, 'myst.yml');
 
   // Strip fork-controlled Pages control files before any deploy path ([R154]).
   const stripped = stripPagesControlFiles(siteDir);
@@ -321,7 +313,7 @@ export async function cmdDeployPreview(
   const notify = runNewVersionReminder({ repoRoot, mystPath, repo, pr }, deps.gh);
   return {
     exitCode: notify.exitCode,
-    result: { status: notify.result.status, ...outcome, notify: notify.result },
+    result: { status: notify.result.status, pr, paper, ...outcome, notify: notify.result },
   };
 }
 

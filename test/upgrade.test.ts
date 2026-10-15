@@ -1,8 +1,8 @@
 /**
  * `oak upgrade`, with fakes for gh and git: computeDrift resets to the template (no change, a
- * changed template, a file edited in the repo); --version-only writes only myst.yml;
- * --files-only overwrites only the engine-managed files that differ; --both; an up-to-date repo
- * gets no pull request; and the pull request's branch and paths.
+ * changed template, a file edited in the repo); a run sets the version and overwrites the
+ * engine-managed files that differ; --files-only leaves the version; an up-to-date repo gets no
+ * pull request; and the pull request's branch and paths.
  */
 import { describe, it, expect } from 'vitest';
 import {
@@ -31,6 +31,7 @@ import {
   type UpgradePr,
   type UpgradeDeps,
   ownerFromCodeowners,
+  MIN_ENGINE_KEY,
 } from '../src/upgrade.js';
 
 const TEMPLATE_ROOT = 'templates/paper';
@@ -120,7 +121,7 @@ describe('computeDrift', () => {
     appendFileSync(join(repo, '.github/workflows/ci.yml'), '\n# hand edit\n');
     const { pr } = fakePr();
     await cmdUpgrade(
-      { repoRoot: repo, mode: 'files-only' },
+      { repoRoot: repo, filesOnly: true },
       deps(pr, 'v2.0.0', () => TEMPLATE_ROOT),
     );
     expect(readFileSync(co, 'utf8')).toContain('@org/editors @alice');
@@ -182,7 +183,7 @@ describe('an engine-managed file the target no longer ships [R143]', () => {
     const lines: string[] = [];
     const { pr } = fakePr();
     const out = await cmdUpgrade(
-      { repoRoot: repo, mode: 'both' },
+      { repoRoot: repo },
       {
         ...deps(pr, 'v1.0.0', () => TEMPLATE_ROOT),
         log: (m) => lines.push(m),
@@ -197,7 +198,7 @@ describe('an engine-managed file the target no longer ships [R143]', () => {
     const repo = withRetired();
     const { pr } = fakePr();
     return cmdUpgrade(
-      { repoRoot: repo, mode: 'files-only' },
+      { repoRoot: repo, filesOnly: true },
       deps(pr, 'v2.0.0', () => TEMPLATE_ROOT),
     ).then(() => {
       expect(existsSync(join(repo, '.github/workflows/retired.yml'))).toBe(true);
@@ -206,22 +207,6 @@ describe('an engine-managed file the target no longer ships [R143]', () => {
 });
 
 describe('cmdUpgrade', () => {
-  it('--version-only writes only myst.yml, and the pull request has only that path', async () => {
-    const repo = makeRepo();
-    const before = readFileSync(join(repo, '.github/workflows/ci.yml'), 'utf8');
-    const { pr, opened } = fakePr();
-    const out = await cmdUpgrade(
-      { repoRoot: repo, mode: 'version-only' },
-      deps(pr, 'v2.0.0', () => TEMPLATE_ROOT),
-    );
-    expect(out.result.version_bumped).toBe(true);
-    const myst = parseDocument(readFileSync(join(repo, 'myst.yml'), 'utf8'));
-    expect(myst.getIn(['project', 'options', 'oaktree-sapling', 'version'])).toBe('v2.0.0');
-    expect(readFileSync(join(repo, '.github/workflows/ci.yml'), 'utf8')).toBe(before); // workflows unchanged
-    expect(opened[0]!.paths).toEqual(['myst.yml']);
-    expect(opened[0]!.branch).toBe('oak/upgrade');
-  });
-
   it('--files-only overwrites only the engine-managed files that differ, not myst.yml', async () => {
     const repo = makeRepo();
     const mystBefore = readFileSync(join(repo, 'myst.yml'), 'utf8');
@@ -231,7 +216,7 @@ describe('cmdUpgrade', () => {
 
     const { pr, opened } = fakePr();
     const out = await cmdUpgrade(
-      { repoRoot: repo, mode: 'files-only' },
+      { repoRoot: repo, filesOnly: true },
       deps(pr, 'v2.0.0', () => target),
     );
     expect(out.result.version_bumped).toBe(false);
@@ -244,7 +229,7 @@ describe('cmdUpgrade', () => {
     );
   });
 
-  it('--both sets the version and resets the files that differ', async () => {
+  it('sets the version and resets the files that differ, on a branch named after the tag', async () => {
     const repo = makeRepo();
     const target = tmp('oak-tmpl-');
     cpSync(TEMPLATE_ROOT, target, { recursive: true });
@@ -252,20 +237,23 @@ describe('cmdUpgrade', () => {
 
     const { pr, opened } = fakePr();
     const out = await cmdUpgrade(
-      { repoRoot: repo, mode: 'both' },
+      { repoRoot: repo },
       deps(pr, 'v3.0.0', () => target),
     );
     expect(out.result.version_bumped).toBe(true);
     expect(out.result.drift).toEqual(['.github/workflows/ci.yml']);
+    const myst = parseDocument(readFileSync(join(repo, 'myst.yml'), 'utf8'));
+    expect(myst.getIn(['project', 'options', 'oaktree-sapling', 'version'])).toBe('v3.0.0');
     expect(opened[0]!.paths).toContain('myst.yml');
     expect(opened[0]!.paths).toContain('.github/workflows/ci.yml');
+    expect(opened[0]!.branch).toBe('oak/upgrade-v3.0.0');
   });
 
   it('a repo already at the target gets no pull request', async () => {
     const repo = makeRepo(); // version v1.0.0, workflows match the template
     const { pr, opened } = fakePr();
     const out = await cmdUpgrade(
-      { repoRoot: repo, mode: 'both' },
+      { repoRoot: repo },
       deps(pr, 'v1.0.0', () => TEMPLATE_ROOT),
     );
     expect(out.result.up_to_date).toBe(true);
@@ -289,7 +277,7 @@ describe('the newest release', () => {
     const repo = pinned('v1.0.1-dev.2');
     const { pr, opened } = fakePr();
     const out = await cmdUpgrade(
-      { repoRoot: repo, mode: 'version-only' },
+      { repoRoot: repo },
       deps(pr, 'v1.0.0', () => TEMPLATE_ROOT),
     );
     expect(out.result.pin_ahead).toBe(true);
@@ -299,7 +287,7 @@ describe('the newest release', () => {
   it('leaves a pin that is not a release tag', async () => {
     const { pr, opened } = fakePr();
     await cmdUpgrade(
-      { repoRoot: pinned('main'), mode: 'version-only' },
+      { repoRoot: pinned('main') },
       deps(pr, 'v2.0.0', () => TEMPLATE_ROOT),
     );
     expect(opened).toHaveLength(0);
@@ -308,16 +296,16 @@ describe('the newest release', () => {
   it('moves a pre-release pin up to its release', async () => {
     const { pr, opened } = fakePr();
     await cmdUpgrade(
-      { repoRoot: pinned('v2.0.0-dev.9'), mode: 'version-only' },
+      { repoRoot: pinned('v2.0.0-dev.9') },
       deps(pr, 'v2.0.0', () => TEMPLATE_ROOT),
     );
-    expect(opened[0]!.branch).toBe('oak/upgrade');
+    expect(opened[0]!.branch).toBe('oak/upgrade-v2.0.0');
   });
 
-  it('--to moves a pin back, on a branch named after the tag', async () => {
+  it('--to moves a pin back', async () => {
     const { pr, opened } = fakePr();
     await cmdUpgrade(
-      { repoRoot: pinned('v1.0.1-dev.2'), to: 'v1.0.0', mode: 'version-only' },
+      { repoRoot: pinned('v1.0.1-dev.2'), to: 'v1.0.0' },
       deps(pr, 'v9.0.0', () => TEMPLATE_ROOT),
     );
     expect(opened[0]!.branch).toBe('oak/upgrade-v1.0.0');
@@ -329,11 +317,101 @@ describe('the newest release', () => {
       open: () => ({ url: 'https://github.com/me/paper/pull/9', action: 'updated' }),
     };
     const out = await cmdUpgrade(
-      { repoRoot: makeRepo(), mode: 'version-only' },
+      { repoRoot: makeRepo() },
       { ...deps(pr, 'v2.0.0', () => TEMPLATE_ROOT), log: (m) => lines.push(m) },
     );
     expect(out.result.pr_action).toBe('updated');
     expect(lines.join('\n')).toContain('updated upgrade PR');
+  });
+
+  it('reports an open pull request that already has these changes', async () => {
+    const lines: string[] = [];
+    const pr: UpgradePr = {
+      open: () => ({ url: 'https://github.com/me/paper/pull/9', action: 'current' }),
+    };
+    const out = await cmdUpgrade(
+      { repoRoot: makeRepo() },
+      { ...deps(pr, 'v2.0.0', () => TEMPLATE_ROOT), log: (m) => lines.push(m) },
+    );
+    expect(out.result.pr_action).toBe('current');
+    expect(lines.join('\n')).toContain('already has these changes');
+  });
+});
+
+describe('the minimum engine version the workflows declare', () => {
+  /** A template whose pins.yml asks for `min`. */
+  function templateNeeding(min: string): string {
+    const target = tmp('oak-tmpl-');
+    cpSync(TEMPLATE_ROOT, target, { recursive: true });
+    const pins = join(target, '.github/actions/engine/pins.yml');
+    const doc = parseDocument(readFileSync(pins, 'utf8'));
+    doc.set(MIN_ENGINE_KEY, min);
+    writeFileSync(pins, doc.toString());
+    return target;
+  }
+
+  it('--files-only refuses to leave the pin below it, and changes nothing', async () => {
+    const repo = makeRepo(); // pinned at v1.0.0
+    const before = readFileSync(join(repo, '.github/actions/engine/pins.yml'), 'utf8');
+    const { pr, opened } = fakePr();
+    const out = await cmdUpgrade(
+      { repoRoot: repo, filesOnly: true },
+      deps(pr, 'v2.0.0', () => templateNeeding('v2.0.0')),
+    );
+    expect(out.exitCode).toBe(2);
+    expect(String(out.result.message)).toContain('v2.0.0 or newer');
+    expect(String(out.result.message)).toContain('without --files-only');
+    expect(opened).toHaveLength(0);
+    expect(readFileSync(join(repo, '.github/actions/engine/pins.yml'), 'utf8')).toBe(before);
+  });
+
+  it('a run moves the pin with the files, so it passes', async () => {
+    const { pr, opened } = fakePr();
+    const out = await cmdUpgrade(
+      { repoRoot: makeRepo() },
+      deps(pr, 'v2.0.0', () => templateNeeding('v2.0.0')),
+    );
+    expect(out.exitCode).toBe(0);
+    expect(opened[0]!.paths).toContain('myst.yml');
+    expect(opened[0]!.paths).toContain('.github/actions/engine/pins.yml');
+  });
+
+  it('refuses a --to below it, and changes nothing', async () => {
+    const repo = makeRepo();
+    const before = readFileSync(join(repo, 'myst.yml'), 'utf8');
+    const { pr, opened } = fakePr();
+    const out = await cmdUpgrade(
+      { repoRoot: repo, to: 'v1.2.0' },
+      deps(pr, 'v9.0.0', () => templateNeeding('v1.5.0')),
+    );
+    expect(out.exitCode).toBe(2);
+    expect(String(out.result.message)).toContain('--to');
+    expect(opened).toHaveLength(0);
+    expect(readFileSync(join(repo, 'myst.yml'), 'utf8')).toBe(before);
+  });
+
+  it('a pre-release of the minimum passes when the minimum admits pre-releases', async () => {
+    const { pr, opened } = fakePr();
+    const out = await cmdUpgrade(
+      { repoRoot: makeRepo(), to: 'v2.0.0-dev.3' },
+      deps(pr, 'v9.0.0', () => templateNeeding('v2.0.0-0')),
+    );
+    expect(out.exitCode).toBe(0);
+    expect(opened).toHaveLength(1);
+  });
+
+  it('a pin that is not a release tag cannot be ordered, and is let through', async () => {
+    const repo = makeRepo();
+    const myst = join(repo, 'myst.yml');
+    const doc = parseDocument(readFileSync(myst, 'utf8'));
+    doc.setIn(['project', 'options', 'oaktree-sapling', 'version'], 'main');
+    writeFileSync(myst, doc.toString());
+    const { pr } = fakePr();
+    const out = await cmdUpgrade(
+      { repoRoot: repo, to: 'v2.0.0', filesOnly: true },
+      deps(pr, 'v2.0.0', () => templateNeeding('v2.0.0')),
+    );
+    expect(out.exitCode).toBe(0);
   });
 });
 

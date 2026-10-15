@@ -25,8 +25,8 @@ export const EDITION_ID = z
  */
 export const OaktreeSaplingOptions = z
   .object({
-    /** A release tag (`vX.Y.Z`), the default branch, a SHA or `refs/pull/N/merge`. The last two
-     *  run only from a same-repo pull request or with the maintainer override (ref.ts). */
+    /** A release tag (`vX.Y.Z`, or a pre-release like `vX.Y.Z-dev.N`), at or above pins.yml's
+     *  `min_engine_version`. The engine action's `ref` step refuses anything else [R41]. */
     version: z.string().min(1),
     /** Selects `editions/<edition>.yml` [R195]. */
     edition: EDITION_ID,

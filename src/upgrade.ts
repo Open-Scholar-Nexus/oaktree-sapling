@@ -1,18 +1,15 @@
 /**
  * `oak upgrade`: renders a paper's engine-managed files at a target version from the repo's own
  * settings (`pins.yml`, `CODEOWNERS`), compares them with the files on disk, and opens a pull
- * request. Engine-managed files are never edited by hand, so any difference is reset to the template;
- * a deliberate edit still shows in the pull request. Nothing records a template version.
- *
- *  - **version-only** sets `project.options.oaktree-sapling.version` in `myst.yml`. Not gated.
- *  - **files-only** overwrites the engine-managed files that differ, so the pull request needs a
- *    CODEOWNERS review.
- *  - **both** does both.
+ * request that sets the target in `myst.yml` and overwrites the files that differ, which needs a
+ * CODEOWNERS review. `--files-only` leaves the version in `myst.yml` as it is. Engine-managed
+ * files are never edited by hand, so any difference is reset to the template; a deliberate edit
+ * still shows in the pull request. Nothing records a template version.
  *
  * A repo that is up to date gets no pull request. Without `--to`, the target is the newest stable
- * release, and a pin already past it stays. That run reuses one branch, so its pull request is
- * updated in place; a `--to` pick gets a branch of its own. Finding the target, getting the
- * template and opening the pull request are injected, so tests use fakes.
+ * release, and a pin already past it stays. Each target gets a branch of its own, and running
+ * again updates its open pull request. Finding the target, getting the template and opening the
+ * pull request are injected, so tests use fakes.
  */
 import { existsSync, readFileSync, writeFileSync, mkdirSync, copyFileSync } from 'node:fs';
 import { join, dirname, posix } from 'node:path';
@@ -27,9 +24,9 @@ import {
 import * as msg from './messages.js';
 import type { cmdConformanceReset } from './conformance.js';
 
-/** The branch for the newest release; a `--to` pick adds `-<tag>`. Exported for
- *  {@link cmdConformanceReset}, which deletes both [R117]. */
-export const UPGRADE_BRANCH = 'oak/upgrade';
+/** The branch prefix; the target tag follows it. Exported for {@link cmdConformanceReset},
+ *  which deletes these branches [R117]. */
+export const UPGRADE_BRANCH_PREFIX = 'oak/upgrade-';
 
 /** A release tag: `vX.Y.Z`, optionally with a pre-release such as `-dev.4`. */
 const RELEASE_TAG = /^v(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/;
@@ -67,6 +64,18 @@ function comparePre(a: string | undefined, b: string | undefined): number {
 }
 
 const PINS_REL = posix.join('.github', 'actions', 'engine', 'pins.yml');
+
+/** The pins.yml key naming the oldest engine the workflows beside it run with. */
+export const MIN_ENGINE_KEY = 'min_engine_version';
+
+/** `min_engine_version` from the pins.yml under `root` (a repo or a template), or null when the
+ *  file or the key is absent. */
+export function readMinEngine(root: string): string | null {
+  const pins = join(root, PINS_REL);
+  if (!existsSync(pins)) return null;
+  const v = readDoc(pins).get(MIN_ENGINE_KEY);
+  return typeof v === 'string' && v ? v : null;
+}
 const CODEOWNERS_REL = 'CODEOWNERS';
 
 /* --------------------------------------------------------------------------
@@ -212,12 +221,10 @@ export interface UpgradeDeps {
   confirm(plan: string[]): Promise<boolean>;
 }
 
-export type UpgradeMode = 'version-only' | 'files-only' | 'both';
-
 export interface UpgradeInput {
   repoRoot: string;
   to?: string; // target tag; else latest release
-  mode: UpgradeMode;
+  filesOnly?: boolean; // leave the version in myst.yml as it is
 }
 
 export interface Outcome {
@@ -249,7 +256,7 @@ function resyncFiles(
 }
 
 export async function cmdUpgrade(input: UpgradeInput, deps: UpgradeDeps): Promise<Outcome> {
-  const { repoRoot, mode } = input;
+  const { repoRoot, filesOnly = false } = input;
   const answers = readAnswers(repoRoot);
   if (!answers.engineRepo) {
     return {
@@ -273,21 +280,29 @@ export async function cmdUpgrade(input: UpgradeInput, deps: UpgradeDeps): Promis
       };
     }
   }
-  const wantVersion = mode === 'version-only' || mode === 'both';
-  const wantFiles = mode === 'files-only' || mode === 'both';
+  const versionChanged = !filesOnly && answers.version !== target;
 
-  const versionChanged = wantVersion && answers.version !== target;
+  const templateAtTarget = deps.materializeTemplate(answers.engineRepo, target);
+  const drift = computeDrift(repoRoot, templateAtTarget, answers);
+  const extra = extraFrozenFiles(repoRoot, templateAtTarget);
+  const filesChanged = drift.length > 0;
 
-  // The template is only fetched for a files resync; a version-only bump needs none.
-  let drift: string[] = [];
-  let extra: string[] = [];
-  let templateAtTarget: string | null = null;
-  if (wantFiles) {
-    templateAtTarget = deps.materializeTemplate(answers.engineRepo, target);
-    drift = computeDrift(repoRoot, templateAtTarget, answers);
-    extra = extraFrozenFiles(repoRoot, templateAtTarget);
+  // The pin and the workflows this run leaves must agree: workflows above the pin call verbs it
+  // lacks, and on GitHub that fails quietly. A pin that is not a release tag cannot be ordered.
+  const pinAfter = filesOnly ? answers.version : target;
+  const minEngine = readMinEngine(templateAtTarget);
+  if (minEngine && (compareTags(pinAfter, minEngine) ?? 0) < 0) {
+    return {
+      exitCode: 2,
+      result: {
+        status: 'error',
+        message: msg.upgrade.belowMinimum(pinAfter, minEngine, filesOnly),
+        target,
+        pin: pinAfter,
+        min_engine_version: minEngine,
+      },
+    };
   }
-  const filesChanged = wantFiles && drift.length > 0;
 
   if (!versionChanged && !filesChanged) {
     deps.log(msg.upgrade.upToDate(target, answers.engineRepo, targetGiven));
@@ -304,8 +319,9 @@ export async function cmdUpgrade(input: UpgradeInput, deps: UpgradeDeps): Promis
     msg.upgrade.planHeader(repoRoot, target),
     msg.upgrade.planTarget(target, answers.engineRepo, targetGiven),
     ...(versionChanged ? [msg.upgrade.planBumpVersion(answers.version, target)] : []),
-    ...(filesChanged ? [msg.upgrade.planResync(drift.length, target, drift.join(', '))] : []),
-    ...(wantFiles && !filesChanged ? [msg.upgrade.planFilesMatch(target)] : []),
+    filesChanged
+      ? msg.upgrade.planResync(drift.length, target, drift.join(', '))
+      : msg.upgrade.planFilesMatch(target),
     ...(extra.length ? [msg.upgrade.planExtraFiles(extra)] : []),
     msg.upgrade.planAsPr,
   ];
@@ -325,12 +341,12 @@ export async function cmdUpgrade(input: UpgradeInput, deps: UpgradeDeps): Promis
     paths.push('myst.yml');
   }
   if (filesChanged) {
-    resyncFiles(repoRoot, templateAtTarget!, answers, drift);
+    resyncFiles(repoRoot, templateAtTarget, answers, drift);
     paths.push(...drift);
   }
 
   const { url, action } = deps.pr.open(repoRoot, {
-    branch: targetGiven ? `${UPGRADE_BRANCH}-${target}` : UPGRADE_BRANCH,
+    branch: `${UPGRADE_BRANCH_PREFIX}${target}`,
     title: msg.upgrade.prTitle(target),
     body: upgradeBody(target, versionChanged, drift, extra),
     paths,

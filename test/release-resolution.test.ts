@@ -1,7 +1,7 @@
 /**
  * Which release of oak a repo gets by default: `oak bootstrap` without `--engine-version`, and
- * the weekly `oak upgrade --version-only`. Both write it into the repo, and a dev release will
- * be deleted when pruned (RELEASING.md), so it must be a stable one.
+ * `oak upgrade` without `--to`. Both write it into the repo, and a dev release will be deleted
+ * when pruned (RELEASING.md), so it must be a stable one.
  *
  * `latestEngineRelease` must use `repos/<repo>/releases/latest`, the newest release that is
  * neither a draft nor a pre-release; `gh release list --limit 1` sorts by date and includes

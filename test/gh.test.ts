@@ -207,7 +207,7 @@ describe('openDoiPr', () => {
     expect(ghCall('pr', 'create'), 'no PR is opened from a diverged HEAD').toBeUndefined();
   });
 
-  it('the body tells the editor what GitHub holds back on a bot pull request', () => {
+  it('the body tells the editor how to run the checks GitHub does not start', () => {
     openDoiPr('/paper', { conceptDoi: '10.5072/zenodo.5' });
     const body = argAfter(ghCall('pr', 'create')!.args, '--body')!;
     expect(body).toContain('10.5072/zenodo.5');
@@ -226,6 +226,20 @@ describe('openDoiPr', () => {
     expect(openDoiPr('/paper', { conceptDoi: '10.5072/zenodo.5' })).toBe(
       'https://github.com/o/r/pull/7',
     );
+  });
+
+  it("never takes a fork's pull request from a branch of the same name", () => {
+    child.respond = answers((args) =>
+      args[0] === 'pr' && args[1] === 'create' ? { status: 1, stderr: 'already exists' } : null,
+    );
+    try {
+      openDoiPr('/paper', { conceptDoi: '10.5072/zenodo.5' });
+    } catch {
+      /* the fake answers the lookup with nothing */
+    }
+    const list = ghCall('pr', 'list')!.args;
+    expect(argAfter(list, '--json')).toContain('isCrossRepository');
+    expect(argAfter(list, '--jq')).toContain('select(.isCrossRepository | not)');
   });
 });
 
@@ -338,6 +352,21 @@ describe('realGhPr.sticky', () => {
     child.calls.length = 0;
     child.respond = () => ({ status: 1, stdout: '', stderr: 'fatal: no such remote' });
     expect(() => realGhPr.sticky('.', '3', 'header', 'body')).toThrow();
+  });
+});
+
+describe('realGhPr.prHead', () => {
+  it('asks for the pull request head commit', () => {
+    child.calls.length = 0;
+    child.respond = () => ({ status: 0, stdout: 'f'.repeat(40), stderr: '' });
+    expect(realGhPr.prHead('o/r', '7')).toBe('f'.repeat(40));
+    expect(ghCall('api')!.args.slice(0, 2)).toEqual(['api', 'repos/o/r/pulls/7']);
+  });
+
+  it('refuses a repo that is not owner/name before gh sees it', () => {
+    child.calls.length = 0;
+    expect(() => realGhPr.prHead('--jq', '7')).toThrow(UserError);
+    expect(child.calls).toHaveLength(0);
   });
 });
 

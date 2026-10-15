@@ -15,7 +15,7 @@
 import { STICKY_PREVIEW } from './preview.js';
 import { stickyMarker } from './messages.js';
 import { RESERVED_BUNDLE_NAMES } from './zenodo.js';
-import { UPGRADE_BRANCH } from './upgrade.js';
+import { UPGRADE_BRANCH_PREFIX } from './upgrade.js';
 
 /** The label on every pull request a run opens, which is how `reset` finds them, including pull
  *  requests from the fork, whose branch names it does not know. */
@@ -126,7 +126,7 @@ export interface ConformanceDeps {
   sleep(ms: number): Promise<void>;
   /** The HTTP status of a GET to `url`, 0 on a network error. */
   probe(url: string): Promise<number>;
-  /** Moves `repo` onto release `tag` with `oak upgrade --both`, so the upgrade path is tested
+  /** Moves `repo` onto release `tag` with `oak upgrade --to`, so the upgrade path is tested
    *  too. Returns its pull request, or `upToDate` when the pin is already `tag`. */
   installEngine(
     repo: string,
@@ -170,7 +170,7 @@ export async function cmdConformanceReset(input: ResetInput, deps: ResetDeps): P
   // The run's `oak upgrade` opens `oak/upgrade-<tag>`; deleting it lets the same release be tested
   // again [R117]. Deleting a branch closes its pull request.
   const deletedBranches: string[] = [];
-  for (const prefix of [CERT_BRANCH_PREFIX, UPGRADE_BRANCH]) {
+  for (const prefix of [CERT_BRANCH_PREFIX, UPGRADE_BRANCH_PREFIX]) {
     for (const branch of gh.listBranches(repo, prefix)) {
       gh.deleteBranch(repo, branch);
       deletedBranches.push(branch);

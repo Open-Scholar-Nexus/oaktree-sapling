@@ -5,15 +5,15 @@ Each paper builds with the oaktree-sapling version it names, and the journal web
 
 ## A paper's engine version
 
-A paper names its oaktree-sapling version under `project.options.oaktree-sapling.version` in its `myst.yml`. Every Monday, the paper's **Engine version bump** workflow opens a pull request moving it to the newest release, or updates the one already open. It goes through the Journal checks and review like any other pull request, and merging it is all there is to do. A version newer than the newest release, a branch or a commit is left as it is.
-
-That pull request changes only `myst.yml`, because GitHub does not let a workflow change workflow files ([why](../design/paper-ci.md#design-paper-ci-weekly-bump)). To bring the workflows under `.github/` and `CODEOWNERS` up to a release as well, run, for each paper repository:
+A paper names its oaktree-sapling version under `project.options.oaktree-sapling.version` in its `myst.yml`. To move a paper to the newest release, run:
 
 ```bash
 oak upgrade --repo <owner>/<paper-repo>
 ```
 
-`oak` prints a plan, then opens a pull request that sets the version and replaces those files with the release's own, keeping any code owner added to `CODEOWNERS`. A hand edit to them shows in that pull request's diff. `--to <tag>` picks a release other than the newest.
+`oak` prints a plan, then opens a pull request that sets the version and replaces the workflows under `.github/` and `CODEOWNERS` with the release's own, keeping any code owner added to `CODEOWNERS`. A hand edit to them shows in that pull request's diff. It goes through the Journal checks and review like any other pull request, and merging it is all there is to do. Running `oak upgrade` again for the same release updates that pull request.
+
+`--to <tag>` picks a release other than the newest. Without it, a version newer than the newest release, a branch or a commit is left as it is. `--files-only` replaces the files and leaves the version. When the release's workflows need a newer engine than the version that pull request would set, `oak` stops before changing anything and names the oldest version they run with.
 
 (site-pins)=
 ## The journal website's versions

@@ -4,7 +4,7 @@
  * recheck the line ranges the pages cite.
  */
 const REPO = 'Open-Scholar-Nexus/oaktree-sapling';
-const REF = 'v0.2.0';
+const REF = 'v0.3.0';
 
 const SCHEME = 'src:';
 

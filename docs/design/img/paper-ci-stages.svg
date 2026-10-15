@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 290" role="img" aria-label="Two flows start from a pull request or a push. Stage 1 builds or validates with a read-only token and passes an artifact to Stage 2, which runs from the base branch with tokens and posts the preview or the check result. Tag, dispatch and schedule workflows run once, after merge.">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 290" role="img" aria-label="Two flows start from a pull request or a push. Stage 1 builds or validates with a read-only token and passes an artifact to Stage 2, which runs from the base branch with tokens and posts the preview or the check result. Tag and dispatch workflows run once, after merge.">
 <style>
 svg{--bg:#f6f7f5;--panel:#ffffff;--ink:#1c2320;--muted:#5b6762;--blue:#2f6fd6;--green:#23875a;--grey:#80878a;--gate:#b27417;--blue-soft:rgba(47,111,214,.10);--green-soft:rgba(35,135,90,.10);--grey-soft:rgba(128,135,138,.10);--band:rgba(28,35,32,.035);--gate-soft:rgba(178,116,23,.06)}
 @media (prefers-color-scheme: dark){svg{--panel:#1b201e;--ink:#e3e8e5;--muted:#9aa5a0;--blue:#72a4f7;--green:#5cc28c;--grey:#9ba3a6;--gate:#e2a64a;--blue-soft:rgba(114,164,247,.12);--green-soft:rgba(92,194,140,.12);--grey-soft:rgba(155,163,166,.12);--band:rgba(227,232,229,.04);--gate-soft:rgba(226,166,74,.07)}}
@@ -80,12 +80,12 @@ svg{font-family:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif}
         <!-- after merge -->
         <text x="20" y="232" class="t-hd">after merge · one stage, holds tokens</text>
         <rect x="20" y="242" width="140" height="40" rx="6" class="box q"/>
-        <text x="90" y="266" text-anchor="middle">tag, dispatch, weekly</text>
+        <text x="90" y="266" text-anchor="middle">tag, dispatch</text>
         <rect x="195" y="242" width="405" height="40" rx="6" class="box n"/>
-        <text x="215" y="258" class="t-mono">publish · prepare · version-bump</text>
-        <text x="215" y="274" class="t-verb">oak release · deposit · upgrade</text>
+        <text x="215" y="258" class="t-mono">publish · prepare</text>
+        <text x="215" y="274" class="t-verb">oak release · deposit</text>
         <line x1="160" y1="262" x2="193" y2="262" class="l n" marker-end="url(#an)"/>
         <rect x="690" y="242" width="170" height="40" rx="6" class="box q"/>
-        <text x="775" y="266" text-anchor="middle">release, deposit, bump PR</text>
+        <text x="775" y="266" text-anchor="middle">release, deposit, DOI PR</text>
         <line x1="600" y1="262" x2="688" y2="262" class="l n" marker-end="url(#an)"/>
       </svg>

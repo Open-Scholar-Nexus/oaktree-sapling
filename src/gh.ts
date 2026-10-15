@@ -276,24 +276,27 @@ function defaultBranch(repo: string): string {
   return gh(['api', `repos/${repo}`, '--jq', '.default_branch']) || 'main';
 }
 
+/** `gh pr list` arguments for the open pull request from `branch` of this repo. A fork's pull
+ *  request can come from a branch of the same name, so those are left out. */
+function openPrQuery(branch: string): string[] {
+  return [
+    'pr',
+    'list',
+    '--head',
+    branch,
+    '--state',
+    'open',
+    '--json',
+    'url,isCrossRepository',
+    '--jq',
+    '[.[] | select(.isCrossRepository | not)][0].url // empty',
+  ];
+}
+
 /** The open pull request for `branch`, or null. */
 function openPrUrl(repo: string | null, branch: string): string | null {
   try {
-    return (
-      gh([
-        'pr',
-        'list',
-        ...(repo ? ['--repo', repo] : []),
-        '--head',
-        branch,
-        '--state',
-        'open',
-        '--json',
-        'url',
-        '--jq',
-        '.[0].url // empty',
-      ]) || null
-    );
+    return gh([...openPrQuery(branch), ...(repo ? ['--repo', repo] : [])]) || null;
   } catch {
     return null;
   }
@@ -394,6 +397,10 @@ export const realGhPr: GhPr = {
       .split('\n')
       .map((t) => t.trim())
       .filter((t) => t.startsWith('v'));
+  },
+
+  prHead(repo, pr) {
+    return gh(['api', `repos/${assertRepoName(repo)}/pulls/${pr}`, '--jq', '.head.sha']);
   },
 };
 
@@ -829,7 +836,7 @@ export function cachedJournal(
 
 /**
  * The latest stable release tag of `engineRepo`, from the `releases/latest` API: the newest
- * release that is neither a draft nor a pre-release, so `oak bootstrap` and the weekly upgrade
+ * release that is neither a draft nor a pre-release, so `oak bootstrap` and `oak upgrade`
  * never pick a pre-release (RELEASING.md). One is used only when named (`--engine-version`,
  * `--to`). A 404 means no stable release yet: the probe is quiet, and `oak bootstrap` and
  * `oak upgrade` say how to proceed.
@@ -854,7 +861,7 @@ export function materializeTemplate(engineRepo: string, tag: string): string {
 }
 
 /** The upgrade pull request: branch, commit as the bot, push, then open one or update the
- *  branch's open one, so the weekly run keeps a single pull request. */
+ *  branch's open one, so running again for the same target keeps a single pull request. */
 export const realUpgradePr: UpgradePr = {
   open(repoRoot, opts) {
     git(repoRoot, ['checkout', '-B', opts.branch]);
@@ -863,22 +870,7 @@ export const realUpgradePr: UpgradePr = {
     // Run `gh` inside the clone so it finds the repo from the remote: in CI the cwd is
     // already the repo, while a local `oak upgrade` works in a temporary clone.
     const cwd = repoRoot;
-    const existing =
-      gh(
-        [
-          'pr',
-          'list',
-          '--head',
-          opts.branch,
-          '--state',
-          'open',
-          '--json',
-          'url',
-          '--jq',
-          '.[0].url // empty',
-        ],
-        { cwd },
-      ) || null;
+    const existing = gh(openPrQuery(opts.branch), { cwd }) || null;
     // The open pull request already has these changes.
     if (existing && sameTreeAsRemote(repoRoot, opts.branch))
       return { url: existing, action: 'current' };
