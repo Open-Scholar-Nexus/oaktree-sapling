@@ -894,18 +894,20 @@ export const workflow = {
   depositDoiPrFailed: (message: string): string =>
     `deposit prepare: DOI PR not opened (${message})`,
 
-  /** The DOI pull request `gh.openDoiPr` opens. GitHub starts no workflow for a pull request a
-   *  workflow opens, so the body says what the editor clicks. */
+  /** The DOI pull request `gh.openDoiPr` opens. GitHub holds the checks on a pull request a
+   *  workflow opens, and approving them does not run the preview, so the body says what the
+   *  editor clicks. */
   doiPrTitle: 'Reserve Zenodo DOI',
   doiPrBody: (conceptDoi: string): string =>
     [
       `Writes the reserved concept DOI \`${conceptDoi}\` into \`myst.yml\`. Merge before tagging.`,
       '',
       '<details>',
-      '<summary>Why have no checks run?</summary>',
+      '<summary>Why are the checks waiting?</summary>',
       '',
-      'GitHub starts no workflow for a pull request a workflow opens. To run the preview and ' +
-        'Journal checks, close and reopen this pull request.',
+      'GitHub holds the checks on a pull request a workflow opens, and approving them does not ' +
+        'run the preview. To run the Journal checks and the preview, close and reopen this pull ' +
+        'request.',
       '',
       '</details>',
     ].join('\n'),

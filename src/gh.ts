@@ -454,7 +454,8 @@ export const realPagesDeployer: PagesDeployer = {
 
 /* --------------------------------------------------------------------------
  * For checks.ts: posting the journal check results as a Check Run, with a summary table and
- * inline annotations. Needs `checks: write`, so only the trusted `workflow_run` job.
+ * inline annotations, and as a commit status of the same name. Needs `checks: write` and
+ * `statuses: write`, so only the trusted `workflow_run` job.
  * ------------------------------------------------------------------------ */
 
 export interface CheckRunPoster {
@@ -477,6 +478,21 @@ export function changedFiles(repo: string, base: string, head: string): string[]
   }
 }
 
+/** GitHub's limit on a commit status description. */
+const STATUS_DESCRIPTION_MAX = 140;
+
+/** The commit status that repeats a Check Run's result under the same name. */
+export function commitStatusFor(
+  name: string,
+  run: CheckRun,
+): { context: string; state: CheckRun['conclusion']; description: string } {
+  const description =
+    run.title.length > STATUS_DESCRIPTION_MAX
+      ? `${run.title.slice(0, STATUS_DESCRIPTION_MAX - 1)}…`
+      : run.title;
+  return { context: name, state: run.conclusion, description };
+}
+
 export const realCheckRun: CheckRunPoster = {
   create(repo, headSha, name, run) {
     const body = JSON.stringify({
@@ -487,6 +503,11 @@ export const realCheckRun: CheckRunPoster = {
       output: { title: run.title, summary: run.summary, annotations: run.annotations },
     });
     gh(['api', '--method', 'POST', `repos/${repo}/check-runs`, '--input', '-'], { input: body });
+    // On a pull request a workflow opened, GitHub files the Check Run under the held run's check
+    // suite, which the merge rule does not read; a commit status belongs to no suite.
+    gh(['api', '--method', 'POST', `repos/${repo}/statuses/${headSha}`, '--input', '-'], {
+      input: JSON.stringify(commitStatusFor(name, run)),
+    });
   },
 };
 

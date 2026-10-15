@@ -231,8 +231,9 @@ export interface CheckPostOutcome {
 }
 
 /**
- * `oak check-post`: posts the report's Check Run on the pull request's head commit and, given a
- * pull request number, updates the sticky comment. Posting needs `GH_TOKEN`.
+ * `oak check-post`: posts the report's Check Run, and a commit status with the same result, on the pull
+ * request's head commit and, given a pull request number, updates the sticky comment. Posting
+ * needs `GH_TOKEN`.
  */
 export function cmdCheckPost(
   input: { report: ChecksReport; repo: string; sha: string; pr?: string; shimTouched?: string[] },
@@ -274,8 +275,8 @@ export function cmdCheckPost(
     }
   }
 
-  // The Check Run is the merge gate, so failing to post it is an error: the pull request would
-  // stay blocked with no explanation. A failed comment only warns [R144].
+  // The Check Run and its commit status are the merge gate, so failing to post them is an error:
+  // the pull request would stay blocked with no explanation. A failed comment only warns [R144].
   return {
     status: checkRunPosted ? 'ok' : 'error',
     checkRunPosted,
