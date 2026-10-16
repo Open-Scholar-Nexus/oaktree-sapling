@@ -1,7 +1,7 @@
 (philosophy)=
 # Philosophy
 
-Oaktree Sapling runs a journal on free services and on tools a researcher already uses or can learn in an afternoon. This page explains each choice, for anyone deciding whether to adopt it.
+Oaktree Sapling sets up a journal on free services and on tools a researcher already uses or can learn in an afternoon. This page explains each choice, for anyone deciding whether to adopt it.
 
 ## Papers are written in MyST
 
@@ -53,8 +53,8 @@ These projects publish research with similar tools, and each one made different 
 
 ## Costs and accounts
 
-A journal has little to run: a paper is built only when it changes, and what readers get is a static website, which costs little to serve[^scope]. So every service it uses is free at its scale: GitHub Actions and Pages for public repositories, Cloudflare Pages for the previews, and Zenodo.
+A journal set up with Oaktree Sapling has little to run: a paper is built only when it changes, and what readers get is a static website, which costs little to serve[^scope]. So every service it uses is free at its scale: GitHub Actions and Pages for public repositories, Cloudflare Pages for the previews, and Zenodo.
 
 An author needs a GitHub account. The journal also needs a Cloudflare account for the previews and a Zenodo account for the deposits.
 
-[^scope]: This is a journal as Oaktree Sapling sets one up: review in pull requests, papers built by GitHub Actions, and a static website for readers. Each addition brings its own service and its own cost: collaborative editing, email reminders, an external review platform, other integrations, and above all running a paper's code for its readers, which needs servers.
+[^scope]: That covers review in pull requests, papers built by GitHub Actions, and a static website for readers. Each addition brings its own service and its own cost: collaborative editing, email reminders, an external review platform, other integrations, and above all running a paper's code for its readers, which needs servers.
