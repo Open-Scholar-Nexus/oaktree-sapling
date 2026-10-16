@@ -34,22 +34,20 @@ Publishing a version deposits it to [Zenodo](https://zenodo.org), which gives it
 
 ## Alternatives
 
-These projects publish research with similar tools, and each one made different choices.
-
 [ReScience C](https://rescience.github.io)
-: Reviews each submission in a public GitHub issue and publishes through Zenodo, with no other infrastructure. It publishes replications of computational studies. Oaktree Sapling is the closest to it in setup, and packages that setup as a tool: `oak` creates the repositories, the editorial checks run on every pull request, and a journal upgrades when the engine does.
+: Publishes replications of computational studies. Each submission is reviewed in a public GitHub issue and published on Zenodo, using only GitHub and Zenodo. Oaktree Sapling is close to it in setup, and packages that setup as a tool: `oak` creates the repositories, the editorial checks run on every pull request, and a journal upgrades when the engine does.
 
 [Journal of Open Source Software](https://joss.theoj.org)
-: Reviews in GitHub issues too, and publishes short Markdown papers about research software. It runs its own website and review bot, and registers DOIs with Crossref.
+: Publishes short Markdown papers about research software. It reviews them in GitHub issues, runs its own website and review bot, and registers DOIs with Crossref. With Oaktree Sapling, review happens in a pull request on the paper's own repository, and that repository's GitHub Actions build and publish it.
 
 [NeuroLibre](https://neurolibre.org)
-: Publishes preprints from Jupyter notebooks and MyST, and runs its own servers so readers can re-run the code.
+: Publishes preprints from Jupyter notebooks and MyST, and runs its own servers so readers can re-run the code. With Oaktree Sapling, each paper is a static website on GitHub Pages: readers see a notebook's saved outputs, and run the code by cloning the repository.
 
 [Computo](https://computo-journal.org)
-: Builds each paper from a GitHub template repository with GitHub Actions, written in [Quarto](https://quarto.org). Review happens on OpenReview.
+: Publishes computational work in statistics and machine learning, written in [Quarto](https://quarto.org). Each paper is built from a [GitHub template repository](https://computo-journal.org/site/guidelines-authors.html) with GitHub Actions and published on GitHub Pages, and review happens on OpenReview. With Oaktree Sapling, papers are written in MyST and reviewed in a pull request on the paper's repository.
 
 [Open Journal Systems](https://pkp.sfu.ca/software/ojs/)
-: The most widely used journal platform. It runs on a server the journal installs or pays PKP to host, and handles submission and review through its web interface.
+: Journal software that runs on a server the journal installs or pays PKP to host, and handles submission and review through its web interface. [PKP counts](https://web.archive.org/web/20261016022114/https://pkp.sfu.ca/software/ojs/) more than 44,000 journals using it. With Oaktree Sapling, a journal is a set of GitHub repositories: submission and review happen in pull requests, and each paper's repository builds its own website.
 
 ## Costs and accounts
 
