@@ -30,7 +30,11 @@ GitHub also builds each paper and hosts its website, so the journal has no serve
 
 Publishing a version deposits it to [Zenodo](https://zenodo.org), which gives it a DOI and keeps a copy that outlives both the GitHub repository and the journal[^archive]. Zenodo is run by CERN.
 
-[^archive]: Each paper gets one DOI that always resolves to its latest version, and each version gets its own. [Zenodo's policies](https://about.zenodo.org/policies/) keep records for as long as Zenodo runs, which is tied to CERN's lifetime, and promise best efforts to move them to another archive if it ever closes. A deposit holds the PDF, the paper's source and the version of the engine that built it, so the paper can be read and rebuilt without GitHub.
+[^archive]: Each paper gets one DOI that always resolves to its latest version, and each version gets its own. [Zenodo's policies](https://about.zenodo.org/policies/) keep records for as long as Zenodo runs, which is tied to CERN's lifetime, and promise best efforts to move them to another archive if it ever closes. A deposit holds the PDF, the paper's source and the version of the engine that built it, so the paper can be read, and its PDF rendered again, without GitHub. That PDF uses the engine's defaults, because the journal's branding and edition settings stay in the journal's repository.
+
+## Maintenance
+
+A paper builds with the engine release named in its `myst.yml`, checked out from the engine repository at that release's tag. If the engine stops being maintained, each paper keeps building with the release it names, for as long as that release and the web theme it downloads stay on GitHub. A journal can also run its papers from its own copy of the engine repository, release tags included, by naming that copy in the paper's [`pins.yml`](src:templates/paper/.github/actions/engine/pins.yml#L4).
 
 ## Alternatives
 
@@ -46,6 +50,9 @@ Publishing a version deposits it to [Zenodo](https://zenodo.org), which gives it
 [Computo](https://computo-journal.org)
 : Publishes computational work in statistics and machine learning, written in [Quarto](https://quarto.org). Each paper is built from a [GitHub template repository](https://computo-journal.org/site/guidelines-authors.html) with GitHub Actions and published on GitHub Pages, and review happens on OpenReview. With Oaktree Sapling, papers are written in MyST and reviewed in a pull request on the paper's repository.
 
+[PubPub](https://www.pubpub.org)
+: A hosted platform run by the nonprofit [Knowledge Futures](https://www.knowledgefutures.org). Authors and editors write in a browser editor, and the text is stored in PubPub's database. With Oaktree Sapling, a paper is a folder of text files in a repository the journal owns, changed through pull requests.
+
 [Open Journal Systems](https://pkp.sfu.ca/software/ojs/)
 : Journal software that runs on a server the journal installs or pays PKP to host, and handles submission and review through its web interface. [PKP counts](https://web.archive.org/web/20261016022114/https://pkp.sfu.ca/software/ojs/) more than 44,000 journals using it. With Oaktree Sapling, a journal is a set of GitHub repositories: submission and review happen in pull requests, and each paper's repository builds its own website.
 
@@ -57,4 +64,4 @@ An author needs a GitHub account. The journal also needs a Cloudflare account fo
 
 [^scope]: That covers review in pull requests, papers built by GitHub Actions, a static website for readers, and a permanent copy of each published version on Zenodo. As a journal system adds features, each addition brings its own service and its own cost: collaborative editing, email reminders, an external review platform, other integrations, and running a paper's code for its readers.
 
-[^sustainability]: Of these, GitHub Pages and Cloudflare Pages are the simplest to swap to alternatives. Actions have especially large limits among alternatives, but a journal uses a few minutes of build per change. Zenodo mints DOIs and keeps the archived copies; replacing it would need another provider that mints DOIs at no cost, and a deposit in `oak` written for it.
+[^sustainability]: Of these, GitHub Pages and Cloudflare Pages are the simplest to swap to alternatives. Actions have especially large limits among alternatives, but a journal uses a few minutes of build per change. The workflows `oak` sets up are written for GitHub Actions: a paper's repository is plain git and moves to any host, and its workflows would have to be rewritten there. Zenodo mints DOIs and keeps the archived copies; replacing it would need another provider that mints DOIs at no cost, and a deposit in `oak` written for it.
