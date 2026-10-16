@@ -670,7 +670,7 @@ describe('splitUnrunnableChecks: a check that cannot run yet is reported, not ru
   });
 
   it('marks it optional even when the journal made it required', () => {
-    // `_build/exports` never exists in CI (check.yml has no build step), so a blocking result
+    // `_build/exports` never exists in CI (check-paper.yml has no build step), so a blocking result
     // here would fail every pull request of every paper, and only the journal could fix it. It
     // would also pass locally, where an earlier build left the directory.
     const { unrunnable } = splitUnrunnableChecks([{ id: 'exports-exist' }], '/paper', allFalse);

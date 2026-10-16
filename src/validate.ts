@@ -580,7 +580,7 @@ const EXPORTS_EXIST = 'exports-exist';
  * Each becomes an `error` result ("could not run"; `CheckStatus` has no skip) marked `optional`,
  * so it never blocks a merge whatever the journal set [R82].
  *
- * Building first is not an option: `check.yml` runs apart from `ci.yml`, so it would either tie
+ * Building first is not an option: `check-paper.yml` runs apart from `build-paper.yml`, so it would either tie
  * the merge to the build or build every pull request twice.
  */
 export function splitUnrunnableChecks(

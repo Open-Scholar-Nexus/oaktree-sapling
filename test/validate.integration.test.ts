@@ -114,7 +114,7 @@ describe.skipIf(bundleState() === 'absent')(
       expect(abstract.status).toBe('fail');
     }, 60_000);
 
-    it('--report writes the full JSON, with checkRun, for check-post', () => {
+    it('--report writes the full JSON, with checkRun, for post-checks', () => {
       const tmp = mkdtempSync(join(tmpdir(), 'oak-report-'));
       const reportPath = join(tmp, 'report.json');
       const r = spawnSync(
@@ -142,7 +142,7 @@ describe.skipIf(bundleState() === 'absent')(
       expect(written.status).toBe('ok');
     }, 60_000);
 
-    it('--report exits 0 on a failing result, since check-post posts it', () => {
+    it('--report exits 0 on a failing result, since post-checks posts it', () => {
       const tmp = mkdtempSync(join(tmpdir(), 'oak-report-'));
       const reportPath = join(tmp, 'report.json');
       const r = spawnSync(
@@ -260,12 +260,12 @@ describe.skipIf(bundleState() === 'absent')(
       const r = spawnSync('node', [bundle, 'validate', '--paper', dir, '--report', report], {
         encoding: 'utf8',
       });
-      // A report was written, so the run passes and check-post posts the failure.
+      // A report was written, so the run passes and post-checks posts the failure.
       expect(r.status).toBe(0);
       expect(existsSync(report)).toBe(true);
       const written = JSON.parse(readFileSync(report, 'utf8'));
       expect(written.checkRun.conclusion).toBe('failure');
-      // The report carries the reason, since check-post posts it on the pull request.
+      // The report carries the reason, since post-checks posts it on the pull request.
       expect(written.checkRun.summary).toContain('pins.yml');
       expect(String(written.errors[0])).toContain('no journal repo found');
     }, 60_000);

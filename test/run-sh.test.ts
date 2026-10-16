@@ -43,20 +43,20 @@ function run(dir: string, args: string[], env: Record<string, string> = {}) {
 describe('ci/run.sh', () => {
   it('writes the result as one result= line, whatever the strings in it hold', () => {
     const result = { status: 'error', message: 'line one\nforged=1', pr_number: '7' };
-    const r = run(engine(result), ['check-post']);
+    const r = run(engine(result), ['post-checks']);
     expect(r.output.split('\n').filter(Boolean)).toHaveLength(1);
     expect(r.output.startsWith('result=')).toBe(true);
     expect(JSON.parse(r.output.slice('result='.length))).toEqual(result);
   });
 
   it("keeps the verb's exit code", () => {
-    const r = run(engine({ status: 'error' }, 3), ['check-post']);
+    const r = run(engine({ status: 'error' }, 3), ['post-checks']);
     expect(r.code).toBe(3);
     expect(r.output).toContain('result=');
   });
 
   it('writes no output when the verb recorded no result', () => {
-    const r = run(engine(null, 2), ['check-post']);
+    const r = run(engine(null, 2), ['post-checks']);
     expect(r.code).toBe(2);
     expect(r.output).toBe('');
   });

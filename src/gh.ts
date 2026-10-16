@@ -338,7 +338,7 @@ export function openFailureIssue(repoRoot: string, title: string, body: string):
  *  comment carries a hidden HTML marker, so a rerun edits it in place. */
 export const realGhPr: GhPr = {
   sticky(repoRoot, prNumber, header, body) {
-    // Throws on failure, so check-post never reports a comment it did not post.
+    // Throws on failure, so post-checks never reports a comment it did not post.
     const repo = originRepo(repoRoot);
     if (!repo) throw new Error(msg.workflow.noOriginRepo(repoRoot));
     const marker = msg.stickyMarker(header);
@@ -462,7 +462,7 @@ export interface CheckRunPoster {
   create(repo: string, headSha: string, name: string, run: CheckRun): void;
 }
 
-/** Files changed between `base` and `head`, from the compare API. check-post passes `head` from
+/** Files changed between `base` and `head`, from the compare API. post-checks passes `head` from
  *  `github.event.workflow_run.head_sha`, which GitHub sets and the fork's artifact cannot, so
  *  the gated-files warning cannot be dodged. Returns [] on any error, so the warning never
  *  fails the post. */

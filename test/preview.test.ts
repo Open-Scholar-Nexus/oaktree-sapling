@@ -373,7 +373,7 @@ describe('cmdDeployPreview', () => {
     expect(stickies.some((s) => s.header === STICKY_PREVIEW)).toBe(true);
   });
 
-  it('links the fallback comment to its Paper CI run (artifactRunId)', async () => {
+  it('links the fallback comment to its Build paper run (artifactRunId)', async () => {
     const dir = siteWithPr('7');
     const { gh, stickies } = fakeGh();
     await cmdDeployPreview(baseInput(dir, { cf: {}, artifactRunId: '12345' }), {

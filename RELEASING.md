@@ -27,11 +27,11 @@ The script stops before pushing anything if the version is malformed, the tag al
 
 ## After a stable release
 
-A stable `vX.Y.Z` is `latest` as soon as it is released, and conformance runs after ([why](https://scholar.nexus/oaktree-sapling/design/releases#r114)). Wait for the conformance run to pass before announcing the version. If it fails, delete the release or release a newer one.
+A stable `vX.Y.Z` is `latest` as soon as it is released, and conformance runs after ([why](https://scholar.nexus/oaktree-sapling/design/releases#r114)). Before announcing the version, wait until the release's `conformance.json` says `ok`: a green run can also be inconclusive or not run. If it fails, delete the release or release a newer one.
 
 ## Conformance
 
-`conformance.yml` tests a release on the test paper repository named by the `CONFORMANCE_TEST_REPO` variable, with `oak conformance` ([what it runs](https://scholar.nexus/oaktree-sapling/reference/cli#conformance)), and uploads the result to the release as `conformance.json`. It starts on the newest release after every successful `cut-engine-release` run, and can be started by hand from Actions with a tag, or with no tag to only reset the test repository.
+`conformance.yml` tests a release on the test paper repository named by the `CONFORMANCE_TEST_REPO` variable, with `oak conformance` ([what it runs](https://scholar.nexus/oaktree-sapling/reference/cli#conformance)), and uploads the result to the release as `conformance.json`. A run on a release the test repository already pins ends green with a `NOT RUN` warning and uploads nothing; to test again, cut a new tag. It starts on the newest release after every successful `cut-engine-release` run, and can be started by hand from Actions with a tag, or with no tag to only reset the test repository.
 
 It reads two secrets from the `conformance` environment: `CONFORMANCE_PAT`, a fine-grained token for the test repository, and `CONFORMANCE_FORK_PAT`, for the account that owns the fork named by the `CONFORMANCE_FORK_REPO` variable. With that variable unset, the fork preview is not tested. The environment admits only `main` and `move`, with no required reviewer. The test repository keeps its own Cloudflare and Zenodo (sandbox only) secrets.
 

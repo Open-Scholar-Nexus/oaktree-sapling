@@ -1,4 +1,4 @@
-name: Publish Zenodo deposit
+name: Deposit version
 
 # A v* tag fills the Zenodo draft; a human clicks Publish on Zenodo. Token picked by DOI prefix.
 # https://scholar.nexus/oaktree-sapling/reference/cli#release

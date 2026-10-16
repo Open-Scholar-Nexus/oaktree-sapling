@@ -45,7 +45,7 @@ fi
 # A paper below the repo root (co-located). "." is oak's default, so it is not passed.
 if [ -n "${PAPER_DIR:-}" ] && [ "$PAPER_DIR" != "." ]; then
   case "$verb" in
-    build|validate|release|deploy-preview|deposit|check-post|notify) extra+=(--paper "$PAPER_DIR") ;;
+    build|validate|release|deploy-preview|deposit|post-checks|notify) extra+=(--paper "$PAPER_DIR") ;;
   esac
 fi
 

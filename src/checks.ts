@@ -161,7 +161,7 @@ export function toCheckRun(
 /* --------------------------------------------------------------------------
  * Posting to the pull request. The `pull_request` job that runs `oak validate` on the pull
  * request's code holds no write token, so it only writes the report. The trusted `workflow_run`
- * job then runs `oak check-post`, which posts the report as a Check Run and as a sticky comment,
+ * job then runs `oak post-checks`, which posts the report as a Check Run and as a sticky comment,
  * since authors rarely open a Check Run's details. It never reruns validate.
  * ------------------------------------------------------------------------ */
 
@@ -169,7 +169,7 @@ export function toCheckRun(
  *  `<!-- oak-sticky: oak-journal-checks -->`. */
 export const STICKY_CHECKS = 'oak-journal-checks';
 
-/** The `oak validate --report` payload. check-post only uses `checkRun`. */
+/** The `oak validate --report` payload. post-checks only uses `checkRun`. */
 export interface ChecksReport {
   status?: 'ok' | 'error';
   checkRun: CheckRun;
@@ -197,7 +197,7 @@ export function checksComment(report: ChecksReport, shimTouched: string[] = []):
 }
 
 /** The gated paths [design §6a]: `.github/`, `CODEOWNERS` and `paper-environment.yml`. A pull
- *  request that changes them can change how the checks run, so check-post warns that its report
+ *  request that changes them can change how the checks run, so post-checks warns that its report
  *  cannot be fully trusted [R83]. */
 export function frozenPathsTouched(changed: string[]): string[] {
   return changed.filter(
@@ -218,12 +218,12 @@ export function shimWarning(touched: string[]): string {
 
 /** Injected so tests can use fakes. The real ones are `gh.realCheckRun` and
  *  `gh.realGhPr.sticky`. */
-export interface CheckPostDeps {
+export interface PostChecksDeps {
   checkRun: { create(repo: string, headSha: string, name: string, run: CheckRun): void };
   sticky(repoRoot: string, prNumber: string, header: string, body: string): void;
 }
 
-export interface CheckPostOutcome {
+export interface PostChecksOutcome {
   status: 'ok' | 'error';
   checkRunPosted: boolean;
   commentPosted: boolean;
@@ -231,14 +231,14 @@ export interface CheckPostOutcome {
 }
 
 /**
- * `oak check-post`: posts the report's Check Run, and a commit status with the same result, on the pull
+ * `oak post-checks`: posts the report's Check Run, and a commit status with the same result, on the pull
  * request's head commit and, given a pull request number, updates the sticky comment. Posting
  * needs `GH_TOKEN`.
  */
-export function cmdCheckPost(
+export function cmdPostChecks(
   input: { report: ChecksReport; repo: string; sha: string; pr?: string; shimTouched?: string[] },
-  deps: CheckPostDeps,
-): CheckPostOutcome {
+  deps: PostChecksDeps,
+): PostChecksOutcome {
   const { report, repo, sha, pr } = input;
   const shimTouched = input.shimTouched ?? [];
   const warnings: string[] = [];
@@ -259,7 +259,7 @@ export function cmdCheckPost(
     deps.checkRun.create(repo, sha, 'Journal checks', checkRunToPost);
     checkRunPosted = true;
   } catch (e) {
-    const msg = messages.workflow.checkPostCheckRunFailed((e as Error).message);
+    const msg = messages.workflow.postChecksCheckRunFailed((e as Error).message);
     warnings.push(msg);
     process.stderr.write(annotate('warning', msg) + '\n');
   }
@@ -269,7 +269,7 @@ export function cmdCheckPost(
       deps.sticky('.', pr, STICKY_CHECKS, checksComment(report, shimTouched));
       commentPosted = true;
     } catch (e) {
-      const msg = messages.workflow.checkPostCommentFailed((e as Error).message);
+      const msg = messages.workflow.postChecksCommentFailed((e as Error).message);
       warnings.push(msg);
       process.stderr.write(annotate('warning', msg) + '\n');
     }

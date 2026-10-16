@@ -1,11 +1,11 @@
-name: Journal checks post
+name: Post checks
 
 # Stage 2 of the journal checks: posts Stage 1's report from the base context, never rebuilding.
 # https://scholar.nexus/oaktree-sapling/design/paper-ci#design-paper-ci-stage2-inputs
 
 on:
   workflow_run:
-    workflows: ["Journal checks"]
+    workflows: ["Check paper"]
     types: [completed]
 
 permissions:
@@ -17,7 +17,7 @@ permissions:
 
 concurrency:
   # Head repo in the key: forks share branch names.
-  group: check-post-${{ github.event.workflow_run.head_repository.full_name }}-${{ github.event.workflow_run.head_branch }}
+  group: post-checks-${{ github.event.workflow_run.head_repository.full_name }}-${{ github.event.workflow_run.head_branch }}
   cancel-in-progress: true
 
 jobs:
@@ -33,13 +33,13 @@ jobs:
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ github.token }}
 
-      # The artifact is fork-controlled: check-post reads pr-number from it and checks that pull
+      # The artifact is fork-controlled: post-checks reads pr-number from it and checks that pull
       # request heads at the commit this run checked. Best-effort:
-      # https://scholar.nexus/oaktree-sapling/reference/cli#check-post
+      # https://scholar.nexus/oaktree-sapling/reference/cli#post-checks
       - uses: ./.github/actions/engine
         with:
           args: >-
-            check-post
+            post-checks
             --report journal-checks/report.json
             --repo ${{ github.repository }}
             --sha ${{ github.event.workflow_run.head_sha }}

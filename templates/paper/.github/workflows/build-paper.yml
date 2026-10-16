@@ -1,6 +1,6 @@
-name: Paper CI
+name: Build paper
 
-# Stage 1 of the preview, no secrets; preview-deploy.yml deploys. A push also deploys Pages, once myst.yml has a real id.
+# Stage 1 of the preview, no secrets; deploy-preview.yml deploys. A push also deploys Pages, once myst.yml has a real id.
 # https://scholar.nexus/oaktree-sapling/design/paper-ci#design-paper-ci-two-stages
 
 on:
@@ -14,7 +14,7 @@ permissions:
 
 concurrency:
   # Head repo in the key, and PR groups apart from the push group.
-  group: ${{ github.event_name == 'pull_request' && format('ci-pr-{0}-{1}', github.event.pull_request.head.repo.full_name, github.head_ref) || 'ci-push-main' }}
+  group: ${{ github.event_name == 'pull_request' && format('build-paper-pr-{0}-{1}', github.event.pull_request.head.repo.full_name, github.head_ref) || 'build-paper-push-main' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:

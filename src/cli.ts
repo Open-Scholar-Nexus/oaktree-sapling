@@ -30,7 +30,7 @@ type Verb =
   | 'build'
   | 'start'
   | 'validate'
-  | 'check-post'
+  | 'post-checks'
   | 'deploy-preview'
   | 'deposit'
   | 'release'
@@ -705,7 +705,7 @@ function readEditionQuietly(paperRoot: string): string | null {
 
 /**
  * Writes `--report` and, on a `pull_request` run, the pull request number and paper folder
- * beside it for check-post (artifact.ts). Returns whether the report was written.
+ * beside it for post-checks (artifact.ts). Returns whether the report was written.
  */
 async function writeReport(
   reportPath: string,
@@ -731,7 +731,7 @@ async function writeReport(
 
 /**
  * Writes a failing `--report` for a run that could not produce one, so even a usage error or an
- * unexpected throw leaves a readable report for check-post to post [R82]. Returns the exit code:
+ * unexpected throw leaves a readable report for post-checks to post [R82]. Returns the exit code:
  * 0 once a report is written, as with a failing result, else `fallback`.
  */
 async function writeFailureReport(
@@ -760,7 +760,7 @@ async function writeFailureReport(
 
 /**
  * The human output of a validate run: the result and every finding. The JSON exists for
- * check-post, which reads `--report <path>`. Leaving out findings would change the result.
+ * post-checks, which reads `--report <path>`. Leaving out findings would change the result.
  */
 function validateSummary(out: {
   status: string;
@@ -783,8 +783,8 @@ function validateSummary(out: {
 }
 
 /** `oak validate`: oak's own rules (Layer A) and the journal's editorial checks (Layer B), with
- *  `--report <path>` writing the JSON check-post posts. With `--report` it exits 0 once a report
- *  is written, failing or not, since check-post posts the result.
+ *  `--report <path>` writing the JSON post-checks posts. With `--report` it exits 0 once a report
+ *  is written, failing or not, since post-checks posts the result.
  *  Documented at DOCS.validate. */
 async function cmdValidate(argv: string[]): Promise<number> {
   const paperRoot = resolve(flag(argv, 'paper') ?? '.');
@@ -871,7 +871,7 @@ async function cmdValidate(argv: string[]): Promise<number> {
     () => validateSummary(out),
   );
 
-  // `--report <path>`: the full JSON, `checkRun` included, for check-post, which posts the Check
+  // `--report <path>`: the full JSON, `checkRun` included, for post-checks, which posts the Check
   // Run and the sticky comment from the trusted `workflow_run` job.
   if (reportPath) {
     const written = await writeReport(reportPath, paperRoot, {
@@ -888,12 +888,12 @@ async function cmdValidate(argv: string[]): Promise<number> {
   return out.exitCode;
 }
 
-/** `oak check-post --report <path> --repo <o/r> --sha <headsha>`: posts the report
+/** `oak post-checks --report <path> --repo <o/r> --sha <headsha>`: posts the report
  *  from the trusted `workflow_run` job (checks and pull-requests write). Never reruns validate or
  *  touches myst. The pull request is the `pr-number` beside the report, and is
  *  checked against `--verified-head` before anything is posted. Failing to post the Check Run
- *  fails the job; a failed comment only warns. Needs GH_TOKEN. Documented at DOCS.checkPost. */
-async function cmdCheckPost(argv: string[]): Promise<number> {
+ *  fails the job; a failed comment only warns. Needs GH_TOKEN. Documented at DOCS.postChecks. */
+async function cmdPostChecks(argv: string[]): Promise<number> {
   const reportPath = flag(argv, 'report');
   const repo = flag(argv, 'repo') ?? process.env.GITHUB_REPOSITORY;
   const sha = flag(argv, 'sha');
@@ -903,11 +903,11 @@ async function cmdCheckPost(argv: string[]): Promise<number> {
   const base = flag(argv, 'base');
   const verifiedHead = flag(argv, 'verified-head');
   if (!reportPath || !repo || !sha || !base || !verifiedHead) {
-    process.stderr.write(msg.workflow.checkPostArgs + '\n');
+    process.stderr.write(msg.workflow.postChecksArgs + '\n');
     return 2;
   }
   if (!existsSync(reportPath)) {
-    process.stderr.write(msg.workflow.checkPostNoReport(reportPath) + '\n');
+    process.stderr.write(msg.workflow.postChecksNoReport(reportPath) + '\n');
     return 2;
   }
   // The report comes from the fork's code [R137], so it is untrusted input. A bad one gets a
@@ -916,12 +916,12 @@ async function cmdCheckPost(argv: string[]): Promise<number> {
   try {
     report = JSON.parse(readFileSync(reportPath, 'utf8'));
   } catch {
-    process.stderr.write(annotate('error', msg.workflow.checkPostBadReport(reportPath)) + '\n');
+    process.stderr.write(annotate('error', msg.workflow.postChecksBadReport(reportPath)) + '\n');
     return 1;
   }
   const cr = report?.checkRun;
   if (!cr || typeof cr.conclusion !== 'string') {
-    process.stderr.write(annotate('error', msg.workflow.checkPostBadReport(reportPath)) + '\n');
+    process.stderr.write(annotate('error', msg.workflow.postChecksBadReport(reportPath)) + '\n');
     return 1;
   }
 
@@ -936,7 +936,7 @@ async function cmdCheckPost(argv: string[]): Promise<number> {
   const pr = artifact.readPrNumber(artifactDir, artifact.CHECKS_FILES.pr) ?? undefined;
   if (pr) artifact.verifyPrHead(repo, pr, verifiedHead, (r, n) => gh.realGhPr.prHead(r, n));
 
-  const { cmdCheckPost: run, frozenPathsTouched } = await import('./checks.js');
+  const { cmdPostChecks: run, frozenPathsTouched } = await import('./checks.js');
   const shimTouched = frozenPathsTouched(gh.changedFiles(repo, base, verifiedHead));
   const out = run(
     { report, repo, sha, pr, shimTouched },
@@ -1188,6 +1188,7 @@ async function cmdConformance(argv: string[]): Promise<number> {
               confirm: async () => true,
             },
           );
+          if (up.exitCode !== 0) throw new Error(`oak upgrade: ${String(up.result.message)}`);
           const prUrl = (up.result.pr as string | null) ?? null;
           return {
             upToDate: Boolean(up.result.up_to_date),
@@ -1213,7 +1214,7 @@ const VERBS: Verb[] = [
   'build',
   'start',
   'validate',
-  'check-post',
+  'post-checks',
   'deploy-preview',
   'deposit',
   'release',
@@ -1271,7 +1272,7 @@ async function main(argv: string[]): Promise<number> {
   if (verb === 'build') return cmdBuild(argv.slice(1));
   if (verb === 'start') return cmdStart(argv.slice(1));
   if (verb === 'validate') return cmdValidate(argv.slice(1));
-  if (verb === 'check-post') return cmdCheckPost(argv.slice(1));
+  if (verb === 'post-checks') return cmdPostChecks(argv.slice(1));
   if (verb === 'deposit') return cmdDeposit(argv.slice(1));
   if (verb === 'release') return cmdRelease(argv.slice(1));
   if (verb === 'deploy-preview') return cmdDeployPreview(argv.slice(1));
