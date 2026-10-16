@@ -14,7 +14,7 @@
  */
 import { STICKY_PREVIEW } from './preview.js';
 import { stickyMarker } from './messages.js';
-import { RESERVED_BUNDLE_NAMES } from './zenodo.js';
+import { JOURNAL_BUNDLE_NAME, RESERVED_BUNDLE_NAMES } from './zenodo.js';
 import { UPGRADE_BRANCH_PREFIX } from './upgrade.js';
 
 /** The label on every pull request a run opens, which is how `reset` finds them, including pull
@@ -73,6 +73,8 @@ export interface ConformanceGh {
   committedDoi(repo: string): string | null;
   /** The oak version pinned in the test repo's `myst.yml`, or null. */
   committedEngineVersion(repo: string): string | null;
+  /** `instance_repo` from the test repo's `pins.yml`, or null. */
+  committedJournalRepo(repo: string): string | null;
   /** The head commit of `main`, where the deposit tag goes. */
   defaultBranchSha(repo: string): string;
   /** Creates tag `tag` at `sha`; the `v*` push starts deposit-version.yml. */
@@ -476,7 +478,7 @@ export async function cmdConformanceRun(input: RunInput, deps: ConformanceDeps):
     log(`same-repo preview CERTIFIED for ${tag}`);
 
     // ---- The deposit: deposit-version.yml and `oak release` ----
-    // The tag push, the publish run, and the five deposit files on the tag's release [R24].
+    // The tag push, the publish run, and the deposit files on the tag's release [R24].
     // Reserving a DOI is not tested: the test repo already has a sandbox DOI and `oak
     // deposit prepare` refuses when one is set. This holds no Zenodo token, so it checks the
     // deposit by the release's file names.
@@ -513,10 +515,15 @@ export async function cmdConformanceRun(input: RunInput, deps: ConformanceDeps):
       { sleep, log },
     );
 
-    // 4. All five deposit files are on the tag's release. Without a Zenodo token this checks
-    //    names, not contents [R24].
+    // 4. The deposit files are on the tag's release, with journal.zip when the journal is a repo
+    //    of its own. Without a Zenodo token this checks names, not contents [R24].
     const releaseAssets = gh.releaseAssets(repo, depositTag);
-    const missing = RESERVED_BUNDLE_NAMES.filter((n) => !releaseAssets.includes(n));
+    const journalRepo = gh.committedJournalRepo(repo);
+    const expected =
+      journalRepo && journalRepo !== '.'
+        ? [...RESERVED_BUNDLE_NAMES, JOURNAL_BUNDLE_NAME]
+        : RESERVED_BUNDLE_NAMES;
+    const missing = expected.filter((n) => !releaseAssets.includes(n));
     if (missing.length) {
       throw new Error(
         `GH Release ${depositTag} is missing deposit asset(s): ${missing.join(', ')} ` +

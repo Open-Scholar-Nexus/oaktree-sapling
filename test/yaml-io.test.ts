@@ -11,6 +11,9 @@ import {
   readEngineCoordinateRaw,
   readBrandAssetOptions,
   readJournalTypstTemplate,
+  readJournalStamp,
+  writeDerivedDoc,
+  type JournalStamp,
 } from '../src/yaml-io.js';
 
 const fixturePaper = fileURLToPath(new URL('./fixture-paper/myst.yml', import.meta.url));
@@ -168,5 +171,29 @@ describe('applyOwnOverride: the PDF download', () => {
     );
     applyOwnOverride(doc, { project: { downloads: [download] } });
     expect(doc.toJSON().project.downloads).toEqual([{ id: 'typst-pdf', title: 'Paper' }]);
+  });
+});
+
+describe('the journal stamp in the derived config banner', () => {
+  const stamps: JournalStamp[] = [
+    { kind: 'none' },
+    { kind: 'paper' },
+    { kind: 'uncommitted' },
+    { kind: 'commit', commit: 'b'.repeat(40), repo: 'o/journal' },
+    { kind: 'commit', commit: 'c'.repeat(64), repo: null },
+  ];
+  it.each(stamps)('reads back what writeDerivedDoc wrote: %o', (stamp) => {
+    const root = mkdtempSync(join(tmpdir(), 'oak-stamp-'));
+    writeDerivedDoc(join(root, 'myst.oak.yml'), parseDocument('version: 1\n'), stamp);
+    expect(readJournalStamp(root)).toEqual(stamp);
+  });
+
+  it('reads nothing from a banner without the line, or a line that is not a commit', () => {
+    const root = mkdtempSync(join(tmpdir(), 'oak-stamp-'));
+    expect(readJournalStamp(root)).toBeUndefined();
+    writeDerivedDoc(join(root, 'myst.oak.yml'), parseDocument('version: 1\n'));
+    expect(readJournalStamp(root)).toBeUndefined();
+    writeFileSync(join(root, 'myst.oak.yml'), '# journal: o/j@--upload-pack=x\n\nversion: 1\n');
+    expect(readJournalStamp(root)).toBeUndefined();
   });
 });

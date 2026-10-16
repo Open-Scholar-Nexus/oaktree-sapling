@@ -15,6 +15,7 @@ import {
   readBrandAssetOptions,
   readJournalTypstTemplate,
   DERIVED_CONFIG_FILE,
+  type JournalStamp,
 } from './yaml-io.js';
 
 export interface BuildOpts {
@@ -62,6 +63,8 @@ export interface MaterializeInput {
   paperRoot: string;
   engineRoot: string;
   instanceRoot: string | null;
+  /** Which journal checkout `instanceRoot` is, written into the derived config's banner. */
+  journalStamp?: JournalStamp;
   engineRepo: string;
   baseUrl: string;
   assetOverrides?: ComposeInput['assetOverrides'];
@@ -98,6 +101,7 @@ export async function materializeDerived(
     paperRoot,
     engineRoot,
     instanceRoot,
+    journalStamp,
     engineRepo,
     baseUrl,
     assetOverrides,
@@ -119,7 +123,7 @@ export async function materializeDerived(
   // precedence over the edition unpredictable [R72].
   const { extendsChain } = extendsChainFor({ engineRoot, instanceRoot, edition });
   setExtends(doc, extendsChain);
-  writeDerivedDoc(derivedPath, doc);
+  writeDerivedDoc(derivedPath, doc, journalStamp);
 
   const resolvedProject = await edge.loadProject(paperRoot, DERIVED_CONFIG_FILE);
 
@@ -151,7 +155,7 @@ export async function materializeDerived(
   // Pass 2 sets the export's `template` and `output` [R71-out]. Without it, myst would take the
   // output path from the file that declares the export, a path the build never writes.
   applyOwnOverride(doc, result.ownOverride);
-  writeDerivedDoc(derivedPath, doc);
+  writeDerivedDoc(derivedPath, doc, journalStamp);
 
   return { resolvedProject, derivedPath, extendsChain, edition, warnings: result.warnings };
 }

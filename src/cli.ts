@@ -19,6 +19,7 @@ import { execFileSync } from 'node:child_process';
 import { parseDocument } from 'yaml';
 import type { ComposeInput } from './compose.js';
 import type { MaterializeInput, StartOpts } from './materialize.js';
+import type { JournalStamp } from './yaml-io.js';
 import * as msg from './messages.js';
 import { annotate, inCI, UserError } from './messages.js';
 
@@ -101,6 +102,9 @@ function assetOverridesFrom(argv: string[]): ComposeInput['assetOverrides'] {
   };
 }
 
+/** The journal repo a verb composes from, and how the derived config records it. */
+type ResolvedInstance = { root: string | null; stamp: JournalStamp };
+
 /**
  * Where the journal repo is [R38]: none with `--no-instance`, else `--instance`, else this repo
  * when a `journal.yml` sits beside the paper, else a cached clone of pins.yml's `instance_repo`.
@@ -108,27 +112,29 @@ function assetOverridesFrom(argv: string[]): ComposeInput['assetOverrides'] {
  * `--instance` (`instance_repo: .`). Only a local run reaches the clone: CI passes `--instance`
  * (ci/run.sh).
  *
- * Returns a root or an error string and never exits, so `oak validate` can report the error.
+ * Returns a root, with the {@link JournalStamp} the derived config records for it, or an error
+ * string, and never exits, so `oak validate` can report the error.
  */
 async function resolveInstanceRoot(
   argv: string[],
   paperRoot: string,
-  verb: 'build' | 'start' | 'validate',
-): Promise<{ root: string | null } | { error: string }> {
-  if (has(argv, 'no-instance')) return { root: null };
+  verb: 'build' | 'start' | 'validate' | 'release',
+): Promise<ResolvedInstance | { error: string }> {
+  if (has(argv, 'no-instance')) return { root: null, stamp: { kind: 'none' } };
   const explicit = flag(argv, 'instance');
   // Refused, since the error below would ask for the flag that was just passed.
   if (explicit === '') throw new UserError(msg.flagNeedsValue('instance'));
-  if (explicit) return { root: resolve(explicit) };
-  if (existsSync(join(paperRoot, 'journal.yml'))) return { root: paperRoot };
+  const { cachedJournal, journalStamp } = await import('./gh.js');
+  const found = (root: string) => ({ root, stamp: journalStamp(root, paperRoot) });
+  if (explicit) return found(resolve(explicit));
+  if (existsSync(join(paperRoot, 'journal.yml'))) return found(paperRoot);
   const journalRepo = readPin(paperRoot, 'instance_repo');
   if (!journalRepo || journalRepo === '.') return { error: msg.build.noInstance(verb, paperRoot) };
-  const { cachedJournal } = await import('./gh.js');
   try {
     const cache = cachedJournal(journalRepo, paperRoot);
     const line = msg.build.journalCache(verb, journalRepo, cache);
     process.stderr.write((cache.state === 'stale' ? annotate('warning', line) : line) + '\n');
-    return { root: cache.root };
+    return found(cache.root);
   } catch (err) {
     const why = err instanceof Error ? err.message : String(err);
     return { error: msg.build.instanceCloneFailed(verb, journalRepo, why) };
@@ -163,12 +169,13 @@ function isJournalRepo(root: string): boolean {
 function materializeInputFrom(
   argv: string[],
   paperRoot: string,
-  instanceRoot: string | null,
+  instance: ResolvedInstance,
 ): Omit<MaterializeInput, 'edge'> {
   return {
     paperRoot,
     engineRoot: engineRoot(),
-    instanceRoot,
+    instanceRoot: instance.root,
+    journalStamp: instance.stamp,
     engineRepo: flag(argv, 'engine-repo') ?? readEngineRepo(paperRoot),
     baseUrl: flag(argv, 'base-url') ?? '',
     assetOverrides: assetOverridesFrom(argv),
@@ -192,7 +199,7 @@ async function buildPaper(argv: string[]): Promise<{ paperRoot: string; resolved
   const { runBuild } = await import('./build.js');
   const { createMystEdge } = await import('./myst.js');
   const res = await runBuild({
-    ...materializeInputFrom(argv, paperRoot, resolved.root),
+    ...materializeInputFrom(argv, paperRoot, resolved),
     // --exports-only builds only the typst PDF, offline; --no-exports only the HTML.
     buildOpts: has(argv, 'exports-only')
       ? { exportsOnly: true }
@@ -329,7 +336,7 @@ async function cmdStart(argv: string[]): Promise<number> {
   const pdfPath = join(paperRoot, TYPST_OUTPUT);
   // myst start builds no PDF, so the download is offered only once `oak build` has made one.
   const inputNow = () => ({
-    ...materializeInputFrom(argv, paperRoot, resolved.root),
+    ...materializeInputFrom(argv, paperRoot, resolved),
     pdfDownload: existsSync(pdfPath),
     edge,
   });
@@ -577,6 +584,13 @@ async function cmdRelease(argv: string[]): Promise<number> {
     return 2;
   }
 
+  // Found as the build found it, so the deposit archives that journal and reads its `zenodo:`.
+  const instance = await resolveInstanceRoot(argv, paperRoot, 'release');
+  if ('error' in instance) {
+    process.stderr.write(instance.error + '\n');
+    return 2;
+  }
+
   const api = new z.ZenodoApi(z.createFetchTransport(), sandbox, token);
   const bundleOut = resolve(flag(argv, 'bundle-out') ?? '_bundle');
   const out = await z.cmdPublish({
@@ -587,7 +601,7 @@ async function cmdRelease(argv: string[]): Promise<number> {
     bundleOut,
     api,
     git: gh.realGitContext,
-    instanceRoot: instanceRootOf(argv),
+    instanceRoot: instance.root,
     engineRoot: engineRoot(),
   });
   emit(argv, out.result);
@@ -828,7 +842,7 @@ async function cmdValidate(argv: string[]): Promise<number> {
         // The inputs `oak build` composes from, spread from the same builder so a field added for
         // build reaches validate too [R82]. The [R72] check also needs oak's checkout and the
         // edition; without both, validate reads the author's config and says so.
-        ...materializeInputFrom(argv, paperRoot, instanceRoot),
+        ...materializeInputFrom(argv, paperRoot, resolved),
         edge: createMystEdge(),
         edition: readEditionQuietly(paperRoot),
       },

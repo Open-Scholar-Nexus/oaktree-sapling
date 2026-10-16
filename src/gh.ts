@@ -20,6 +20,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { parseDocument } from 'yaml';
 import type { GitContext } from './zenodo.js';
+import type { JournalStamp } from './yaml-io.js';
 import { LABEL_ZENODO_FAILED, type GhPr, type PagesDeployer } from './preview.js';
 import type { CheckRun } from './checks.js';
 import type { EnvironmentReviewer, Provisioner } from './bootstrap.js';
@@ -193,8 +194,20 @@ export const realGitContext: GitContext = {
   async headSha(repoRoot) {
     return git(repoRoot, ['rev-parse', 'HEAD']);
   },
-  async gitArchive(repoRoot, outZip) {
-    git(repoRoot, ['archive', '--format=zip', '-o', outZip, 'HEAD']);
+  async gitArchive(repoRoot, outZip, commit = 'HEAD') {
+    git(repoRoot, ['archive', '--format=zip', '-o', outZip, commit]);
+  },
+  async fetchCommit(repoRoot, commit) {
+    if (!COMMIT_ID.test(commit)) throw new Error(`not a full commit id: ${commit}`);
+    try {
+      git(repoRoot, ['cat-file', '-e', `${commit}^{commit}`], { quiet: true });
+    } catch {
+      // A shallow clone of the default branch lacks a commit the branch has since moved past.
+      git(repoRoot, ['fetch', '--depth', '1', '--quiet', 'origin', commit]);
+    }
+  },
+  async originRepo(repoRoot) {
+    return originRepo(repoRoot);
   },
   async reviewPr(repoRoot, sha) {
     // The tagged commit's pull request, from the API [R35.2].
@@ -210,6 +223,28 @@ export const realGitContext: GitContext = {
     }
   },
 };
+
+/** A full commit id, the only form `fetchCommit` passes to git: the value comes from the build
+ *  job's artifact, which the paper's code could have written. */
+const COMMIT_ID = /^([0-9a-f]{40}|[0-9a-f]{64})$/;
+
+/**
+ * Which journal checkout `instanceRoot` is, for the derived config's banner ({@link JournalStamp}).
+ * Untracked files count as uncommitted: `git archive` leaves them out.
+ */
+export function journalStamp(instanceRoot: string | null, paperRoot: string): JournalStamp {
+  if (instanceRoot === null) return { kind: 'none' };
+  if (resolve(instanceRoot) === resolve(paperRoot)) return { kind: 'paper' };
+  try {
+    const commit = git(instanceRoot, ['rev-parse', 'HEAD'], { quiet: true });
+    if (git(instanceRoot, ['status', '--porcelain', '--', '.'], { quiet: true })) {
+      return { kind: 'uncommitted' };
+    }
+    return { kind: 'commit', commit, repo: originRepo(instanceRoot) };
+  } catch {
+    return { kind: 'uncommitted' };
+  }
+}
 
 /** owner/repo from the origin remote, or null. */
 export function originRepo(repoRoot: string): string | null {
@@ -919,14 +954,14 @@ function sameTreeAsRemote(repoRoot: string, branch: string): boolean {
   );
 }
 
-/** A value from the test repo's `myst.yml` on the default branch, read through the
+/** A value from a YAML file in the test repo on the default branch, read through the
  *  Contents API, so no clone is needed. null when absent or unreadable. */
-function committedMystValue(repo: string, path: string[]): string | null {
+function committedYamlValue(repo: string, file: string, path: string[]): string | null {
   let content: string;
   try {
-    content = gh(['api', `repos/${repo}/contents/myst.yml`, '--jq', '.content'], { quiet: true });
+    content = gh(['api', `repos/${repo}/contents/${file}`, '--jq', '.content'], { quiet: true });
   } catch {
-    return null; // no myst.yml / no read access
+    return null; // no such file / no read access
   }
   if (!content) return null;
   // GitHub wraps the base64 in newlines; Buffer ignores them.
@@ -1111,10 +1146,18 @@ export const realConformanceGh: ConformanceGh = {
     return out ? (JSON.parse(out) as string[]) : [];
   },
   committedDoi(repo) {
-    return committedMystValue(repo, ['project', 'doi']);
+    return committedYamlValue(repo, 'myst.yml', ['project', 'doi']);
   },
   committedEngineVersion(repo) {
-    return committedMystValue(repo, ['project', 'options', 'oaktree-sapling', 'version']);
+    return committedYamlValue(repo, 'myst.yml', [
+      'project',
+      'options',
+      'oaktree-sapling',
+      'version',
+    ]);
+  },
+  committedJournalRepo(repo) {
+    return committedYamlValue(repo, '.github/actions/engine/pins.yml', ['instance_repo']);
   },
   defaultBranchSha(repo) {
     return gh(['api', `repos/${repo}/git/ref/heads/main`, '--jq', '.object.sha']);

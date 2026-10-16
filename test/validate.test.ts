@@ -154,8 +154,8 @@ describe('checkDepositNames [R28]', () => {
     expect(out[0]!.message).not.toContain('"data.csv"');
   });
 
-  it('covers the conditional template.zip, not just the always-present five', () => {
-    expect(checkDepositNames({ paperRoot: '/paper' }, depositOf('template.zip'))).toHaveLength(1);
+  it.each(['template.zip', 'journal.zip', 'myst.oak.yml'])('covers %s', (name) => {
+    expect(checkDepositNames({ paperRoot: '/paper' }, depositOf(name))).toHaveLength(1);
   });
 
   it('passes a deposit/ of ordinary supplements, and an absent one', () => {

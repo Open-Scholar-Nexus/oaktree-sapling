@@ -162,7 +162,7 @@ export const usage = (): string =>
   `  oak deposit prepare --repo <owner/repo> [--site-url <url>] [--sandbox] [--instance <dir>]\n` +
   `  oak deposit publish --pdf <path> --tag <vX.Y.Z> [--site-url <url>] [--sandbox] [--instance <dir>]\n` +
   `  oak deposit status  [--sandbox] [--instance <dir>]\n` +
-  `  oak release --tag <vX.Y.Z> [--no-build] [--paper <dir>] [--instance <dir>] [--site-url <url>]\n` +
+  `  oak release --tag <vX.Y.Z> [--no-build] [--paper <dir>] [--instance <dir> | --no-instance] [--site-url <url>]\n` +
   `  oak conformance reset   --repo <owner/name>\n` +
   `  oak conformance run   --repo <owner/name> --tag <vX.Y.Z> [--fork-repo <owner/name>]\n` +
   `\n` +
@@ -547,7 +547,7 @@ export const build = {
     `It names a file (editions/<edition>.yml), so it must be a plain name: letters, digits, . _ -`,
   /** No journal repo found: pins.yml names none (`instance_repo: .` or absent, which means the
    *  same) and no journal.yml sits beside the paper. */
-  noInstance: (verb: 'build' | 'start' | 'validate', paperRoot: string): string =>
+  noInstance: (verb: 'build' | 'start' | 'validate' | 'release', paperRoot: string): string =>
     `oak ${verb}: no journal repo found. .github/actions/engine/pins.yml names none ` +
     `(\`instance_repo: "."\` means the journal.yml sits in this repo), and there is no ` +
     `journal.yml at ${paperRoot}.\n` +
@@ -559,7 +559,7 @@ export const build = {
 
   /** Where a local run without `--instance` got the journal settings ({@link JournalCache}). */
   journalCache: (
-    verb: 'build' | 'start' | 'validate',
+    verb: 'build' | 'start' | 'validate' | 'release',
     journalRepo: string,
     cache: JournalCache,
   ): string => {
@@ -586,7 +586,7 @@ export const build = {
   },
 
   instanceCloneFailed: (
-    verb: 'build' | 'start' | 'validate',
+    verb: 'build' | 'start' | 'validate' | 'release',
     journalRepo: string,
     why: string,
   ): string =>
@@ -893,6 +893,23 @@ export const workflow = {
   depositDoiPrOpened: (url: string): string => `deposit prepare: opened DOI PR ${url}`,
   depositDoiPrFailed: (message: string): string =>
     `deposit prepare: DOI PR not opened (${message})`,
+
+  // journal.zip: the journal commit the build recorded in myst.oak.yml
+  depositJournalUnstamped:
+    `myst.oak.yml does not say which journal commit the PDF was built from, so the deposit ` +
+    `cannot archive it. Build this working tree with oak before depositing.`,
+  depositJournalUncommitted:
+    `the PDF was built from journal files no commit holds (local changes, or not a git ` +
+    `checkout), so the deposit cannot archive them. Commit them in the journal repo and build again.`,
+  depositJournalNotGiven: (at: string): string =>
+    `the PDF was built from the journal at ${at}. Pass --instance <a clone of that repo> so ` +
+    `the deposit can archive it.`,
+  depositJournalOtherRepo: (built: string, given: string): string =>
+    `the PDF was built from the journal ${built}, but --instance is a clone of ${given}. Pass a ` +
+    `clone of ${built}.`,
+  depositJournalUnfetchable: (at: string, why: string): string =>
+    `the journal commit the PDF was built from (${at}) could not be fetched (${why}). Re-run ` +
+    `the whole workflow, so the build and the deposit read the same journal commit.`,
 
   /** The DOI pull request `gh.openDoiPr` opens. GitHub holds the checks on a pull request a
    *  workflow opens, and approving them does not run the preview, so the body says what the

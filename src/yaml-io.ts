@@ -23,6 +23,49 @@ const DERIVED_BANNER =
   ' Your config is `myst.yml`; this is it composed with the engine/edition/brand chain.\n' +
   ' Regenerated on every build; safe to delete.';
 
+/**
+ * The journal checkout a build composed from, recorded in the derived config's banner so the
+ * deposit archives that commit [R66]:
+ *  - `none`: built with `--no-instance`.
+ *  - `paper`: the paper repo is its own journal (`instance_repo: "."`), so `source.zip` holds it.
+ *  - `commit`: a clean git checkout at `commit`; `repo` is its GitHub origin, when it has one.
+ *  - `uncommitted`: files no commit holds (not a git checkout, or local changes).
+ */
+export type JournalStamp =
+  | { kind: 'none' }
+  | { kind: 'paper' }
+  | { kind: 'commit'; commit: string; repo: string | null }
+  | { kind: 'uncommitted' };
+
+const JOURNAL_LINE = /^ ?journal: (.*)$/m;
+const JOURNAL_COMMIT = /^(?:([A-Za-z0-9._-]+\/[A-Za-z0-9._-]+)@)?([0-9a-f]{40}|[0-9a-f]{64})$/;
+
+/** The banner line for `stamp`: `journal: none`, `.`, `uncommitted`, or `[<owner/repo>@]<sha>`. */
+export function journalStampLine(stamp: JournalStamp): string {
+  const value =
+    stamp.kind === 'none'
+      ? 'none'
+      : stamp.kind === 'paper'
+        ? '.'
+        : stamp.kind === 'uncommitted'
+          ? 'uncommitted'
+          : `${stamp.repo ? `${stamp.repo}@` : ''}${stamp.commit}`;
+  return ` journal: ${value}`;
+}
+
+/** The journal stamp in `<paperRoot>/myst.oak.yml`; undefined when the file or its line is
+ *  absent, or the line is unreadable. */
+export function readJournalStamp(paperRoot: string): JournalStamp | undefined {
+  const path = join(paperRoot, DERIVED_CONFIG_FILE);
+  if (!existsSync(path)) return undefined;
+  const value = JOURNAL_LINE.exec(readDoc(path).commentBefore ?? '')?.[1]?.trim();
+  if (value === 'none') return { kind: 'none' };
+  if (value === '.') return { kind: 'paper' };
+  if (value === 'uncommitted') return { kind: 'uncommitted' };
+  const m = JOURNAL_COMMIT.exec(value ?? '');
+  return m ? { kind: 'commit', commit: m[2]!, repo: m[1] ?? null } : undefined;
+}
+
 export function readDoc(path: string): Document {
   return parseDocument(readFileSync(path, 'utf8'));
 }
@@ -31,9 +74,10 @@ export function writeDoc(path: string, doc: Document): void {
   writeFileSync(path, doc.toString());
 }
 
-/** Writes the derived config with a banner saying it is generated from `myst.yml`. */
-export function writeDerivedDoc(path: string, doc: Document): void {
-  doc.commentBefore = DERIVED_BANNER;
+/** Writes the derived config with a banner saying it is generated from `myst.yml`, and which
+ *  journal it was composed from when `journal` is given. */
+export function writeDerivedDoc(path: string, doc: Document, journal?: JournalStamp): void {
+  doc.commentBefore = journal ? `${DERIVED_BANNER}\n${journalStampLine(journal)}` : DERIVED_BANNER;
   writeFileSync(path, doc.toString());
 }
 

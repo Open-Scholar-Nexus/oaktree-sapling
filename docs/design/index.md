@@ -38,10 +38,10 @@ Everything else is worked out when the paper builds. `oak build` assembles this 
 
 Both external repositories are fetched before the engine runs: oaktree-sapling at the version the paper pinned, the journal repository at its default branch[^pinning]. When MyST runs (resolving the generated `extend` chain) every entry is a local path.
 
-[^pinning]: The journal repository is deliberately not pinned. A new logo or an extra editorial check reaches every paper on its next build, with nobody re-pinning anything. The price is that rebuilding a published paper does not reproduce the original build, because it picks up the journal's settings as they stand today. 
+[^pinning]: The journal repository is deliberately not pinned. A new logo or an extra editorial check reaches every paper on its next build, with nobody re-pinning anything. The price is that rebuilding a published paper from its repositories does not reproduce the original build, because it picks up the journal's settings as they stand today. The Zenodo deposit is the copy that reproduces the PDF: it holds the journal repository at the commit the build used ([what a deposit carries](#design-releases-deposit)).
 
 (r71)=
-The assembled result is written to **`myst.oak.yml`**, next to the paper's `myst.yml`, and MyST is pointed at that file instead[^compose]. It opens with a banner saying it is generated, the paper template gitignores it, and it is rewritten on every build.[^cleanup]
+The assembled result is written to **`myst.oak.yml`**, next to the paper's `myst.yml`, and MyST is pointed at that file instead[^compose]. It opens with a banner saying it is generated and naming the journal commit it was assembled from, the paper template gitignores it, and it is rewritten on every build.[^cleanup]
 
 ## The pages here
 
