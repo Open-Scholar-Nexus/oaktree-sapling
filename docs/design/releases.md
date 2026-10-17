@@ -29,13 +29,44 @@ These were considered and rejected:
 
 ## What is committed with the build
 
-A deposited PDF is rendered again from `engine.zip`, so everything it needs has to be in git at the tag. The PDF template already is, under `templates/typst`. Typst is a binary from its own GitHub releases, so the release script commits it as `bin/typst`. The web theme is downloaded at build time, because a deposit carries the PDF and not the website.
+A deposited PDF is rendered again with oak from `engine.zip` ([below](#design-releases-deposit)), so everything oak needs for it has to be in git at the tag. The PDF template already is, under `templates/typst`. Typst is a binary from its own GitHub releases, so the release script commits it as `bin/typst`. The web theme is downloaded at build time, because a deposit carries the PDF and not the website.
 
 The release script downloads typst at the version in `typst.version` and runs the tests with it, so the binary that ships is the one the tests used. Bumping typst means editing `typst.version` and making a release, and it reaches a paper through the same version pin as any other change to oak.
 
 `bin/typst` is built for linux x86_64 (musl) only, which is what CI uses: every workflow in this repository and in the paper templates runs on `ubuntu-latest`. So a deposited PDF renders again with nothing fetched on that platform only. On macOS or arm64 the PDF export uses the system typst[^exec].
 
 [^exec]: A Linux binary keeps its executable bit on macOS, so `ci/run.sh` runs `bin/typst --version` before putting it on `PATH`. Checking `-x` alone would put a binary that fails with `Exec format error` ahead of a working one.
+
+(design-releases-deposit)=
+
+## What a deposit carries
+
+A deposit holds the PDF and what it was rendered from. To render the PDF again with nothing fetched from GitHub, unzip `engine.zip`, `journal.zip` and `source.zip` into three folders, and from the paper's folder run:
+
+```sh
+node <engine>/dist/cli.cjs build --instance <journal> --exports-only
+```
+
+When the deposit has a `template.zip`, unzip it too and add `--typst-template <template>`. [`--exports-only`](#build) builds the PDF without the website, whose theme is downloaded. For a paper that is its own journal[^own-journal], leave out `--instance`: oak finds `journal.yml` beside the paper.
+
+| file | holds |
+|---|---|
+| `paper.pdf` | the PDF |
+| `source.zip` | the paper repository at the tagged commit |
+| `myst.yml` | the paper's own config |
+| `myst.oak.yml` | the config the build assembled, kept as a record: its paths are the build machine's |
+| `engine.zip` | oak at the version the paper pins, with typst and oak's PDF template |
+| `journal.zip` | the journal repository at the commit the build used |
+| `template.zip` | the PDF template, when it is the journal's or the author's |
+| `publication-provenance.json` | the paper's and the journal's repository and commit, the DOIs, and the typst version |
+
+The files in the paper's `deposit/` folder are added beside them, and these names are reserved.
+
+`journal.zip` holds the journal commit the build used, which the build records in `myst.oak.yml` under `project.options.oaktree-sapling.journal`. The deposit runs in a job of its own and fetches that commit, so the archive matches the PDF even when the journal has changed since the build, as when a failed deposit job is re-run days later. The record's Zenodo metadata follows the journal's `zenodo:` settings as they are when the deposit runs. A build from journal files that are not a commit of their own repository, such as local changes, cannot be deposited.
+
+A paper repository that is its own journal (`instance_repo: "."` in `pins.yml`)[^own-journal] gets no `journal.zip`, because its journal files are in `source.zip` at the same commit; the provenance names the paper's repository and commit as the journal's. A paper built with `--no-instance` has no journal to archive.
+
+[^own-journal]: Planned, in development.
 
 (r114)=
 

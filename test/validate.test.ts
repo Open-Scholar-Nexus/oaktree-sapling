@@ -154,8 +154,8 @@ describe('checkDepositNames [R28]', () => {
     expect(out[0]!.message).not.toContain('"data.csv"');
   });
 
-  it('covers the conditional template.zip, not just the always-present five', () => {
-    expect(checkDepositNames({ paperRoot: '/paper' }, depositOf('template.zip'))).toHaveLength(1);
+  it.each(['template.zip', 'journal.zip', 'myst.oak.yml'])('covers %s', (name) => {
+    expect(checkDepositNames({ paperRoot: '/paper' }, depositOf(name))).toHaveLength(1);
   });
 
   it('passes a deposit/ of ordinary supplements, and an absent one', () => {
@@ -649,6 +649,21 @@ describe("the author's template is read from their myst.yml, not from the compos
       allTrue,
     );
     expect(findings.some((f) => f.check === 'template-override')).toBe(true);
+  });
+
+  it("warns when the author's myst.yml sets the journal stamp oak writes", () => {
+    const paperRoot = tmpDir({
+      'myst.yml':
+        'version: 1\nproject:\n  id: j-2026-x\n  options:\n    oaktree-sapling:\n      journal: { repo: "." }\n',
+    });
+    const findings = runLayerA(
+      { paperRoot, instanceRoot: journalInstance(), project: composedProject, repo: null },
+      allTrue,
+    );
+    expect(findings.find((f) => f.check === 'journal-stamp')).toMatchObject({
+      severity: 'warn',
+      klass: 'config',
+    });
   });
 });
 

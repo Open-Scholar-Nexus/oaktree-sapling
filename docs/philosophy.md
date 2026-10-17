@@ -30,7 +30,7 @@ GitHub also builds each paper and hosts its website, so the journal has no serve
 
 Publishing a version deposits it to [Zenodo](https://zenodo.org), which gives it a DOI and keeps a copy that outlives both the GitHub repository and the journal[^archive]. Zenodo is run by CERN.
 
-[^archive]: Each paper gets one DOI that always resolves to its latest version, and each version gets its own. [Zenodo's policies](https://about.zenodo.org/policies/) keep records for as long as Zenodo runs, which is tied to CERN's lifetime, and promise best efforts to move them to another archive if it ever closes. A deposit holds the PDF, the paper's source and the version of the engine that built it, so the paper can be read and rebuilt without GitHub.
+[^archive]: Each paper gets one DOI that always resolves to its latest version, and each version gets its own. [Zenodo's policies](https://about.zenodo.org/policies/) keep records for as long as Zenodo runs, which is tied to CERN's lifetime, and promise best efforts to move them to another archive if it ever closes. A deposit holds the PDF, the paper's source, and the engine and journal settings that built it, so the paper can be read and rebuilt without GitHub.
 
 ## Alternatives
 

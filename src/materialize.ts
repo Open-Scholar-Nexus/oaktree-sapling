@@ -15,7 +15,9 @@ import {
   readBrandAssetOptions,
   readJournalTypstTemplate,
   DERIVED_CONFIG_FILE,
+  dropJournalStamp,
 } from './yaml-io.js';
+import type { JournalStamp } from './schema.js';
 
 export interface BuildOpts {
   all?: boolean;
@@ -62,6 +64,8 @@ export interface MaterializeInput {
   paperRoot: string;
   engineRoot: string;
   instanceRoot: string | null;
+  /** Which journal checkout `instanceRoot` is, for the derived config ({@link JournalStamp}). */
+  journalStamp?: JournalStamp;
   engineRepo: string;
   baseUrl: string;
   assetOverrides?: ComposeInput['assetOverrides'];
@@ -98,6 +102,7 @@ export async function materializeDerived(
     paperRoot,
     engineRoot,
     instanceRoot,
+    journalStamp,
     engineRepo,
     baseUrl,
     assetOverrides,
@@ -119,6 +124,8 @@ export async function materializeDerived(
   // precedence over the edition unpredictable [R72].
   const { extendsChain } = extendsChainFor({ engineRoot, instanceRoot, edition });
   setExtends(doc, extendsChain);
+  // The journal stamp is oak's to write; `oak validate` warns about an author's.
+  dropJournalStamp(doc);
   writeDerivedDoc(derivedPath, doc);
 
   const resolvedProject = await edge.loadProject(paperRoot, DERIVED_CONFIG_FILE);
@@ -146,6 +153,7 @@ export async function materializeDerived(
     pdfDownload,
     brandAssets,
     journalTypstTemplate,
+    journal: journalStamp,
   });
 
   // Pass 2 sets the export's `template` and `output` [R71-out]. Without it, myst would take the

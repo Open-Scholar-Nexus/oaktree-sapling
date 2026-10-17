@@ -144,11 +144,12 @@ export const usage = (): string =>
   `                    move a paper repo to a newer engine version, as a pull request\n` +
   `\n` +
   `Working on a paper\n` +
-  `  oak validate [--paper <dir>] [--instance <dir> | --no-instance] [--strict] [--report <path>]\n` +
+  `  oak validate [--paper <dir>] [--instance <dir> | --no-instance] [--typst-template <dir>] [--strict] [--report <path>]\n` +
   `                    run the journal's checks over a manuscript and report what fails\n` +
   `  oak build   [--paper <dir>] [--instance <dir> | --no-instance] [--base-url <url>] [--no-site-template]\n` +
+  `              [--exports-only | --no-exports] [--typst-template <dir>]\n` +
   `                    build the paper's website + PDF into _build/\n` +
-  `  oak start   [--paper <dir>] [--instance <dir> | --no-instance] [--port <n>] [--server-port <n>]\n` +
+  `  oak start   [--paper <dir>] [--instance <dir> | --no-instance] [--typst-template <dir>] [--port <n>] [--server-port <n>]\n` +
   `                    run mystmd's live preview of the paper, with the journal's settings\n` +
   `                    and branding applied (the same config its CI builds). Reloads as you\n` +
   `                    edit; Ctrl-C stops it. Run in the journal repo, it previews the\n` +
@@ -162,7 +163,7 @@ export const usage = (): string =>
   `  oak deposit prepare --repo <owner/repo> [--site-url <url>] [--sandbox] [--instance <dir>]\n` +
   `  oak deposit publish --pdf <path> --tag <vX.Y.Z> [--site-url <url>] [--sandbox] [--instance <dir>]\n` +
   `  oak deposit status  [--sandbox] [--instance <dir>]\n` +
-  `  oak release --tag <vX.Y.Z> [--no-build] [--paper <dir>] [--instance <dir>] [--site-url <url>]\n` +
+  `  oak release --tag <vX.Y.Z> [--no-build] [--paper <dir>] [--instance <dir> | --no-instance] [--site-url <url>]\n` +
   `  oak conformance reset   --repo <owner/name>\n` +
   `  oak conformance run   --repo <owner/name> --tag <vX.Y.Z> [--fork-repo <owner/name>]\n` +
   `\n` +
@@ -511,6 +512,9 @@ export const upgrade = {
  * oak build / oak start
  * ═════════════════════════════════════════════════════════════════════════════════════════ */
 
+/** The verbs that find a journal repo the way `oak build` does. */
+export type JournalVerb = 'build' | 'start' | 'validate' | 'release';
+
 export const build = {
   done: (id: string): string => `oak build: done (id=${id})`,
   placeholder:
@@ -547,7 +551,7 @@ export const build = {
     `It names a file (editions/<edition>.yml), so it must be a plain name: letters, digits, . _ -`,
   /** No journal repo found: pins.yml names none (`instance_repo: .` or absent, which means the
    *  same) and no journal.yml sits beside the paper. */
-  noInstance: (verb: 'build' | 'start' | 'validate', paperRoot: string): string =>
+  noInstance: (verb: JournalVerb, paperRoot: string): string =>
     `oak ${verb}: no journal repo found. .github/actions/engine/pins.yml names none ` +
     `(\`instance_repo: "."\` means the journal.yml sits in this repo), and there is no ` +
     `journal.yml at ${paperRoot}.\n` +
@@ -558,11 +562,7 @@ export const build = {
     `See ${docsUrl(DOCS.paperJournalLink)}`,
 
   /** Where a local run without `--instance` got the journal settings ({@link JournalCache}). */
-  journalCache: (
-    verb: 'build' | 'start' | 'validate',
-    journalRepo: string,
-    cache: JournalCache,
-  ): string => {
+  journalCache: (verb: JournalVerb, journalRepo: string, cache: JournalCache): string => {
     const head = `oak ${verb}: `;
     switch (cache.state) {
       case 'cloned':
@@ -585,11 +585,7 @@ export const build = {
     }
   },
 
-  instanceCloneFailed: (
-    verb: 'build' | 'start' | 'validate',
-    journalRepo: string,
-    why: string,
-  ): string =>
+  instanceCloneFailed: (verb: JournalVerb, journalRepo: string, why: string): string =>
     `oak ${verb}: could not clone the journal ${journalRepo} named in .github/actions/engine/pins.yml ` +
     `(${why}). Pass --instance <path to a clone of the journal>, or --no-instance to go ` +
     `without its settings. See ${docsUrl(DOCS.paperPreviewLocally)}`,
@@ -736,6 +732,9 @@ export const validate = {
     `thumbnail "${thumbnail}" does not resolve to a file under the paper root; the ` +
     `paper will ship with NO thumbnail (a declared thumbnail disables myst's ` +
     `first-image fallback) and its gallery card renders blank`,
+  journalStampSet:
+    `myst.yml sets project.options.oaktree-sapling.journal, which oak writes itself when it ` +
+    `builds. Remove it from myst.yml.`,
   templateOverride: (authorTemplate: string, journalTemplate?: string): string =>
     `this paper declares its own typst template ("${authorTemplate}"), overriding ` +
     (journalTemplate ? `the journal's ("${journalTemplate}").` : "oaktree-sapling's."),
@@ -893,6 +892,24 @@ export const workflow = {
   depositDoiPrOpened: (url: string): string => `deposit prepare: opened DOI PR ${url}`,
   depositDoiPrFailed: (message: string): string =>
     `deposit prepare: DOI PR not opened (${message})`,
+
+  // journal.zip: the journal commit the build recorded in myst.oak.yml
+  depositJournalUnstamped:
+    `myst.oak.yml does not say which journal commit the PDF was built from, so the deposit ` +
+    `cannot archive it. Build this working tree with oak before depositing.`,
+  depositJournalUncommitted:
+    `the PDF was built from journal files that are not a commit of their own repo (local ` +
+    `changes, a folder inside a larger repo, or not a git checkout), so the deposit cannot ` +
+    `archive them. Build again from a clean clone of the journal repo.`,
+  depositJournalNotGiven: (at: string): string =>
+    `the PDF was built from the journal at ${at}. Pass --instance <a clone of that repo> so ` +
+    `the deposit can archive it.`,
+  depositJournalOtherRepo: (built: string, given: string): string =>
+    `the PDF was built from the journal ${built}, but --instance is a clone of ${given}. Pass a ` +
+    `clone of ${built}.`,
+  depositJournalUnfetchable: (at: string, why: string): string =>
+    `the journal commit the PDF was built from (${at}) could not be fetched (${why}). Re-run ` +
+    `the whole workflow, so the build and the deposit read the same journal commit.`,
 
   /** The DOI pull request `gh.openDoiPr` opens. GitHub holds the checks on a pull request a
    *  workflow opens, and approving them does not run the preview, so the body says what the

@@ -75,6 +75,10 @@ const fakeGit: GitContext = {
   async reviewPr() {
     return '42';
   },
+  async fetchCommit() {},
+  async originRepo() {
+    return null;
+  },
 };
 
 const dep = (over: Partial<Deposition> = {}): Deposition => ({
@@ -236,12 +240,14 @@ describe('buildBundle', () => {
     concept_doi: 'd',
     version_doi: 'v',
     review_pr: '42',
+    journal_repo: null,
+    journal_commit: null,
     built_at: 'now',
     platform: 'linux-x86_64',
     typst_version: '0.14.2',
   };
 
-  it('adds the five fixed files (incl. engine.zip) plus deposit/ files verbatim', async () => {
+  it('adds the fixed files (incl. engine.zip) plus deposit/ files verbatim', async () => {
     const root = paperWithDeposit({ 'data.csv': '1,2,3', 'extra.txt': 'hi' });
     const out = join(root, '_bundle');
     const files = (await buildBundle(out, join(root, 'paper.pdf'), root, root, prov, fakeGit)).map(
@@ -622,6 +628,8 @@ const PROVENANCE = {
   concept_doi: 'd',
   version_doi: 'v',
   review_pr: null,
+  journal_repo: null,
+  journal_commit: null,
   built_at: 'now',
   platform: 'linux-x86_64',
   typst_version: '0.14.2',
@@ -780,4 +788,169 @@ describe('finding the deposit, and the checks before it [R100] [R101]', () => {
     expect(JSON.stringify(out.result)).toContain('source.zip');
     expect(calls.length, 'nothing may reach Zenodo before the tree is judged').toBe(0);
   });
+});
+
+/* --------------------------------------------------------------------------
+ * The journal the build used, archived as journal.zip [R66]
+ * ------------------------------------------------------------------------ */
+
+describe('journal.zip', () => {
+  const COMMIT = 'a'.repeat(40);
+
+  const STAMPED = { repo: 'o/journal', commit: COMMIT };
+
+  /** A paper tree as `oak build` leaves it, with `journal` as the derived config's stamp. */
+  function builtPaper(journal?: unknown): string {
+    const mystPath = paperRepo(
+      BARE_MYST + '  doi: 10.5072/zenodo.5\n  github: https://github.com/o/r\n',
+    );
+    const root = mystPath.replace('myst.yml', '');
+    writeFileSync(join(root, 'paper.pdf'), '%PDF');
+    withBuild(mystPath);
+    const doc = parseDocument('version: 1\n');
+    doc.setIn(['project', 'options', 'oaktree-sapling'], { version: 'v1.0.0', edition: 'e' });
+    if (journal !== undefined) {
+      doc.setIn(['project', 'options', 'oaktree-sapling', 'journal'], journal);
+    }
+    writeFileSync(join(root, 'myst.oak.yml'), doc.toString());
+    return root;
+  }
+
+  /** A git context recording what was fetched and archived, with `origin` as the journal's. */
+  function recordingGit(origin: string | null, fetchFails = false) {
+    const fetched: string[] = [];
+    const archived: Array<{ root: string; zip: string; commit: string }> = [];
+    const git: GitContext = {
+      ...fakeGit,
+      async gitArchive(root, outZip, commit = 'HEAD') {
+        archived.push({ root, zip: outZip.split('/').pop()!, commit });
+        await fakeGit.gitArchive(root, outZip);
+      },
+      async fetchCommit(_root, commit) {
+        if (fetchFails) throw new Error('not our ref');
+        fetched.push(commit);
+      },
+      async originRepo() {
+        return origin;
+      },
+    };
+    return { git, fetched, archived };
+  }
+
+  /** A Zenodo fake that accepts the publish and records the uploads and every call. */
+  function zenodo() {
+    const uploaded: string[] = [];
+    const provenance: Array<Record<string, unknown>> = [];
+    const { transport, calls } = fakeTransport((r) => {
+      if (r.method === 'GET' && r.url.includes('/deposit/depositions/')) {
+        return { json: dep({ id: 5, conceptrecid: 5, submitted: false }) };
+      }
+      if (r.method === 'GET') return { json: [dep({ id: 5, conceptrecid: 5 })] };
+      if (r.method === 'PUT' && r.url.includes('/bucket/')) {
+        const name = decodeURIComponent(r.url.split('/').pop()!);
+        uploaded.push(name);
+        if (name === 'publication-provenance.json') {
+          provenance.push(JSON.parse(Buffer.from(r.opts.body!).toString('utf8')));
+        }
+        return { json: {} };
+      }
+      if (r.method === 'PUT') return { json: dep({ id: 5, conceptrecid: 5 }) };
+      return { json: {} };
+    });
+    return { api: new ZenodoApi(transport, true, 't'), uploaded, provenance, calls };
+  }
+
+  function publish(root: string, git: GitContext, api: ZenodoApi, instanceRoot: string | null) {
+    return cmdPublish({
+      mystPath: join(root, 'myst.yml'),
+      pdf: join(root, 'paper.pdf'),
+      tag: 'v1.0.0',
+      bundleOut: join(root, '_bundle'),
+      api,
+      git,
+      instanceRoot,
+      engineRoot: root,
+    });
+  }
+
+  it('archives the commit the build recorded, fetched into the --instance clone', async () => {
+    const root = builtPaper(STAMPED);
+    const journalRoot = mkdtempSync(join(tmpdir(), 'oak-journal-'));
+    const { git, fetched, archived } = recordingGit('o/journal');
+    const z = zenodo();
+    const out = await publish(root, git, z.api, journalRoot);
+    expect(out.exitCode).toBe(0);
+    expect(fetched).toEqual([COMMIT]);
+    expect(archived).toContainEqual({ root: journalRoot, zip: 'journal.zip', commit: COMMIT });
+    expect(z.uploaded).toContain('journal.zip');
+    expect(z.uploaded).toContain('myst.oak.yml');
+    expect(z.provenance[0]).toMatchObject({ journal_repo: 'o/journal', journal_commit: COMMIT });
+  });
+
+  it("matches the clone's repo case-insensitively, as GitHub does", async () => {
+    const root = builtPaper(STAMPED);
+    const journalRoot = mkdtempSync(join(tmpdir(), 'oak-journal-'));
+    const out = await publish(root, recordingGit('O/Journal').git, zenodo().api, journalRoot);
+    expect(out.exitCode).toBe(0);
+  });
+
+  it("records the paper's own repo and commit when the paper is its own journal", async () => {
+    const root = builtPaper({ repo: '.' });
+    const { git, archived } = recordingGit(null);
+    const z = zenodo();
+    const out = await publish(root, git, z.api, null);
+    expect(out.exitCode).toBe(0);
+    expect(z.uploaded).not.toContain('journal.zip');
+    expect(archived.map((a) => a.zip)).not.toContain('journal.zip');
+    expect(z.provenance[0]).toMatchObject({ journal_repo: 'o/r', journal_commit: 'deadbeef' });
+  });
+
+  it('adds no journal.zip for a build without a journal', async () => {
+    const root = builtPaper();
+    const z = zenodo();
+    const out = await publish(root, recordingGit(null).git, z.api, null);
+    expect(out.exitCode).toBe(0);
+    expect(z.uploaded).not.toContain('journal.zip');
+    expect(z.provenance[0]).toMatchObject({ journal_repo: null, journal_commit: null });
+  });
+
+  it.each<{
+    why: string;
+    journal?: unknown;
+    origin?: string;
+    fetchFails?: boolean;
+    instance?: boolean;
+    says: string;
+  }>([
+    { why: 'the clone is of another journal', origin: 'o/other', says: 'o/other' },
+    { why: 'the commit cannot be fetched', fetchFails: true, says: COMMIT },
+    {
+      why: 'the build used uncommitted journal files',
+      journal: { repo: 'o/journal', commit: null },
+      says: 'not a commit of their own repo',
+    },
+    {
+      why: 'the stamp is not valid',
+      journal: { repo: 'o/journal', commit: '--x' },
+      says: 'myst.oak.yml',
+    },
+    { why: 'no --instance was given', instance: false, says: `o/journal@${COMMIT}` },
+  ])(
+    'refuses before any Zenodo write when $why',
+    async ({
+      journal = STAMPED,
+      origin = 'o/journal',
+      fetchFails = false,
+      instance = true,
+      says,
+    }) => {
+      const root = builtPaper(journal);
+      const z = zenodo();
+      const journalRoot = instance ? mkdtempSync(join(tmpdir(), 'oak-journal-')) : null;
+      const out = await publish(root, recordingGit(origin, fetchFails).git, z.api, journalRoot);
+      expect(out.exitCode).toBe(2);
+      expect(String(out.result.message)).toContain(says);
+      expect(z.calls).toHaveLength(0);
+    },
+  );
 });

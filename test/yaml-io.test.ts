@@ -11,7 +11,11 @@ import {
   readEngineCoordinateRaw,
   readBrandAssetOptions,
   readJournalTypstTemplate,
+  readJournalStamp,
+  writeDerivedDoc,
+  dropJournalStamp,
 } from '../src/yaml-io.js';
+import type { JournalStamp } from '../src/schema.js';
 
 const fixturePaper = fileURLToPath(new URL('./fixture-paper/myst.yml', import.meta.url));
 const fixtureInstance = fileURLToPath(new URL('./fixture-instance', import.meta.url));
@@ -168,5 +172,49 @@ describe('applyOwnOverride: the PDF download', () => {
     );
     applyOwnOverride(doc, { project: { downloads: [download] } });
     expect(doc.toJSON().project.downloads).toEqual([{ id: 'typst-pdf', title: 'Paper' }]);
+  });
+});
+
+describe('the journal stamp under project.options.oaktree-sapling', () => {
+  /** A derived config whose `oaktree-sapling` key holds `journal`, when given. */
+  function derived(journal?: unknown): string {
+    const root = mkdtempSync(join(tmpdir(), 'oak-stamp-'));
+    const doc = parseDocument('version: 1\n');
+    doc.setIn(['project', 'options', 'oaktree-sapling'], { version: 'v1.0.0', edition: 'e' });
+    if (journal !== undefined) {
+      doc.setIn(['project', 'options', 'oaktree-sapling', 'journal'], journal);
+    }
+    writeDerivedDoc(join(root, 'myst.oak.yml'), doc);
+    return root;
+  }
+  const stamps: JournalStamp[] = [
+    { repo: '.' },
+    { repo: 'o/journal', commit: 'b'.repeat(40) },
+    { repo: null, commit: 'c'.repeat(64) },
+    { repo: 'o/journal', commit: null },
+  ];
+  it.each(stamps)('reads back %o', (stamp) => {
+    expect(readJournalStamp(derived(stamp))).toEqual(stamp);
+  });
+
+  it('reads null without the key, and nothing without the file', () => {
+    expect(readJournalStamp(derived())).toBeNull();
+    expect(readJournalStamp(mkdtempSync(join(tmpdir(), 'oak-stamp-')))).toBeUndefined();
+  });
+
+  it('reads nothing from a value that is not a stamp', () => {
+    expect(readJournalStamp(derived({ repo: 'o/j', commit: '--upload-pack=x' }))).toBeUndefined();
+  });
+
+  it("drops the author's stamp and keeps the rest of the key", () => {
+    const doc = parseDocument(
+      'version: 1\nproject:\n  options:\n    oaktree-sapling:\n      version: v1.0.0\n' +
+        '      edition: e\n      journal: { repo: o/j, commit: null }\n',
+    );
+    dropJournalStamp(doc);
+    expect(doc.toJSON().project.options['oaktree-sapling']).toEqual({
+      version: 'v1.0.0',
+      edition: 'e',
+    });
   });
 });

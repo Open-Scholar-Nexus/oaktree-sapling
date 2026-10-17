@@ -23,7 +23,7 @@ git push origin v1.0.0
 
 Creating a release with a new tag on GitHub does the same. Only editors can create `v*` tags.
 
-The tag starts the **Deposit version** workflow, which builds the paper and uploads the PDF, the sources and the engine that built them to the Zenodo draft. It attaches the same files to a GitHub release for the tag, and comments the draft's address on the tagged commit.
+The tag starts the **Deposit version** workflow, which builds the paper and uploads the PDF, the sources, and the engine and journal settings that built them to the Zenodo draft ([what a deposit carries](#design-releases-deposit)). It attaches the same files to a GitHub release for the tag, and comments the draft's address on the tagged commit.
 
 ## 3. Publish on Zenodo
 
@@ -52,6 +52,18 @@ A published paper keeps one DOI for all its versions, and each version gets a DO
 3. Click **Publish** on the new draft.
 
 Once a paper is published, every pull request to it gets a comment reminding the editors to click [**New version**](#click-new-version) on Zenodo, and the `editor-action-needed` label.
+
+## Leaving files out of the deposit
+
+`source.zip` holds what is committed at the tag. To leave a committed folder out, such as a large data set, mark it in `.gitattributes`:
+
+```
+data/ export-ignore
+```
+
+The PDF is rendered from the files in the repository, with notebook outputs as they were saved, so the data a figure was made from can be left out. A file the manuscript points to must stay: a figure's image, a notebook it embeds, a file it includes. Without it, the PDF in the deposit cannot be rendered again.
+
+`export-ignore` also leaves the folder out of GitHub's source downloads.
 
 ## When the publish run fails
 

@@ -19,7 +19,7 @@ import {
   type WorkflowRun,
   type CheckRunRef,
 } from '../src/conformance.js';
-import { RESERVED_BUNDLE_NAMES } from '../src/zenodo.js';
+import { JOURNAL_BUNDLE_NAME, RESERVED_BUNDLE_NAMES } from '../src/zenodo.js';
 import { UPGRADE_BRANCH_PREFIX } from '../src/upgrade.js';
 
 const REPO = 'me/fixture-paper-repo';
@@ -176,6 +176,7 @@ function fakeCertGh(
     comments?: (pr: number) => string[];
     committedDoi?: () => string | null;
     committedEngineVersion?: () => string | null;
+    committedJournalRepo?: () => string | null;
     releaseAssets?: (tag: string) => string[];
   } = {},
 ): ConformanceGh & {
@@ -250,9 +251,11 @@ function fakeCertGh(
     listIssueComments: (_r, pr) => (over.comments ?? (() => [PREVIEW_COMMENT]))(pr),
     committedDoi: () => (over.committedDoi ?? (() => '10.5072/zenodo.562233'))(),
     committedEngineVersion: () => (over.committedEngineVersion ?? (() => TAG))(),
+    committedJournalRepo: () => (over.committedJournalRepo ?? (() => 'o/journal'))(),
     defaultBranchSha: () => 'main-sha',
     pushTag: (_r, tag, sha) => pushedTags.push([tag, sha]),
-    releaseAssets: (_r, tag) => (over.releaseAssets ?? (() => [...RESERVED_BUNDLE_NAMES]))(tag),
+    releaseAssets: (_r, tag) =>
+      (over.releaseAssets ?? (() => [...RESERVED_BUNDLE_NAMES, JOURNAL_BUNDLE_NAME]))(tag),
     deleteRelease: (_r, tag) => deletedReleases.push(tag),
     sweepForkBranches: (forkRepo, _tok, _prefix) => {
       sweptForkBranches.push(forkRepo);
@@ -303,7 +306,7 @@ describe('cmdConformanceRun', () => {
       previewPr: 21,
       previewUrl: 'https://cert-x.oaktree-sapling-test.pages.dev',
       depositTag: CERT_DEPOSIT_TAG,
-      releaseAssets: RESERVED_BUNDLE_NAMES,
+      releaseAssets: [...RESERVED_BUNDLE_NAMES, JOURNAL_BUNDLE_NAME],
     });
     expect(gh.labeled).toEqual([
       [7, CONFORMANCE_LABEL],
@@ -586,6 +589,22 @@ describe('cmdConformanceRun', () => {
     expect(out.result.failure).toContain('engine.zip');
     expect(gh.pushedTags).toHaveLength(1); // the tag was pushed before the failing asset check
     expect(gh.pushedTags[0]![1]).toBe('main-sha');
+  });
+
+  it('expects journal.zip when the test repo names a journal repo of its own', async () => {
+    const gh = fakeCertGh({ releaseAssets: () => [...RESERVED_BUNDLE_NAMES] });
+    const out = await cmdConformanceRun({ repo: REPO, tag: TAG }, runDeps(gh));
+    expect(out.result).toMatchObject({ status: 'failed', path: 'deposit' });
+    expect(out.result.failure).toContain(JOURNAL_BUNDLE_NAME);
+  });
+
+  it('expects no journal.zip when the test repo is its own journal', async () => {
+    const gh = fakeCertGh({
+      committedJournalRepo: () => '.',
+      releaseAssets: () => [...RESERVED_BUNDLE_NAMES],
+    });
+    const out = await cmdConformanceRun({ repo: REPO, tag: TAG }, runDeps(gh));
+    expect(out.exitCode).toBe(0);
   });
 
   it('fails on a result that never appeared, rather than blaming a slow third party', async () => {

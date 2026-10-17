@@ -13,7 +13,7 @@
  */
 import * as msg from './messages.js';
 import { isAbsolute, join } from 'node:path';
-import { readEngineOptions } from './schema.js';
+import { readEngineOptions, type JournalStamp } from './schema.js';
 import { typstTemplateUrl, themeZipUrl } from './assets.js';
 
 /**
@@ -144,15 +144,18 @@ export interface ComposeInput {
    *  since myst resolves them against the paper root [R62]. Read from brand.yml itself so a
    *  paper's own relative asset is never taken for the brand's. */
   brandAssets?: { site?: Record<string, string>; project?: Record<string, string> };
+  /** The journal checkout `instanceRoot` is, recorded for the deposit; absent without one. */
+  journal?: JournalStamp;
 }
 
 export interface OwnOverride {
-  /** Merged into the base `project`. `options` carries only the PDF watermark (`logo`), set key
-   *  by key so the author's other options survive; `downloads` is appended to the author's. */
+  /** Merged into the base `project`. `options` carries the PDF watermark (`logo`) and the
+   *  `oaktree-sapling` key with the journal stamp, set key by key so the author's other options
+   *  survive; `downloads` is appended to the author's. */
   project?: {
     exports?: Array<Record<string, unknown>>;
     downloads?: Array<Record<string, string>>;
-    options?: Record<string, string>;
+    options?: Record<string, unknown>;
   };
   /** Merged into the base `site`. `options` carries the asset overrides [R62]; MyST merges
    *  `site.options` field by field, so the brand's other options survive. */
@@ -292,6 +295,18 @@ export function compose(input: ComposeInput): ComposeResult {
     if (Object.keys(projectOptions).length) {
       ownOverride.project = { ...ownOverride.project, options: projectOptions };
     }
+  }
+
+  // The journal stamp, for the deposit [R66]. MyST merges `project.options` one key deep, so an
+  // `oaktree-sapling` object replaces another whole: this one keeps the coordinates checked above.
+  if (input.journal) {
+    ownOverride.project = {
+      ...ownOverride.project,
+      options: {
+        ...ownOverride.project?.options,
+        'oaktree-sapling': { ...resolved, journal: input.journal },
+      },
+    };
   }
 
   if (site.template !== undefined || site.options) ownOverride.site = site;

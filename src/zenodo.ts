@@ -34,8 +34,9 @@ import {
 import { join, resolve, basename, relative, isAbsolute } from 'node:path';
 import { createHash } from 'node:crypto';
 import AdmZip from 'adm-zip';
-import { readDoc, writeDoc, DERIVED_CONFIG_FILE } from './yaml-io.js';
-import { JournalConfig, type ZenodoConfig } from './schema.js';
+import { readDoc, writeDoc, readJournalStamp, DERIVED_CONFIG_FILE } from './yaml-io.js';
+import { JournalConfig, sameRepo, type ZenodoConfig } from './schema.js';
+import * as msg from './messages.js';
 
 export const ZENODO_PROD = 'https://zenodo.org/api';
 export const ZENODO_SANDBOX = 'https://sandbox.zenodo.org/api';
@@ -47,23 +48,32 @@ const ORCID_RE = /^\d{4}-\d{4}-\d{4}-\d{3}[\dX]$/;
 /** Extra document part appended to the Zenodo description (e.g. shared authorship). */
 const ZENODO_EXTRA_PART = 'zenodo_extra_description';
 
-/** oak's five fixed deposit files; a `deposit/` file may not take their names [R28]. Exported
- *  so conformance can check the release carries exactly these. */
+/** oak's fixed deposit files; a `deposit/` file may not take their names [R28]. Exported so
+ *  conformance can check the release carries these. */
 export const RESERVED_BUNDLE_NAMES = [
   'paper.pdf',
   'source.zip',
   'myst.yml',
+  DERIVED_CONFIG_FILE,
   'publication-provenance.json',
   'engine.zip',
 ];
 
-/** The sixth file, only when the template used is not already in `engine.zip` (a journal's or an
- *  author's) [R76]. Reserved against `deposit/` names, but kept out of RESERVED_BUNDLE_NAMES, the
- *  set conformance expects on every deposit. */
+/** Only when the template used is not already in `engine.zip` (a journal's or an author's)
+ *  [R76]. Reserved against `deposit/` names, but kept out of RESERVED_BUNDLE_NAMES, the set
+ *  conformance expects on every deposit. */
 export const TEMPLATE_BUNDLE_NAME = 'template.zip';
 
+/** Only when the journal is a repo of its own ({@link prepareJournalArchive}). Reserved against
+ *  `deposit/` names, and kept out of RESERVED_BUNDLE_NAMES like {@link TEMPLATE_BUNDLE_NAME}. */
+export const JOURNAL_BUNDLE_NAME = 'journal.zip';
+
 /** Every name oak may write into the bundle, which a `deposit/` file may not take. */
-export const RESERVED_DEPOSIT_NAMES = [...RESERVED_BUNDLE_NAMES, TEMPLATE_BUNDLE_NAME];
+export const RESERVED_DEPOSIT_NAMES = [
+  ...RESERVED_BUNDLE_NAMES,
+  TEMPLATE_BUNDLE_NAME,
+  JOURNAL_BUNDLE_NAME,
+];
 
 /** The reserved names a `deposit/` folder uses. The one statement of the [R28] rule: `oak
  *  validate` reports it on the pull request, `oak release` refuses on it [R101]. */
@@ -151,8 +161,13 @@ export function createFetchTransport(): ZenodoTransport {
 export interface GitContext {
   /** `git -C <root> rev-parse HEAD`. */
   headSha(repoRoot: string): Promise<string>;
-  /** `git -C <root> archive --format=zip -o <outZip> HEAD`. */
-  gitArchive(repoRoot: string, outZip: string): Promise<void>;
+  /** `git -C <root> archive --format=zip -o <outZip> <commit>`, HEAD by default. */
+  gitArchive(repoRoot: string, outZip: string, commit?: string): Promise<void>;
+  /** Makes <commit> available in <root>, fetching it from origin when the clone lacks it;
+   *  throws when it cannot. */
+  fetchCommit(repoRoot: string, commit: string): Promise<void>;
+  /** owner/repo from <root>'s origin remote, or null. */
+  originRepo(repoRoot: string): Promise<string | null>;
   /** The pull request that introduced <sha>, via `gh api` [R35.2]; null when there is none or
    *  gh is unavailable. */
   reviewPr(repoRoot: string, sha: string): Promise<string | null>;
@@ -494,6 +509,10 @@ export interface BundleProvenance {
   concept_doi: string;
   version_doi: string;
   review_pr: string | null;
+  /** The journal the PDF was built from: what `journal.zip` holds, the paper's own repo and
+   *  commit when it is its own journal, null without one. */
+  journal_repo: string | null;
+  journal_commit: string | null;
   built_at: string;
   // What it takes to render the deposit again [R66]: engine.zip carries everything but
   // node, so this platform and node.
@@ -574,8 +593,7 @@ export function resolveTemplateDir(template: string, paperRoot: string): string 
 
 /**
  * The template directory this deposit must archive, or null when nothing needs adding: when the
- * template is inside oak's checkout, already archived as `engine.zip`. Then the bundle is the
- * five fixed files conformance expects.
+ * template is inside oak's checkout, already archived as `engine.zip`.
  *
  * Otherwise the bytes are in no other file, and without them the PDF behind the DOI could not be
  * rendered again [design §7] [R66], so a template that cannot be found is an error.
@@ -600,10 +618,65 @@ export function templateArchiveDir(paperRoot: string, engineRoot: string): strin
   return dir;
 }
 
+/* --------------------------------------------------------------------------
+ * The journal the build used, archived into the deposit [R66]
+ * ------------------------------------------------------------------------ */
+
+export class JournalArchiveError extends Error {}
+
+/** The journal the provenance names, and the checkout `journal.zip` is archived from. */
+export interface JournalArchive {
+  /** null when the paper repo is its own journal, so `source.zip` holds it. */
+  root: string | null;
+  repo: string | null;
+  commit: string;
+}
+
+/**
+ * The journal commit this deposit records, read from the stamp the build left in
+ * `myst.oak.yml`: the journal is fetched at its default branch on every run, so the deposit's
+ * checkout can be at a later commit than the build's, and the commit is fetched into it. `paper`
+ * when the paper repo is its own journal; null when built with `--no-instance`. Run before
+ * anything is written to Zenodo [R101].
+ *
+ * Throws {@link JournalArchiveError} when the build used a journal this deposit cannot archive.
+ */
+export async function prepareJournalArchive(
+  repoRoot: string,
+  instanceRoot: string | null,
+  git: GitContext,
+  paper: { repo: string; commit: string },
+): Promise<JournalArchive | null> {
+  const stamp = readJournalStamp(repoRoot);
+  if (stamp === undefined) {
+    if (instanceRoot === null) return null;
+    throw new JournalArchiveError(msg.workflow.depositJournalUnstamped);
+  }
+  if (stamp === null) return null;
+  if (!('commit' in stamp)) return { root: null, ...paper }; // repo: "."
+  if (stamp.commit === null) throw new JournalArchiveError(msg.workflow.depositJournalUncommitted);
+  const at = stamp.repo ? `${stamp.repo}@${stamp.commit}` : stamp.commit;
+  if (instanceRoot === null) {
+    throw new JournalArchiveError(msg.workflow.depositJournalNotGiven(at));
+  }
+  const origin = await git.originRepo(instanceRoot);
+  if (stamp.repo && origin && !sameRepo(stamp.repo, origin)) {
+    throw new JournalArchiveError(msg.workflow.depositJournalOtherRepo(stamp.repo, origin));
+  }
+  try {
+    await git.fetchCommit(instanceRoot, stamp.commit);
+  } catch (e) {
+    const why = e instanceof Error ? e.message : String(e);
+    throw new JournalArchiveError(msg.workflow.depositJournalUnfetchable(at, why));
+  }
+  return { root: instanceRoot, repo: origin ?? stamp.repo, commit: stamp.commit };
+}
+
 /**
  * What can make a deposit impossible, in one place so a caller can check before writing to
  * Zenodo [R101]. `oak validate` reports the same clash on the pull request
- * ({@link depositCollisions}).
+ * ({@link depositCollisions}). The journal's own check is {@link prepareJournalArchive}, which
+ * needs git.
  */
 export function assertBundlePreconditions(repoRoot: string, engineRoot: string): void {
   const depositDir = join(repoRoot, 'deposit');
@@ -621,13 +694,15 @@ export function assertBundlePreconditions(repoRoot: string, engineRoot: string):
 }
 
 /**
- * Assembles the deposit: oak's five fixed files plus every file in the paper's `deposit/`
- * folder, as they are [R28]; a clash with a fixed name is an error. Returns the paths, sorted.
+ * Assembles the deposit: oak's fixed files plus every file in the paper's `deposit/` folder, as
+ * they are [R28]; a clash with a fixed name is an error. Returns the paths, sorted.
  *
  * `engine.zip` is a `git archive` of oak at its pinned release [R66], which carries
  * `bin/typst`, `dist/cli.cjs` and `templates/typst/`: everything but node needed to render the
- * PDF again, on linux x86_64. A sixth file, `template.zip`, holds a template that is not oak's
- * own [R76]; see {@link templateArchiveDir}.
+ * PDF again, on linux x86_64. `journal.zip` is a `git archive` of `journal`, the journal commit
+ * the build used, unless `source.zip` holds it ({@link prepareJournalArchive}). `template.zip` holds a template that is not
+ * oak's own [R76]; see {@link templateArchiveDir}. `myst.oak.yml` records what the build
+ * resolved; its paths are the build machine's.
  */
 export async function buildBundle(
   out: string,
@@ -636,6 +711,7 @@ export async function buildBundle(
   engineRoot: string,
   provenance: BundleProvenance,
   git: GitContext,
+  journal: JournalArchive | null = null,
 ): Promise<string[]> {
   assertBundlePreconditions(repoRoot, engineRoot);
   const depositDir = join(repoRoot, 'deposit');
@@ -652,8 +728,13 @@ export async function buildBundle(
   await git.gitArchive(repoRoot, resolve(join(out, 'source.zip')));
   await git.gitArchive(engineRoot, resolve(join(out, 'engine.zip')));
   assertEngineArchive(join(out, 'engine.zip'));
-  const mystSrc = join(repoRoot, 'myst.yml');
-  if (existsSync(mystSrc)) copyFileSync(mystSrc, join(out, 'myst.yml'));
+  for (const name of ['myst.yml', DERIVED_CONFIG_FILE]) {
+    const src = join(repoRoot, name);
+    if (existsSync(src)) copyFileSync(src, join(out, name));
+  }
+  if (journal?.root) {
+    await git.gitArchive(journal.root, resolve(join(out, JOURNAL_BUNDLE_NAME)), journal.commit);
+  }
   if (templateDir) {
     const zip = new AdmZip();
     zip.addLocalFolder(templateDir);
@@ -870,11 +951,20 @@ export async function cmdPublish(input: PublishInput): Promise<Outcome> {
 
   const repoRoot = resolve(mystPath, '..');
 
+  const sha = await git.headSha(repoRoot);
+  const repo = repoFromGithubUrl(githubUrl);
+
   // Checked before anything is written to Zenodo, and reported in the result [R101].
+  let journal: JournalArchive | null;
   try {
     assertBundlePreconditions(repoRoot, engineRoot);
+    journal = await prepareJournalArchive(repoRoot, instanceRoot, git, { repo, commit: sha });
   } catch (e) {
-    if (e instanceof BundleCollisionError || e instanceof TemplateArchiveError) {
+    if (
+      e instanceof BundleCollisionError ||
+      e instanceof TemplateArchiveError ||
+      e instanceof JournalArchiveError
+    ) {
       return err(2, e.message);
     }
     throw e;
@@ -940,22 +1030,23 @@ export async function cmdPublish(input: PublishInput): Promise<Outcome> {
 
   // Predicted from the deposition id; matches what Zenodo assigns at publish.
   const predictedVersionDoi = `${doiPrefix(sandbox)}${dep.id}`;
-  const sha = await git.headSha(repoRoot);
   const provenance: BundleProvenance = {
-    repo: repoFromGithubUrl(githubUrl),
+    repo,
     commit_sha: sha,
     tag,
     site_url: siteUrl,
     concept_doi: conceptDoi,
     version_doi: predictedVersionDoi,
     review_pr: await git.reviewPr(repoRoot, sha),
+    journal_repo: journal?.repo ?? null,
+    journal_commit: journal?.commit ?? null,
     built_at: new Date().toISOString(),
     platform: 'linux-x86_64',
     typst_version: readTypstVersion(engineRoot),
   };
   let files: string[];
   try {
-    files = await buildBundle(bundleOut, pdf, repoRoot, engineRoot, provenance, git);
+    files = await buildBundle(bundleOut, pdf, repoRoot, engineRoot, provenance, git, journal);
   } catch (e) {
     if (e instanceof EngineArchiveError) return err(2, e.message);
     throw e;

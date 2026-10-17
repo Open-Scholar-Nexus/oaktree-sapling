@@ -9,6 +9,7 @@ import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, posix, relative, sep } from 'node:path';
 import * as msg from './messages.js';
 import { UserError } from './messages.js';
+import { COMMIT_ID } from './schema.js';
 
 /** Dot names: the site is served. */
 export const SITE_FILES = { pr: '.pr-number', paper: '.paper' } as const;
@@ -16,7 +17,6 @@ export const CHECKS_FILES = { pr: 'pr-number', paper: 'paper' } as const;
 type Names = typeof SITE_FILES | typeof CHECKS_FILES;
 
 const PR_NUMBER = /^[0-9]{1,10}$/;
-const SHA = /^[0-9a-f]{40}$/;
 /** A folder below the repo root, or `.`: no segment starts with a dot, so none is `..`. */
 const PAPER_DIR = /^(\.|[A-Za-z0-9_][A-Za-z0-9._-]*(\/[A-Za-z0-9_][A-Za-z0-9._-]*)*)$/;
 
@@ -145,7 +145,7 @@ export function verifyPrHead(
 ): void {
   assertPrNumber(pr);
   if (!repo) throw new UserError(msg.workflow.prCheckNoRepo(pr));
-  if (!head || !SHA.test(head)) throw new UserError(msg.workflow.prCheckNoHead(pr));
+  if (!head || !COMMIT_ID.test(head)) throw new UserError(msg.workflow.prCheckNoHead(pr));
   const actual = prHead(repo, pr);
   if (actual !== head) throw new UserError(msg.workflow.prHeadMismatch(pr, actual, head));
 }

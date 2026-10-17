@@ -9,6 +9,7 @@ import {
   labelChildOutput,
   openDoiPr,
   realConformanceGh,
+  realGitContext,
   realGhPr,
   realPagesDeployer,
   realProvisioner,
@@ -367,6 +368,16 @@ describe('realGhPr.prHead', () => {
   it('refuses a repo that is not owner/name before gh sees it', () => {
     child.calls.length = 0;
     expect(() => realGhPr.prHead('--jq', '7')).toThrow(UserError);
+    expect(child.calls).toHaveLength(0);
+  });
+});
+
+describe('realGitContext.fetchCommit', () => {
+  it('refuses anything but a full commit id before git sees it', async () => {
+    child.calls.length = 0;
+    await expect(realGitContext.fetchCommit('/journal', '--upload-pack=x')).rejects.toThrow(
+      'not a full commit id',
+    );
     expect(child.calls).toHaveLength(0);
   });
 });
