@@ -1256,8 +1256,8 @@ function nearestVerb(word: string): string | null {
   return bestD <= 3 ? best : null;
 }
 
-/** Set by the bundle: the release tag without its `v`, or package.json's `0.0.0-unreleased` in
- *  a bundle built outside a release. */
+/** Set by the bundle: the release tag without its `v`, or `<package.json version>-unreleased+<sha>`
+ *  in a bundle built outside a release. */
 declare const OAK_VERSION: string;
 
 async function main(argv: string[]): Promise<number> {
