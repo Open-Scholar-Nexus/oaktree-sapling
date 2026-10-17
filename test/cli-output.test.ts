@@ -385,6 +385,8 @@ describe.skipIf(bundleState() === 'absent')('bootstrap preflight ([R110], [R125]
       'me/i',
       '--edition',
       'e',
+      '--engine-version',
+      'v1.2.3',
     ]);
     expect(code).toBe(2);
     expect(stderr).toContain('gh');
@@ -399,7 +401,18 @@ describe.skipIf(bundleState() === 'absent')('bootstrap preflight ([R110], [R125]
   it('a gh that is installed but logged out says gh auth login', () => {
     const ghStub = join(mkdtempSync(join(tmpdir(), 'oak-fakegh-')), 'gh');
     const { code, stderr } = oakOffline(
-      ['bootstrap', 'paper', '--repo', 'me/p', '--instance', 'me/i', '--edition', 'e'],
+      [
+        'bootstrap',
+        'paper',
+        '--repo',
+        'me/p',
+        '--instance',
+        'me/i',
+        '--edition',
+        'e',
+        '--engine-version',
+        'v1.2.3',
+      ],
       { ghStub },
     );
     expect(code).toBe(2);
@@ -424,10 +437,38 @@ describe.skipIf(bundleState() === 'absent')('bootstrap preflight ([R110], [R125]
     expect(stderr).not.toContain('not on PATH');
   });
 
+  it('a malformed --engine-version is refused, before any gh call', () => {
+    const { code, stderr } = oakOffline([
+      'bootstrap',
+      'paper',
+      '--repo',
+      'me/p',
+      '--engine-version',
+      'main',
+    ]);
+    expect(code).toBe(2);
+    expect(stderr).toContain('--engine-version must be a release tag');
+    expect(stderr).not.toContain('not on PATH');
+  });
+
+  // A release cut exports OAK_VERSION for its own test run, so its bundle may be stable.
+  it.skipIf(process.env.OAK_VERSION)(
+    'a bundle built outside a release refuses to pick a version, before any gh call',
+    () => {
+      expect(oak(['--version']).stdout).toBe('oak 0.0.0-unreleased\n');
+      const { code, stderr } = oakOffline(['bootstrap', 'journal', '--repo', 'me/j']);
+      expect(code).toBe(2);
+      expect(stderr).toContain('the running oak (0.0.0-unreleased) is not a stable release');
+      expect(stderr).toContain('--engine-version <tag>');
+      expect(stderr).not.toContain('not on PATH');
+    },
+  );
+
   it('an env-derived token does not trigger the refusal', () => {
-    const { code, stderr } = oakOffline(['bootstrap', 'journal', '--repo', 'me/j'], {
-      env: { ZENODO_TOKEN: 'zt' },
-    });
+    const { code, stderr } = oakOffline(
+      ['bootstrap', 'journal', '--repo', 'me/j', '--engine-version', 'v1.2.3'],
+      { env: { ZENODO_TOKEN: 'zt' } },
+    );
     expect(code).toBe(2);
     // It stopped at the gh check, not at a secrets refusal.
     expect(stderr).toContain('not on PATH');
