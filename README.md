@@ -20,7 +20,7 @@ npm install -g oaktree-sapling
 oak
 ```
 
-`oak` with no arguments prints the full usage. To run a single command without installing, such as a bootstrap, use `npx oaktree-sapling <command>`.
+`oak` with no arguments prints the full usage. To run a single command without installing, such as a bootstrap, use `npx oaktree-sapling@latest <command>`; without `@latest`, npx may reuse an older copy it cached.
 
 ## Commands
 

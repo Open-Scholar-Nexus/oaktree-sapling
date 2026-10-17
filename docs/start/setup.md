@@ -11,7 +11,7 @@ gh auth login
 
 `oak bootstrap` checks for `gh` and a logged-in account before it does anything else.
 
-The command below runs `oak` with `npx`, without installing it. To create papers as well, install it with `npm install -g oaktree-sapling` and type `oak` in place of `npx oaktree-sapling`, as the other pages do.
+The command below runs `oak` with `npx`, without installing it. To create papers as well, install it with `npm install -g oaktree-sapling` and type `oak` in place of `npx oaktree-sapling@latest`, as the other pages do.
 
 ## Choose where the repositories live
 
@@ -29,7 +29,7 @@ Then pass the team with `--owner @my-journal/editors` when you create each paper
 ## Create the journal
 
 ```bash
-npx oaktree-sapling bootstrap journal --repo <owner>/<journal-repo> \
+npx oaktree-sapling@latest bootstrap journal --repo <owner>/<journal-repo> \
   --name "My Journal" \
   --edition 2026
 ```
