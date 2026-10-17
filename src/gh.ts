@@ -906,8 +906,8 @@ export function latestEngineRelease(engineRepo: string): string {
   return tag;
 }
 
-/** Shallow-clones `engineRepo` at `tag` into the empty directory `dest`, for the paper commands'
- *  handoff (pinned.ts). Plain git, as {@link cachedJournal}: an author may have no gh login. */
+/** Shallow-clones `engineRepo` at `tag` into the empty directory `dest`, for {@link handOff} in
+ *  pinned.ts. Plain git, as {@link cachedJournal}: an author may have no gh login. */
 export function cloneEngineTag(engineRepo: string, tag: string, dest: string): void {
   const url = `https://github.com/${assertRepoName(engineRepo)}.git`;
   run('git', ['clone', '--depth', '1', '--quiet', '--branch', tag, '--', url, dest]);

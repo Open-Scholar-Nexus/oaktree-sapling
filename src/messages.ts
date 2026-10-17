@@ -662,7 +662,7 @@ export const pinned = {
     `(${dir}). Pass --use-running to run this oak (${current}).`,
 
   downloading: (verb: PaperVerb, pin: PinnedEngine, dir: string): string =>
-    `oak ${verb}: downloading oak ${pin.version} from ${pin.engineRepo} into ${dir}, once.`,
+    `oak ${verb}: downloading oak ${pin.version} from ${pin.engineRepo} into ${dir}.`,
 
   otherRepo: (verb: PaperVerb, pin: PinnedEngine, defaultRepo: string): string =>
     `oak ${verb}: this paper runs oak ${pin.version} from ${pin.engineRepo} (engine_repo in ` +
