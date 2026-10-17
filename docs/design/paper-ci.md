@@ -133,6 +133,16 @@ The same step refuses a version below `min_engine_version` in `pins.yml`, the ol
 
 The check runs in the workflow because it decides which engine to fetch, so there is no engine yet to run it.
 
+(design-paper-ci-local-ref)=
+
+### Which engine code runs locally
+
+`oak build`, `oak validate` and `oak start` read the same two settings, so a local run uses the engine the paper's CI uses, as `rust-toolchain.toml` does for Rust or the `packageManager` field does for corepack. When the running oak is another version, [`handOff`](src:src/pinned.ts) shallow-clones the pinned tag (`git clone --depth 1 --branch`) into `$XDG_CACHE_HOME/oak/<owner>/<name>/<tag>`, or `~/.cache/oak/...`, and runs that clone's `dist/cli.cjs` with the same arguments and its `bin/typst` on `PATH` when that runs on the machine, as `ci/run.sh` does. Each clone is made beside its final path and renamed in, so a later run reuses only a complete one. A clone with no `dist/cli.cjs` is a ref with no build, and oak refuses it as `ci/run.sh` does.
+
+Before any git call the repository must be `owner/name` in GitHub's characters, and the version `vX.Y.Z` or `vX.Y.Z-dev.N`; both also form the cache path. An `engine_repo` other than oak's own is fetched only after the person running oak confirms it (`--yes` confirms), because running the clone runs that repository's code with their access. `pins.yml` is gated on the paper's `main`, but a branch checked out from a pull request carries whatever its author wrote there.
+
+The oak it hands to runs with `OAK_USE_RUNNING=1` and never hands off again. `--use-running`, or the same variable, keeps the running oak. A checkout of the engine reports its `package.json` version, so testing an engine change against a paper that pins a release needs one of them. `ci/run.sh` sets the variable, because the engine action has already checked out the pinned version.
+
 (design-paper-ci-limits)=
 
 ### Known gaps
