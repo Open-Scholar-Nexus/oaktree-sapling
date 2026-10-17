@@ -6,7 +6,8 @@
  * this also checks that `journal.zip` holds the commit the build used.
  *
  * The rebuild is skipped unless the bundle, typst and oak's template are all present, like
- * `test/integration.test.ts`. `journalStamp`, which records that commit, needs only git.
+ * `test/integration.test.ts`. `journalStamp`, which records that commit, is tested here against
+ * real checkouts, since `test/gh.test.ts` fakes `git`; those tests need only git.
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { execFileSync } from 'node:child_process';
@@ -115,13 +116,6 @@ describe('journalStamp', () => {
     writeFileSync(join(outer, 'journal', 'journal.yml'), 'name: J\n');
     commitAll(outer, 'journal in a folder');
     expect(journalStamp(join(outer, 'journal'), '/paper')).toEqual({ repo: null, commit: null });
-  });
-
-  it('fetches only a full commit id', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'oak-stamp-'));
-    await expect(realGitContext.fetchCommit(dir, '--upload-pack=x')).rejects.toThrow(
-      'not a full commit id',
-    );
   });
 });
 

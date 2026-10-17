@@ -43,7 +43,12 @@ describe('OaktreeSaplingOptions', () => {
     expect(parse({ repo: null, commit: null })).toBe(true);
     expect(parse({ repo: '.' })).toBe(true);
     expect(parse({ repo: 'o/j', commit: 'HEAD' })).toBe(false);
+    expect(parse({ repo: 'o/j', commit: 'abc123' })).toBe(false);
+    expect(parse({ repo: 'o/j', commit: '--upload-pack=x' })).toBe(false);
+    expect(parse({ repo: '-o/j', commit: 'a'.repeat(40) })).toBe(false);
+    expect(parse({ repo: '.', commit: 'a'.repeat(40) })).toBe(false);
     expect(parse({ repo: 'o/j' })).toBe(false);
+    expect(parse('o/j@' + 'a'.repeat(40))).toBe(false);
   });
 });
 

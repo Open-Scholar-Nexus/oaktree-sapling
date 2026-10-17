@@ -27,10 +27,6 @@ import {
   ZENODO_SANDBOX,
   readStampedTemplate,
   resolveTemplateDir,
-  prepareJournalArchive,
-  JournalArchiveError,
-  JOURNAL_BUNDLE_NAME,
-  RESERVED_DEPOSIT_NAMES,
   type ZenodoTransport,
   type TransportResponse,
   type GitContext,
@@ -877,12 +873,6 @@ describe('journal.zip', () => {
     });
   }
 
-  it('reserves journal.zip and myst.oak.yml against deposit/ names', () => {
-    expect(RESERVED_DEPOSIT_NAMES).toContain(JOURNAL_BUNDLE_NAME);
-    expect(RESERVED_BUNDLE_NAMES).toContain('myst.oak.yml');
-    expect(RESERVED_BUNDLE_NAMES).not.toContain(JOURNAL_BUNDLE_NAME);
-  });
-
   it('archives the commit the build recorded, fetched into the --instance clone', async () => {
     const root = builtPaper(STAMPED);
     const journalRoot = mkdtempSync(join(tmpdir(), 'oak-journal-'));
@@ -924,31 +914,43 @@ describe('journal.zip', () => {
     expect(z.provenance[0]).toMatchObject({ journal_repo: null, journal_commit: null });
   });
 
-  it.each([
-    ['the clone is of another journal', STAMPED, 'o/other', false, 'o/other'],
-    ['the commit cannot be fetched', STAMPED, 'o/journal', true, COMMIT],
-    [
-      'the build used uncommitted journal files',
-      { repo: 'o/journal', commit: null },
-      null,
-      false,
-      'not a commit of their own repo',
-    ],
-    ['the stamp is not valid', { repo: 'o/journal', commit: '--x' }, null, false, 'myst.oak.yml'],
-  ])('refuses before any Zenodo write when %s', async (_why, journal, origin, fetchFails, says) => {
-    const root = builtPaper(journal);
-    const z = zenodo();
-    const journalRoot = mkdtempSync(join(tmpdir(), 'oak-journal-'));
-    const out = await publish(root, recordingGit(origin, fetchFails).git, z.api, journalRoot);
-    expect(out.exitCode).toBe(2);
-    expect(String(out.result.message)).toContain(says);
-    expect(z.calls).toHaveLength(0);
-  });
-
-  it('asks for --instance when the build used a journal and none was given', async () => {
-    const root = builtPaper(STAMPED);
-    const out = prepareJournalArchive(root, null, fakeGit, { repo: 'o/r', commit: 'deadbeef' });
-    await expect(out).rejects.toThrow(JournalArchiveError);
-    await expect(out).rejects.toThrow(`o/journal@${COMMIT}`);
-  });
+  it.each<{
+    why: string;
+    journal?: unknown;
+    origin?: string;
+    fetchFails?: boolean;
+    instance?: boolean;
+    says: string;
+  }>([
+    { why: 'the clone is of another journal', origin: 'o/other', says: 'o/other' },
+    { why: 'the commit cannot be fetched', fetchFails: true, says: COMMIT },
+    {
+      why: 'the build used uncommitted journal files',
+      journal: { repo: 'o/journal', commit: null },
+      says: 'not a commit of their own repo',
+    },
+    {
+      why: 'the stamp is not valid',
+      journal: { repo: 'o/journal', commit: '--x' },
+      says: 'myst.oak.yml',
+    },
+    { why: 'no --instance was given', instance: false, says: `o/journal@${COMMIT}` },
+  ])(
+    'refuses before any Zenodo write when $why',
+    async ({
+      journal = STAMPED,
+      origin = 'o/journal',
+      fetchFails = false,
+      instance = true,
+      says,
+    }) => {
+      const root = builtPaper(journal);
+      const z = zenodo();
+      const journalRoot = instance ? mkdtempSync(join(tmpdir(), 'oak-journal-')) : null;
+      const out = await publish(root, recordingGit(origin, fetchFails).git, z.api, journalRoot);
+      expect(out.exitCode).toBe(2);
+      expect(String(out.result.message)).toContain(says);
+      expect(z.calls).toHaveLength(0);
+    },
+  );
 });

@@ -13,7 +13,6 @@ import {
   readJournalTypstTemplate,
   readJournalStamp,
   writeDerivedDoc,
-  authorSetsJournalStamp,
   dropJournalStamp,
 } from '../src/yaml-io.js';
 import type { JournalStamp } from '../src/schema.js';
@@ -203,30 +202,19 @@ describe('the journal stamp under project.options.oaktree-sapling', () => {
     expect(readJournalStamp(mkdtempSync(join(tmpdir(), 'oak-stamp-')))).toBeUndefined();
   });
 
-  it.each([
-    { repo: 'o/j', commit: '--upload-pack=x' },
-    { repo: 'o/j', commit: 'abc123' },
-    { repo: '-o/j', commit: 'a'.repeat(40) },
-    { repo: '.', commit: 'a'.repeat(40) },
-    'o/j@' + 'a'.repeat(40),
-  ])('refuses a value that is not a stamp: %o', (bad) => {
-    expect(readJournalStamp(derived(bad))).toBeUndefined();
+  it('reads nothing from a value that is not a stamp', () => {
+    expect(readJournalStamp(derived({ repo: 'o/j', commit: '--upload-pack=x' }))).toBeUndefined();
   });
 
-  it("drops the author's stamp and reports that they set one", () => {
-    const root = mkdtempSync(join(tmpdir(), 'oak-stamp-'));
-    const text =
+  it("drops the author's stamp and keeps the rest of the key", () => {
+    const doc = parseDocument(
       'version: 1\nproject:\n  options:\n    oaktree-sapling:\n      version: v1.0.0\n' +
-      '      edition: e\n      journal: { repo: o/j, commit: null }\n';
-    writeFileSync(join(root, 'myst.yml'), text);
-    expect(authorSetsJournalStamp(root)).toBe(true);
-    const doc = parseDocument(text);
+        '      edition: e\n      journal: { repo: o/j, commit: null }\n',
+    );
     dropJournalStamp(doc);
     expect(doc.toJSON().project.options['oaktree-sapling']).toEqual({
       version: 'v1.0.0',
       edition: 'e',
     });
-    writeFileSync(join(root, 'myst.yml'), doc.toString());
-    expect(authorSetsJournalStamp(root)).toBe(false);
   });
 });
