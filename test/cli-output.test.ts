@@ -455,10 +455,11 @@ describe.skipIf(bundleState() === 'absent')('bootstrap preflight ([R110], [R125]
   it.skipIf(process.env.OAK_VERSION)(
     'a bundle built outside a release refuses to pick a version, before any gh call',
     () => {
-      expect(oak(['--version']).stdout).toBe('oak 0.0.0-unreleased\n');
+      const version = oak(['--version']).stdout.trim().replace(/^oak /, '');
+      expect(version).toMatch(/^\d+\.\d+\.\d+-unreleased\+[0-9a-z]+$/);
       const { code, stderr } = oakOffline(['bootstrap', 'journal', '--repo', 'me/j']);
       expect(code).toBe(2);
-      expect(stderr).toContain('the running oak (0.0.0-unreleased) is not a stable release');
+      expect(stderr).toContain(`the running oak (${version}) is not a stable release`);
       expect(stderr).toContain('--engine-version <tag>');
       expect(stderr).not.toContain('not on PATH');
     },

@@ -68,5 +68,8 @@ jobs:
           npm version "${TAG#v}" --no-git-tag-version --allow-same-version
           npm pkg set repository.url="git+https://github.com/${GITHUB_REPOSITORY}.git"
 
-      # prepack runs the typecheck and the bundle. Provenance is added by trusted publishing.
-      - run: npm publish --tag latest
+      # prepack runs the typecheck and the bundle, which reports the tag's version as a release cut's
+      # does. Provenance is added by trusted publishing.
+      - run: OAK_VERSION="${TAG#v}" npm publish --tag latest
+        env:
+          TAG: ${{ inputs.tag }}

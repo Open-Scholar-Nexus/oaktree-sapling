@@ -11,7 +11,7 @@ import type { ResolvedFlags } from './bootstrap.js';
 const ENGINE_TAG = /^v\d+\.\d+\.\d+(-dev\.\d+)?$/;
 
 /** A stable version as `oak --version` reports it. A bundle built outside a release cut reports
- *  package.json's `0.0.0-unreleased`, so it never matches. */
+ *  `<version>-unreleased+<sha>`, so it never matches. */
 const STABLE_VERSION = /^\d+\.\d+\.\d+$/;
 
 /** Whether `running` (the bundle's `OAK_VERSION`) is a stable release. */

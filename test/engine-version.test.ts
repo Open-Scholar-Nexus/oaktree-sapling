@@ -16,18 +16,18 @@ describe('pinnedEngineVersion', () => {
   });
 
   it('refuses a dev or unreleased build without --engine-version', () => {
-    for (const running of ['1.2.3-dev.4', '0.0.0-unreleased']) {
+    for (const running of ['1.2.3-dev.4', '1.2.3-unreleased+abc1234']) {
       expect(() => pinnedEngineVersion(undefined, running)).toThrow(UserError);
       expect(() => pinnedEngineVersion(undefined, running)).toThrow(
         new RegExp(
-          `the running oak \\(${running.replace(/\./g, '\\.')}\\) is not a stable release.*--engine-version <tag>`,
+          `the running oak \\(${running.replace(/[.+]/g, '\\$&')}\\) is not a stable release.*--engine-version <tag>`,
         ),
       );
     }
   });
 
   it('takes --engine-version as given, on any build', () => {
-    for (const running of ['1.2.3', '1.2.3-dev.4', '0.0.0-unreleased']) {
+    for (const running of ['1.2.3', '1.2.3-dev.4', '1.2.3-unreleased+abc1234']) {
       for (const tag of ['v1.2.3', 'v2.0.0', 'v1.3.0-dev.7']) {
         expect(pinnedEngineVersion(tag, running)).toEqual({
           engineVersion: tag,
@@ -57,7 +57,7 @@ describe('pinnedEngineVersion', () => {
 describe('isStableVersion', () => {
   it('is true only for X.Y.Z', () => {
     expect(isStableVersion('1.2.3')).toBe(true);
-    for (const v of ['1.2.3-dev.4', '0.0.0-unreleased', 'v1.2.3', '']) {
+    for (const v of ['1.2.3-dev.4', '1.2.3-unreleased+abc1234', 'v1.2.3', '']) {
       expect(isStableVersion(v)).toBe(false);
     }
   });
