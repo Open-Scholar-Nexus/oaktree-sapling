@@ -669,3 +669,92 @@ describe('a sandbox deposit never uses the production token [R102]', () => {
     expect(r.stdout + r.stderr).not.toContain('production-secret');
   });
 });
+
+describe.skipIf(bundleState() === 'absent')('the paper commands hand off to the pinned oak', () => {
+  beforeAll(assertBundleNotStale);
+
+  it('checks the pin before any git call, for build, validate and start', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'oak-pinned-'));
+    writeFileSync(
+      join(dir, 'myst.yml'),
+      'version: 1\nproject:\n  options:\n    oaktree-sapling:\n      version: v9.9.9\n      edition: e\n',
+    );
+    mkdirSync(join(dir, '.github', 'actions', 'engine'), { recursive: true });
+    writeFileSync(join(dir, '.github', 'actions', 'engine', 'pins.yml'), 'engine_repo: ../..\n');
+    const cache = mkdtempSync(join(tmpdir(), 'oak-pinned-cache-'));
+    for (const verb of ['build', 'validate', 'start']) {
+      const { code, stderr } = oak([verb, '--paper', dir], {
+        OAK_USE_RUNNING: undefined,
+        XDG_CACHE_HOME: cache,
+      });
+      expect(code, verb).toBe(2);
+      expect(stderr, verb).toContain(`oak ${verb}: engine_repo in`);
+    }
+    expect(existsSync(join(cache, 'oak'))).toBe(false);
+  });
+});
+
+describe.skipIf(bundleState() === 'absent')('fetching from a non-default engine_repo', () => {
+  beforeAll(assertBundleNotStale);
+
+  /** A paper pinning `someone/fork` v9.9.9, served from a local mirror whose `dist/cli.cjs`
+   *  records how it was run. */
+  function forkPaper() {
+    const dir = mkdtempSync(join(tmpdir(), 'oak-pinned-fork-'));
+    writeFileSync(
+      join(dir, 'myst.yml'),
+      'version: 1\nproject:\n  options:\n    oaktree-sapling:\n      version: v9.9.9\n      edition: e\n',
+    );
+    mkdirSync(join(dir, '.github', 'actions', 'engine'), { recursive: true });
+    writeFileSync(
+      join(dir, '.github', 'actions', 'engine', 'pins.yml'),
+      'engine_repo: someone/fork\n',
+    );
+    const mirrors = mkdtempSync(join(tmpdir(), 'oak-mirrors-'));
+    const fork = join(mirrors, 'someone', 'fork.git');
+    mkdirSync(join(fork, 'dist'), { recursive: true });
+    writeFileSync(
+      join(fork, 'dist', 'cli.cjs'),
+      "require('fs').writeFileSync(process.env.RAN, JSON.stringify({ argv: process.argv.slice(2), " +
+        'env: process.env.OAK_USE_RUNNING })); process.exit(5);\n',
+    );
+    const git = (...args: string[]) => spawnSync('git', ['-C', fork, ...args]);
+    git('init', '-q');
+    git('add', '-A');
+    git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'fork');
+    git('tag', 'v9.9.9');
+    const ran = join(mirrors, 'ran.json');
+    const env = {
+      OAK_USE_RUNNING: undefined,
+      XDG_CACHE_HOME: mkdtempSync(join(tmpdir(), 'oak-pinned-cache-')),
+      RAN: ran,
+      GIT_CONFIG_COUNT: '1',
+      GIT_CONFIG_KEY_0: `url.file://${mirrors}/.insteadOf`,
+      GIT_CONFIG_VALUE_0: 'https://github.com/',
+    };
+    return { dir, env, ran };
+  }
+
+  it('refuses without a TTY or --yes, and fetches nothing', () => {
+    const { dir, env, ran } = forkPaper();
+    const { code, stderr } = oak(['build', '--paper', dir], env);
+    expect(code).toBe(2);
+    expect(stderr).toContain('from someone/fork (engine_repo in pins.yml)');
+    expect(stderr).toContain('Re-run with --yes');
+    expect(existsSync(join(env.XDG_CACHE_HOME, 'oak'))).toBe(false);
+    expect(existsSync(ran)).toBe(false);
+  });
+
+  it('with --yes, clones the tag and runs its oak with the same arguments', () => {
+    const { dir, env, ran } = forkPaper();
+    const { code, stderr } = oak(['build', '--paper', dir, '--yes'], env);
+    expect(code).toBe(5);
+    expect(stderr).toContain('oak build: downloading oak v9.9.9 from someone/fork');
+    expect(stderr).toContain('oak build: running oak v9.9.9 from someone/fork');
+    expect(JSON.parse(readFileSync(ran, 'utf8'))).toEqual({
+      argv: ['build', '--paper', dir, '--yes'],
+      env: '1',
+    });
+    expect(existsSync(join(env.XDG_CACHE_HOME, 'oak', 'someone', 'fork', 'v9.9.9'))).toBe(true);
+  });
+});

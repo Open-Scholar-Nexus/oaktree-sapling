@@ -19,6 +19,9 @@ if [ -x "$engine/bin/typst" ] && "$engine/bin/typst" --version >/dev/null 2>&1; 
   export PATH="$engine/bin:$PATH"
 fi
 
+# The engine action checked out the version the paper pins, so oak never fetches another.
+export OAK_USE_RUNNING=1
+
 extra=()
 
 if [ "$verb" = "build" ] || [ "$verb" = "release" ]; then
