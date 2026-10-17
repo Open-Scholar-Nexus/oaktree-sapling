@@ -1,7 +1,7 @@
 /**
  * The strings oak prints for people, grouped by where they appear: the output helpers, then
- * usage, the confirm prompt, bootstrap, upgrade, build and start, validate, what lands on a pull
- * request, and the verbs the workflows run.
+ * usage, the confirm prompt, bootstrap, upgrade, build and start, the pinned oak version,
+ * validate, what lands on a pull request, and the verbs the workflows run.
  *
  * Fixed strings are consts, parameterised ones functions. Keep the `${…}` holes and the
  * `oak <verb>:` prefixes, which say which command spoke; some tests assert on fragments. Nothing
@@ -49,6 +49,7 @@
 
 import { DOCS, docsUrl } from './docs-links.js';
 import type { JournalCache } from './gh.js';
+import type { PaperVerb, PinnedEngine } from './pinned.js';
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════
  * Output plumbing: not prose, but it decides HOW the prose is printed.
@@ -154,6 +155,8 @@ export const usage = (): string =>
   `                    and branding applied (the same config its CI builds). Reloads as you\n` +
   `                    edit; Ctrl-C stops it. Run in the journal repo, it previews the\n` +
   `                    journal website instead.\n` +
+  `  These three run the oak version the paper's myst.yml pins, fetched once into ~/.cache/oak.\n` +
+  `      --use-running run this oak, whatever the paper pins (also OAK_USE_RUNNING=1)\n` +
   `\n` +
   `Run by the workflows (rarely typed by hand)\n` +
   `  oak post-checks --report <path> --repo <owner/repo> --sha <headsha> --base <branch>\n` +
@@ -652,6 +655,36 @@ export const start = {
   recomposeFailed: (message: string): string =>
     `oak start: myst.yml changed but could not be composed, so the preview is still showing the ` +
     `previous version: ${message}`,
+};
+
+/** `oak build`, `validate` and `start` handing the command to the oak version the paper pins. */
+export const pinned = {
+  running: (verb: PaperVerb, pin: PinnedEngine, dir: string, current: string): string =>
+    `oak ${verb}: running oak ${pin.version} from ${pin.engineRepo}, the version myst.yml pins ` +
+    `(${dir}). Pass --use-running to run this oak (${current}).`,
+
+  downloading: (verb: PaperVerb, pin: PinnedEngine, dir: string): string =>
+    `oak ${verb}: downloading oak ${pin.version} from ${pin.engineRepo} into ${dir}.`,
+
+  otherRepo: (verb: PaperVerb, pin: PinnedEngine, defaultRepo: string): string =>
+    `oak ${verb}: this paper runs oak ${pin.version} from ${pin.engineRepo} (engine_repo in ` +
+    `pins.yml), not from ${defaultRepo}. Fetching it runs that repository's code on this machine.`,
+
+  badVersion: (verb: PaperVerb, got: string, mystPath: string, current: string): string =>
+    `oak ${verb}: the oak version in ${mystPath} is ${JSON.stringify(got.slice(0, 60))}; pin a ` +
+    `release tag like v1.2.3, or pass --use-running to run this oak (${current}).`,
+
+  badRepo: (verb: PaperVerb, got: string, pinsPath: string): string =>
+    `oak ${verb}: engine_repo in ${pinsPath} must be owner/name, not ` +
+    `${JSON.stringify(got.slice(0, 60))}.`,
+
+  fetchFailed: (verb: PaperVerb, pin: PinnedEngine, why: string): string =>
+    `oak ${verb}: could not fetch oak ${pin.version} from ${pin.engineRepo} (${why}). Check the ` +
+    `version in myst.yml, or pass --use-running to run this oak.`,
+
+  noBuild: (verb: PaperVerb, pin: PinnedEngine, dir: string): string =>
+    `oak ${verb}: ${pin.engineRepo} ${pin.version} has no build (no dist/cli.cjs in ${dir}); ` +
+    `pin a release tag in myst.yml.`,
 };
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════
