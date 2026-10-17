@@ -15,8 +15,6 @@ oak upgrade --repo <owner>/<paper-repo>
 
 `--to <tag>` picks a release other than the newest. Without it, a version newer than the newest release, a branch or a commit is left as it is. `--files-only` replaces the files and leaves the version. When the release's workflows need a newer engine than the version that pull request would set, `oak` stops before changing anything and names the oldest version they run with.
 
-When it builds, `oak` writes a `journal` key beside the version in `myst.oak.yml`, naming the journal commit the build used. Leave it out of `myst.yml`: `oak validate` warns when it is there.
-
 (site-pins)=
 ## The journal website's versions
 

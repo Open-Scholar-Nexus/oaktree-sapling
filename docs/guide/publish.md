@@ -53,6 +53,18 @@ A published paper keeps one DOI for all its versions, and each version gets a DO
 
 Once a paper is published, every pull request to it gets a comment reminding the editors to click [**New version**](#click-new-version) on Zenodo, and the `editor-action-needed` label.
 
+## Leaving files out of the deposit
+
+`source.zip` holds what is committed at the tag. To leave a committed folder out, such as a large data set, mark it in `.gitattributes`:
+
+```
+data/ export-ignore
+```
+
+The PDF is rendered from the files in the repository, with notebook outputs as they were saved, so the data a figure was made from can be left out. A file the manuscript points to must stay: a figure's image, a notebook it embeds, a file it includes. Without it, the PDF in the deposit cannot be rendered again.
+
+`export-ignore` also leaves the folder out of GitHub's source downloads.
+
 ## When the publish run fails
 
 The run opens an issue titled **Zenodo publish failed for** the tag, labelled `zenodo-publish-failed`, with the reason. A common one is a new version tagged before **New version** was clicked on Zenodo. Fix the cause, then open the failed run and click **Re-run failed jobs**.

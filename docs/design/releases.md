@@ -41,7 +41,13 @@ The release script downloads typst at the version in `typst.version` and runs th
 
 ## What a deposit carries
 
-A deposit holds the PDF and what it was rendered from, so the PDF can be rendered again with nothing fetched from GitHub:
+A deposit holds the PDF and what it was rendered from. To render the PDF again with nothing fetched from GitHub, unzip `engine.zip`, `journal.zip` and `source.zip` into three folders, and from the paper's folder run:
+
+```sh
+node <engine>/dist/cli.cjs build --instance <journal> --exports-only
+```
+
+When the deposit has a `template.zip`, unzip it too and add `--typst-template <template>`. [`--exports-only`](#build) builds the PDF without the website, whose theme is downloaded. For a paper that is its own journal[^own-journal], leave out `--instance`: oak finds `journal.yml` beside the paper.
 
 | file | holds |
 |---|---|
@@ -54,19 +60,13 @@ A deposit holds the PDF and what it was rendered from, so the PDF can be rendere
 | `template.zip` | the PDF template, when it is the journal's or the author's |
 | `publication-provenance.json` | the paper's and the journal's repository and commit, the DOIs, and the typst version |
 
-The files in the paper's `deposit/` folder are added beside them. `oak validate` reports a `deposit/` file that takes one of these names, and `oak release` refuses to publish one.
+The files in the paper's `deposit/` folder are added beside them, and these names are reserved.
 
-The journal repository is fetched at its default branch on every run, and `deposit-version.yml` builds and deposits in two jobs, each with its own clone, so the deposit job's clone can be at a later commit than the build's. The build records the journal repository and commit it used in `myst.oak.yml`, under `project.options.oaktree-sapling.journal` beside the version and edition. That file reaches the deposit job in the build's artifact, and the deposit archives that commit, fetching it when its own clone has moved past it. oak writes the key itself and drops one set in `myst.yml`, which `oak validate` warns about. A build from journal files that are not a commit of their own repository, such as local changes or a folder inside a larger repository, records `commit: null` and cannot be deposited.
+`deposit-version.yml` builds and deposits in two jobs, and each clones the journal at its default branch, so a journal change between them leaves the two at different commits, as when a failed deposit job is re-run days later. The build records its commit in `myst.oak.yml`, under `project.options.oaktree-sapling.journal`, and the deposit archives that one. A build from journal files that are not a commit of their own repository, such as local changes, cannot be deposited.
 
-A paper repository that is its own journal (`instance_repo: "."` in `pins.yml`) gets no `journal.zip`, because its journal files are in `source.zip` at the same commit; the provenance names the paper's repository and commit as the journal's. A paper built with `--no-instance` has no journal to archive.
+A paper repository that is its own journal (`instance_repo: "."` in `pins.yml`)[^own-journal] gets no `journal.zip`, because its journal files are in `source.zip` at the same commit; the provenance names the paper's repository and commit as the journal's. A paper built with `--no-instance` has no journal to archive.
 
-To render the PDF again, unzip `engine.zip`, `journal.zip` and `source.zip` into three folders, and from the paper's folder run:
-
-```sh
-node <engine>/dist/cli.cjs build --instance <journal> --exports-only
-```
-
-When the deposit has a `template.zip`, unzip it too and add `--typst-template <template>`. [`--exports-only`](#build) builds the PDF without the website, whose theme is downloaded. For a paper that is its own journal, leave out `--instance`: oak finds `journal.yml` beside the paper.
+[^own-journal]: Planned, in development.
 
 (r114)=
 
