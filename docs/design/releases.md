@@ -89,7 +89,7 @@ The release script refuses a tag that already exists, pre-releases included, bec
 
 The npm package is a second way to get oak, and papers do not use it: their CI runs oak from a checkout, as above.
 
-`npm-publish.yml` publishes a release tag with npm trusted publishing, and sets the package version to the tag. npm versions stay published for good once the 72 hour unpublish window closes, so a dev tag published to `next` outlives its deletion here, and dev tags are published only by hand.
+`npm-publish.yml` publishes a stable release tag with npm trusted publishing, once its `conformance.json` says `ok`, and sets the package version to the tag. It refuses a dev tag: npm versions stay published for good once the 72 hour unpublish window closes, and a dev tag is deleted when pruned.
 
 `repository` in `package.json` has to name the repository whose Actions run publishes, because provenance checks it. The workflow sets it to the repository it runs in.
 
