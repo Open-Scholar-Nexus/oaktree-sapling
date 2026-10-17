@@ -5,7 +5,7 @@
  * local run builds with the same oak. Side effects are injected so the tests stay offline.
  */
 import { existsSync, mkdirSync, mkdtempSync, renameSync, rmSync } from 'node:fs';
-import { delimiter, dirname, isAbsolute, join } from 'node:path';
+import { delimiter, dirname, isAbsolute, join, resolve } from 'node:path';
 import { readDoc, readEngineCoordinateRaw } from './yaml-io.js';
 import * as msg from './messages.js';
 import { UserError } from './messages.js';
@@ -28,7 +28,17 @@ export interface PinnedEngine {
   version: string;
 }
 
-/** The version `<paperRoot>/myst.yml` pins and `engine_repo` from its `pins.yml` (else
+/** The nearest `pins.yml` from `paperRoot` up to the repo root, so a paper below the root
+ *  (co-located) reads the repo's. */
+function findPins(paperRoot: string): string | undefined {
+  for (let dir = resolve(paperRoot); ; dir = dirname(dir)) {
+    const pins = join(dir, PINS_FILE);
+    if (existsSync(pins)) return pins;
+    if (existsSync(join(dir, '.git')) || dirname(dir) === dir) return undefined;
+  }
+}
+
+/** The version `<paperRoot>/myst.yml` pins and `engine_repo` from the repo's `pins.yml` (else
  *  `defaultRepo`), or undefined when there is no readable pin: the verb then reports it. */
 export function readPin(paperRoot: string, defaultRepo: string): PinnedEngine | undefined {
   let version: string;
@@ -37,8 +47,8 @@ export function readPin(paperRoot: string, defaultRepo: string): PinnedEngine | 
   } catch {
     return undefined;
   }
-  const pins = join(paperRoot, PINS_FILE);
-  const v = existsSync(pins) ? readDoc(pins).get('engine_repo') : undefined;
+  const pins = findPins(paperRoot);
+  const v = pins ? readDoc(pins).get('engine_repo') : undefined;
   return { engineRepo: typeof v === 'string' && v ? v : defaultRepo, version };
 }
 

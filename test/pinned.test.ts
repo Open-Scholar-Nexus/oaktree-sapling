@@ -3,10 +3,17 @@
  * so nothing here touches the network or runs another oak.
  */
 import { describe, it, expect } from 'vitest';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { cacheHome, handOff, USE_RUNNING_ENV, type HandoffDeps } from '../src/pinned.js';
+import { cacheHome, handOff, readPin, USE_RUNNING_ENV, type HandoffDeps } from '../src/pinned.js';
 
 const DEFAULT_REPO = 'Open-Scholar-Nexus/oaktree-sapling';
 
@@ -194,5 +201,27 @@ describe('cacheHome', () => {
     expect(cacheHome({ XDG_CACHE_HOME: '/x/cache' }, '/home/a')).toBe('/x/cache');
     expect(cacheHome({ XDG_CACHE_HOME: 'rel' }, '/home/a')).toBe('/home/a/.cache');
     expect(cacheHome({}, '/home/a')).toBe('/home/a/.cache');
+  });
+});
+
+describe('readPin', () => {
+  it('a paper below the repo root reads the repo root pins.yml', () => {
+    const root = paper('v1.0.0', 'fork/oaktree-sapling');
+    mkdirSync(join(root, '.git'));
+    const sub = join(root, 'papers', 'p');
+    mkdirSync(sub, { recursive: true });
+    writeFileSync(join(sub, 'myst.yml'), readFileSync(join(root, 'myst.yml')));
+    expect(readPin(sub, DEFAULT_REPO)).toEqual({
+      engineRepo: 'fork/oaktree-sapling',
+      version: 'v1.0.0',
+    });
+  });
+
+  it('stops at the repo root', () => {
+    const outer = paper(null, 'outside/oaktree-sapling');
+    const repo = join(outer, 'repo');
+    mkdirSync(join(repo, '.git'), { recursive: true });
+    writeFileSync(join(repo, 'myst.yml'), readFileSync(join(paper('v1.0.0'), 'myst.yml')));
+    expect(readPin(repo, DEFAULT_REPO)?.engineRepo).toBe(DEFAULT_REPO);
   });
 });
