@@ -225,8 +225,8 @@ export function isFloatingTemplate(value: string): boolean {
 
 /**
  * The template findings, from the two layers a paper can change: the author's
- * `exports[].template` and the journal's `typst_template`. oak's own template needs none: a
- * checkout is fixed bytes, and the release zip is pinned to the tag.
+ * `exports[].template` and the journal's `typst_template`. oak's own template needs none: it
+ * is fixed bytes in oak's checkout.
  *
  * compose also warns about an author override, but a build log is not a review; this puts it in
  * the Check Run and the pull request comment, where an editor decides. A warning, since allowing
@@ -643,9 +643,6 @@ export async function runValidate(
     /** oak's checkout and the edition, for the [R72] check and the composed view. */
     engineRoot?: string | null;
     edition?: string | null;
-    /** The `engine_repo` pin, only for compose's fallback asset URLs; no check reads it
-     *  [R82]. */
-    engineRepo?: string;
     /** The asset overrides `oak build` passes, and they must match: both write the same
      *  `myst.oak.yml`, and different inputs would write different files. */
     assetOverrides?: ComposeInput['assetOverrides'];
@@ -671,7 +668,6 @@ export async function runValidate(
         paperRoot: input.paperRoot,
         engineRoot: input.engineRoot!,
         instanceRoot: input.instanceRoot,
-        engineRepo: input.engineRepo ?? 'unknown/engine',
         baseUrl: '', // no site is built here; compose only needs it for the build env
         assetOverrides: input.assetOverrides,
         edge: input.edge,

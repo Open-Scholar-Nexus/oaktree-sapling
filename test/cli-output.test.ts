@@ -435,6 +435,30 @@ describe.skipIf(bundleState() === 'absent')('bootstrap preflight ([R110], [R125]
   });
 });
 
+describe.skipIf(bundleState() === 'absent')("an install missing oak's typst template", () => {
+  beforeAll(assertBundleNotStale);
+
+  it('stops the build and names the directory', () => {
+    // engineRoot() finds the install by its paper-base.yml; this one has no templates/.
+    const install = mkdtempSync(join(tmpdir(), 'oak-notypst-'));
+    mkdirSync(join(install, 'dist'));
+    copyFileSync(bundlePath, join(install, 'dist', 'cli.cjs'));
+    copyFileSync(join(engineDir, 'paper-base.yml'), join(install, 'paper-base.yml'));
+    const env = { ...process.env };
+    delete env.CI;
+    delete env.GITHUB_ACTIONS;
+    const r = spawnSync(
+      'node',
+      [join(install, 'dist', 'cli.cjs'), 'build', '--paper', fixturePaper, '--no-instance'],
+      { encoding: 'utf8', env },
+    );
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain(
+      `oak's typst template is missing (${join(install, 'templates', 'typst')})`,
+    );
+  }, 60_000);
+});
+
 describe('subprocess output carries its provenance', () => {
   it('labels every line with the tool that produced it', () => {
     const out = labelChildOutput(

@@ -15,7 +15,7 @@ import { runBuild, runStart, type MystEdge } from '../src/build.js';
 import { UserError } from '../src/messages.js';
 import { DERIVED_CONFIG_FILE } from '../src/yaml-io.js';
 import type { ResolvedProject } from '../src/compose.js';
-import { typstTemplateUrl, themeZipUrl } from '../src/assets.js';
+import { themeZipUrl } from '../src/assets.js';
 import { TYPST_OUTPUT } from '../src/compose.js';
 
 const fixturePaper = fileURLToPath(new URL('./fixture-paper/myst.yml', import.meta.url));
@@ -67,7 +67,6 @@ describe('runBuild: the two-pass orchestrator ([R52])', () => {
       paperRoot,
       engineRoot: '.engine',
       instanceRoot: '.instance',
-      engineRepo: 'open-scholar-nexus/oaktree-sapling',
       baseUrl: '/fixture-sample-paper',
       edge,
     });
@@ -84,10 +83,8 @@ describe('runBuild: the two-pass orchestrator ([R52])', () => {
     expect(doc.getIn(['extends', 0])).toBe('.engine/paper-base.yml');
     expect(doc.getIn(['extends', 1])).toBe('.instance/editions/fixture-edition.yml');
     expect(doc.getIn(['extends', 2])).toBe('.instance/brand/brand.yml');
-    // the full typst entry in myst.oak.yml (release URL, articles kept)
-    expect(doc.getIn(['project', 'exports', 0, 'template'])).toBe(
-      typstTemplateUrl('open-scholar-nexus/oaktree-sapling', 'v0.3.0'),
-    );
+    // the full typst entry in myst.oak.yml (oak's template, articles kept)
+    expect(doc.getIn(['project', 'exports', 0, 'template'])).toBe('.engine/templates/typst');
     expect(doc.getIn(['project', 'exports', 0, 'articles', 0, 'file'])).toBe('index.md');
     // oak sets `output` too, so the PDF's path does not depend on the config's filename
     expect(doc.getIn(['project', 'exports', 0, 'output'])).toBe(TYPST_OUTPUT);
@@ -106,7 +103,6 @@ describe('runBuild: the two-pass orchestrator ([R52])', () => {
       paperRoot,
       engineRoot: '.engine',
       instanceRoot: '.instance',
-      engineRepo: 'x/y',
       baseUrl: '',
       assetOverrides: { typstTemplate: '/local/typst', siteTemplate: null },
       edge,
@@ -126,10 +122,8 @@ describe('runBuild: the two-pass orchestrator ([R52])', () => {
       paperRoot,
       engineRoot: '.engine',
       instanceRoot,
-      engineRepo: 'x/y',
       baseUrl: '',
-      // oak's template is in the checkout, and the journal's wins over it
-      assetOverrides: { engineTypstTemplate: '/engine/templates/typst' },
+      // the journal's template wins over the one in oak's checkout
       edge,
     });
 
@@ -151,7 +145,6 @@ describe('runBuild: the two-pass orchestrator ([R52])', () => {
       paperRoot,
       engineRoot: '.engine',
       instanceRoot: '.instance',
-      engineRepo: 'x/y',
       baseUrl: '/p',
       edge,
     });
@@ -168,7 +161,6 @@ describe('runBuild: the two-pass orchestrator ([R52])', () => {
         paperRoot,
         engineRoot: '.engine',
         instanceRoot: '.instance',
-        engineRepo: 'x/y',
         baseUrl: '/p',
         edge: fakeEdge().edge,
       });
@@ -195,7 +187,6 @@ describe('a missing version key is a sentence, not a stack', () => {
       paperRoot,
       engineRoot: '.engine',
       instanceRoot: '.instance',
-      engineRepo: 'x/y',
       baseUrl: '',
       edge: fakeEdge().edge,
     }).catch((e) => e);
@@ -216,7 +207,6 @@ describe('runStart: compose, then hand off to myst', () => {
       paperRoot,
       engineRoot: '.engine',
       instanceRoot: '.instance',
-      engineRepo: 'x/y',
       baseUrl: '',
       startOpts: { port: 3210 },
       edge,
@@ -246,7 +236,6 @@ describe('runStart: compose, then hand off to myst', () => {
       paperRoot,
       engineRoot: '.engine',
       instanceRoot: '.instance',
-      engineRepo: 'x/y',
       baseUrl: '',
       edge,
     });

@@ -522,6 +522,9 @@ export const build = {
     'deployed until it is set',
   finishFailed: (why: string): string =>
     `oak build: the site was built, but preparing it for upload failed (${why})`,
+  /** oak's install lacks `templates/typst`, which every release and npm package ships. */
+  noEngineTypstTemplate: (dir: string): string =>
+    `oak: oak's typst template is missing (${dir}). Reinstall oak, or run it from a full checkout.`,
 
   /** `oak build` in the journal repo, whose myst.yml is the website (cli.ts `isJournalRepo`). */
   inJournalRepo: (root: string): string =>

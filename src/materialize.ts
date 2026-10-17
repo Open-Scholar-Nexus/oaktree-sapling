@@ -66,7 +66,6 @@ export interface MaterializeInput {
   instanceRoot: string | null;
   /** Which journal checkout `instanceRoot` is, for the derived config ({@link JournalStamp}). */
   journalStamp?: JournalStamp;
-  engineRepo: string;
   baseUrl: string;
   assetOverrides?: ComposeInput['assetOverrides'];
   pdfDownload?: ComposeInput['pdfDownload'];
@@ -103,7 +102,6 @@ export async function materializeDerived(
     engineRoot,
     instanceRoot,
     journalStamp,
-    engineRepo,
     baseUrl,
     assetOverrides,
     pdfDownload,
@@ -145,7 +143,6 @@ export async function materializeDerived(
     engineRoot,
     instanceRoot,
     resolvedProject,
-    engineRepo,
     engineVersion,
     edition,
     baseUrl,

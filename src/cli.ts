@@ -22,6 +22,7 @@ import type { MaterializeInput, StartOpts } from './materialize.js';
 import type { JournalStamp } from './schema.js';
 import * as msg from './messages.js';
 import { annotate, inCI, UserError } from './messages.js';
+import { engineTypstTemplate } from './assets.js';
 
 // oak only runs as the CJS bundle [R51] (ci/run.sh and local runs both call dist/cli.cjs), so
 // `__dirname` is the bundle's directory; @types/node declares it for tsc.
@@ -71,33 +72,28 @@ function has(argv: string[], name: string): boolean {
 
 /** A string value from the paper's `pins.yml`, or undefined when the file or the key is
  *  absent. */
-function readPin(paperRoot: string, key: 'engine_repo' | 'instance_repo'): string | undefined {
+function readPin(paperRoot: string, key: 'instance_repo'): string | undefined {
   const pins = join(paperRoot, '.github', 'actions', 'engine', 'pins.yml');
   if (!existsSync(pins)) return undefined;
   const v = parseDocument(readFileSync(pins, 'utf8')).get(key);
   return typeof v === 'string' && v ? v : undefined;
 }
 
-/** The `engine_repo` pin, for asset URLs. Repos carry pins.yml; the fallback is oak's own
- *  repo. */
-function readEngineRepo(paperRoot: string): string {
-  return readPin(paperRoot, 'engine_repo') ?? 'Open-Scholar-Nexus/oaktree-sapling';
-}
-
 /**
- * Asset overrides from the checkout. `--typst-template` beats every other template; the
+ * Asset overrides from the flags. `--typst-template` beats every other template; the
  * checkout's own `templates/typst` is the default, which a journal's or author's template
- * outranks [R76]. `--no-site-template` uses myst's default theme.
+ * outranks [R76]. `--no-site-template` uses myst's default theme. Throws when the checkout has
+ * no `templates/typst`.
  *
  * Shared by `oak build` and `oak validate` so both write the same `myst.oak.yml` [R82], which
  * `readStampedTemplate` (zenodo.ts) reads as what was rendered.
  */
 function assetOverridesFrom(argv: string[]): ComposeInput['assetOverrides'] {
-  const localTypst = join(engineRoot(), 'templates', 'typst');
+  const localTypst = engineTypstTemplate(engineRoot());
+  if (!existsSync(localTypst)) throw new Error(msg.build.noEngineTypstTemplate(localTypst));
   const typstTemplate = flag(argv, 'typst-template');
   return {
     ...(typstTemplate ? { typstTemplate: resolve(typstTemplate) } : {}),
-    ...(existsSync(localTypst) ? { engineTypstTemplate: localTypst } : {}),
     ...(has(argv, 'no-site-template') ? { siteTemplate: null as string | null } : {}),
   };
 }
@@ -176,7 +172,6 @@ function materializeInputFrom(
     engineRoot: engineRoot(),
     instanceRoot: instance.root,
     journalStamp: instance.stamp,
-    engineRepo: flag(argv, 'engine-repo') ?? readEngineRepo(paperRoot),
     baseUrl: flag(argv, 'base-url') ?? '',
     assetOverrides: assetOverridesFrom(argv),
   };
@@ -967,7 +962,7 @@ async function cmdPostChecks(argv: string[]): Promise<number> {
   return out.checkRunPosted ? 0 : 1;
 }
 
-/** oak's own repo, matching readEngineRepo's fallback. */
+/** oak's own repo. */
 const ENGINE_REPO_DEFAULT = 'Open-Scholar-Nexus/oaktree-sapling';
 
 /** Prints the plan to stderr, then takes --yes (required without a TTY) or asks. */

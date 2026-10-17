@@ -8,7 +8,7 @@
  *
  * Copies the fixture to a temp dir first so the committed fixture is never mutated by
  * the two-pass working-tree injection. This is the "test with a local template" path:
- * no release zip, no network for the PDF; the engine template is used by path.
+ * no network for the PDF; the engine template is used by path.
  */
 import { mkdtempSync, copyFileSync, existsSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
