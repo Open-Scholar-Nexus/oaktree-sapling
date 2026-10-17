@@ -1,7 +1,8 @@
 /**
- * Which release of oak a repo gets by default: `oak bootstrap` without `--engine-version`, and
- * `oak upgrade` without `--to`. Both write it into the repo, and a dev release will be deleted
- * when pruned (RELEASING.md), so it must be a stable one.
+ * Which release of oak a repo gets by default: `oak upgrade` without `--to`. It writes it into the
+ * repo, and a dev release will be deleted when pruned (RELEASING.md), so it must be a stable one.
+ * `oak bootstrap` pins the running oak's own version, and looks the newest release up only to say
+ * when a newer one exists (engine-version.test.ts).
  *
  * `latestEngineRelease` must use `repos/<repo>/releases/latest`, the newest release that is
  * neither a draft nor a pre-release; `gh release list --limit 1` sorts by date and includes
@@ -43,10 +44,9 @@ describe('the release a repo gets by default', () => {
 
   it('tells a repo with only pre-releases how to name one', () => {
     // "no releases" would contradict the releases page.
-    for (const m of [msg.workflow.noStableRelease('me/engine'), msg.workflow.bootstrapNoRelease]) {
-      expect(m).not.toMatch(/no releases found/);
-      expect(m).toMatch(/pre-release/);
-      expect(m).toMatch(/--to <tag>|--engine-version <tag>/);
-    }
+    const m = msg.workflow.noStableRelease('me/engine');
+    expect(m).not.toMatch(/no releases found/);
+    expect(m).toMatch(/pre-release/);
+    expect(m).toMatch(/--to <tag>/);
   });
 });

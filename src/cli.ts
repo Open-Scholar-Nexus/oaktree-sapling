@@ -1030,22 +1030,16 @@ async function cmdBootstrap(argv: string[]): Promise<number> {
       return 2;
     }
   }
+  const { pinnedEngineVersion, newerRelease } = await import('./engine-version.js');
+  const pinned = pinnedEngineVersion(flag(rest, 'engine-version'), OAK_VERSION);
   gh.assertGhReady();
   const engineRepo = flag(rest, 'engine-repo') ?? ENGINE_REPO_DEFAULT;
-  let engineVersion = flag(rest, 'engine-version');
-  // The plan says how the version was chosen: "the newest release now" and "the tag you named"
-  // differ, and only the second is reproducible.
-  const engineVersionFrom: 'flag' | 'latest-release' = engineVersion ? 'flag' : 'latest-release';
-  if (!engineVersion) {
-    try {
-      engineVersion = gh.latestEngineRelease(engineRepo);
-    } catch {
-      process.stderr.write(msg.workflow.bootstrapNoRelease + '\n');
-      return 2;
-    }
-  }
+  const { engineVersion } = pinned;
   const resolved = {
-    engineVersionFrom,
+    ...pinned.resolved,
+    ...(pinned.resolved.engineVersionFrom === 'running-oak'
+      ? { newerRelease: newerRelease(OAK_VERSION, () => gh.latestEngineRelease(engineRepo)) }
+      : {}),
     engineRepoFrom: (flag(rest, 'engine-repo') ? 'flag' : 'default') as 'flag' | 'default',
   };
   const deps = {
@@ -1262,7 +1256,8 @@ function nearestVerb(word: string): string | null {
   return bestD <= 3 ? best : null;
 }
 
-/** Set by the bundle: the release tag's version, or package.json's in a local build. */
+/** Set by the bundle: the release tag without its `v`, or package.json's `0.0.0-unreleased` in
+ *  a bundle built outside a release. */
 declare const OAK_VERSION: string;
 
 async function main(argv: string[]): Promise<number> {

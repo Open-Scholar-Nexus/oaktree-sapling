@@ -895,10 +895,10 @@ export function cachedJournal(
 
 /**
  * The latest stable release tag of `engineRepo`, from the `releases/latest` API: the newest
- * release that is neither a draft nor a pre-release, so `oak bootstrap` and `oak upgrade`
- * never pick a pre-release (RELEASING.md). One is used only when named (`--engine-version`,
- * `--to`). A 404 means no stable release yet: the probe is quiet, and `oak bootstrap` and
- * `oak upgrade` say how to proceed.
+ * release that is neither a draft nor a pre-release, so `oak upgrade` never picks a pre-release
+ * (RELEASING.md); one is used only when named (`--to`). `oak bootstrap` reads it only to say a
+ * newer release exists. A 404 means no stable release yet: the probe is quiet, and `oak upgrade`
+ * says how to proceed.
  */
 export function latestEngineRelease(engineRepo: string): string {
   let tag = '';
