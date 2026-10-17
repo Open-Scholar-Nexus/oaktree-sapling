@@ -15,7 +15,7 @@ import { runBuild, runStart, type MystEdge } from '../src/build.js';
 import { UserError } from '../src/messages.js';
 import { DERIVED_CONFIG_FILE } from '../src/yaml-io.js';
 import type { ResolvedProject } from '../src/compose.js';
-import { typstTemplateUrl, themeZipUrl } from '../src/assets.js';
+import { themeZipUrl } from '../src/assets.js';
 import { TYPST_OUTPUT } from '../src/compose.js';
 
 const fixturePaper = fileURLToPath(new URL('./fixture-paper/myst.yml', import.meta.url));
@@ -25,6 +25,13 @@ function tmpPaper(): string {
   const dir = mkdtempSync(join(tmpdir(), 'oak-build-'));
   copyFileSync(fixturePaper, join(dir, 'myst.yml'));
   writeFileSync(join(dir, 'index.md'), '# Fixture\n');
+  return dir;
+}
+
+/** An engine root holding oak's typst template, which a PDF build checks for. */
+function tmpEngine(): string {
+  const dir = mkdtempSync(join(tmpdir(), 'oak-engine-'));
+  mkdirSync(join(dir, 'templates', 'typst'), { recursive: true });
   return dir;
 }
 
@@ -61,13 +68,13 @@ function fakeEdge(): { edge: MystEdge; calls: string[] } {
 describe('runBuild: the two-pass orchestrator ([R52])', () => {
   it("writes extends, then oak's settings, into myst.oak.yml, then builds", async () => {
     const paperRoot = tmpPaper();
+    const engineRoot = tmpEngine();
     const { edge, calls } = fakeEdge();
 
     const res = await runBuild({
       paperRoot,
-      engineRoot: '.engine',
+      engineRoot,
       instanceRoot: '.instance',
-      engineRepo: 'open-scholar-nexus/oaktree-sapling',
       baseUrl: '/fixture-sample-paper',
       edge,
     });
@@ -81,12 +88,12 @@ describe('runBuild: the two-pass orchestrator ([R52])', () => {
 
     const doc = parseDocument(readFileSync(join(paperRoot, DERIVED_CONFIG_FILE), 'utf8'));
     // extends chain written in pass 1
-    expect(doc.getIn(['extends', 0])).toBe('.engine/paper-base.yml');
+    expect(doc.getIn(['extends', 0])).toBe(`${engineRoot}/paper-base.yml`);
     expect(doc.getIn(['extends', 1])).toBe('.instance/editions/fixture-edition.yml');
     expect(doc.getIn(['extends', 2])).toBe('.instance/brand/brand.yml');
-    // the full typst entry in myst.oak.yml (release URL, articles kept)
+    // the full typst entry in myst.oak.yml (oak's template, articles kept)
     expect(doc.getIn(['project', 'exports', 0, 'template'])).toBe(
-      typstTemplateUrl('open-scholar-nexus/oaktree-sapling', 'v0.3.0'),
+      join(engineRoot, 'templates', 'typst'),
     );
     expect(doc.getIn(['project', 'exports', 0, 'articles', 0, 'file'])).toBe('index.md');
     // oak sets `output` too, so the PDF's path does not depend on the config's filename
@@ -106,7 +113,6 @@ describe('runBuild: the two-pass orchestrator ([R52])', () => {
       paperRoot,
       engineRoot: '.engine',
       instanceRoot: '.instance',
-      engineRepo: 'x/y',
       baseUrl: '',
       assetOverrides: { typstTemplate: '/local/typst', siteTemplate: null },
       edge,
@@ -126,10 +132,8 @@ describe('runBuild: the two-pass orchestrator ([R52])', () => {
       paperRoot,
       engineRoot: '.engine',
       instanceRoot,
-      engineRepo: 'x/y',
       baseUrl: '',
-      // oak's template is in the checkout, and the journal's wins over it
-      assetOverrides: { engineTypstTemplate: '/engine/templates/typst' },
+      // the journal's template wins over the one in oak's checkout
       edge,
     });
 
@@ -149,9 +153,8 @@ describe('runBuild: the two-pass orchestrator ([R52])', () => {
     const { edge } = fakeEdge();
     await runBuild({
       paperRoot,
-      engineRoot: '.engine',
+      engineRoot: tmpEngine(),
       instanceRoot: '.instance',
-      engineRepo: 'x/y',
       baseUrl: '/p',
       edge,
     });
@@ -163,12 +166,12 @@ describe('runBuild: the two-pass orchestrator ([R52])', () => {
 
   it('derived config is regenerated from the author config, not accumulated ([R71])', async () => {
     const paperRoot = tmpPaper();
+    const engineRoot = tmpEngine();
     const run = () =>
       runBuild({
         paperRoot,
-        engineRoot: '.engine',
+        engineRoot,
         instanceRoot: '.instance',
-        engineRepo: 'x/y',
         baseUrl: '/p',
         edge: fakeEdge().edge,
       });
@@ -184,6 +187,41 @@ describe('runBuild: the two-pass orchestrator ([R52])', () => {
   });
 });
 
+describe("an install missing oak's typst template", () => {
+  const build = (extra: Partial<Parameters<typeof runBuild>[0]>) => {
+    const { edge, calls } = fakeEdge();
+    const run = runBuild({
+      paperRoot: tmpPaper(),
+      engineRoot: '.engine',
+      instanceRoot: '.instance',
+      baseUrl: '',
+      edge,
+      ...extra,
+    });
+    return { run, calls };
+  };
+
+  it('stops a PDF build with a UserError naming the directory', async () => {
+    const { run, calls } = build({});
+    const err = await run.catch((e) => e);
+    expect(err).toBeInstanceOf(UserError);
+    expect(err.message).toContain(join('.engine', 'templates', 'typst'));
+    expect(calls.some((c) => c.startsWith('build:'))).toBe(false);
+  });
+
+  it('builds when another template wins', async () => {
+    const { run, calls } = build({ assetOverrides: { typstTemplate: '/local/typst' } });
+    await run;
+    expect(calls.some((c) => c.startsWith('build:'))).toBe(true);
+  });
+
+  it('builds the site alone (--no-exports)', async () => {
+    const { run, calls } = build({ buildOpts: { all: false, html: true } });
+    await run;
+    expect(calls.some((c) => c.startsWith('build:'))).toBe(true);
+  });
+});
+
 describe('a missing version key is a sentence, not a stack', () => {
   it('names the file and the line to put back, as a UserError', async () => {
     // A missing version key is a UserError, printed as a sentence without a stack.
@@ -195,7 +233,6 @@ describe('a missing version key is a sentence, not a stack', () => {
       paperRoot,
       engineRoot: '.engine',
       instanceRoot: '.instance',
-      engineRepo: 'x/y',
       baseUrl: '',
       edge: fakeEdge().edge,
     }).catch((e) => e);
@@ -216,7 +253,6 @@ describe('runStart: compose, then hand off to myst', () => {
       paperRoot,
       engineRoot: '.engine',
       instanceRoot: '.instance',
-      engineRepo: 'x/y',
       baseUrl: '',
       startOpts: { port: 3210 },
       edge,
@@ -246,7 +282,6 @@ describe('runStart: compose, then hand off to myst', () => {
       paperRoot,
       engineRoot: '.engine',
       instanceRoot: '.instance',
-      engineRepo: 'x/y',
       baseUrl: '',
       edge,
     });

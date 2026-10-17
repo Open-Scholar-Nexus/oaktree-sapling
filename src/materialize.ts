@@ -66,7 +66,6 @@ export interface MaterializeInput {
   instanceRoot: string | null;
   /** Which journal checkout `instanceRoot` is, for the derived config ({@link JournalStamp}). */
   journalStamp?: JournalStamp;
-  engineRepo: string;
   baseUrl: string;
   assetOverrides?: ComposeInput['assetOverrides'];
   pdfDownload?: ComposeInput['pdfDownload'];
@@ -84,6 +83,8 @@ export interface MaterializeResult {
   edition: string;
   /** compose's warnings, including the one for building without a journal. */
   warnings: string[];
+  /** The typst template compose chose; undefined without a typst export. */
+  typstTemplate?: string;
 }
 
 /**
@@ -103,7 +104,6 @@ export async function materializeDerived(
     engineRoot,
     instanceRoot,
     journalStamp,
-    engineRepo,
     baseUrl,
     assetOverrides,
     pdfDownload,
@@ -145,7 +145,6 @@ export async function materializeDerived(
     engineRoot,
     instanceRoot,
     resolvedProject,
-    engineRepo,
     engineVersion,
     edition,
     baseUrl,
@@ -161,5 +160,14 @@ export async function materializeDerived(
   applyOwnOverride(doc, result.ownOverride);
   writeDerivedDoc(derivedPath, doc);
 
-  return { resolvedProject, derivedPath, extendsChain, edition, warnings: result.warnings };
+  const typstTemplate = result.ownOverride.project?.exports?.[0]?.['template'] as
+    string | undefined;
+  return {
+    resolvedProject,
+    derivedPath,
+    extendsChain,
+    edition,
+    warnings: result.warnings,
+    typstTemplate,
+  };
 }

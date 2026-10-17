@@ -1,10 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { compose, type ComposeInput, type ResolvedProject } from '../src/compose.js';
-import { typstTemplateUrl, themeZipUrl } from '../src/assets.js';
+import { themeZipUrl } from '../src/assets.js';
 
 const ENGINE = '.engine';
 const INSTANCE = '.instance';
-const ENGINE_REPO = 'open-scholar-nexus/oaktree-sapling';
 const VERSION = 'v0.3.0';
 const EDITION = 'fixture-edition';
 
@@ -26,7 +25,6 @@ const base = (over: Partial<ComposeInput> = {}): ComposeInput => ({
   engineRoot: ENGINE,
   instanceRoot: INSTANCE,
   resolvedProject,
-  engineRepo: ENGINE_REPO,
   engineVersion: VERSION,
   edition: EDITION,
   baseUrl: '/fixture-sample-paper',
@@ -71,7 +69,7 @@ describe("compose: what oak sets on the paper's own config [R5] [R52]", () => {
   it('writes the whole typst entry, articles and template', () => {
     const r = compose(base());
     const exp = r.ownOverride.project!.exports[0]!;
-    expect(exp.template).toBe(typstTemplateUrl(ENGINE_REPO, VERSION));
+    expect(exp.template).toBe(`${ENGINE}/templates/typst`);
     expect(exp.articles).toEqual([{ file: 'index.md', level: 0 }]); // kept, since entries are not merged field by field
     expect(exp.id).toBe('typst-pdf');
   });
@@ -181,22 +179,12 @@ describe('compose: which typst template wins: author, then journal, then oak [R7
   const templateOf = (r: ReturnType<typeof compose>) =>
     r.ownOverride.project!.exports![0]!.template;
 
-  it("uses oak's release URL when nothing else is set", () => {
-    expect(templateOf(compose(base()))).toBe(typstTemplateUrl(ENGINE_REPO, VERSION));
-  });
-
-  it("falls back to the template in oak's checkout last", () => {
-    const r = compose(base({ assetOverrides: { engineTypstTemplate: ENGINE_LOCAL } }));
-    expect(templateOf(r)).toBe(ENGINE_LOCAL);
+  it("uses the template in oak's checkout when nothing else is set", () => {
+    expect(templateOf(compose(base()))).toBe(ENGINE_LOCAL);
   });
 
   it("the journal's template wins over oak's", () => {
-    const r = compose(
-      base({
-        journalTypstTemplate: './typst-template',
-        assetOverrides: { engineTypstTemplate: ENGINE_LOCAL },
-      }),
-    );
+    const r = compose(base({ journalTypstTemplate: './typst-template' }));
     expect(templateOf(r)).toBe(`${INSTANCE}/typst-template`);
   });
 
@@ -205,7 +193,6 @@ describe('compose: which typst template wins: author, then journal, then oak [R7
       base({
         resolvedProject: withAuthorTemplate('./my-template'),
         journalTypstTemplate: './typst-template',
-        assetOverrides: { engineTypstTemplate: ENGINE_LOCAL },
       }),
     );
     expect(templateOf(r)).toBe('./my-template');
@@ -223,7 +210,7 @@ describe('compose: which typst template wins: author, then journal, then oak [R7
       base({
         resolvedProject: withAuthorTemplate('./my-template'),
         journalTypstTemplate: './typst-template',
-        assetOverrides: { typstTemplate: '/explicit/override', engineTypstTemplate: ENGINE_LOCAL },
+        assetOverrides: { typstTemplate: '/explicit/override' },
       }),
     );
     expect(templateOf(r)).toBe('/explicit/override');

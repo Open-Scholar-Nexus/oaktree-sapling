@@ -14,7 +14,7 @@
 import * as msg from './messages.js';
 import { isAbsolute, join } from 'node:path';
 import { readEngineOptions, type JournalStamp } from './schema.js';
-import { typstTemplateUrl, themeZipUrl } from './assets.js';
+import { engineTypstTemplate, themeZipUrl } from './assets.js';
 
 /**
  * Where the typst PDF is written, relative to the paper root. Without it, myst derives the path
@@ -108,27 +108,22 @@ export interface ResolvedProject {
 export interface ComposeInput {
   /** Path to the paper root, which holds myst.yml. */
   paperRoot: string;
-  /** Path to oak's checkout, which holds paper-base.yml. */
+  /** Path to oak's checkout, which holds paper-base.yml and oak's typst template. */
   engineRoot: string;
   /** Path to the journal repo; null with --no-instance. */
   instanceRoot: string | null;
   /** The project as myst resolved it (`loadConfig().project`). Read only. */
   resolvedProject: ResolvedProject;
-  /** oak's version and repo, read before the merge; used for URLs. */
-  engineRepo: string;
+  /** oak's version, read before the merge. */
   engineVersion: string;
   /** The paper's edition, read before the merge; selects `editions/<edition>.yml`. */
   edition: string;
   /** `/<repo>` in CI for GitHub Pages; empty locally and for previews [design §12a]. */
   baseUrl: string;
-  /** Overrides for the asset URLs. By default they point at the release's zips; checkouts and
-   *  tests pass local paths. */
+  /** Overrides for the PDF template and the site theme, from the CLI flags. */
   assetOverrides?: {
     /** `--typst-template <path>`: an explicit override, above every other template. */
     typstTemplate?: string;
-    /** oak's own template as a local directory (`<engineRoot>/templates/typst`), the default
-     *  that journal and author templates outrank. When absent, the release zip URL. */
-    engineTypstTemplate?: string;
     /** string → use it; null → omit site.template (myst default); undefined → release zip. */
     siteTemplate?: string | null;
   };
@@ -202,7 +197,6 @@ export function compose(input: ComposeInput): ComposeResult {
     engineRoot,
     instanceRoot,
     resolvedProject,
-    engineRepo,
     engineVersion,
     edition,
     baseUrl,
@@ -243,8 +237,7 @@ export function compose(input: ComposeInput): ComposeResult {
       input.journalTypstTemplate && instanceRoot
         ? resolveJournalTemplate(instanceRoot, input.journalTypstTemplate)
         : input.journalTypstTemplate;
-    const engineTemplate =
-      assetOverrides.engineTypstTemplate ?? typstTemplateUrl(engineRepo, engineVersion);
+    const engineTemplate = engineTypstTemplate(engineRoot);
     const template =
       assetOverrides.typstTemplate ?? authorTemplate ?? journalTemplate ?? engineTemplate;
 

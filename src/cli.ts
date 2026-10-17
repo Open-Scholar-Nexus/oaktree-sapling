@@ -69,23 +69,17 @@ function has(argv: string[], name: string): boolean {
   return argv.includes(`--${name}`);
 }
 
-/** A string value from the paper's `pins.yml`, or undefined when the file or the key is
- *  absent. */
-function readPin(paperRoot: string, key: 'engine_repo' | 'instance_repo'): string | undefined {
+/** The `instance_repo` pin from the paper's `pins.yml`, or undefined when the file or the key
+ *  is absent. */
+function readInstanceRepo(paperRoot: string): string | undefined {
   const pins = join(paperRoot, '.github', 'actions', 'engine', 'pins.yml');
   if (!existsSync(pins)) return undefined;
-  const v = parseDocument(readFileSync(pins, 'utf8')).get(key);
+  const v = parseDocument(readFileSync(pins, 'utf8')).get('instance_repo');
   return typeof v === 'string' && v ? v : undefined;
 }
 
-/** The `engine_repo` pin, for asset URLs. Repos carry pins.yml; the fallback is oak's own
- *  repo. */
-function readEngineRepo(paperRoot: string): string {
-  return readPin(paperRoot, 'engine_repo') ?? 'Open-Scholar-Nexus/oaktree-sapling';
-}
-
 /**
- * Asset overrides from the checkout. `--typst-template` beats every other template; the
+ * Asset overrides from the flags. `--typst-template` beats every other template; the
  * checkout's own `templates/typst` is the default, which a journal's or author's template
  * outranks [R76]. `--no-site-template` uses myst's default theme.
  *
@@ -93,11 +87,9 @@ function readEngineRepo(paperRoot: string): string {
  * `readStampedTemplate` (zenodo.ts) reads as what was rendered.
  */
 function assetOverridesFrom(argv: string[]): ComposeInput['assetOverrides'] {
-  const localTypst = join(engineRoot(), 'templates', 'typst');
   const typstTemplate = flag(argv, 'typst-template');
   return {
     ...(typstTemplate ? { typstTemplate: resolve(typstTemplate) } : {}),
-    ...(existsSync(localTypst) ? { engineTypstTemplate: localTypst } : {}),
     ...(has(argv, 'no-site-template') ? { siteTemplate: null as string | null } : {}),
   };
 }
@@ -128,7 +120,7 @@ async function resolveInstanceRoot(
   const found = (root: string) => ({ root, stamp: journalStamp(root, paperRoot) });
   if (explicit) return found(resolve(explicit));
   if (existsSync(join(paperRoot, 'journal.yml'))) return found(paperRoot);
-  const journalRepo = readPin(paperRoot, 'instance_repo');
+  const journalRepo = readInstanceRepo(paperRoot);
   if (!journalRepo || journalRepo === '.') return { error: msg.build.noInstance(verb, paperRoot) };
   try {
     const cache = cachedJournal(journalRepo, paperRoot);
@@ -176,7 +168,6 @@ function materializeInputFrom(
     engineRoot: engineRoot(),
     instanceRoot: instance.root,
     journalStamp: instance.stamp,
-    engineRepo: flag(argv, 'engine-repo') ?? readEngineRepo(paperRoot),
     baseUrl: flag(argv, 'base-url') ?? '',
     assetOverrides: assetOverridesFrom(argv),
   };
@@ -967,7 +958,7 @@ async function cmdPostChecks(argv: string[]): Promise<number> {
   return out.checkRunPosted ? 0 : 1;
 }
 
-/** oak's own repo, matching readEngineRepo's fallback. */
+/** oak's own repo. */
 const ENGINE_REPO_DEFAULT = 'Open-Scholar-Nexus/oaktree-sapling';
 
 /** Prints the plan to stderr, then takes --yes (required without a TTY) or asks. */

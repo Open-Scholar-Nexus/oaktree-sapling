@@ -37,7 +37,7 @@ describe('build and validate materialize from the same inputs', () => {
   });
 
   it('validate does not rebuild the shared fields by hand', () => {
-    // cmdValidate must not list paperRoot, engineRoot, engineRepo or assetOverrides itself,
+    // cmdValidate must not list paperRoot, engineRoot or assetOverrides itself,
     // since its own list could differ from the build's.
     const call = cli.slice(cli.indexOf('await runValidate('));
     // Leave out the builder call, where `paperRoot` and `instanceRoot` are its arguments.
@@ -48,7 +48,6 @@ describe('build and validate materialize from the same inputs', () => {
       .join('\n');
     for (const field of [
       'engineRoot:',
-      'engineRepo:',
       'assetOverrides:',
       'baseUrl:',
       'paperRoot,',
