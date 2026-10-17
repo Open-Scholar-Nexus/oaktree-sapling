@@ -50,6 +50,23 @@ describe('compose: extends chain', () => {
   });
 });
 
+describe('compose: the journal stamp [R66]', () => {
+  it('writes the whole oaktree-sapling object, coordinates included', () => {
+    const journal = { repo: 'o/journal', commit: 'a'.repeat(40) };
+    const r = compose(base({ journal }));
+    expect(r.ownOverride.project!.options!['oaktree-sapling']).toEqual({
+      version: VERSION,
+      edition: EDITION,
+      journal,
+    });
+  });
+
+  it('leaves the key alone without a journal', () => {
+    const r = compose(base({ journal: undefined }));
+    expect(r.ownOverride.project?.options?.['oaktree-sapling']).toBeUndefined();
+  });
+});
+
 describe("compose: what oak sets on the paper's own config [R5] [R52]", () => {
   it('writes the whole typst entry, articles and template', () => {
     const r = compose(base());

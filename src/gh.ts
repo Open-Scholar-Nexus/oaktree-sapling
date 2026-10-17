@@ -20,7 +20,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { parseDocument } from 'yaml';
 import type { GitContext } from './zenodo.js';
-import type { JournalStamp } from './yaml-io.js';
+import { COMMIT_ID, locationRepo, type JournalStamp } from './schema.js';
 import { LABEL_ZENODO_FAILED, type GhPr, type PagesDeployer } from './preview.js';
 import type { CheckRun } from './checks.js';
 import type { EnvironmentReviewer, Provisioner } from './bootstrap.js';
@@ -198,6 +198,8 @@ export const realGitContext: GitContext = {
     git(repoRoot, ['archive', '--format=zip', '-o', outZip, commit]);
   },
   async fetchCommit(repoRoot, commit) {
+    // Checked again here: the value comes from the build job's artifact, which the paper's code
+    // could have written, and git reads a leading dash as an option.
     if (!COMMIT_ID.test(commit)) throw new Error(`not a full commit id: ${commit}`);
     try {
       git(repoRoot, ['cat-file', '-e', `${commit}^{commit}`], { quiet: true });
@@ -224,25 +226,23 @@ export const realGitContext: GitContext = {
   },
 };
 
-/** A full commit id, the only form `fetchCommit` passes to git: the value comes from the build
- *  job's artifact, which the paper's code could have written. */
-const COMMIT_ID = /^([0-9a-f]{40}|[0-9a-f]{64})$/;
-
 /**
- * Which journal checkout `instanceRoot` is, for the derived config's banner ({@link JournalStamp}).
+ * Which journal checkout `instanceRoot` is ({@link JournalStamp}); undefined without one.
  * Untracked files count as uncommitted: `git archive` leaves them out.
  */
-export function journalStamp(instanceRoot: string | null, paperRoot: string): JournalStamp {
-  if (instanceRoot === null) return { kind: 'none' };
-  if (resolve(instanceRoot) === resolve(paperRoot)) return { kind: 'paper' };
+export function journalStamp(
+  instanceRoot: string | null,
+  paperRoot: string,
+): JournalStamp | undefined {
+  if (instanceRoot === null) return undefined;
+  if (resolve(instanceRoot) === resolve(paperRoot)) return { repo: '.' };
+  const repo = locationRepo(originRepo(instanceRoot));
   try {
     const commit = git(instanceRoot, ['rev-parse', 'HEAD'], { quiet: true });
-    if (git(instanceRoot, ['status', '--porcelain', '--', '.'], { quiet: true })) {
-      return { kind: 'uncommitted' };
-    }
-    return { kind: 'commit', commit, repo: originRepo(instanceRoot) };
+    const dirty = git(instanceRoot, ['status', '--porcelain', '--', '.'], { quiet: true });
+    return { repo, commit: dirty ? null : commit };
   } catch {
-    return { kind: 'uncommitted' };
+    return { repo, commit: null };
   }
 }
 

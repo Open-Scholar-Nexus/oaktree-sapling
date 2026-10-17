@@ -650,6 +650,21 @@ describe("the author's template is read from their myst.yml, not from the compos
     );
     expect(findings.some((f) => f.check === 'template-override')).toBe(true);
   });
+
+  it("warns when the author's myst.yml sets the journal stamp oak writes", () => {
+    const paperRoot = tmpDir({
+      'myst.yml':
+        'version: 1\nproject:\n  id: j-2026-x\n  options:\n    oaktree-sapling:\n      journal: { repo: "." }\n',
+    });
+    const findings = runLayerA(
+      { paperRoot, instanceRoot: journalInstance(), project: composedProject, repo: null },
+      allTrue,
+    );
+    expect(findings.find((f) => f.check === 'journal-stamp')).toMatchObject({
+      severity: 'warn',
+      klass: 'config',
+    });
+  });
 });
 
 describe('splitUnrunnableChecks: a check that cannot run yet is reported, not run [R82]', () => {

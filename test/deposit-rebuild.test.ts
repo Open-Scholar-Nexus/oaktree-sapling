@@ -108,20 +108,16 @@ describe('journalStamp', () => {
     writeFileSync(join(journal, 'journal.yml'), 'name: J\n');
     commitAll(journal, 'journal');
     const head = execFileSync('git', ['-C', journal, 'rev-parse', 'HEAD'], { encoding: 'utf8' });
-    expect(journalStamp(journal, '/paper')).toEqual({
-      kind: 'commit',
-      commit: head.trim(),
-      repo: null,
-    });
+    expect(journalStamp(journal, '/paper')).toEqual({ repo: null, commit: head.trim() });
     writeFileSync(join(journal, 'logo.svg'), '<svg/>'); // untracked, so left out of an archive
-    expect(journalStamp(journal, '/paper')).toEqual({ kind: 'uncommitted' });
+    expect(journalStamp(journal, '/paper')).toEqual({ repo: null, commit: null });
   });
 
   it('tells no journal, the paper itself, and a folder outside git apart', () => {
     const dir = mkdtempSync(join(tmpdir(), 'oak-stamp-'));
-    expect(journalStamp(null, dir)).toEqual({ kind: 'none' });
-    expect(journalStamp(dir, dir)).toEqual({ kind: 'paper' });
-    expect(journalStamp(dir, '/paper')).toEqual({ kind: 'uncommitted' });
+    expect(journalStamp(null, dir)).toBeUndefined();
+    expect(journalStamp(dir, dir)).toEqual({ repo: '.' });
+    expect(journalStamp(dir, '/paper')).toEqual({ repo: null, commit: null });
   });
 
   it('fetches only a full commit id', async () => {
@@ -147,11 +143,22 @@ describe.skipIf(!runnable)('rebuilding the PDF from a deposit', () => {
     for (const f of ['myst.yml', 'index.md', 'bib.bib']) {
       copyFileSync(join(engineDir, 'test', 'fixture-paper', f), join(paper, f));
     }
+    // An author's own stamp, which the build drops.
+    const myst = parseDocument(readFileSync(join(paper, 'myst.yml'), 'utf8'));
+    myst.setIn(['project', 'options', 'oaktree-sapling', 'journal'], { repo: 'o/x', commit: null });
+    writeFileSync(join(paper, 'myst.yml'), myst.toString());
     commitAll(paper, 'paper');
+    const journalHead = execFileSync('git', ['-C', journal, 'rev-parse', 'HEAD'], {
+      encoding: 'utf8',
+    }).trim();
 
     build(engine, paper, journal);
-    const stamp = readJournalStamp(paper);
-    expect(stamp).toMatchObject({ kind: 'commit' });
+    expect(readJournalStamp(paper)).toEqual({ repo: null, commit: journalHead });
+    const derived = parseDocument(readFileSync(join(paper, DERIVED_CONFIG_FILE), 'utf8'));
+    expect(derived.getIn(['project', 'options', 'oaktree-sapling', 'version'])).toBe('v0.3.0');
+    expect(derived.getIn(['project', 'options', 'oaktree-sapling', 'edition'])).toBe(
+      'fixture-edition',
+    );
     const builtLogo = readFileSync(join(journal, 'brand', 'logo-watermark.svg'), 'utf8');
 
     // The journal's default branch moves on before the deposit job runs.

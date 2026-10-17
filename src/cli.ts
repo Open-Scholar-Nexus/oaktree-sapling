@@ -19,7 +19,7 @@ import { execFileSync } from 'node:child_process';
 import { parseDocument } from 'yaml';
 import type { ComposeInput } from './compose.js';
 import type { MaterializeInput, StartOpts } from './materialize.js';
-import type { JournalStamp } from './yaml-io.js';
+import type { JournalStamp } from './schema.js';
 import * as msg from './messages.js';
 import { annotate, inCI, UserError } from './messages.js';
 
@@ -103,7 +103,7 @@ function assetOverridesFrom(argv: string[]): ComposeInput['assetOverrides'] {
 }
 
 /** The journal repo a verb composes from, and how the derived config records it. */
-type ResolvedInstance = { root: string | null; stamp: JournalStamp };
+type ResolvedInstance = { root: string | null; stamp: JournalStamp | undefined };
 
 /**
  * Where the journal repo is [R38]: none with `--no-instance`, else `--instance`, else this repo
@@ -120,7 +120,7 @@ async function resolveInstanceRoot(
   paperRoot: string,
   verb: 'build' | 'start' | 'validate' | 'release',
 ): Promise<ResolvedInstance | { error: string }> {
-  if (has(argv, 'no-instance')) return { root: null, stamp: { kind: 'none' } };
+  if (has(argv, 'no-instance')) return { root: null, stamp: undefined };
   const explicit = flag(argv, 'instance');
   // Refused, since the error below would ask for the flag that was just passed.
   if (explicit === '') throw new UserError(msg.flagNeedsValue('instance'));

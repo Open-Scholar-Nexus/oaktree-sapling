@@ -56,7 +56,7 @@ A deposit holds the PDF and what it was rendered from, so the PDF can be rendere
 
 The files in the paper's `deposit/` folder are added beside them. `oak validate` reports a `deposit/` file that takes one of these names, and `oak release` refuses to publish one.
 
-The journal repository is fetched at its default branch on every run, and `deposit-version.yml` builds and deposits in two jobs, each with its own clone, so the deposit job's clone can be at a later commit than the build's. The build writes the commit it used into the banner of `myst.oak.yml`, which reaches the deposit job in the build's artifact, and the deposit archives that commit, fetching it when its own clone has moved past it. A build from journal files that no commit holds, such as local changes, cannot be deposited.
+The journal repository is fetched at its default branch on every run, and `deposit-version.yml` builds and deposits in two jobs, each with its own clone, so the deposit job's clone can be at a later commit than the build's. The build records the journal repository and commit it used in `myst.oak.yml`, under `project.options.oaktree-sapling.journal` beside the version and edition. That file reaches the deposit job in the build's artifact, and the deposit archives that commit, fetching it when its own clone has moved past it. oak writes the key itself and drops one set in `myst.yml`, which `oak validate` warns about. The key is also in the paper website's files, since MyST publishes `project.options`. A build from journal files that no commit holds, such as local changes, records `commit: null` and cannot be deposited.
 
 A paper repository that is its own journal (`instance_repo: "."` in `pins.yml`) gets no `journal.zip`, because its journal files are in `source.zip` at the same commit; the provenance names the paper's repository and commit as the journal's. A paper built with `--no-instance` has no journal to archive.
 
@@ -66,7 +66,7 @@ To render the PDF again, unzip `engine.zip`, `journal.zip` and `source.zip` into
 node <engine>/dist/cli.cjs build --instance <journal> --exports-only
 ```
 
-When the deposit has a `template.zip`, unzip it too and add `--typst-template <template>`. `--exports-only` builds the PDF without the website, whose theme is downloaded. For a paper that is its own journal, leave out `--instance`: oak finds `journal.yml` beside the paper.
+When the deposit has a `template.zip`, unzip it too and add `--typst-template <template>`. [`--exports-only`](#build) builds the PDF without the website, whose theme is downloaded. For a paper that is its own journal, leave out `--instance`: oak finds `journal.yml` beside the paper.
 
 (r114)=
 

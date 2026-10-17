@@ -736,6 +736,9 @@ export const validate = {
     `thumbnail "${thumbnail}" does not resolve to a file under the paper root; the ` +
     `paper will ship with NO thumbnail (a declared thumbnail disables myst's ` +
     `first-image fallback) and its gallery card renders blank`,
+  journalStampSet:
+    `myst.yml sets project.options.oaktree-sapling.journal, which oak writes itself when it ` +
+    `builds; the value here is ignored. Remove it from myst.yml.`,
   templateOverride: (authorTemplate: string, journalTemplate?: string): string =>
     `this paper declares its own typst template ("${authorTemplate}"), overriding ` +
     (journalTemplate ? `the journal's ("${journalTemplate}").` : "oaktree-sapling's."),

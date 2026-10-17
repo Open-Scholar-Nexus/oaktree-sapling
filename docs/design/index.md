@@ -41,7 +41,7 @@ Both external repositories are fetched before the engine runs: oaktree-sapling a
 [^pinning]: The journal repository is deliberately not pinned. A new logo or an extra editorial check reaches every paper on its next build, with nobody re-pinning anything. The price is that rebuilding a published paper from its repositories does not reproduce the original build, because it picks up the journal's settings as they stand today. The Zenodo deposit is the copy that reproduces the PDF: it holds the journal repository at the commit the build used ([what a deposit carries](#design-releases-deposit)).
 
 (r71)=
-The assembled result is written to **`myst.oak.yml`**, next to the paper's `myst.yml`, and MyST is pointed at that file instead[^compose]. It opens with a banner saying it is generated and naming the journal commit it was assembled from, the paper template gitignores it, and it is rewritten on every build.[^cleanup]
+The assembled result is written to **`myst.oak.yml`**, next to the paper's `myst.yml`, and MyST is pointed at that file instead[^compose]. It opens with a banner saying it is generated, the paper template gitignores it, and it is rewritten on every build.[^cleanup] It records the journal commit it was assembled from under `project.options.oaktree-sapling.journal` ([what a deposit carries](#design-releases-deposit)).
 
 ## The pages here
 

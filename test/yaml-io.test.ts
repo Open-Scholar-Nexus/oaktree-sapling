@@ -13,8 +13,10 @@ import {
   readJournalTypstTemplate,
   readJournalStamp,
   writeDerivedDoc,
-  type JournalStamp,
+  authorSetsJournalStamp,
+  dropJournalStamp,
 } from '../src/yaml-io.js';
+import type { JournalStamp } from '../src/schema.js';
 
 const fixturePaper = fileURLToPath(new URL('./fixture-paper/myst.yml', import.meta.url));
 const fixtureInstance = fileURLToPath(new URL('./fixture-instance', import.meta.url));
@@ -174,26 +176,57 @@ describe('applyOwnOverride: the PDF download', () => {
   });
 });
 
-describe('the journal stamp in the derived config banner', () => {
-  const stamps: JournalStamp[] = [
-    { kind: 'none' },
-    { kind: 'paper' },
-    { kind: 'uncommitted' },
-    { kind: 'commit', commit: 'b'.repeat(40), repo: 'o/journal' },
-    { kind: 'commit', commit: 'c'.repeat(64), repo: null },
-  ];
-  it.each(stamps)('reads back what writeDerivedDoc wrote: %o', (stamp) => {
+describe('the journal stamp under project.options.oaktree-sapling', () => {
+  /** A derived config whose `oaktree-sapling` key holds `journal`, when given. */
+  function derived(journal?: unknown): string {
     const root = mkdtempSync(join(tmpdir(), 'oak-stamp-'));
-    writeDerivedDoc(join(root, 'myst.oak.yml'), parseDocument('version: 1\n'), stamp);
-    expect(readJournalStamp(root)).toEqual(stamp);
+    const doc = parseDocument('version: 1\n');
+    doc.setIn(['project', 'options', 'oaktree-sapling'], { version: 'v1.0.0', edition: 'e' });
+    if (journal !== undefined) {
+      doc.setIn(['project', 'options', 'oaktree-sapling', 'journal'], journal);
+    }
+    writeDerivedDoc(join(root, 'myst.oak.yml'), doc);
+    return root;
+  }
+  const stamps: JournalStamp[] = [
+    { repo: '.' },
+    { repo: 'o/journal', commit: 'b'.repeat(40) },
+    { repo: null, commit: 'c'.repeat(64) },
+    { repo: 'o/journal', commit: null },
+  ];
+  it.each(stamps)('reads back %o', (stamp) => {
+    expect(readJournalStamp(derived(stamp))).toEqual(stamp);
   });
 
-  it('reads nothing from a banner without the line, or a line that is not a commit', () => {
+  it('reads null without the key, and nothing without the file', () => {
+    expect(readJournalStamp(derived())).toBeNull();
+    expect(readJournalStamp(mkdtempSync(join(tmpdir(), 'oak-stamp-')))).toBeUndefined();
+  });
+
+  it.each([
+    { repo: 'o/j', commit: '--upload-pack=x' },
+    { repo: 'o/j', commit: 'abc123' },
+    { repo: '-o/j', commit: 'a'.repeat(40) },
+    { repo: '.', commit: 'a'.repeat(40) },
+    'o/j@' + 'a'.repeat(40),
+  ])('refuses a value that is not a stamp: %o', (bad) => {
+    expect(readJournalStamp(derived(bad))).toBeUndefined();
+  });
+
+  it("drops the author's stamp and reports that they set one", () => {
     const root = mkdtempSync(join(tmpdir(), 'oak-stamp-'));
-    expect(readJournalStamp(root)).toBeUndefined();
-    writeDerivedDoc(join(root, 'myst.oak.yml'), parseDocument('version: 1\n'));
-    expect(readJournalStamp(root)).toBeUndefined();
-    writeFileSync(join(root, 'myst.oak.yml'), '# journal: o/j@--upload-pack=x\n\nversion: 1\n');
-    expect(readJournalStamp(root)).toBeUndefined();
+    const text =
+      'version: 1\nproject:\n  options:\n    oaktree-sapling:\n      version: v1.0.0\n' +
+      '      edition: e\n      journal: { repo: o/j, commit: null }\n';
+    writeFileSync(join(root, 'myst.yml'), text);
+    expect(authorSetsJournalStamp(root)).toBe(true);
+    const doc = parseDocument(text);
+    dropJournalStamp(doc);
+    expect(doc.toJSON().project.options['oaktree-sapling']).toEqual({
+      version: 'v1.0.0',
+      edition: 'e',
+    });
+    writeFileSync(join(root, 'myst.yml'), doc.toString());
+    expect(authorSetsJournalStamp(root)).toBe(false);
   });
 });

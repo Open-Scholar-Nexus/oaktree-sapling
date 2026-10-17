@@ -649,14 +649,15 @@ export function journalToArchive(
     if (instanceRoot === null) return null;
     throw new JournalArchiveError(msg.workflow.depositJournalUnstamped);
   }
-  if (stamp.kind === 'none' || stamp.kind === 'paper') return null;
-  if (stamp.kind === 'uncommitted') {
+  if (stamp === null || stamp.repo === '.') return null;
+  if (!('commit' in stamp) || stamp.commit === null) {
     throw new JournalArchiveError(msg.workflow.depositJournalUncommitted);
   }
+  const journal = { commit: stamp.commit, repo: stamp.repo };
   if (instanceRoot === null) {
-    throw new JournalArchiveError(msg.workflow.depositJournalNotGiven(journalAt(stamp)));
+    throw new JournalArchiveError(msg.workflow.depositJournalNotGiven(journalAt(journal)));
   }
-  return { commit: stamp.commit, repo: stamp.repo };
+  return journal;
 }
 
 function journalAt(j: { commit: string; repo: string | null }): string {
@@ -1045,7 +1046,7 @@ export async function cmdPublish(input: PublishInput): Promise<Outcome> {
   const predictedVersionDoi = `${doiPrefix(sandbox)}${dep.id}`;
   const sha = await git.headSha(repoRoot);
   const repo = repoFromGithubUrl(githubUrl);
-  const ownJournal = readJournalStamp(repoRoot)?.kind === 'paper';
+  const ownJournal = readJournalStamp(repoRoot)?.repo === '.';
   const provenance: BundleProvenance = {
     repo,
     commit_sha: sha,

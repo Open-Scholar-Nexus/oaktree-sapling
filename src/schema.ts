@@ -19,6 +19,29 @@ export const EDITION_ID = z
   .min(1)
   .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/, 'must be a plain name (letters, digits, . _ -)');
 
+const GITHUB_REPO = /^[A-Za-z0-9][A-Za-z0-9-]*\/(?!\.\.?$)[A-Za-z0-9._-]+$/;
+
+/** A full git commit id, SHA-1 or SHA-256. */
+export const COMMIT_ID = /^([0-9a-f]{40}|[0-9a-f]{64})$/;
+
+/**
+ * The journal checkout a build composed from, which the deposit archives as `journal.zip`
+ * [R66]. oak writes it into `myst.oak.yml`; a value in the author's `myst.yml` is dropped.
+ * Absent for a `--no-instance` build. `repo: "."` is a paper repo that is its own journal, so
+ * `source.zip` holds it. `repo` is null for a clone with no GitHub origin, and `commit` is null
+ * when the build used files no commit holds (local changes, or not a git checkout).
+ */
+export const JournalStamp = z.union([
+  z.object({ repo: z.literal('.') }).strict(),
+  z
+    .object({
+      repo: z.string().regex(GITHUB_REPO).nullable(),
+      commit: z.string().regex(COMMIT_ID).nullable(),
+    })
+    .strict(),
+]);
+export type JournalStamp = z.infer<typeof JournalStamp>;
+
 /**
  * The key under myst's `project.options`. It sits beside keys a paper already uses (such as
  * `options.youtube`), which are left alone. `.loose()` accepts keys from a newer oak [design §6].
@@ -30,6 +53,8 @@ export const OaktreeSaplingOptions = z
     version: z.string().min(1),
     /** Selects `editions/<edition>.yml` [R195]. */
     edition: EDITION_ID,
+    /** Written by oak into `myst.oak.yml` only ({@link JournalStamp}). */
+    journal: JournalStamp.optional(),
   })
   .loose();
 export type OaktreeSaplingOptions = z.infer<typeof OaktreeSaplingOptions>;
@@ -121,8 +146,6 @@ export type JournalConfig = z.infer<typeof JournalConfig>;
 /** What {@link parseLocation} returns: a GitHub repository with the paper at its root, or a
  *  folder in the journal repo, relative to its root. */
 export type PaperLocation = { repo: string } | { path: string };
-
-const GITHUB_REPO = /^[A-Za-z0-9][A-Za-z0-9-]*\/(?!\.\.?$)[A-Za-z0-9._-]+$/;
 
 /**
  * Reads a registry `location`, or returns null. `owner/name` is a GitHub repository; a `./` or

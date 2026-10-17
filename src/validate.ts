@@ -25,7 +25,12 @@ import {
 } from './schema.js';
 import { dirname, isAbsolute, join } from 'node:path';
 import { resolveBrandAssetPath, isBrandAssetUrl, isInstanceRelativeTemplate } from './compose.js';
-import { readBrandAssetOptions, readAuthorTypstTemplate, DERIVED_CONFIG_FILE } from './yaml-io.js';
+import {
+  readBrandAssetOptions,
+  readAuthorTypstTemplate,
+  authorSetsJournalStamp,
+  DERIVED_CONFIG_FILE,
+} from './yaml-io.js';
 import {
   runChecks,
   toCheckRun,
@@ -510,6 +515,16 @@ export function runLayerA(
   );
 
   findings.push(...checkDepositNames({ paperRoot }, probes));
+
+  // Read from the author's myst.yml: the composed config drops it [R66].
+  if (authorSetsJournalStamp(paperRoot)) {
+    findings.push({
+      check: 'journal-stamp',
+      severity: 'warn',
+      message: msg.validate.journalStampSet,
+      klass: 'config',
+    });
+  }
 
   // [R72]: the three extends layers must own disjoint keys, or precedence is a race.
   if (engineRoot && instanceRoot && edition) {
