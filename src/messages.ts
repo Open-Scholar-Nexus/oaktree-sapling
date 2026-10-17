@@ -235,9 +235,9 @@ export const declared = {
   engineVersionDefault: (tag: string): string => `${tag} (default): the version of the running oak`,
   /** Printed under the rows when a stable release is newer than the running oak. */
   newerRelease: (running: string, newer: string): string =>
-    `  ! you are running oak ${running} and the newest release is ${newer}; this repo will be ` +
-    `pinned to v${running}. To get ${newer}, update oak (\`npm install -g oaktree-sapling\`, or ` +
-    `\`npx oaktree-sapling@latest\`) and run this again.`,
+    `  ! ${newer} is newer than this oak (${running}), so this repo is pinned to v${running}. ` +
+    `To pin ${newer}, run this again with \`npx oaktree-sapling@latest\` or after ` +
+    `\`npm install -g oaktree-sapling\`.`,
 
   engineRepoGiven: (repo: string): string => repo,
   engineRepoDefault: (repo: string): string =>

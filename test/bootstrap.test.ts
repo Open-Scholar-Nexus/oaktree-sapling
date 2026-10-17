@@ -548,7 +548,7 @@ describe('cmdBootstrapPaper', () => {
     for (const plan of plans.map((p) => p.join('\n'))) {
       expect(plan).toMatch(/--engine-version +v1\.2\.3 \(default\)/);
       expect(plan).toContain(
-        'you are running oak 1.2.3 and the newest release is v1.4.0; this repo will be pinned to v1.2.3',
+        'v1.4.0 is newer than this oak (1.2.3), so this repo is pinned to v1.2.3',
       );
       expect(plan).toContain('npm install -g oaktree-sapling');
       expect(plan).toContain('npx oaktree-sapling@latest');
