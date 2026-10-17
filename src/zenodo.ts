@@ -35,7 +35,7 @@ import { join, resolve, basename, relative, isAbsolute } from 'node:path';
 import { createHash } from 'node:crypto';
 import AdmZip from 'adm-zip';
 import { readDoc, writeDoc, readJournalStamp, DERIVED_CONFIG_FILE } from './yaml-io.js';
-import { JournalConfig, type ZenodoConfig } from './schema.js';
+import { JournalConfig, sameRepo, type ZenodoConfig } from './schema.js';
 import * as msg from './messages.js';
 
 export const ZENODO_PROD = 'https://zenodo.org/api';
@@ -64,7 +64,7 @@ export const RESERVED_BUNDLE_NAMES = [
  *  conformance expects on every deposit. */
 export const TEMPLATE_BUNDLE_NAME = 'template.zip';
 
-/** Only when the journal is a repo of its own ({@link journalToArchive}). Reserved against
+/** Only when the journal is a repo of its own ({@link prepareJournalArchive}). Reserved against
  *  `deposit/` names, and kept out of RESERVED_BUNDLE_NAMES like {@link TEMPLATE_BUNDLE_NAME}. */
 export const JOURNAL_BUNDLE_NAME = 'journal.zip';
 
@@ -624,69 +624,52 @@ export function templateArchiveDir(paperRoot: string, engineRoot: string): strin
 
 export class JournalArchiveError extends Error {}
 
-/** The journal commit `journal.zip` holds. */
+/** The journal the provenance names, and the checkout `journal.zip` is archived from. */
 export interface JournalArchive {
-  /** The journal checkout to archive from. */
-  root: string;
-  commit: string;
+  /** null when the paper repo is its own journal, so `source.zip` holds it. */
+  root: string | null;
   repo: string | null;
+  commit: string;
 }
 
 /**
- * The journal commit this deposit must archive, read from the stamp the build left in
+ * The journal commit this deposit records, read from the stamp the build left in
  * `myst.oak.yml`: the journal is fetched at its default branch on every run, so the deposit's
- * checkout can be at a later commit than the build's. null when there is nothing to add: built
- * with `--no-instance`, or the paper repo is its own journal and `source.zip` holds it.
+ * checkout can be at a later commit than the build's, and the commit is fetched into it. `paper`
+ * when the paper repo is its own journal; null when built with `--no-instance`. Run before
+ * anything is written to Zenodo [R101].
  *
  * Throws {@link JournalArchiveError} when the build used a journal this deposit cannot archive.
- */
-export function journalToArchive(
-  repoRoot: string,
-  instanceRoot: string | null,
-): { commit: string; repo: string | null } | null {
-  const stamp = readJournalStamp(repoRoot);
-  if (stamp === undefined) {
-    if (instanceRoot === null) return null;
-    throw new JournalArchiveError(msg.workflow.depositJournalUnstamped);
-  }
-  if (stamp === null || stamp.repo === '.') return null;
-  if (!('commit' in stamp) || stamp.commit === null) {
-    throw new JournalArchiveError(msg.workflow.depositJournalUncommitted);
-  }
-  const journal = { commit: stamp.commit, repo: stamp.repo };
-  if (instanceRoot === null) {
-    throw new JournalArchiveError(msg.workflow.depositJournalNotGiven(journalAt(journal)));
-  }
-  return journal;
-}
-
-function journalAt(j: { commit: string; repo: string | null }): string {
-  return j.repo ? `${j.repo}@${j.commit}` : j.commit;
-}
-
-/**
- * {@link journalToArchive}, with the commit made available in the `--instance` checkout,
- * fetched when that clone is past it. Run before anything is written to Zenodo [R101].
  */
 export async function prepareJournalArchive(
   repoRoot: string,
   instanceRoot: string | null,
   git: GitContext,
+  paper: { repo: string; commit: string },
 ): Promise<JournalArchive | null> {
-  const journal = journalToArchive(repoRoot, instanceRoot);
-  if (!journal || instanceRoot === null) return null;
+  const stamp = readJournalStamp(repoRoot);
+  if (stamp === undefined) {
+    if (instanceRoot === null) return null;
+    throw new JournalArchiveError(msg.workflow.depositJournalUnstamped);
+  }
+  if (stamp === null) return null;
+  if (!('commit' in stamp)) return { root: null, ...paper }; // repo: "."
+  if (stamp.commit === null) throw new JournalArchiveError(msg.workflow.depositJournalUncommitted);
+  const at = stamp.repo ? `${stamp.repo}@${stamp.commit}` : stamp.commit;
+  if (instanceRoot === null) {
+    throw new JournalArchiveError(msg.workflow.depositJournalNotGiven(at));
+  }
   const origin = await git.originRepo(instanceRoot);
-  if (journal.repo && origin && journal.repo !== origin) {
-    throw new JournalArchiveError(msg.workflow.depositJournalOtherRepo(journal.repo, origin));
+  if (stamp.repo && origin && !sameRepo(stamp.repo, origin)) {
+    throw new JournalArchiveError(msg.workflow.depositJournalOtherRepo(stamp.repo, origin));
   }
   try {
-    await git.fetchCommit(instanceRoot, journal.commit);
+    await git.fetchCommit(instanceRoot, stamp.commit);
   } catch (e) {
-    throw new JournalArchiveError(
-      msg.workflow.depositJournalUnfetchable(journalAt(journal), (e as Error).message),
-    );
+    const why = e instanceof Error ? e.message : String(e);
+    throw new JournalArchiveError(msg.workflow.depositJournalUnfetchable(at, why));
   }
-  return { root: instanceRoot, commit: journal.commit, repo: origin ?? journal.repo };
+  return { root: instanceRoot, repo: origin ?? stamp.repo, commit: stamp.commit };
 }
 
 /**
@@ -717,7 +700,7 @@ export function assertBundlePreconditions(repoRoot: string, engineRoot: string):
  * `engine.zip` is a `git archive` of oak at its pinned release [R66], which carries
  * `bin/typst`, `dist/cli.cjs` and `templates/typst/`: everything but node needed to render the
  * PDF again, on linux x86_64. `journal.zip` is a `git archive` of `journal`, the journal commit
- * the build used ({@link prepareJournalArchive}). `template.zip` holds a template that is not
+ * the build used, unless `source.zip` holds it ({@link prepareJournalArchive}). `template.zip` holds a template that is not
  * oak's own [R76]; see {@link templateArchiveDir}. `myst.oak.yml` records what the build
  * resolved; its paths are the build machine's.
  */
@@ -749,7 +732,7 @@ export async function buildBundle(
     const src = join(repoRoot, name);
     if (existsSync(src)) copyFileSync(src, join(out, name));
   }
-  if (journal) {
+  if (journal?.root) {
     await git.gitArchive(journal.root, resolve(join(out, JOURNAL_BUNDLE_NAME)), journal.commit);
   }
   if (templateDir) {
@@ -968,11 +951,14 @@ export async function cmdPublish(input: PublishInput): Promise<Outcome> {
 
   const repoRoot = resolve(mystPath, '..');
 
+  const sha = await git.headSha(repoRoot);
+  const repo = repoFromGithubUrl(githubUrl);
+
   // Checked before anything is written to Zenodo, and reported in the result [R101].
   let journal: JournalArchive | null;
   try {
     assertBundlePreconditions(repoRoot, engineRoot);
-    journal = await prepareJournalArchive(repoRoot, instanceRoot, git);
+    journal = await prepareJournalArchive(repoRoot, instanceRoot, git, { repo, commit: sha });
   } catch (e) {
     if (
       e instanceof BundleCollisionError ||
@@ -1044,9 +1030,6 @@ export async function cmdPublish(input: PublishInput): Promise<Outcome> {
 
   // Predicted from the deposition id; matches what Zenodo assigns at publish.
   const predictedVersionDoi = `${doiPrefix(sandbox)}${dep.id}`;
-  const sha = await git.headSha(repoRoot);
-  const repo = repoFromGithubUrl(githubUrl);
-  const ownJournal = readJournalStamp(repoRoot)?.repo === '.';
   const provenance: BundleProvenance = {
     repo,
     commit_sha: sha,
@@ -1055,8 +1038,8 @@ export async function cmdPublish(input: PublishInput): Promise<Outcome> {
     concept_doi: conceptDoi,
     version_doi: predictedVersionDoi,
     review_pr: await git.reviewPr(repoRoot, sha),
-    journal_repo: ownJournal ? repo : (journal?.repo ?? null),
-    journal_commit: ownJournal ? sha : (journal?.commit ?? null),
+    journal_repo: journal?.repo ?? null,
+    journal_commit: journal?.commit ?? null,
     built_at: new Date().toISOString(),
     platform: 'linux-x86_64',
     typst_version: readTypstVersion(engineRoot),

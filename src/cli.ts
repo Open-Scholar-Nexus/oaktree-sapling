@@ -118,7 +118,7 @@ type ResolvedInstance = { root: string | null; stamp: JournalStamp | undefined }
 async function resolveInstanceRoot(
   argv: string[],
   paperRoot: string,
-  verb: 'build' | 'start' | 'validate' | 'release',
+  verb: msg.JournalVerb,
 ): Promise<ResolvedInstance | { error: string }> {
   if (has(argv, 'no-instance')) return { root: null, stamp: undefined };
   const explicit = flag(argv, 'instance');
@@ -558,10 +558,21 @@ async function cmdRelease(argv: string[]): Promise<number> {
   // (_build/site/content) from the same tree; `oak build` ignores release's extra flags.
   // `--no-build` deposits a build made elsewhere: CI builds in a job holding no token.
   const paperRoot = resolve(flag(argv, 'paper') ?? '.');
+  // Found once and handed to the build, so the deposit archives the journal the build used and
+  // reads its `zenodo:`.
+  const instance = await resolveInstanceRoot(argv, paperRoot, 'release');
+  if ('error' in instance) {
+    process.stderr.write(instance.error + '\n');
+    return 2;
+  }
   // The child gets no OAK_RESULT_FILE: the result is release's.
   if (!has(argv, 'no-build')) {
     const { OAK_RESULT_FILE: _, ...env } = process.env;
-    execFileSync(process.execPath, [process.argv[1]!, 'build', ...argv], { stdio: 'inherit', env });
+    const journalArgs = instance.root === null ? ['--no-instance'] : ['--instance', instance.root];
+    execFileSync(process.execPath, [process.argv[1]!, 'build', ...argv, ...journalArgs], {
+      stdio: 'inherit',
+      env,
+    });
   }
   const mystPath = mystPathOf(argv);
 
@@ -581,13 +592,6 @@ async function cmdRelease(argv: string[]): Promise<number> {
   const pdf = findExportedPdf(paperRoot);
   if (!pdf) {
     process.stderr.write(msg.workflow.releaseNoPdf + '\n');
-    return 2;
-  }
-
-  // Found as the build found it, so the deposit archives that journal and reads its `zenodo:`.
-  const instance = await resolveInstanceRoot(argv, paperRoot, 'release');
-  if ('error' in instance) {
-    process.stderr.write(instance.error + '\n');
     return 2;
   }
 

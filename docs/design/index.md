@@ -41,7 +41,7 @@ Both external repositories are fetched before the engine runs: oaktree-sapling a
 [^pinning]: The journal repository is deliberately not pinned. A new logo or an extra editorial check reaches every paper on its next build, with nobody re-pinning anything. The price is that rebuilding a published paper from its repositories does not reproduce the original build, because it picks up the journal's settings as they stand today. The Zenodo deposit is the copy that reproduces the PDF: it holds the journal repository at the commit the build used ([what a deposit carries](#design-releases-deposit)).
 
 (r71)=
-The assembled result is written to **`myst.oak.yml`**, next to the paper's `myst.yml`, and MyST is pointed at that file instead[^compose]. It opens with a banner saying it is generated, the paper template gitignores it, and it is rewritten on every build.[^cleanup] It records the journal commit it was assembled from under `project.options.oaktree-sapling.journal` ([what a deposit carries](#design-releases-deposit)).
+The assembled result is written to **`myst.oak.yml`**[^public], next to the paper's `myst.yml`, and MyST is pointed at that file instead[^compose]. It opens with a banner saying it is generated, the paper template gitignores it, and it is rewritten on every build.[^cleanup]
 
 ## The pages here
 
@@ -56,3 +56,5 @@ Code comments cite decisions as `[R#]` and `[design §N]`. Those not yet written
 [^around]: Where the journal's settings live, for one, and which version of the engine to run. Then the editorial checks, deploying a preview, reserving a DOI, and building an author's pull request without handing it a token.
 
 [^compose]: Why generate a file, rather than add an `extends:` line to the paper's config? We need control over how the chain resolves. In plain MyST the paper's own config wins over everything it extends, and entries like PDF export definitions are merged whole rather than field by field, so an extended layer cannot adjust one field of something the paper declares. An engine that needs to override any default behaviour therefore cannot express itself as a layer.
+
+[^public]: MyST builds the paper website from this file, so the project settings in the website's public JSON are the composed ones, `project.options.oaktree-sapling` included.

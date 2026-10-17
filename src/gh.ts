@@ -236,13 +236,16 @@ export function journalStamp(
 ): JournalStamp | undefined {
   if (instanceRoot === null) return undefined;
   if (resolve(instanceRoot) === resolve(paperRoot)) return { repo: '.' };
-  const repo = locationRepo(originRepo(instanceRoot));
   try {
+    // A folder inside a larger repo: HEAD and origin are that repo's.
+    if (git(instanceRoot, ['rev-parse', '--show-prefix'], { quiet: true })) {
+      return { repo: null, commit: null };
+    }
     const commit = git(instanceRoot, ['rev-parse', 'HEAD'], { quiet: true });
-    const dirty = git(instanceRoot, ['status', '--porcelain', '--', '.'], { quiet: true });
-    return { repo, commit: dirty ? null : commit };
+    const dirty = git(instanceRoot, ['status', '--porcelain'], { quiet: true });
+    return { repo: locationRepo(originRepo(instanceRoot)), commit: dirty ? null : commit };
   } catch {
-    return { repo, commit: null };
+    return { repo: null, commit: null };
   }
 }
 

@@ -512,6 +512,9 @@ export const upgrade = {
  * oak build / oak start
  * ═════════════════════════════════════════════════════════════════════════════════════════ */
 
+/** The verbs that find a journal repo the way `oak build` does. */
+export type JournalVerb = 'build' | 'start' | 'validate' | 'release';
+
 export const build = {
   done: (id: string): string => `oak build: done (id=${id})`,
   placeholder:
@@ -548,7 +551,7 @@ export const build = {
     `It names a file (editions/<edition>.yml), so it must be a plain name: letters, digits, . _ -`,
   /** No journal repo found: pins.yml names none (`instance_repo: .` or absent, which means the
    *  same) and no journal.yml sits beside the paper. */
-  noInstance: (verb: 'build' | 'start' | 'validate' | 'release', paperRoot: string): string =>
+  noInstance: (verb: JournalVerb, paperRoot: string): string =>
     `oak ${verb}: no journal repo found. .github/actions/engine/pins.yml names none ` +
     `(\`instance_repo: "."\` means the journal.yml sits in this repo), and there is no ` +
     `journal.yml at ${paperRoot}.\n` +
@@ -559,11 +562,7 @@ export const build = {
     `See ${docsUrl(DOCS.paperJournalLink)}`,
 
   /** Where a local run without `--instance` got the journal settings ({@link JournalCache}). */
-  journalCache: (
-    verb: 'build' | 'start' | 'validate' | 'release',
-    journalRepo: string,
-    cache: JournalCache,
-  ): string => {
+  journalCache: (verb: JournalVerb, journalRepo: string, cache: JournalCache): string => {
     const head = `oak ${verb}: `;
     switch (cache.state) {
       case 'cloned':
@@ -586,11 +585,7 @@ export const build = {
     }
   },
 
-  instanceCloneFailed: (
-    verb: 'build' | 'start' | 'validate' | 'release',
-    journalRepo: string,
-    why: string,
-  ): string =>
+  instanceCloneFailed: (verb: JournalVerb, journalRepo: string, why: string): string =>
     `oak ${verb}: could not clone the journal ${journalRepo} named in .github/actions/engine/pins.yml ` +
     `(${why}). Pass --instance <path to a clone of the journal>, or --no-instance to go ` +
     `without its settings. See ${docsUrl(DOCS.paperPreviewLocally)}`,
@@ -739,7 +734,7 @@ export const validate = {
     `first-image fallback) and its gallery card renders blank`,
   journalStampSet:
     `myst.yml sets project.options.oaktree-sapling.journal, which oak writes itself when it ` +
-    `builds; the value here is ignored. Remove it from myst.yml.`,
+    `builds. Remove it from myst.yml.`,
   templateOverride: (authorTemplate: string, journalTemplate?: string): string =>
     `this paper declares its own typst template ("${authorTemplate}"), overriding ` +
     (journalTemplate ? `the journal's ("${journalTemplate}").` : "oaktree-sapling's."),
@@ -903,8 +898,9 @@ export const workflow = {
     `myst.oak.yml does not say which journal commit the PDF was built from, so the deposit ` +
     `cannot archive it. Build this working tree with oak before depositing.`,
   depositJournalUncommitted:
-    `the PDF was built from journal files no commit holds (local changes, or not a git ` +
-    `checkout), so the deposit cannot archive them. Commit them in the journal repo and build again.`,
+    `the PDF was built from journal files that are not a commit of their own repo (local ` +
+    `changes, a folder inside a larger repo, or not a git checkout), so the deposit cannot ` +
+    `archive them. Build again from a clean clone of the journal repo.`,
   depositJournalNotGiven: (at: string): string =>
     `the PDF was built from the journal at ${at}. Pass --instance <a clone of that repo> so ` +
     `the deposit can archive it.`,

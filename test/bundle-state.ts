@@ -8,12 +8,14 @@
  * `npm test` bundles first; this covers runs that do not (`npm run test:watch`, `vitest`, an
  * editor).
  */
+import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const engineDir = fileURLToPath(new URL('..', import.meta.url));
 export const bundlePath = join(engineDir, 'dist', 'cli.cjs');
+export const typstTemplate = join(engineDir, 'templates', 'typst');
 
 /** The newest modification time under src/. */
 function newestSourceMtime(): number {
@@ -41,4 +43,19 @@ export function assertBundleNotStale(): void {
         `Run \`npm run bundle\` (\`npm test\` does it for you; \`test:watch\` does not).`,
     );
   }
+}
+
+function typstPresent(): boolean {
+  try {
+    execFileSync('typst', ['--version'], { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Whether a test can render a PDF through the bundle: the bundle, oak's template and typst are
+ *  all present. A stale bundle counts, so {@link assertBundleNotStale} fails the test. */
+export function canRenderPdf(): boolean {
+  return bundleState() !== 'absent' && existsSync(typstTemplate) && typstPresent();
 }

@@ -24,24 +24,14 @@ import { parseDocument } from 'yaml';
 import { DERIVED_CONFIG_FILE } from '../src/yaml-io.js';
 import { ENGINE_ID_SENTINEL } from '../src/schema.js';
 import { TYPST_OUTPUT } from '../src/compose.js';
-import { bundleState, assertBundleNotStale } from './bundle-state.js';
+import { assertBundleNotStale, canRenderPdf, typstTemplate } from './bundle-state.js';
 import { readFileSync } from 'node:fs';
 
 const engineDir = fileURLToPath(new URL('..', import.meta.url));
 const bundle = join(engineDir, 'dist', 'cli.cjs');
-const template = join(engineDir, 'templates', 'typst');
-
-function typstPresent(): boolean {
-  try {
-    execFileSync('typst', ['--version'], { stdio: 'ignore' });
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 // No bundle skips; a stale bundle fails in beforeAll (bundle-state.ts).
-const runnable = bundleState() !== 'absent' && existsSync(template) && typstPresent();
+const runnable = canRenderPdf();
 
 describe.skipIf(!runnable)('fixture build through the bundled CLI', () => {
   beforeAll(assertBundleNotStale);
@@ -79,7 +69,7 @@ describe.skipIf(!runnable)('fixture build through the bundled CLI', () => {
 
     // The full typst entry (articles and oak's template) is in myst.oak.yml.
     const doc = parseDocument(readFileSync(join(tmp, DERIVED_CONFIG_FILE), 'utf8'));
-    expect(doc.getIn(['project', 'exports', 0, 'template'])).toBe(template);
+    expect(doc.getIn(['project', 'exports', 0, 'template'])).toBe(typstTemplate);
     // the articles are kept [R53]
     expect(doc.getIn(['project', 'exports', 0, 'articles', 0, 'file'])).toBe('index.md');
     expect(doc.getIn(['project', 'exports', 0, 'output'])).toBe(TYPST_OUTPUT);

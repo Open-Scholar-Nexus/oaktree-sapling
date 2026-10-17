@@ -27,7 +27,7 @@ import {
   ZENODO_SANDBOX,
   readStampedTemplate,
   resolveTemplateDir,
-  journalToArchive,
+  prepareJournalArchive,
   JournalArchiveError,
   JOURNAL_BUNDLE_NAME,
   RESERVED_DEPOSIT_NAMES,
@@ -897,6 +897,13 @@ describe('journal.zip', () => {
     expect(z.provenance[0]).toMatchObject({ journal_repo: 'o/journal', journal_commit: COMMIT });
   });
 
+  it("matches the clone's repo case-insensitively, as GitHub does", async () => {
+    const root = builtPaper(STAMPED);
+    const journalRoot = mkdtempSync(join(tmpdir(), 'oak-journal-'));
+    const out = await publish(root, recordingGit('O/Journal').git, zenodo().api, journalRoot);
+    expect(out.exitCode).toBe(0);
+  });
+
   it("records the paper's own repo and commit when the paper is its own journal", async () => {
     const root = builtPaper({ repo: '.' });
     const { git, archived } = recordingGit(null);
@@ -925,7 +932,7 @@ describe('journal.zip', () => {
       { repo: 'o/journal', commit: null },
       null,
       false,
-      'no commit',
+      'not a commit of their own repo',
     ],
     ['the stamp is not valid', { repo: 'o/journal', commit: '--x' }, null, false, 'myst.oak.yml'],
   ])('refuses before any Zenodo write when %s', async (_why, journal, origin, fetchFails, says) => {
@@ -938,9 +945,10 @@ describe('journal.zip', () => {
     expect(z.calls).toHaveLength(0);
   });
 
-  it('asks for --instance when the build used a journal and none was given', () => {
+  it('asks for --instance when the build used a journal and none was given', async () => {
     const root = builtPaper(STAMPED);
-    expect(() => journalToArchive(root, null)).toThrow(JournalArchiveError);
-    expect(() => journalToArchive(root, null)).toThrow(`o/journal@${COMMIT}`);
+    const out = prepareJournalArchive(root, null, fakeGit, { repo: 'o/r', commit: 'deadbeef' });
+    await expect(out).rejects.toThrow(JournalArchiveError);
+    await expect(out).rejects.toThrow(`o/journal@${COMMIT}`);
   });
 });

@@ -29,7 +29,8 @@ export const COMMIT_ID = /^([0-9a-f]{40}|[0-9a-f]{64})$/;
  * [R66]. oak writes it into `myst.oak.yml`; a value in the author's `myst.yml` is dropped.
  * Absent for a `--no-instance` build. `repo: "."` is a paper repo that is its own journal, so
  * `source.zip` holds it. `repo` is null for a clone with no GitHub origin, and `commit` is null
- * when the build used files no commit holds (local changes, or not a git checkout).
+ * when the files are not a commit of their own repo (local changes, a folder inside a larger
+ * repo, or not a git checkout).
  */
 export const JournalStamp = z.union([
   z.object({ repo: z.literal('.') }).strict(),

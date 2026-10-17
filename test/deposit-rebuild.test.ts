@@ -28,21 +28,10 @@ import { journalStamp, realGitContext } from '../src/gh.js';
 import { buildBundle, prepareJournalArchive, type BundleProvenance } from '../src/zenodo.js';
 import { readJournalStamp, DERIVED_CONFIG_FILE } from '../src/yaml-io.js';
 import { TYPST_OUTPUT } from '../src/compose.js';
-import { bundleState, assertBundleNotStale, bundlePath } from './bundle-state.js';
+import { assertBundleNotStale, bundlePath, canRenderPdf, typstTemplate } from './bundle-state.js';
 
 const engineDir = fileURLToPath(new URL('..', import.meta.url));
-const template = join(engineDir, 'templates', 'typst');
-
-function typstPresent(): boolean {
-  try {
-    execFileSync('typst', ['--version'], { stdio: 'ignore' });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-const runnable = bundleState() !== 'absent' && existsSync(template) && typstPresent();
+const runnable = canRenderPdf();
 
 const GIT_ID = ['-c', 'user.name=t', '-c', 'user.email=t@example.org'];
 
@@ -64,7 +53,7 @@ function engineCheckout(dir: string): void {
     copyFileSync(join(engineDir, f), join(dir, f));
   mkdirSync(join(dir, 'dist'));
   copyFileSync(bundlePath, join(dir, 'dist', 'cli.cjs'));
-  cpSync(template, join(dir, 'templates', 'typst'), { recursive: true });
+  cpSync(typstTemplate, join(dir, 'templates', 'typst'), { recursive: true });
   // The PDF export uses the system typst here; the file only has to be in engine.zip.
   mkdirSync(join(dir, 'bin'));
   writeFileSync(join(dir, 'bin', 'typst'), '');
@@ -120,6 +109,14 @@ describe('journalStamp', () => {
     expect(journalStamp(dir, '/paper')).toEqual({ repo: null, commit: null });
   });
 
+  it('names no commit for a journal folder inside a larger repo', () => {
+    const outer = repoOf(mkdtempSync(join(tmpdir(), 'oak-stamp-')));
+    mkdirSync(join(outer, 'journal'));
+    writeFileSync(join(outer, 'journal', 'journal.yml'), 'name: J\n');
+    commitAll(outer, 'journal in a folder');
+    expect(journalStamp(join(outer, 'journal'), '/paper')).toEqual({ repo: null, commit: null });
+  });
+
   it('fetches only a full commit id', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'oak-stamp-'));
     await expect(realGitContext.fetchCommit(dir, '--upload-pack=x')).rejects.toThrow(
@@ -165,7 +162,10 @@ describe.skipIf(!runnable)('rebuilding the PDF from a deposit', () => {
     writeFileSync(join(journal, 'brand', 'logo-watermark.svg'), '<svg>later</svg>');
     commitAll(journal, 'a later logo');
 
-    const archive = await prepareJournalArchive(paper, journal, realGitContext);
+    const archive = await prepareJournalArchive(paper, journal, realGitContext, {
+      repo: 'o/r',
+      commit: 'unused',
+    });
     const provenance = { repo: 'o/r' } as BundleProvenance;
     const out = join(tmp, 'deposit');
     await buildBundle(
