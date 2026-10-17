@@ -906,6 +906,13 @@ export function latestEngineRelease(engineRepo: string): string {
   return tag;
 }
 
+/** Shallow-clones `engineRepo` at `tag` into the empty directory `dest`, for the paper commands'
+ *  handoff (pinned.ts). Plain git, as {@link cachedJournal}: an author may have no gh login. */
+export function cloneEngineTag(engineRepo: string, tag: string, dest: string): void {
+  const url = `https://github.com/${assertRepoName(engineRepo)}.git`;
+  run('git', ['clone', '--depth', '1', '--quiet', '--branch', tag, '--', url, dest]);
+}
+
 /** Shallow-clones `engineRepo` at `tag` and returns its `templates/paper/` path: `oak upgrade`
  *  resets only the paper's gated files, and the journal repo is never reset. */
 export function materializeTemplate(engineRepo: string, tag: string): string {

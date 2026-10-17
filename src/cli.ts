@@ -14,8 +14,8 @@ import {
   mkdtempSync,
   watchFile,
 } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { execFileSync } from 'node:child_process';
+import { homedir, tmpdir } from 'node:os';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { parseDocument } from 'yaml';
 import type { ComposeInput } from './compose.js';
 import type { MaterializeInput, StartOpts } from './materialize.js';
@@ -559,6 +559,8 @@ async function cmdRelease(argv: string[]): Promise<number> {
   // The child gets no OAK_RESULT_FILE: the result is release's.
   if (!has(argv, 'no-build')) {
     const { OAK_RESULT_FILE: _, ...env } = process.env;
+    // The build must be this oak's, since this oak deposits it.
+    env[(await import('./pinned.js')).USE_RUNNING_ENV] = '1';
     const journalArgs = instance.root === null ? ['--no-instance'] : ['--instance', instance.root];
     execFileSync(process.execPath, [process.argv[1]!, 'build', ...argv, ...journalArgs], {
       stdio: 'inherit',
@@ -1261,6 +1263,42 @@ function nearestVerb(word: string): string | null {
  *  in a bundle built outside a release. */
 declare const OAK_VERSION: string;
 
+/** Hands a paper command to the oak version the paper pins ({@link handOff}), or returns null
+ *  when this oak runs it. Documented at DOCS.pinnedVersion. */
+async function runPinned(
+  verb: 'build' | 'validate' | 'start',
+  argv: string[],
+): Promise<number | null> {
+  const { handOff, cacheHome } = await import('./pinned.js');
+  const { cloneEngineTag } = await import('./gh.js');
+  return handOff(
+    {
+      verb,
+      argv,
+      paperRoot: resolve(flag(argv, 'paper') ?? '.'),
+      running: `v${OAK_VERSION}`,
+      defaultRepo: ENGINE_REPO_DEFAULT,
+      env: process.env,
+      cacheRoot: cacheHome(process.env, homedir()),
+    },
+    {
+      clone: cloneEngineTag,
+      typstRuns: (bin) => {
+        try {
+          execFileSync(join(bin, 'typst'), ['--version'], { stdio: 'ignore' });
+          return true;
+        } catch {
+          return false;
+        }
+      },
+      spawn: (cli, args, env) =>
+        spawnSync(process.execPath, [cli, ...args], { stdio: 'inherit', env }).status ?? 1,
+      confirm: makeConfirm(argv),
+      log: (line) => process.stderr.write(line + '\n'),
+    },
+  );
+}
+
 async function main(argv: string[]): Promise<number> {
   const verb = argv[0] as Verb | undefined;
   // One environment variable, read by gh.ts, so `--verbose` reaches the git and gh calls
@@ -1273,6 +1311,10 @@ async function main(argv: string[]): Promise<number> {
   if (argv[0] === '--version') {
     process.stdout.write(msg.version(OAK_VERSION) + '\n');
     return 0;
+  }
+  if (verb === 'build' || verb === 'validate' || verb === 'start') {
+    const code = await runPinned(verb, argv.slice(1));
+    if (code !== null) return code;
   }
   if (verb === 'build') return cmdBuild(argv.slice(1));
   if (verb === 'start') return cmdStart(argv.slice(1));
