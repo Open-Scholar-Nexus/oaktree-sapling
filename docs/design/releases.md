@@ -89,13 +89,13 @@ The release script refuses a tag that already exists, pre-releases included, bec
 
 The npm package is a second way to get oak, and papers do not use it: their CI runs oak from a checkout, as above.
 
-`npm-publish.yml` publishes a release tag with npm trusted publishing, and sets the package version to the tag. npm versions stay published for good once the 72 hour unpublish window closes, so a dev tag published to `next` outlives its deletion here, and dev tags are published only by hand.
+`npm-publish.yml` publishes a stable release tag with npm trusted publishing, once its `conformance.json` says `ok`, and sets the package version to the tag. It refuses a dev tag: npm versions stay published for good once the 72 hour unpublish window closes, and a dev tag is deleted when pruned.
 
 `repository` in `package.json` has to name the repository whose Actions run publishes, because provenance checks it. The workflow sets it to the repository it runs in.
 
 `files` in `package.json` is an allowlist. It carries what the CLI reads at runtime, plus all of `ci/` and `plugins/`: papers use those from the checkout and from a pinned raw URL, but they are small, and shipping them keeps the tarball a subset of the checkout. `prepack` runs the typecheck and the bundle. `dist/` is gitignored, and `npm pack` leaves out a missing file without an error, so the bundle has to be built by a hook that runs on both `npm pack` and `npm publish`, which `prepublishOnly` does not.
 
-An engine installed from npm cannot do two things a checkout can:
+The package runs the commands a person types. The workflows run the rest from a checkout of the tag, which carries two things the tarball leaves out:
 
-- Export a PDF, unless typst is on the system. `bin/typst` is committed at the tag and is not in the tarball, because a per-platform binary on npm needs `optionalDependencies` or a download on install, and neither is designed yet.
-- Build `engine.zip`. `oak deposit` makes it with `git archive` over the engine directory, and `node_modules/oaktree-sapling` is not a git repository. Deposits run in CI from a tag checkout, so this fails only once a deposit runs from an npm install.
+- `bin/typst`, built for linux x86_64 only. A local build exports the PDF with the typst on the system.
+- The git history `oak deposit` needs: it makes `engine.zip` with `git archive` over the engine directory, and `node_modules/oaktree-sapling` is not a git repository.

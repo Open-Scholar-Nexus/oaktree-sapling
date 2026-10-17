@@ -7,7 +7,7 @@ The steps below get you from that repository to a preview on your own machine, t
 
 ## Before you start
 
-You need a GitHub account, `git`, and Node 22 or later. Then install `oak`, oaktree-sapling's command-line tool:
+You need a GitHub account, `git`, and Node 22 or later. Then install `oak`, oaktree-sapling's command-line tool, which you run each time you preview or build the paper:
 
 ```bash
 npm install -g oaktree-sapling
@@ -55,8 +55,6 @@ Commit, push to your fork, and open a pull request against the paper repository.
 A bot then comments on the pull request with the result of the journal's checks, including anything to fix, and a preview of the paper's website. It updates the comments on every push.
 
 Once the checks pass and an editor approves, the pull request can merge, and the paper's website at `https://<owner>.github.io/<paper-repo>/` updates. The editors then [publish it](../guide/publish.md) on Zenodo, which gives it a DOI.
-
-Once a week the bot also opens a pull request updating the oaktree-sapling version in `myst.yml`, which goes through the same checks and review.
 
 ## Building the PDF
 

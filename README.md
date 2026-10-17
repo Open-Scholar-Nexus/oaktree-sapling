@@ -7,6 +7,8 @@ Each paper gets a repo of its own, with CI that builds a website and a PDF, runs
 
 Papers refer to the engine by a single version coordinate, so a journal upgrades by changing one line rather than by copying workflow files around.
 
+The documentation is at [scholar.nexus/oaktree-sapling](https://scholar.nexus/oaktree-sapling).
+
 ## Status
 
 Pre-1.0 and in active development. Every command is implemented and the CI is being tested end to end against real GitHub, Cloudflare and Zenodo, but interfaces may still change between 0.x versions and the documentation is incomplete. Its original design served Neuromatch Impact Scholars Program 2025, but is being heavily revised to become suitable to more tenants.
@@ -18,7 +20,7 @@ npm install -g oaktree-sapling
 oak
 ```
 
-`oak` with no arguments prints the full usage.
+`oak` with no arguments prints the full usage. To run a single command without installing, such as a bootstrap, use `npx oaktree-sapling <command>`.
 
 ## Commands
 
@@ -36,14 +38,11 @@ Working on a paper:
 
 The rest (`post-checks`, `deploy-preview`, `deposit`, `release`, `notify`, `conformance`) are run by the generated workflows and are rarely typed by hand.
 
-## Known limitations of the npm package
+## What runs from the npm package
 
-The engine is normally run from a checked-out release tag, which carries two things the npm package does not:
+The package runs the commands for setting up repos and working on a paper; the workflows run the rest in CI, from a checkout of the release tag.
 
-- **No PDF export.** A pinned `typst` binary ships with each release tag; the package has none, so `oak build` produces a PDF only if `typst` is already on your `PATH`.
-- **`oak deposit` does not work.** It archives the engine with `git archive` to record what built the paper, which needs a git checkout rather than an installed package.
-
-Both are being worked on. Until then, CI uses release tags.
+`oak build` exports the PDF with the [typst](https://github.com/typst/typst) on your `PATH`, as for any local build. In CI, the release tag's linux x86_64 `bin/typst` is put on `PATH`.
 
 ## Editorial checks
 
