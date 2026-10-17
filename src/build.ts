@@ -8,7 +8,9 @@
  * `oak validate` shares both passes through `materialize.ts`, so it checks what gets built
  * [R82]. The myst calls are injected (`MystEdge`) so tests can use a fake.
  */
+import { existsSync } from 'node:fs';
 import { type ResolvedProject } from './compose.js';
+import { engineTypstTemplate } from './assets.js';
 import { runLayerA } from './validate.js';
 import {
   materializeDerived,
@@ -18,6 +20,7 @@ import {
   type StartOpts,
 } from './materialize.js';
 import * as msg from './messages.js';
+import { UserError } from './messages.js';
 import { originRepo } from './gh.js';
 import { DERIVED_CONFIG_FILE } from './yaml-io.js';
 
@@ -43,7 +46,7 @@ export async function runBuild(input: RunBuildInput): Promise<RunBuildResult> {
   } = input;
 
   const layerAWarnings: string[] = [];
-  const { resolvedProject, extendsChain, warnings } = await materializeDerived(
+  const { resolvedProject, extendsChain, warnings, typstTemplate } = await materializeDerived(
     input,
     (project, { edition }) => {
       // The structural checks run before the expensive build [R21]; editorial ones are the pull
@@ -76,6 +79,17 @@ export async function runBuild(input: RunBuildInput): Promise<RunBuildResult> {
       );
     },
   );
+
+  // Every install ships oak's template, so a PDF build that picks it and finds it missing is a
+  // broken install.
+  const buildsPdf = buildOpts.exportsOnly || buildOpts.all;
+  if (
+    buildsPdf &&
+    typstTemplate === engineTypstTemplate(engineRoot) &&
+    !existsSync(typstTemplate)
+  ) {
+    throw new UserError(msg.build.noEngineTypstTemplate(typstTemplate));
+  }
 
   if (baseUrl) process.env.BASE_URL = baseUrl;
   await edge.build(paperRoot, buildOpts, DERIVED_CONFIG_FILE);

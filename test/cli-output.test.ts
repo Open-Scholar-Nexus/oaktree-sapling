@@ -452,10 +452,12 @@ describe.skipIf(bundleState() === 'absent')("an install missing oak's typst temp
       [join(install, 'dist', 'cli.cjs'), 'build', '--paper', fixturePaper, '--no-instance'],
       { encoding: 'utf8', env },
     );
-    expect(r.status).toBe(1);
+    rmSync(install, { recursive: true, force: true });
+    expect(r.status).toBe(2);
     expect(r.stderr).toContain(
       `oak's typst template is missing (${join(install, 'templates', 'typst')})`,
     );
+    expect(r.stderr).not.toContain('unexpected error');
   }, 60_000);
 });
 
