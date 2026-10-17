@@ -478,14 +478,21 @@ describe('cmdBootstrapPaper', () => {
       return false;
     };
     await cmdBootstrapPaper(
-      paperInput({ resolved: { engineVersionFrom: 'latest-release', engineRepoFrom: 'default' } }),
+      paperInput({
+        resolved: {
+          engineVersionFrom: 'running-oak',
+          runningVersion: '1.2.3',
+          engineRepoFrom: 'default',
+        },
+      }),
       d,
     );
     const plan = plans[0]!.join('\n');
     // One row per flag; a resolved value is marked as a default.
     expect(plan).toMatch(/--instance +me\/instance-config/);
     expect(plan).toMatch(/--edition +ed-2026/);
-    expect(plan).toMatch(/--engine-version +v1\.2\.3 \(default\): the newest engine release/);
+    expect(plan).toMatch(/--engine-version +v1\.2\.3 \(default\): the version of the running oak/);
+    expect(plan).not.toContain('newest release');
     expect(plan).toMatch(/--engine-repo +me\/engine \(default\)/);
     expect(plan).toMatch(/--owner +@alice \(default\): your own GitHub login/);
   });
@@ -510,6 +517,68 @@ describe('cmdBootstrapPaper', () => {
     expect(plan).toMatch(/--engine-repo +me\/engine\n/);
     expect(plan).toMatch(/--owner +@org\/editors: written into CODEOWNERS/);
     expect(plan).not.toContain('(default)');
+  });
+
+  it('a newer stable release is named in the plan, with how to get it', async () => {
+    const plans: string[][] = [];
+    const d = deps(fakeProv().prov);
+    d.confirm = async (plan) => {
+      plans.push(plan);
+      return false;
+    };
+    const resolved = {
+      engineVersionFrom: 'running-oak' as const,
+      runningVersion: '1.2.3',
+      newerRelease: 'v1.4.0',
+    };
+    await cmdBootstrapPaper(paperInput({ resolved }), d);
+    await cmdBootstrapJournal(
+      {
+        repo: 'me/config',
+        tier: 'external',
+        engineVersion: 'v1.2.3',
+        engineRepo: 'me/engine',
+        authedUser: 'alice',
+        requireChecks: true,
+        secrets: {},
+        resolved,
+      },
+      d,
+    );
+    for (const plan of plans.map((p) => p.join('\n'))) {
+      expect(plan).toMatch(/--engine-version +v1\.2\.3 \(default\)/);
+      expect(plan).toContain(
+        'v1.4.0 is newer than this oak (1.2.3), so this repo is pinned to v1.2.3',
+      );
+      expect(plan).toContain('npm install -g oaktree-sapling');
+      expect(plan).toContain('npx oaktree-sapling@latest');
+    }
+  });
+
+  it('--engine-version naming another version says the files come from the running oak', async () => {
+    const plans: string[][] = [];
+    const d = deps(fakeProv().prov);
+    d.confirm = async (plan) => {
+      plans.push(plan);
+      return false;
+    };
+    await cmdBootstrapPaper(
+      paperInput({
+        engineVersion: 'v1.4.0-dev.2',
+        resolved: { engineVersionFrom: 'flag', runningVersion: '1.2.3' },
+      }),
+      d,
+    );
+    await cmdBootstrapPaper(
+      paperInput({ resolved: { engineVersionFrom: 'flag', runningVersion: '1.2.3' } }),
+      d,
+    );
+    const [other, same] = plans.map((p) => p.join('\n'));
+    expect(other).toMatch(
+      /--engine-version +v1\.4\.0-dev\.2: the files come from the running oak \(1\.2\.3\)\n/,
+    );
+    expect(same).toMatch(/--engine-version +v1\.2\.3\n/);
+    expect(same).not.toContain('running oak');
   });
 
   it('--instance . names this repo as the journal, and still bootstraps', async () => {

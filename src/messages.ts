@@ -229,8 +229,15 @@ export const declared = {
     `${edition} (default): written as editions/${edition}.yml; papers name this id`,
 
   engineVersionGiven: (tag: string): string => tag,
-  engineVersionDefault: (tag: string): string =>
-    `${tag} (default): the newest engine release, looked up just now`,
+  /** `--engine-version` names a version other than the running oak's. */
+  engineVersionGivenOther: (tag: string, running: string): string =>
+    `${tag}: the files come from the running oak (${running})`,
+  engineVersionDefault: (tag: string): string => `${tag} (default): the version of the running oak`,
+  /** Printed under the rows when a stable release is newer than the running oak. */
+  newerRelease: (running: string, newer: string): string =>
+    `  ! ${newer} is newer than this oak (${running}), so this repo is pinned to v${running}. ` +
+    `To pin ${newer}, run this again with \`npx oaktree-sapling@latest\` or after ` +
+    `\`npm install -g oaktree-sapling\`.`,
 
   engineRepoGiven: (repo: string): string => repo,
   engineRepoDefault: (repo: string): string =>
@@ -987,12 +994,14 @@ export const workflow = {
 
   // bootstrap / conformance argument errors
   bootstrapNoRepo: 'oak bootstrap: --repo <owner/name> is required',
-  /** The engine repo has pre-releases but no stable one; "no release" would contradict its
-   *  releases page. */
-  bootstrapNoRelease:
-    'oak bootstrap: the engine repo has no stable release to default to. Pass ' +
-    '--engine-version <tag> to name one; a pre-release (a tag like v1.2.0-dev.4) has to be ' +
-    'named, because it can be deleted, which breaks the papers pinned to it.',
+  bootstrapBadEngineVersion: (got: string): string =>
+    `oak bootstrap: --engine-version must be a release tag like v1.2.0 or v1.2.0-dev.4, got: ${got}`,
+  /** A dev tag can be deleted, which breaks the repos pinned to it, so it is pinned only when
+   *  named. */
+  bootstrapUnreleased: (running: string): string =>
+    `oak bootstrap: the running oak (${running}) is not a stable release, so there is no ` +
+    'default to pin. Pass --engine-version <tag> to name one (v1.2.0, or a pre-release like ' +
+    'v1.2.0-dev.4); the files still come from the running oak.',
   bootstrapUsage: 'oak bootstrap: usage: oak bootstrap <paper|journal> --repo <owner/name> [...]',
   bootstrapSecretsNeedPaper:
     'oak bootstrap journal: the secret flags (--zenodo-token, ' +
@@ -1011,8 +1020,7 @@ export const workflow = {
   working: (what: string): string => `  … ${what}`,
 
   // the release lookup and the wrangler deploy (gh.ts)
-  /** As {@link workflow.bootstrapNoRelease}: a repo can have many pre-releases and still no
-   *  stable release to move to. */
+  /** A repo can have many pre-releases and still no stable release to move to. */
   noStableRelease: (engineRepo: string): string =>
     `no stable release on ${engineRepo} to move to. Pass --to <tag> to name one; ` +
     `pre-releases are excluded from "latest" on purpose, since a dev tag can be deleted.`,

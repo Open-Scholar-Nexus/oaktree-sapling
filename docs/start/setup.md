@@ -11,7 +11,7 @@ gh auth login
 
 `oak bootstrap` checks for `gh` and a logged-in account before it does anything else.
 
-The command below runs `oak` with `npx`, without installing it. To create papers as well, install it with `npm install -g oaktree-sapling` and type `oak` in place of `npx oaktree-sapling`, as the other pages do.
+The command below runs `oak` with `npx`, without installing it. To create papers as well, install it with `npm install -g oaktree-sapling` and type `oak` in place of `npx oaktree-sapling@latest`, as the other pages do.
 
 ## Choose where the repositories live
 
@@ -29,12 +29,12 @@ Then pass the team with `--owner @my-journal/editors` when you create each paper
 ## Create the journal
 
 ```bash
-npx oaktree-sapling bootstrap journal --repo <owner>/<journal-repo> \
+npx oaktree-sapling@latest bootstrap journal --repo <owner>/<journal-repo> \
   --name "My Journal" \
   --edition 2026
 ```
 
-`oak` prints what it is about to do, including every value it took a default for, and asks before changing anything. `--edition` names the first edition; without it the edition is called `seedling`. The engine version defaults to the newest stable release.
+`oak` prints what it is about to do, including every value it took a default for, and asks before changing anything. `--edition` names the first edition; without it the edition is called `seedling`. The engine version defaults to the version of the `oak` you run, and the plan says when a newer release exists; `--engine-version <tag>` pins another, with the files still coming from the `oak` you run. An `oak` that is not a stable release needs `--engine-version`.
 
 Running the same command again finishes a run that failed partway and skips what is already there. It does not rewrite files already on `main`, so a different `--name` or `--edition` on a second run changes nothing: edit the files instead.
 

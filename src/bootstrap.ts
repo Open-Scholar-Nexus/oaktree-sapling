@@ -577,7 +577,11 @@ export interface Outcome {
  * by the time a value arrives here, a default and a typed value look the same.
  */
 export interface ResolvedFlags {
-  engineVersionFrom?: 'flag' | 'latest-release';
+  engineVersionFrom?: 'flag' | 'running-oak';
+  /** The running oak's version (`oak --version`), whose templates this run stamps. */
+  runningVersion?: string;
+  /** A stable release newer than the running oak, when the lookup found one. */
+  newerRelease?: string;
   engineRepoFrom?: 'flag' | 'default';
 }
 
@@ -623,11 +627,14 @@ function declaredValues(v: {
     msg.declared.labels.edition,
     v.editionGiven ? msg.declared.editionGiven(v.edition) : msg.declared.editionDefault(v.edition),
   ]);
+  const running = v.resolved?.runningVersion;
   rows.push([
     msg.declared.labels.engineVersion,
-    v.resolved?.engineVersionFrom === 'flag'
-      ? msg.declared.engineVersionGiven(v.engineVersion)
-      : msg.declared.engineVersionDefault(v.engineVersion),
+    v.resolved?.engineVersionFrom !== 'flag'
+      ? msg.declared.engineVersionDefault(v.engineVersion)
+      : running && v.engineVersion !== `v${running}`
+        ? msg.declared.engineVersionGivenOther(v.engineVersion, running)
+        : msg.declared.engineVersionGiven(v.engineVersion),
   ]);
   rows.push([
     msg.declared.labels.engineRepo,
@@ -642,7 +649,11 @@ function declaredValues(v: {
     ]);
   }
   const width = Math.max(...rows.map(([k]) => k.length));
-  return rows.map(([k, val]) => `  ${k.padEnd(width)}  ${val}`);
+  const newer = v.resolved?.newerRelease;
+  return [
+    ...rows.map(([k, val]) => `  ${k.padEnd(width)}  ${val}`),
+    ...(running && newer ? [msg.declared.newerRelease(running, newer)] : []),
+  ];
 }
 
 export interface BootstrapPaperInput {
