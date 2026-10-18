@@ -1,5 +1,6 @@
 /**
- * pinned.ts: hands `oak build`, `validate` and `start` to the oak version the paper pins.
+ * pinned.ts: hands `oak build`, `validate` and `start` to the oak version the paper pins, and
+ * `oak bootstrap` to the one `--engine-version` names.
  *
  * The paper's `myst.yml` names the version and its `pins.yml` the repository, as in CI, so a
  * local run builds with the same oak. Side effects are injected so the tests stay offline.
@@ -11,6 +12,10 @@ import * as msg from './messages.js';
 import { UserError } from './messages.js';
 
 export type PaperVerb = 'build' | 'validate' | 'start';
+export type HandoffVerb = PaperVerb | 'bootstrap';
+
+/** Where the version came from: the paper's files, or `--engine-version` and `--engine-repo`. */
+export type PinSource = { kind: 'paper'; mystPath: string; pinsPath?: string } | { kind: 'flag' };
 
 /** Set on the handed-off oak so it never hands off again; also an opt-out for engine
  *  development, like `--use-running`. */
@@ -40,7 +45,10 @@ function findPins(paperRoot: string): string | undefined {
 
 /** The version `<paperRoot>/myst.yml` pins and `engine_repo` from the repo's `pins.yml` (else
  *  `defaultRepo`), or undefined when there is no readable pin: the verb then reports it. */
-export function readPin(paperRoot: string, defaultRepo: string): PinnedEngine | undefined {
+export function readPin(
+  paperRoot: string,
+  defaultRepo: string,
+): (PinnedEngine & { pinsPath?: string }) | undefined {
   let version: string;
   try {
     version = readEngineCoordinateRaw(readDoc(join(paperRoot, 'myst.yml'))).version;
@@ -49,7 +57,7 @@ export function readPin(paperRoot: string, defaultRepo: string): PinnedEngine | 
   }
   const pins = findPins(paperRoot);
   const v = pins ? readDoc(pins).get('engine_repo') : undefined;
-  return { engineRepo: typeof v === 'string' && v ? v : defaultRepo, version };
+  return { engineRepo: typeof v === 'string' && v ? v : defaultRepo, version, pinsPath: pins };
 }
 
 /** `$XDG_CACHE_HOME`, or `~/.cache` when it is unset or relative (XDG requires absolute). */
@@ -71,10 +79,9 @@ export interface HandoffDeps {
 }
 
 export interface HandoffContext {
-  verb: PaperVerb;
+  verb: HandoffVerb;
   /** The verb's arguments, passed on unchanged. */
   argv: string[];
-  paperRoot: string;
   /** This oak's version as a tag, `v` + OAK_VERSION. */
   running: string;
   defaultRepo: string;
@@ -88,20 +95,38 @@ export interface HandoffContext {
  * runs it: same version, no readable pin, `--use-running`, or {@link USE_RUNNING_ENV} set.
  * Throws a {@link UserError} for a malformed pin, a failed fetch, or a ref with no build.
  */
-export async function handOff(ctx: HandoffContext, deps: HandoffDeps): Promise<number | null> {
-  const { verb, paperRoot } = ctx;
-  if (ctx.argv.includes('--use-running') || ctx.env[USE_RUNNING_ENV]) return null;
-  const pin = readPin(paperRoot, ctx.defaultRepo);
-  if (!pin || pin.version === ctx.running) return null;
+export async function handOff(
+  ctx: HandoffContext & { paperRoot: string },
+  deps: HandoffDeps,
+): Promise<number | null> {
+  if (usesRunning(ctx)) return null;
+  const pin = readPin(ctx.paperRoot, ctx.defaultRepo);
+  if (!pin) return null;
+  const mystPath = join(ctx.paperRoot, 'myst.yml');
+  return runVersion(pin, { kind: 'paper', mystPath, pinsPath: pin.pinsPath }, ctx, deps);
+}
+
+/**
+ * Runs the verb with oak `pin.version` from `pin.engineRepo`, fetched once into the cache, and
+ * returns its exit code, or null when this oak is that version or {@link handOff}'s opt-outs
+ * apply. Throws as {@link handOff} does.
+ */
+export async function runVersion(
+  pin: PinnedEngine,
+  source: PinSource,
+  ctx: HandoffContext,
+  deps: HandoffDeps,
+): Promise<number | null> {
+  const { verb } = ctx;
+  if (usesRunning(ctx) || pin.version === ctx.running) return null;
 
   // Both reach `git clone` and the cache path, so they are checked before either.
   if (!ENGINE_VERSION.test(pin.version)) {
-    throw new UserError(
-      msg.pinned.badVersion(verb, pin.version, join(paperRoot, 'myst.yml'), ctx.running),
-    );
+    const where = source.kind === 'paper' ? source.mystPath : '--engine-version';
+    throw new UserError(msg.pinned.badVersion(verb, pin.version, where, ctx.running));
   }
   if (!ENGINE_REPO.test(pin.engineRepo)) {
-    throw new UserError(msg.pinned.badRepo(verb, pin.engineRepo, join(paperRoot, PINS_FILE)));
+    throw new UserError(msg.pinned.badRepo(verb, pin.engineRepo, source));
   }
 
   const dir = join(ctx.cacheRoot, 'oak', ...pin.engineRepo.split('/'), pin.version);
@@ -109,17 +134,17 @@ export async function handOff(ctx: HandoffContext, deps: HandoffDeps): Promise<n
     // Another repository's code runs only once the user confirms it.
     if (
       pin.engineRepo !== ctx.defaultRepo &&
-      !(await deps.confirm([msg.pinned.otherRepo(verb, pin, ctx.defaultRepo)]))
+      !(await deps.confirm([msg.pinned.otherRepo(verb, pin, source, ctx.defaultRepo)]))
     ) {
       return 2;
     }
     deps.log(msg.pinned.downloading(verb, pin, dir));
-    fetchInto(dir, pin, verb, deps);
+    fetchInto(dir, pin, source, verb, deps);
   }
   const cli = join(dir, 'dist', 'cli.cjs');
-  if (!existsSync(cli)) throw new UserError(msg.pinned.noBuild(verb, pin, dir));
+  if (!existsSync(cli)) throw new UserError(msg.pinned.noBuild(verb, pin, source, dir));
 
-  deps.log(msg.pinned.running(verb, pin, dir, ctx.running));
+  deps.log(msg.pinned.running(verb, pin, source, dir, ctx.running));
   const env: NodeJS.ProcessEnv = { ...ctx.env, [USE_RUNNING_ENV]: '1' };
   // As ci/run.sh: the release's typst is built for linux x86_64 only.
   const bin = join(dir, 'bin');
@@ -127,8 +152,18 @@ export async function handOff(ctx: HandoffContext, deps: HandoffDeps): Promise<n
   return deps.spawn(cli, [verb, ...ctx.argv], env);
 }
 
+function usesRunning(ctx: HandoffContext): boolean {
+  return ctx.argv.includes('--use-running') || !!ctx.env[USE_RUNNING_ENV];
+}
+
 /** Clones beside `dir` and renames it in, so only a complete clone sits at `dir`. */
-function fetchInto(dir: string, pin: PinnedEngine, verb: PaperVerb, deps: HandoffDeps): void {
+function fetchInto(
+  dir: string,
+  pin: PinnedEngine,
+  source: PinSource,
+  verb: HandoffVerb,
+  deps: HandoffDeps,
+): void {
   mkdirSync(dirname(dir), { recursive: true });
   const tmp = mkdtempSync(join(dirname(dir), `.${pin.version}-`));
   try {
@@ -136,7 +171,7 @@ function fetchInto(dir: string, pin: PinnedEngine, verb: PaperVerb, deps: Handof
   } catch (err) {
     rmSync(tmp, { recursive: true, force: true });
     const why = err instanceof Error ? err.message : String(err);
-    throw new UserError(msg.pinned.fetchFailed(verb, pin, why));
+    throw new UserError(msg.pinned.fetchFailed(verb, pin, source, why));
   }
   try {
     renameSync(tmp, dir);

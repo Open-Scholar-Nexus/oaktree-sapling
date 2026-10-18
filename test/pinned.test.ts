@@ -13,7 +13,14 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { cacheHome, handOff, readPin, USE_RUNNING_ENV, type HandoffDeps } from '../src/pinned.js';
+import {
+  cacheHome,
+  handOff,
+  readPin,
+  runVersion,
+  USE_RUNNING_ENV,
+  type HandoffDeps,
+} from '../src/pinned.js';
 
 const DEFAULT_REPO = 'Open-Scholar-Nexus/oaktree-sapling';
 
@@ -211,7 +218,7 @@ describe('readPin', () => {
     const sub = join(root, 'papers', 'p');
     mkdirSync(sub, { recursive: true });
     writeFileSync(join(sub, 'myst.yml'), readFileSync(join(root, 'myst.yml')));
-    expect(readPin(sub, DEFAULT_REPO)).toEqual({
+    expect(readPin(sub, DEFAULT_REPO)).toMatchObject({
       engineRepo: 'fork/oaktree-sapling',
       version: 'v1.0.0',
     });
@@ -223,5 +230,54 @@ describe('readPin', () => {
     mkdirSync(join(repo, '.git'), { recursive: true });
     writeFileSync(join(repo, 'myst.yml'), readFileSync(join(paper('v1.0.0'), 'myst.yml')));
     expect(readPin(repo, DEFAULT_REPO)?.engineRepo).toBe(DEFAULT_REPO);
+  });
+});
+
+describe('runVersion for oak bootstrap --engine-version', () => {
+  function bootstrapCtx(argv: string[] = []) {
+    return {
+      verb: 'bootstrap' as const,
+      argv: ['paper', '--repo', 'me/p', ...argv],
+      running: 'v1.0.0',
+      defaultRepo: DEFAULT_REPO,
+      env: {},
+      cacheRoot: mkdtempSync(join(tmpdir(), 'oak-pinned-cache-')),
+    };
+  }
+
+  it('runs this oak when the flag names its version', async () => {
+    const { deps, calls } = fakes();
+    const pin = { engineRepo: DEFAULT_REPO, version: 'v1.0.0' };
+    expect(await runVersion(pin, { kind: 'flag' }, bootstrapCtx(), deps)).toBeNull();
+    expect(calls.clones).toEqual([]);
+  });
+
+  it('hands bootstrap to another version with the same arguments', async () => {
+    const { deps, calls } = fakes();
+    const pin = { engineRepo: DEFAULT_REPO, version: 'v0.9.0' };
+    expect(await runVersion(pin, { kind: 'flag' }, bootstrapCtx(), deps)).toBe(7);
+    expect(calls.clones).toEqual([[DEFAULT_REPO, 'v0.9.0']]);
+    expect(calls.spawns[0]!.argv).toEqual(['bootstrap', 'paper', '--repo', 'me/p']);
+    expect(calls.log.at(-1)).toContain('the version --engine-version names');
+  });
+
+  it('asks before fetching from another --engine-repo, and checks its name', async () => {
+    const { deps, calls } = fakes({ confirm: false });
+    const fork = { engineRepo: 'someone/fork', version: 'v0.9.0' };
+    expect(await runVersion(fork, { kind: 'flag' }, bootstrapCtx(), deps)).toBe(2);
+    expect(calls.confirms).toBe(1);
+    const bad = { engineRepo: '../..', version: 'v0.9.0' };
+    await expect(runVersion(bad, { kind: 'flag' }, bootstrapCtx(), deps)).rejects.toThrow(
+      '--engine-repo must be owner/name',
+    );
+    expect(calls.clones).toEqual([]);
+  });
+
+  it('--use-running keeps this oak', async () => {
+    const { deps } = fakes();
+    const pin = { engineRepo: DEFAULT_REPO, version: 'v0.9.0' };
+    expect(
+      await runVersion(pin, { kind: 'flag' }, bootstrapCtx(['--use-running']), deps),
+    ).toBeNull();
   });
 });

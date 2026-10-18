@@ -20,6 +20,7 @@ import { parseDocument } from 'yaml';
 import type { ComposeInput } from './compose.js';
 import type { MaterializeInput, StartOpts } from './materialize.js';
 import type { JournalStamp } from './schema.js';
+import type { HandoffContext, HandoffDeps, HandoffVerb } from './pinned.js';
 import * as msg from './messages.js';
 import { annotate, inCI, UserError } from './messages.js';
 
@@ -1034,8 +1035,17 @@ async function cmdBootstrap(argv: string[]): Promise<number> {
   }
   const { pinnedEngineVersion, newerRelease, npmLatest } = await import('./engine-version.js');
   const pinned = pinnedEngineVersion(flag(rest, 'engine-version'), OAK_VERSION);
-  gh.assertGhReady();
   const engineRepo = flag(rest, 'engine-repo') ?? ENGINE_REPO_DEFAULT;
+  // A new repo's files come from the oak version it pins (DOCS.pinnedVersion).
+  const { runVersion } = await import('./pinned.js');
+  const handed = await runVersion(
+    { engineRepo, version: pinned.engineVersion },
+    { kind: 'flag' },
+    await handoffContext('bootstrap', argv),
+    await handoffDeps(argv),
+  );
+  if (handed !== null) return handed;
+  gh.assertGhReady();
   const { engineVersion } = pinned;
   const resolved = {
     ...pinned.resolved,
@@ -1263,39 +1273,49 @@ function nearestVerb(word: string): string | null {
  *  in a bundle built outside a release. */
 declare const OAK_VERSION: string;
 
+/** What {@link handOff} and {@link runVersion} need to know about this oak. */
+async function handoffContext(verb: HandoffVerb, argv: string[]): Promise<HandoffContext> {
+  const { cacheHome } = await import('./pinned.js');
+  return {
+    verb,
+    argv,
+    running: `v${OAK_VERSION}`,
+    defaultRepo: ENGINE_REPO_DEFAULT,
+    env: process.env,
+    cacheRoot: cacheHome(process.env, homedir()),
+  };
+}
+
+async function handoffDeps(argv: string[]): Promise<HandoffDeps> {
+  const { cloneEngineTag } = await import('./gh.js');
+  return {
+    clone: cloneEngineTag,
+    typstRuns: (bin) => {
+      try {
+        execFileSync(join(bin, 'typst'), ['--version'], { stdio: 'ignore' });
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    spawn: (cli, args, env) =>
+      spawnSync(process.execPath, [cli, ...args], { stdio: 'inherit', env }).status ?? 1,
+    confirm: makeConfirm(argv),
+    log: (line) => process.stderr.write(line + '\n'),
+  };
+}
+
 /** Hands a paper command to the oak version the paper pins ({@link handOff}), or returns null
  *  when this oak runs it. Documented at DOCS.pinnedVersion. */
 async function runPinned(
   verb: 'build' | 'validate' | 'start',
   argv: string[],
 ): Promise<number | null> {
-  const { handOff, cacheHome } = await import('./pinned.js');
-  const { cloneEngineTag } = await import('./gh.js');
+  const { handOff } = await import('./pinned.js');
+  const ctx = await handoffContext(verb, argv);
   return handOff(
-    {
-      verb,
-      argv,
-      paperRoot: resolve(flag(argv, 'paper') ?? '.'),
-      running: `v${OAK_VERSION}`,
-      defaultRepo: ENGINE_REPO_DEFAULT,
-      env: process.env,
-      cacheRoot: cacheHome(process.env, homedir()),
-    },
-    {
-      clone: cloneEngineTag,
-      typstRuns: (bin) => {
-        try {
-          execFileSync(join(bin, 'typst'), ['--version'], { stdio: 'ignore' });
-          return true;
-        } catch {
-          return false;
-        }
-      },
-      spawn: (cli, args, env) =>
-        spawnSync(process.execPath, [cli, ...args], { stdio: 'inherit', env }).status ?? 1,
-      confirm: makeConfirm(argv),
-      log: (line) => process.stderr.write(line + '\n'),
-    },
+    { ...ctx, paperRoot: resolve(flag(argv, 'paper') ?? '.') },
+    await handoffDeps(argv),
   );
 }
 

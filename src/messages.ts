@@ -49,7 +49,7 @@
 
 import { DOCS, docsUrl } from './docs-links.js';
 import type { JournalCache } from './gh.js';
-import type { PaperVerb, PinnedEngine } from './pinned.js';
+import type { HandoffVerb, PinnedEngine, PinSource } from './pinned.js';
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════
  * Output plumbing: not prose, but it decides HOW the prose is printed.
@@ -141,6 +141,8 @@ export const usage = (): string =>
   `                        [--private] [--no-require-checks] [--yes]\n` +
   `      --instance    the journal repo this paper belongs to ('.' only if the journal\n` +
   `                    settings live in this same repo); --edition names one of its editions\n` +
+  `  Both bootstrap verbs: --engine-version naming another oak version runs that version's\n` +
+  `  bootstrap, fetched once into ~/.cache/oak; --use-running keeps this oak.\n` +
   `  oak upgrade (--repo <owner/name> | --paper <dir>) [--to <tag>] [--files-only] [--yes]\n` +
   `                    move a paper repo to a newer engine version, as a pull request\n` +
   `\n` +
@@ -655,34 +657,50 @@ export const start = {
     `previous version: ${message}`,
 };
 
-/** `oak build`, `validate` and `start` handing the command to the oak version the paper pins. */
+/** `oak build`, `validate` and `start` handing the command to the oak version the paper pins, and
+ *  `oak bootstrap` to the one `--engine-version` names. */
 export const pinned = {
-  running: (verb: PaperVerb, pin: PinnedEngine, dir: string, current: string): string =>
-    `oak ${verb}: running oak ${pin.version} from ${pin.engineRepo}, the version myst.yml pins ` +
-    `(${dir}). Pass --use-running to run this oak (${current}).`,
+  running: (
+    verb: HandoffVerb,
+    pin: PinnedEngine,
+    source: PinSource,
+    dir: string,
+    current: string,
+  ): string =>
+    `oak ${verb}: running oak ${pin.version} from ${pin.engineRepo}, the version ` +
+    `${source.kind === 'paper' ? 'myst.yml pins' : '--engine-version names'} (${dir}). Pass ` +
+    `--use-running to run this oak (${current}).`,
 
-  downloading: (verb: PaperVerb, pin: PinnedEngine, dir: string): string =>
+  downloading: (verb: HandoffVerb, pin: PinnedEngine, dir: string): string =>
     `oak ${verb}: downloading oak ${pin.version} from ${pin.engineRepo} into ${dir}.`,
 
-  otherRepo: (verb: PaperVerb, pin: PinnedEngine, defaultRepo: string): string =>
-    `oak ${verb}: this paper runs oak ${pin.version} from ${pin.engineRepo} (engine_repo in ` +
-    `pins.yml), not from ${defaultRepo}. Fetching it runs that repository's code on this machine.`,
+  otherRepo: (
+    verb: HandoffVerb,
+    pin: PinnedEngine,
+    source: PinSource,
+    defaultRepo: string,
+  ): string =>
+    `oak ${verb}: this runs oak ${pin.version} from ${pin.engineRepo} ` +
+    `(${source.kind === 'paper' ? 'engine_repo in pins.yml' : '--engine-repo'}), not from ` +
+    `${defaultRepo}. Fetching it runs that repository's code on this machine.`,
 
-  badVersion: (verb: PaperVerb, got: string, mystPath: string, current: string): string =>
-    `oak ${verb}: the oak version in ${mystPath} is ${JSON.stringify(got.slice(0, 60))}; pin a ` +
+  badVersion: (verb: HandoffVerb, got: string, where: string, current: string): string =>
+    `oak ${verb}: the oak version in ${where} is ${JSON.stringify(got.slice(0, 60))}; pin a ` +
     `release tag like v1.2.3, or pass --use-running to run this oak (${current}).`,
 
-  badRepo: (verb: PaperVerb, got: string, pinsPath: string): string =>
-    `oak ${verb}: engine_repo in ${pinsPath} must be owner/name, not ` +
-    `${JSON.stringify(got.slice(0, 60))}.`,
+  badRepo: (verb: HandoffVerb, got: string, source: PinSource): string =>
+    `oak ${verb}: ${
+      source.kind === 'paper' ? `engine_repo in ${source.pinsPath ?? 'pins.yml'}` : '--engine-repo'
+    } must be owner/name, not ${JSON.stringify(got.slice(0, 60))}.`,
 
-  fetchFailed: (verb: PaperVerb, pin: PinnedEngine, why: string): string =>
-    `oak ${verb}: could not fetch oak ${pin.version} from ${pin.engineRepo} (${why}). Check the ` +
-    `version in myst.yml, or pass --use-running to run this oak.`,
+  fetchFailed: (verb: HandoffVerb, pin: PinnedEngine, source: PinSource, why: string): string =>
+    `oak ${verb}: could not fetch oak ${pin.version} from ${pin.engineRepo} (${why}). Check ` +
+    `${source.kind === 'paper' ? 'the version in myst.yml' : '--engine-version'}, or pass ` +
+    `--use-running to run this oak.`,
 
-  noBuild: (verb: PaperVerb, pin: PinnedEngine, dir: string): string =>
+  noBuild: (verb: HandoffVerb, pin: PinnedEngine, source: PinSource, dir: string): string =>
     `oak ${verb}: ${pin.engineRepo} ${pin.version} has no build (no dist/cli.cjs in ${dir}); ` +
-    `pin a release tag in myst.yml.`,
+    `${source.kind === 'paper' ? 'pin a release tag in myst.yml' : 'name a release tag'}.`,
 };
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════

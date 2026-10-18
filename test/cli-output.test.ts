@@ -694,6 +694,31 @@ describe.skipIf(bundleState() === 'absent')('the paper commands hand off to the 
   });
 });
 
+describe.skipIf(bundleState() === 'absent')('oak bootstrap hands off to --engine-version', () => {
+  beforeAll(assertBundleNotStale);
+
+  it('checks --engine-repo before any git or gh call', () => {
+    const cache = mkdtempSync(join(tmpdir(), 'oak-pinned-cache-'));
+    const { code, stderr } = oak(
+      [
+        'bootstrap',
+        'journal',
+        '--repo',
+        'me/j',
+        '--engine-version',
+        'v9.9.9',
+        '--engine-repo',
+        '../..',
+      ],
+      { OAK_USE_RUNNING: undefined, XDG_CACHE_HOME: cache },
+    );
+    expect(code).toBe(2);
+    expect(stderr).toContain('oak bootstrap: --engine-repo must be owner/name');
+    expect(stderr).not.toContain('not on PATH');
+    expect(existsSync(join(cache, 'oak'))).toBe(false);
+  });
+});
+
 describe.skipIf(bundleState() === 'absent')('fetching from a non-default engine_repo', () => {
   beforeAll(assertBundleNotStale);
 
