@@ -19,6 +19,8 @@ export const DOCS = {
   paperJournalLink: 'start/paper#paper-journal-link',
   /** Previewing a paper locally with `oak start`. */
   paperPreviewLocally: 'start/paper#paper-preview-locally',
+  /** `oak build`, `validate` and `start` running the oak version the paper pins. */
+  pinnedVersion: 'guide/pins#pins-local',
 
   /** `journal.yml` field by field. */
   journalYml: 'guide/journal-yml',

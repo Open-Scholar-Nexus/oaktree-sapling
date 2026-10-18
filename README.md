@@ -40,9 +40,9 @@ The rest (`post-checks`, `deploy-preview`, `deposit`, `release`, `notify`, `conf
 
 ## What runs from the npm package
 
-`oak bootstrap`, `oak upgrade`, `oak validate`, `oak build` and `oak start` run from the package. The workflow commands run in CI from a checkout of the release tag.
+`oak bootstrap` and `oak upgrade` run from the package. `oak build`, `oak validate` and `oak start` run the version the paper pins, downloaded into `~/.cache/oak` the first time ([details](https://scholar.nexus/oaktree-sapling/guide/pins#pins-local)). The workflow commands run in CI from a checkout of the release tag.
 
-`oak build` needs [typst](https://github.com/typst/typst) on your `PATH` for the PDF. In CI it uses the release tag's `bin/typst`, built for linux x86_64.
+`oak build` needs [typst](https://github.com/typst/typst) on your `PATH` for the PDF, unless the downloaded version's `bin/typst` (linux x86_64) runs on your machine.
 
 ## Editorial checks
 

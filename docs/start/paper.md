@@ -7,7 +7,7 @@ The steps below get you from that repository to a preview on your own machine, t
 
 ## Before you start
 
-You need a GitHub account, `git`, and Node 22 or later. Then install `oak`, oaktree-sapling's command-line tool, which you run each time you preview or build the paper:
+You need a GitHub account, `git`, and Node 22 or later. Then install `oak`, oaktree-sapling's command-line tool, which you run each time you preview or build the paper:[^version]
 
 ```bash
 npm install -g oaktree-sapling
@@ -63,5 +63,7 @@ oak build
 ```
 
 This writes the PDF to `_build/exports/paper.pdf`. It needs [typst](https://github.com/typst/typst) installed.
+
+[^version]: `oak` runs the version your paper names, the one its CI uses, and downloads it the first time. [Keeping versions current](#pins-local) has the details.
 
 [^settings]: The journal's logo, colours, edition and checks live in the journal's own repository, which the editors maintain and your paper repository names. Your paper's builds read them from there. [Journal settings in a paper](../guide/journal-settings.md) has the details.

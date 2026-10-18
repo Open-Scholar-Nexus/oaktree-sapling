@@ -27,6 +27,7 @@ const COVERED = [
   'compose.ts',
   'gh.ts',
   'yaml-io.ts',
+  'pinned.ts',
 ];
 
 /** A sink that puts its argument in front of a person. */

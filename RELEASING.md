@@ -4,7 +4,7 @@ A paper's CI runs oak from a checkout of this repository at the version the pape
 
 ## Testing a change locally
 
-Build it from your working tree with `npm run bundle` and run `dist/cli.cjs`. Outside a release the bundle reports package.json's version with `-unreleased+<commit>` added (`0.2.0-unreleased+c174a72`), so `oak bootstrap` needs `--engine-version` to know what to pin.
+Build it from your working tree with `npm run bundle` and run `dist/cli.cjs`. Outside a release the bundle reports package.json's version with `-unreleased+<commit>` added (`0.2.0-unreleased+c174a72`), which matches no pin: `oak bootstrap` needs `--engine-version` to know what to pin, and `oak build`, `validate` and `start` run the version the paper pins unless you set `OAK_USE_RUNNING=1`.
 
 ## Testing a change in CI
 
