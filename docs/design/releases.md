@@ -8,7 +8,7 @@ A paper's CI runs oak from a checkout of the engine repository at the version th
 
 ## Why commit the build with a tag
 
-[`ci/run.sh`](src:ci/run.sh) ends with `exec node "$engine/dist/cli.cjs"`, so the build has to be in the checkout before a paper can run it. The [release script](src:scripts/cut-engine-release.sh) commits `dist/cli.cjs` and `bin/typst` to a new commit off HEAD and tags that commit. Both are gitignored, so no branch carries them, and a paper that pins a branch stops in `ci/run.sh` with an error telling it to pin a release tag.
+[`ci/run.sh`](src:ci/run.sh) ends with `exec node "$engine/dist/cli.cjs"`, so the build has to be in the checkout before a paper can run it. The [release script](src:scripts/cut-engine-release.sh) commits `dist/cli.cjs` and `bin/typst` to a new commit off HEAD and tags that commit. It then makes a GitHub release on the tag, which `releases/latest` and `oak upgrade` read. Both are gitignored, so no branch carries them, and a paper that pins a branch stops in `ci/run.sh` with an error telling it to pin a release tag.
 
 Committing the build at the tag gives three things. Starting oak in a paper's CI takes one git checkout and no install. Local runs and CI read the same committed file, so they match by git object rather than by esbuild being reproducible. And the Zenodo deposit's `engine.zip`, a `git archive` of that checkout, carries typst, so a deposited PDF can be rendered again with nothing fetched.
 
