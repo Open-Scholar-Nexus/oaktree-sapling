@@ -470,8 +470,24 @@ export const upgrade = {
     `up to date at ${target}${targetGiven ? '' : ` (the newest release of ${engineRepo}; no --to given)`}; no pull request.`,
 
   pinAhead: (pin: string, target: string, engineRepo: string): string =>
-    `kept ${pin}: it is newer than ${target} (the newest release of ${engineRepo}) or is a ` +
-    `branch or commit; no pull request. Pass --to <tag> to move it.`,
+    `kept ${pin}: it is newer than ${target} (the newest release of ${engineRepo}); no pull ` +
+    `request. Pass --to <tag> to move it.`,
+
+  badTarget: (target: string, engineRepo: string, targetGiven: boolean): string =>
+    `oak upgrade: ${targetGiven ? '--to' : `the newest release of ${engineRepo}`} is ` +
+    `${JSON.stringify(target.slice(0, 60))}, not a release tag like v1.2.3 or v1.2.3-dev.4; ` +
+    `nothing was changed.`,
+
+  /** `--files-only` would leave a version the engine action refuses. */
+  badPin: (pin: string): string =>
+    `oak upgrade: myst.yml pins ${JSON.stringify(pin.slice(0, 60))}, not a release tag like ` +
+    `v1.2.3 or v1.2.3-dev.4, and --files-only leaves it; nothing was changed. Run it without ` +
+    `--files-only, which moves the version too.`,
+
+  badMinimum: (min: string, target: string): string =>
+    `oak upgrade: pins.yml at ${target} names min_engine_version ${JSON.stringify(min.slice(0, 60))}, ` +
+    `not a release tag like v1.2.3 or v1.2.3-dev.4; nothing was changed. Pass --to <tag> naming ` +
+    `another release.`,
 
   /** The pin this run leaves is older than the workflows it leaves need. */
   belowMinimum: (pin: string, min: string, filesOnly: boolean): string =>
@@ -570,6 +586,11 @@ export const build = {
       ? `It names the engine release that builds this paper, e.g. \`version: v0.1.0\`.`
       : `It names which of the journal's editions this paper appears in; the ids are the ` +
         `filenames under editions/ in the journal repo.`),
+
+  badEngineVersion: (got: string, mystPath: string): string =>
+    `project.options.oaktree-sapling.version is ${JSON.stringify(got.slice(0, 60))} in ${mystPath}. ` +
+    `Pin a release tag like v1.2.3 or v1.2.3-dev.4, as the paper's CI does; \`oak upgrade\` ` +
+    `sets one.`,
 
   badEdition: (got: string, mystPath: string): string =>
     `project.options.oaktree-sapling.edition is ${JSON.stringify(got.slice(0, 40))} in ${mystPath}. ` +
@@ -695,9 +716,9 @@ export const pinned = {
     `(${source.kind === 'paper' ? 'engine_repo in pins.yml' : '--engine-repo'}), not from ` +
     `${defaultRepo}. Fetching it runs that repository's code on this machine.`,
 
-  badVersion: (verb: HandoffVerb, got: string, where: string, current: string): string =>
+  badVersion: (verb: HandoffVerb, got: string, where: string): string =>
     `oak ${verb}: the oak version in ${where} is ${JSON.stringify(got.slice(0, 60))}; pin a ` +
-    `release tag like v1.2.3, or set OAK_USE_RUNNING=1 to run this oak (${current}).`,
+    `release tag like v1.2.3 or v1.2.3-dev.4.`,
 
   badRepo: (verb: HandoffVerb, got: string, source: PinSource): string =>
     `oak ${verb}: ${
@@ -1029,11 +1050,11 @@ export const workflow = {
   notifyUsage: 'oak notify: usage: oak notify new-version [--pr N | --site <dir>]',
   notifyNoPr: 'oak notify new-version: pass --pr N (or --site <dir> holding a .pr-number)',
   notifyPublishedButUnlinked:
-    'notify: a v* tag exists on main but project.doi is missing from myst.yml; the ' +
+    'notify: a version tag (vX.Y.Z) exists but project.doi is missing from myst.yml; the ' +
     'repo is published but unlinked. Fix myst.yml before tagging the next release.',
   notifyBadDoi: (doi: string): string =>
     `unrecognised DOI prefix: ${doi} (expected 10.5281/zenodo.* or 10.5072/zenodo.*)`,
-  notifyFirstDeposit: 'no v* tags on main (first-deposit case)',
+  notifyFirstDeposit: 'no version tags (vX.Y.Z) yet (first-deposit case)',
   notifyTagsFailed: (why: string): string =>
     `notify: gh could not list the repo's version tags (${why}); whether the paper is ` +
     'already published is unknown, and the reminder is not skipped on a guess.',

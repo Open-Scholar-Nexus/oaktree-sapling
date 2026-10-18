@@ -10,7 +10,7 @@ import { delimiter, dirname, isAbsolute, join, resolve } from 'node:path';
 import { readDoc, readEngineCoordinateRaw } from './yaml-io.js';
 import * as msg from './messages.js';
 import { UserError } from './messages.js';
-import { GITHUB_REPO } from './schema.js';
+import { ENGINE_VERSION, GITHUB_REPO } from './schema.js';
 
 export type PaperVerb = 'build' | 'validate' | 'start';
 export type HandoffVerb = PaperVerb | 'bootstrap';
@@ -21,8 +21,6 @@ export type PinSource = { kind: 'paper'; mystPath: string; pinsPath?: string } |
 /** Set on the handed-off oak so it never hands off again, and by CI, the tests and engine
  *  development to run this oak. */
 export const USE_RUNNING_ENV = 'OAK_USE_RUNNING';
-
-const ENGINE_VERSION = /^v[0-9]+\.[0-9]+\.[0-9]+(-dev\.[0-9]+)?$/;
 
 const PINS_FILE = join('.github', 'actions', 'engine', 'pins.yml');
 
@@ -141,7 +139,7 @@ export async function runVersion(
   // Both reach `git clone` and the cache path, so they are checked before either.
   if (!ENGINE_VERSION.test(pin.version)) {
     const where = source.kind === 'paper' ? source.mystPath : '--engine-version';
-    throw new UserError(msg.pinned.badVersion(verb, pin.version, where, ctx.running));
+    throw new UserError(msg.pinned.badVersion(verb, pin.version, where));
   }
   if (!GITHUB_REPO.test(pin.engineRepo)) {
     throw new UserError(msg.pinned.badRepo(verb, pin.engineRepo, source));

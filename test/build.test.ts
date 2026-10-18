@@ -242,6 +242,24 @@ describe('a missing version key is a sentence, not a stack', () => {
     expect(err.message).toContain('project.options.oaktree-sapling'); // where in it
     expect(err.message).toContain('oak upgrade'); // and what changes it for you
   });
+
+  it('refuses the versions the engine action refuses, such as a branch', async () => {
+    for (const bad of ['main', 'v1.2.3-rc.1']) {
+      const paperRoot = tmpPaper();
+      const authorPath = join(paperRoot, 'myst.yml');
+      const src = readFileSync(authorPath, 'utf8').replace(/(\n\s*version: ).*/, `$1${bad}`);
+      writeFileSync(authorPath, src);
+      const err = await runBuild({
+        paperRoot,
+        engineRoot: '.engine',
+        instanceRoot: '.instance',
+        baseUrl: '',
+        edge: fakeEdge().edge,
+      }).catch((e) => e);
+      expect(err, bad).toBeInstanceOf(UserError);
+      expect(err.message).toContain(JSON.stringify(bad));
+    }
+  });
 });
 
 describe('runStart: compose, then hand off to myst', () => {

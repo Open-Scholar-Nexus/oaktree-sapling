@@ -22,46 +22,12 @@ import {
   type TemplateAnswers,
 } from './bootstrap.js';
 import * as msg from './messages.js';
+import { compareEngineVersions, ENGINE_VERSION } from './schema.js';
 import type { cmdConformanceReset } from './conformance.js';
 
 /** The branch prefix; the target tag follows it. Exported for {@link cmdConformanceReset},
  *  which deletes these branches [R117]. */
 export const UPGRADE_BRANCH_PREFIX = 'oak/upgrade-';
-
-/** A release tag: `vX.Y.Z`, optionally with a pre-release such as `-dev.4`. */
-const RELEASE_TAG = /^v(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/;
-
-/** Semver order of two release tags (negative, 0, positive), or null if either is not one. */
-export function compareTags(a: string, b: string): number | null {
-  const ma = RELEASE_TAG.exec(a);
-  const mb = RELEASE_TAG.exec(b);
-  if (!ma || !mb) return null;
-  for (let i = 1; i <= 3; i++) {
-    const d = Number(ma[i]) - Number(mb[i]);
-    if (d) return d;
-  }
-  return comparePre(ma[4], mb[4]);
-}
-
-/** Pre-release order per semver §11: none ranks above any, numeric ids below alphanumeric. */
-function comparePre(a: string | undefined, b: string | undefined): number {
-  if (a === b) return 0;
-  if (a === undefined) return 1;
-  if (b === undefined) return -1;
-  const pa = a.split('.');
-  const pb = b.split('.');
-  for (let i = 0; i < Math.min(pa.length, pb.length); i++) {
-    const x = pa[i]!;
-    const y = pb[i]!;
-    if (x === y) continue;
-    const nx = /^\d+$/.test(x);
-    const ny = /^\d+$/.test(y);
-    if (nx && ny) return Number(x) - Number(y);
-    if (nx !== ny) return nx ? -1 : 1;
-    return x < y ? -1 : 1;
-  }
-  return pa.length - pb.length;
-}
 
 const PINS_REL = posix.join('.github', 'actions', 'engine', 'pins.yml');
 
@@ -268,11 +234,23 @@ export async function cmdUpgrade(input: UpgradeInput, deps: UpgradeDeps): Promis
   // right now" is not.
   const targetGiven = Boolean(input.to);
   const target = input.to ?? deps.resolveTarget(answers.engineRepo);
+  const refuse = (message: string, extra: Record<string, unknown> = {}): Outcome => ({
+    exitCode: 2,
+    result: { status: 'error', message, ...extra },
+  });
+  // The target becomes a clone ref, a branch name and the pin, and the engine action refuses any
+  // pin that is not an engine version.
+  if (!ENGINE_VERSION.test(target)) {
+    return refuse(msg.upgrade.badTarget(target, answers.engineRepo, targetGiven));
+  }
+  const pinAfter = filesOnly ? answers.version : target;
+  if (!ENGINE_VERSION.test(pinAfter)) return refuse(msg.upgrade.badPin(pinAfter));
 
-  // The newest release never moves a pin back: a pre-release or a ref picked by hand stays.
+  // The newest release never moves a pin back from a newer one. A pin that is not an engine
+  // version runs nowhere, so it moves.
   if (!targetGiven && answers.version) {
-    const order = compareTags(answers.version, target);
-    if (order === null || order > 0) {
+    const order = compareEngineVersions(answers.version, target);
+    if (order !== null && order > 0) {
       deps.log(msg.upgrade.pinAhead(answers.version, target, answers.engineRepo));
       return {
         exitCode: 0,
@@ -288,20 +266,17 @@ export async function cmdUpgrade(input: UpgradeInput, deps: UpgradeDeps): Promis
   const filesChanged = drift.length > 0;
 
   // The pin and the workflows this run leaves must agree: workflows above the pin call verbs it
-  // lacks, and on GitHub that fails quietly. A pin that is not a release tag cannot be ordered.
-  const pinAfter = filesOnly ? answers.version : target;
+  // lacks, and on GitHub that fails quietly.
   const minEngine = readMinEngine(templateAtTarget);
-  if (minEngine && (compareTags(pinAfter, minEngine) ?? 0) < 0) {
-    return {
-      exitCode: 2,
-      result: {
-        status: 'error',
-        message: msg.upgrade.belowMinimum(pinAfter, minEngine, filesOnly),
-        target,
-        pin: pinAfter,
-        min_engine_version: minEngine,
-      },
-    };
+  if (minEngine) {
+    const order = compareEngineVersions(pinAfter, minEngine);
+    const why =
+      order === null
+        ? msg.upgrade.badMinimum(minEngine, target)
+        : order < 0
+          ? msg.upgrade.belowMinimum(pinAfter, minEngine, filesOnly)
+          : null;
+    if (why) return refuse(why, { target, pin: pinAfter, min_engine_version: minEngine });
   }
 
   if (!versionChanged && !filesChanged) {

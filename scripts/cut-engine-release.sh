@@ -12,7 +12,8 @@ set -euo pipefail
 version="${1:-}"
 cd "$(cd "$(dirname "$0")/.." && pwd)"
 
-if [[ ! "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+# ENGINE_VERSION in src/schema.ts.
+if [[ ! "$version" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-dev\.(0|[1-9][0-9]*))?$ ]]; then
   echo "::error::version must look like v1.2.0 or v1.2.0-dev.4 (got '${version:-<empty>}')" >&2
   exit 1
 fi

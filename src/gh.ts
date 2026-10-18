@@ -5,7 +5,7 @@
  */
 import * as msg from './messages.js';
 import { UserError } from './messages.js';
-import { GITHUB_REPO, repoFromGithubUrl } from './schema.js';
+import { GITHUB_REPO, PAPER_VERSION_TAG, repoFromGithubUrl } from './schema.js';
 import { execFileSync, spawnSync } from 'node:child_process';
 import {
   cpSync,
@@ -440,7 +440,7 @@ export const realGhPr: GhPr = {
     return out
       .split('\n')
       .map((t) => t.trim())
-      .filter((t) => t.startsWith('v'));
+      .filter((t) => PAPER_VERSION_TAG.test(t));
   },
 
   prHead(repo, pr) {

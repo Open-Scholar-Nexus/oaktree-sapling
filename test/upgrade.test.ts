@@ -27,7 +27,6 @@ import {
   extraFrozenFiles,
   readAnswers,
   cmdUpgrade,
-  compareTags,
   type UpgradePr,
   type UpgradeDeps,
   ownerFromCodeowners,
@@ -288,13 +287,27 @@ describe('the newest release', () => {
     expect(opened).toHaveLength(0);
   });
 
-  it('leaves a pin that is not a release tag', async () => {
+  it('moves a pin that is not a release tag, which no engine runs', async () => {
     const { pr, opened } = fakePr();
     await cmdUpgrade(
       { repoRoot: pinned('main') },
       deps(pr, 'v2.0.0', () => TEMPLATE_ROOT),
     );
-    expect(opened).toHaveLength(0);
+    expect(opened[0]!.branch).toBe('oak/upgrade-v2.0.0');
+  });
+
+  it('refuses a target that is not a release tag before fetching it', async () => {
+    for (const to of ['main', 'v1.2.3-rc.1', '--upload-pack=x']) {
+      const { pr, opened } = fakePr();
+      const out = await cmdUpgrade(
+        { repoRoot: makeRepo(), to },
+        deps(pr, 'v2.0.0', () => {
+          throw new Error('fetched');
+        }),
+      );
+      expect(out.exitCode, to).toBe(2);
+      expect(opened).toHaveLength(0);
+    }
   });
 
   it('moves a pre-release pin up to its release', async () => {
@@ -394,45 +407,40 @@ describe('the minimum engine version the workflows declare', () => {
     expect(readFileSync(join(repo, 'myst.yml'), 'utf8')).toBe(before);
   });
 
-  it('a pre-release of the minimum passes when the minimum admits pre-releases', async () => {
-    const { pr, opened } = fakePr();
-    const out = await cmdUpgrade(
-      { repoRoot: makeRepo(), to: 'v2.0.0-dev.3' },
-      deps(pr, 'v9.0.0', () => templateNeeding('v2.0.0-0')),
-    );
-    expect(out.exitCode).toBe(0);
-    expect(opened).toHaveLength(1);
+  it('a dev release passes a minimum naming an earlier one, and fails a minimum naming its release', async () => {
+    const run = async (min: string) =>
+      (
+        await cmdUpgrade(
+          { repoRoot: makeRepo(), to: 'v2.0.0-dev.3' },
+          deps(fakePr().pr, 'v9.0.0', () => templateNeeding(min)),
+        )
+      ).exitCode;
+    expect(await run('v2.0.0-dev.1')).toBe(0);
+    expect(await run('v2.0.0')).toBe(2);
   });
 
-  it('a pin that is not a release tag cannot be ordered, and is let through', async () => {
+  it('refuses a minimum that is not a release tag', async () => {
+    const out = await cmdUpgrade(
+      { repoRoot: makeRepo(), to: 'v2.0.0' },
+      deps(fakePr().pr, 'v2.0.0', () => templateNeeding('v2.0.0-0')),
+    );
+    expect(out.exitCode).toBe(2);
+    expect(String(out.result.message)).toContain('min_engine_version');
+  });
+
+  it('--files-only refuses to leave a pin that is not a release tag', async () => {
     const repo = makeRepo();
     const myst = join(repo, 'myst.yml');
     const doc = parseDocument(readFileSync(myst, 'utf8'));
     doc.setIn(['project', 'options', 'oaktree-sapling', 'version'], 'main');
     writeFileSync(myst, doc.toString());
-    const { pr } = fakePr();
+    const { pr, opened } = fakePr();
     const out = await cmdUpgrade(
       { repoRoot: repo, to: 'v2.0.0', filesOnly: true },
       deps(pr, 'v2.0.0', () => templateNeeding('v2.0.0')),
     );
-    expect(out.exitCode).toBe(0);
-  });
-});
-
-describe('compareTags', () => {
-  it.each([
-    ['v1.2.3', 'v1.2.3', 0],
-    ['v1.10.0', 'v1.9.9', 1],
-    ['v0.0.5-dev.2', 'v0.0.4', 1],
-    ['v0.0.4-dev.9', 'v0.0.4', -1],
-    ['v0.0.0-dev.10', 'v0.0.0-dev.9', 1],
-    ['v1.0.0-alpha', 'v1.0.0-alpha.1', -1],
-    ['v1.0.0-1', 'v1.0.0-alpha', -1],
-  ])('%s vs %s', (a, b, sign) => {
-    expect(Math.sign(compareTags(a, b)!)).toBe(sign);
-  });
-
-  it('is null for a ref that is not a release tag', () => {
-    expect(compareTags('main', 'v1.0.0')).toBeNull();
+    expect(out.exitCode).toBe(2);
+    expect(String(out.result.message)).toContain('without --files-only');
+    expect(opened).toHaveLength(0);
   });
 });

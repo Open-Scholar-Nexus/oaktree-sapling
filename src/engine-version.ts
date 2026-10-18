@@ -4,32 +4,27 @@
  */
 import * as msg from './messages.js';
 import { UserError } from './messages.js';
-import { compareTags } from './upgrade.js';
+import { compareEngineVersions, ENGINE_VERSION, isStableEngineVersion } from './schema.js';
 import type { ResolvedFlags } from './bootstrap.js';
 
-/** A tag `--engine-version` accepts: a stable `vX.Y.Z` or a dev `vX.Y.Z-dev.N`. */
-const ENGINE_TAG = /^v\d+\.\d+\.\d+(-dev\.\d+)?$/;
-
-/** A stable version as `oak --version` reports it. A bundle built outside a release cut reports
- *  `<version>-unreleased+<sha>`, so it never matches. */
-const STABLE_VERSION = /^\d+\.\d+\.\d+$/;
-
-/** Whether `running` (the bundle's `OAK_VERSION`) is a stable release. */
+/** Whether `running` (the bundle's `OAK_VERSION`) is a stable release. A bundle built outside a
+ *  release cut reports `<version>-unreleased+<sha>`, so it never is. */
 export function isStableVersion(running: string): boolean {
-  return STABLE_VERSION.test(running);
+  return isStableEngineVersion(`v${running}`);
 }
 
 /**
  * The tag to pin: `given` when set, else `v` + `running`. Throws a UserError when `given` is not
- * shaped `vX.Y.Z` or `vX.Y.Z-dev.N`, or when it is unset and `running` is not a stable release. Needs no network, so
- * it runs before the gh check.
+ * an {@link ENGINE_VERSION}, or when it is unset and `running` is not a stable release. Needs no
+ * network, so it runs before the gh check.
  */
 export function pinnedEngineVersion(
   given: string | undefined,
   running: string,
 ): { engineVersion: string; resolved: ResolvedFlags } {
   if (given !== undefined) {
-    if (!ENGINE_TAG.test(given)) throw new UserError(msg.workflow.bootstrapBadEngineVersion(given));
+    if (!ENGINE_VERSION.test(given))
+      throw new UserError(msg.workflow.bootstrapBadEngineVersion(given));
     return {
       engineVersion: given,
       resolved: { engineVersionFrom: 'flag', runningVersion: running },
@@ -54,7 +49,7 @@ export async function newerRelease(
   } catch {
     return undefined;
   }
-  return (compareTags(tag, `v${running}`) ?? 0) > 0 ? tag : undefined;
+  return (compareEngineVersions(tag, `v${running}`) ?? 0) > 0 ? tag : undefined;
 }
 
 /** The npm `latest` of oaktree-sapling as a tag. npm gets a release only after its conformance

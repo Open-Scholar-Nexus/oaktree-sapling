@@ -33,6 +33,45 @@ export function repoFromGithubUrl(url: string): string | null {
   return m && GITHUB_REPO.test(m[1]!) ? m[1]! : null;
 }
 
+/** An oak version a paper or a flag can name: a release `vX.Y.Z` or a dev release `vX.Y.Z-dev.N`
+ *  (RELEASING.md), with no leading zeros, so each version has one tag. It becomes a clone ref, a
+ *  cache path and a `$GITHUB_OUTPUT` line. The engine action, `conformance.yml` and
+ *  `scripts/cut-engine-release.sh` keep shell copies, and `npm-publish.yml` one of
+ *  {@link isStableEngineVersion}, held to these by `version rule parity` in
+ *  `test/frozen-guards.test.ts`. */
+export const ENGINE_VERSION =
+  /^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-dev\.(0|[1-9][0-9]*))?$/;
+
+/** An {@link ENGINE_VERSION} without `-dev.N`: what `releases/latest` and npm carry. */
+export function isStableEngineVersion(tag: string): boolean {
+  return ENGINE_VERSION.test(tag) && !tag.includes('-');
+}
+
+/** The order of two {@link ENGINE_VERSION}s (negative, 0, positive), a dev release before its
+ *  release, or null when either is not one. The engine action's `ref` step orders the same way. */
+export function compareEngineVersions(a: string, b: string): number | null {
+  const ka = engineVersionKey(a);
+  const kb = engineVersionKey(b);
+  if (!ka || !kb) return null;
+  for (let i = 0; i < ka.length; i++) {
+    const d = ka[i]! - kb[i]!;
+    if (d) return d;
+  }
+  return 0;
+}
+
+/** `vX.Y.Z-dev.N` as [X, Y, Z, 0, N] and `vX.Y.Z` as [X, Y, Z, 1, 0]. */
+function engineVersionKey(v: string): number[] | null {
+  const m = ENGINE_VERSION.exec(v);
+  if (!m) return null;
+  const [x, y, z] = m.slice(1, 4).map(Number) as [number, number, number];
+  return m[4] === undefined ? [x, y, z, 1, 0] : [x, y, z, 0, Number(m[4])];
+}
+
+/** A paper's published version: a tag `vMAJOR.MINOR.PATCH` with no leading zeros, deposited on
+ *  Zenodo as `MAJOR.MINOR.PATCH`. */
+export const PAPER_VERSION_TAG = /^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/;
+
 /** A full git commit id, SHA-1 or SHA-256. */
 export const COMMIT_ID = /^([0-9a-f]{40}|[0-9a-f]{64})$/;
 
@@ -61,9 +100,9 @@ export type JournalStamp = z.infer<typeof JournalStamp>;
  */
 export const OaktreeSaplingOptions = z
   .object({
-    /** A release tag (`vX.Y.Z`, or a pre-release like `vX.Y.Z-dev.N`), at or above pins.yml's
-     *  `min_engine_version`. The engine action's `ref` step refuses anything else [R41]. */
-    version: z.string().min(1),
+    /** An {@link ENGINE_VERSION}, at or above pins.yml's `min_engine_version`. The engine
+     *  action's `ref` step refuses anything else [R41]. */
+    version: z.string().regex(ENGINE_VERSION, 'must be a release tag like v1.2.3 or v1.2.3-dev.4'),
     /** Selects `editions/<edition>.yml` [R195]. */
     edition: EDITION_ID,
     /** Written by oak into `myst.oak.yml` only ({@link JournalStamp}). */

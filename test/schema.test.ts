@@ -33,13 +33,13 @@ describe('OaktreeSaplingOptions', () => {
 
   it('tolerates a future engine option key (additive-only)', () => {
     expect(() =>
-      OaktreeSaplingOptions.parse({ version: 'v1', edition: 'e', future: true }),
+      OaktreeSaplingOptions.parse({ version: 'v1.0.0', edition: 'e', future: true }),
     ).not.toThrow();
   });
 
   it('takes the journal stamp oak writes, and nothing shaped otherwise', () => {
     const parse = (journal: unknown) =>
-      OaktreeSaplingOptions.safeParse({ version: 'v1', edition: 'e', journal }).success;
+      OaktreeSaplingOptions.safeParse({ version: 'v1.0.0', edition: 'e', journal }).success;
     expect(parse({ repo: 'o/j', commit: 'a'.repeat(40) })).toBe(true);
     expect(parse({ repo: null, commit: null })).toBe(true);
     expect(parse({ repo: '.' })).toBe(true);
@@ -54,7 +54,8 @@ describe('OaktreeSaplingOptions', () => {
 });
 
 describe('the edition id cannot carry a path ([R141])', () => {
-  const opts = (edition: string) => () => OaktreeSaplingOptions.parse({ version: 'v1', edition });
+  const opts = (edition: string) => () =>
+    OaktreeSaplingOptions.parse({ version: 'v1.0.0', edition });
 
   it('refuses a path, which would point extends outside the journal repo', () => {
     for (const bad of ['../../../etc/shadow', './x', 'a/b', '..', '-lead']) {

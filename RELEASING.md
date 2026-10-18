@@ -8,7 +8,7 @@ Build it from your working tree with `npm run bundle` and run `dist/cli.cjs`. Ou
 
 ## Testing a change in CI
 
-A local build does not test the composite action's `if:` and `hashFiles` conditions, secrets passed through a step's `env:`, or previews on fork PRs. To test those, make a pre-release named `vX.Y.Z-dev.N` and pin it in the test paper repository. A version with a `-` in it becomes a GitHub pre-release, which keeps it out of `releases/latest`, and conformance accepts no suffix other than `-dev.N`.
+A local build does not test the composite action's `if:` and `hashFiles` conditions, secrets passed through a step's `env:`, or previews on fork PRs. To test those, make a pre-release named `vX.Y.Z-dev.N` and pin it in the test paper repository. A version with a `-` in it becomes a GitHub pre-release, which keeps it out of `releases/latest`. The release script, conformance and a paper's CI accept no suffix other than `-dev.N`.
 
 ```bash
 # builds oak and typst, tests them, commits both to a new tagged commit, pushes the tag and creates the GitHub release
