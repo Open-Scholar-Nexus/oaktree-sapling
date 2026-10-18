@@ -470,7 +470,7 @@ async function cmdDeposit(argv: string[]): Promise<number> {
   const api = new z.ZenodoApi(z.createFetchTransport(), sandbox, token);
 
   if (sub === 'prepare') {
-    const repo = flag(rest, 'repo') ?? process.env.GITHUB_REPOSITORY;
+    const repo = gh.currentRepo(flag(rest, 'repo'));
     if (!repo) {
       process.stderr.write(msg.workflow.depositNoRepo + '\n');
       return 2;
@@ -647,7 +647,7 @@ async function cmdDeployPreview(argv: string[]): Promise<number> {
       siteDir,
       repoRoot: resolve('.'),
       instanceRoot: instanceRootOf(argv),
-      repo: flag(argv, 'repo') ?? process.env.GITHUB_REPOSITORY ?? null,
+      repo: gh.currentRepo(flag(argv, 'repo')),
       serverUrl: process.env.GITHUB_SERVER_URL ?? 'https://github.com',
       artifactRunId: process.env.PAPER_BUILD_RUN_ID,
       cf: {
@@ -690,7 +690,7 @@ async function cmdNotify(argv: string[]): Promise<number> {
     {
       repoRoot: resolve(flag(rest, 'paper') ?? '.'),
       mystPath: mystPathOf(rest),
-      repo: flag(rest, 'repo') ?? process.env.GITHUB_REPOSITORY ?? null,
+      repo: gh.currentRepo(flag(rest, 'repo')),
       pr,
     },
     gh.realGhPr,
@@ -823,7 +823,19 @@ async function cmdValidate(argv: string[]): Promise<number> {
   const strict = has(argv, 'strict');
 
   const gh = await import('./gh.js');
-  const repo = flag(argv, 'repo') ?? process.env.GITHUB_REPOSITORY ?? gh.originRepo(paperRoot);
+  let repo: string | null;
+  try {
+    repo = gh.currentRepo(flag(argv, 'repo'), paperRoot);
+  } catch (err) {
+    if (!(err instanceof UserError)) throw err;
+    return writeFailureReport(
+      reportPath,
+      paperRoot,
+      msg.workflow.validateCouldNotRun,
+      err.message,
+      2,
+    );
+  }
 
   const { runValidate } = await import('./validate.js');
   const { createMystEdge } = await import('./myst.js');
@@ -907,7 +919,8 @@ async function cmdValidate(argv: string[]): Promise<number> {
  *  fails the job; a failed comment only warns. Needs GH_TOKEN. Documented at DOCS.postChecks. */
 async function cmdPostChecks(argv: string[]): Promise<number> {
   const reportPath = flag(argv, 'report');
-  const repo = flag(argv, 'repo') ?? process.env.GITHUB_REPOSITORY;
+  const gh = await import('./gh.js');
+  const repo = gh.currentRepo(flag(argv, 'repo'));
   const sha = flag(argv, 'sha');
   // The gated-files warning [R83]: --base and --verified-head come from the workflow_run event,
   // which GitHub sets and the fork's artifact cannot, so a pull request editing `.github/` or
@@ -937,7 +950,6 @@ async function cmdPostChecks(argv: string[]): Promise<number> {
     return 1;
   }
 
-  const gh = await import('./gh.js');
   const artifact = await import('./artifact.js');
   // Stage 1 may run an engine that writes no `paper`; it is read here so a malformed one is refused.
   const artifactDir = dirname(resolve(reportPath));
@@ -1023,6 +1035,9 @@ async function cmdBootstrap(argv: string[]): Promise<number> {
     process.stderr.write(msg.workflow.bootstrapNoRepo + '\n');
     return 2;
   }
+  gh.assertRepoName(repo, '--repo');
+  const instance = flag(rest, 'instance');
+  if (instance && instance !== '.') gh.assertRepoName(instance, '--instance');
   // Malformed arguments are refused before any gh call [R127].
   const external = sub === 'journal' && !has(rest, 'co-located');
   if (sub === 'journal') {
@@ -1045,6 +1060,7 @@ async function cmdBootstrap(argv: string[]): Promise<number> {
     await handoffDeps(argv),
   );
   if (handed !== null) return handed;
+  gh.assertRepoName(engineRepo, '--engine-repo');
   gh.assertGhReady();
   const { engineVersion } = pinned;
   const resolved = {
@@ -1072,7 +1088,7 @@ async function cmdBootstrap(argv: string[]): Promise<number> {
         repo,
         from: flag(rest, 'from'),
         sourceRef: flag(rest, 'source-ref'),
-        instance: flag(rest, 'instance'),
+        instance,
         // No default: the paper joins a journal that already has editions, and an invented
         // `edition` would match none of them, so the paper's CI would fail later on a missing
         // edition file.
@@ -1131,7 +1147,7 @@ async function cmdUpgrade(argv: string[]): Promise<number> {
     process.stderr.write(msg.upgrade.missingTarget + '\n');
     return 2;
   }
-  const repoRoot = paper ? resolve(paper) : gh.tempClone(gh.assertRepoName(repo!));
+  const repoRoot = paper ? resolve(paper) : gh.tempClone(gh.assertRepoName(repo!, '--repo'));
 
   const out = await upgrade.cmdUpgrade(
     { repoRoot, to: flag(argv, 'to'), filesOnly: has(argv, 'files-only') },
@@ -1162,6 +1178,7 @@ async function cmdConformance(argv: string[]): Promise<number> {
       process.stderr.write(msg.workflow.conformanceResetArgs + '\n');
       return 2;
     }
+    gh.assertRepoName(repo, '--repo');
     const out = await conformance.cmdConformanceReset({ repo }, deps);
     emit(rest, out.result);
     return out.exitCode;
@@ -1175,8 +1192,11 @@ async function cmdConformance(argv: string[]): Promise<number> {
       return 2;
     }
     const upgrade = await import('./upgrade.js');
+    gh.assertRepoName(repo, '--repo');
     // The fork preview runs only when the fork repo and its token are both set.
-    const forkRepo = flag(rest, 'fork-repo') ?? process.env.CONFORMANCE_FORK_REPO;
+    const forkFlag = flag(rest, 'fork-repo');
+    const forkRepo = forkFlag ?? process.env.CONFORMANCE_FORK_REPO;
+    if (forkRepo) gh.assertRepoName(forkRepo, forkFlag ? '--fork-repo' : 'CONFORMANCE_FORK_REPO');
     const forkToken = process.env.CONFORMANCE_FORK_PAT;
     const out = await conformance.cmdConformanceRun(
       { repo, tag, runId: flag(rest, 'run-id') },

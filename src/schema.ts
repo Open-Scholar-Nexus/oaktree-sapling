@@ -19,7 +19,19 @@ export const EDITION_ID = z
   .min(1)
   .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/, 'must be a plain name (letters, digits, . _ -)');
 
-const GITHUB_REPO = /^[A-Za-z0-9][A-Za-z0-9-]*\/(?!\.\.?$)[A-Za-z0-9._-]+$/;
+/** `owner/name` with GitHub's characters and lengths. The name is never `.` or `..`, so it is
+ *  safe as a path segment. */
+export const GITHUB_REPO = /^[A-Za-z0-9][A-Za-z0-9-]{0,38}\/(?!\.\.?$)[A-Za-z0-9._-]{1,100}$/;
+
+const GITHUB_URL =
+  /^(?:https:\/\/github\.com\/|ssh:\/\/git@github\.com\/|git@github\.com:)([^/]+\/[^/]+?)(?:\.git)?\/?$/;
+
+/** `owner/name` from a github.com remote or page URL (`https://github.com/`,
+ *  `ssh://git@github.com/` or `git@github.com:`), or null. A URL carrying credentials is null. */
+export function repoFromGithubUrl(url: string): string | null {
+  const m = GITHUB_URL.exec(url);
+  return m && GITHUB_REPO.test(m[1]!) ? m[1]! : null;
+}
 
 /** A full git commit id, SHA-1 or SHA-256. */
 export const COMMIT_ID = /^([0-9a-f]{40}|[0-9a-f]{64})$/;

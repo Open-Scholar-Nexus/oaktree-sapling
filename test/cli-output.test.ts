@@ -569,7 +569,7 @@ describe('--repo takes owner/name', () => {
     for (const bad of ['-u', 'https://evil.example/x/y', 'notarepo']) {
       const r = oak(['upgrade', '--repo', bad, '--yes']);
       expect(r.code, bad).toBe(2);
-      expect(r.stderr, bad).toContain('takes owner/name');
+      expect(r.stderr, bad).toContain('--repo takes a GitHub repo as owner/name');
     }
   });
 });
@@ -781,5 +781,27 @@ describe.skipIf(bundleState() === 'absent')('fetching from a non-default engine_
       env: '1',
     });
     expect(existsSync(join(env.XDG_CACHE_HOME, 'oak', 'someone', 'fork', 'v9.9.9'))).toBe(true);
+  });
+});
+
+describe.skipIf(bundleState() === 'absent')('validate with a malformed --repo', () => {
+  beforeAll(assertBundleNotStale);
+
+  it('still writes the report post-checks reads', () => {
+    const report = join(mkdtempSync(join(tmpdir(), 'oak-report-')), 'report.json');
+    const r = oak([
+      'validate',
+      '--paper',
+      fixturePaper,
+      '--instance',
+      fixtureInstance,
+      '--repo',
+      '../..',
+      '--report',
+      report,
+    ]);
+    // 0 once the report is written, as for any failing result (writeFailureReport).
+    expect(r.code).toBe(0);
+    expect(readFileSync(report, 'utf8')).toContain('--repo takes a GitHub repo as owner/name');
   });
 });

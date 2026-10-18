@@ -10,6 +10,7 @@ import { delimiter, dirname, isAbsolute, join, resolve } from 'node:path';
 import { readDoc, readEngineCoordinateRaw } from './yaml-io.js';
 import * as msg from './messages.js';
 import { UserError } from './messages.js';
+import { GITHUB_REPO } from './schema.js';
 
 export type PaperVerb = 'build' | 'validate' | 'start';
 export type HandoffVerb = PaperVerb | 'bootstrap';
@@ -21,9 +22,6 @@ export type PinSource = { kind: 'paper'; mystPath: string; pinsPath?: string } |
  *  development to run this oak. */
 export const USE_RUNNING_ENV = 'OAK_USE_RUNNING';
 
-/** GitHub's owner and repository characters; a name cannot start with `.`, which also rules
- *  out `..` in the cache path. */
-const ENGINE_REPO = /^[A-Za-z0-9][A-Za-z0-9-]{0,38}\/[A-Za-z0-9_-][A-Za-z0-9._-]{0,99}$/;
 const ENGINE_VERSION = /^v[0-9]+\.[0-9]+\.[0-9]+(-dev\.[0-9]+)?$/;
 
 const PINS_FILE = join('.github', 'actions', 'engine', 'pins.yml');
@@ -135,7 +133,7 @@ export async function runVersion(
     const where = source.kind === 'paper' ? source.mystPath : '--engine-version';
     throw new UserError(msg.pinned.badVersion(verb, pin.version, where, ctx.running));
   }
-  if (!ENGINE_REPO.test(pin.engineRepo)) {
+  if (!GITHUB_REPO.test(pin.engineRepo)) {
     throw new UserError(msg.pinned.badRepo(verb, pin.engineRepo, source));
   }
 

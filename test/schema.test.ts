@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { parse } from 'yaml';
 import {
   OaktreeSaplingOptions,
+  repoFromGithubUrl,
   readEngineOptions,
   JournalConfig,
   Registry,
@@ -272,5 +273,34 @@ describe('JSON Schema export', () => {
     const s = toJsonSchemas();
     expect(s.journal).toHaveProperty('type', 'object');
     expect(s.oaktreeSaplingOptions).toHaveProperty('properties');
+  });
+});
+
+describe('repoFromGithubUrl', () => {
+  it('reads owner/name from every remote and page shape', () => {
+    for (const url of [
+      'https://github.com/acme/paper',
+      'https://github.com/acme/paper.git',
+      'https://github.com/acme/paper/',
+      'git@github.com:acme/paper.git',
+      'ssh://git@github.com/acme/paper.git',
+    ])
+      expect(repoFromGithubUrl(url), url).toBe('acme/paper');
+  });
+
+  it('is null for another host, a mismatched separator, a deeper page or a path', () => {
+    for (const url of [
+      'https://gitlab.com/acme/paper',
+      'https://evilgithub.com/acme/paper',
+      'https://user:token@github.com/acme/paper',
+      'https://github.com/acme/paper/tree/main',
+      'https://github.com/../..',
+      'acme/paper',
+      'https://github.com:acme/paper',
+      'git@github.com/acme/paper',
+      'ssh://git@github.com:acme/paper',
+      'https://github.com/acme/paper///',
+    ])
+      expect(repoFromGithubUrl(url), url).toBeNull();
   });
 });
