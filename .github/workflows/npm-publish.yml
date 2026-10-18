@@ -1,13 +1,13 @@
 name: npm-publish
 
-# Publishes a release tag to npm with trusted publishing (no token). See RELEASING.md.
-# vX.Y.Z goes to `latest` once conformance passed on it; vX.Y.Z-dev.N goes to `next`.
+# Publishes a stable release tag to npm with trusted publishing (no token), once conformance
+# passed on it. See RELEASING.md.
 
 on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release tag: vX.Y.Z or vX.Y.Z-dev.N'
+        description: 'Stable release tag: vX.Y.Z'
         required: true
 
 permissions:
@@ -26,29 +26,21 @@ jobs:
       id-token: write # trusted publishing
     steps:
       - name: Check the release
-        id: r
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag }}
         run: |
-          if [[ $TAG =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            dist_tag=latest
-          elif [[ $TAG =~ ^v[0-9]+\.[0-9]+\.[0-9]+-dev\.[0-9]+$ ]]; then
-            dist_tag=next
-          else
-            echo "::error::not a release tag: $TAG"
+          if ! [[ $TAG =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::not a stable release tag: $TAG"
             exit 1
           fi
           gh release view "$TAG" -R "$GITHUB_REPOSITORY" --json tagName >/dev/null
-          if [ "$dist_tag" = latest ]; then
-            gh release download "$TAG" -R "$GITHUB_REPOSITORY" -p conformance.json -O conformance.json
-            status=$(jq -r .status conformance.json)
-            if [ "$status" != ok ]; then
-              echo "::error::conformance on $TAG is '$status', not ok"
-              exit 1
-            fi
+          gh release download "$TAG" -R "$GITHUB_REPOSITORY" -p conformance.json -O conformance.json
+          status=$(jq -r .status conformance.json)
+          if [ "$status" != ok ]; then
+            echo "::error::conformance on $TAG is '$status', not ok"
+            exit 1
           fi
-          echo "dist_tag=$dist_tag" >> "$GITHUB_OUTPUT"
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -77,6 +69,4 @@ jobs:
           npm pkg set repository.url="git+https://github.com/${GITHUB_REPOSITORY}.git"
 
       # prepack runs the typecheck and the bundle. Provenance is added by trusted publishing.
-      - run: npm publish --tag "$DIST_TAG"
-        env:
-          DIST_TAG: ${{ steps.r.outputs.dist_tag }}
+      - run: npm publish --tag latest
