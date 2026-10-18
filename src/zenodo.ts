@@ -35,7 +35,7 @@ import { join, resolve, basename, relative, isAbsolute } from 'node:path';
 import { createHash } from 'node:crypto';
 import AdmZip from 'adm-zip';
 import { readDoc, writeDoc, readJournalStamp, DERIVED_CONFIG_FILE } from './yaml-io.js';
-import { JournalConfig, sameRepo, type ZenodoConfig } from './schema.js';
+import { JournalConfig, repoFromGithubUrl, sameRepo, type ZenodoConfig } from './schema.js';
 import * as msg from './messages.js';
 
 export const ZENODO_PROD = 'https://zenodo.org/api';
@@ -948,11 +948,12 @@ export async function cmdPublish(input: PublishInput): Promise<Outcome> {
 
   const githubUrl: string | undefined = project.github;
   if (!githubUrl) return err(2, 'project.github missing; should have been set by prepare.');
+  const repo = repoFromGithubUrl(githubUrl);
+  if (!repo) return err(2, msg.workflow.depositBadGithubUrl(mystPath, githubUrl));
 
   const repoRoot = resolve(mystPath, '..');
 
   const sha = await git.headSha(repoRoot);
-  const repo = repoFromGithubUrl(githubUrl);
 
   // Checked before anything is written to Zenodo, and reported in the result [R101].
   let journal: JournalArchive | null;
@@ -1125,8 +1126,4 @@ export async function cmdStatus(input: StatusInput): Promise<Outcome> {
   out.creator_count = (preview.creators as unknown[]).length;
   out.description_preview = preview.description;
   return { exitCode: 0, result: out };
-}
-
-export function repoFromGithubUrl(url: string): string {
-  return url.replace(/\/+$/, '').split('github.com/').pop() ?? url;
 }

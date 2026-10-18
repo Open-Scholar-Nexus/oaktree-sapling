@@ -21,7 +21,7 @@ import {
 } from './materialize.js';
 import * as msg from './messages.js';
 import { UserError } from './messages.js';
-import { originRepo } from './gh.js';
+import { currentRepo } from './gh.js';
 import { DERIVED_CONFIG_FILE } from './yaml-io.js';
 
 export interface RunBuildInput extends MaterializeInput {
@@ -55,7 +55,7 @@ export async function runBuild(input: RunBuildInput): Promise<RunBuildResult> {
         paperRoot,
         instanceRoot,
         project,
-        repo: process.env.GITHUB_REPOSITORY ?? originRepo(paperRoot),
+        repo: currentRepo(undefined, paperRoot),
         engineRoot,
         edition,
       });

@@ -5,6 +5,7 @@
  */
 import * as msg from './messages.js';
 import { UserError } from './messages.js';
+import { GITHUB_REPO, repoFromGithubUrl } from './schema.js';
 import { execFileSync, spawnSync } from 'node:child_process';
 import {
   cpSync,
@@ -155,12 +156,11 @@ function ghOkAs(token: string, args: string[], alsoAbsent?: RegExp): boolean {
   return ghOk(args, { ...process.env, GH_TOKEN: token }, alsoAbsent);
 }
 
-/** `owner/name`, the shape every verb's usage line promises. Checked because the value reaches
- *  `gh` as a positional argument, where a leading dash is read as an option. */
-const REPO_NAME = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/;
-
-export function assertRepoName(repo: string): string {
-  if (!REPO_NAME.test(repo)) throw new UserError(msg.workflow.badRepoName(repo));
+/** `repo` when it is `owner/name` ({@link GITHUB_REPO}); else throws a UserError naming `source`,
+ *  the flag or file it came from. Checked because the value reaches `gh` as a positional argument,
+ *  where a leading dash is read as an option, and {@link cachedJournal} as a path. */
+export function assertRepoName(repo: string, source: string): string {
+  if (!GITHUB_REPO.test(repo)) throw new UserError(msg.workflow.badRepoName(source, repo));
   return repo;
 }
 
@@ -170,12 +170,10 @@ export function assertRepoName(repo: string): string {
  * screening for `-` would miss `ext::`, which does the same. Credentials in the URL are refused,
  * since `--from` is copied into a public commit message.
  */
-const INGEST_URL =
-  /^(https:\/\/github\.com\/|git@github\.com:)[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+(\.git)?\/?$/;
 const INGEST_REF = /^[A-Za-z0-9_][A-Za-z0-9._/-]*$/;
 
 export function assertIngestSource(sourceUrl: string, sourceRef: string): void {
-  if (!INGEST_URL.test(sourceUrl)) throw new UserError(msg.bootstrap.ingestBadUrl(sourceUrl));
+  if (!repoFromGithubUrl(sourceUrl)) throw new UserError(msg.bootstrap.ingestBadUrl(sourceUrl));
   if (!INGEST_REF.test(sourceRef) || sourceRef.includes('..')) {
     throw new UserError(msg.bootstrap.ingestBadRef(sourceRef));
   }
@@ -249,12 +247,20 @@ export function journalStamp(
   }
 }
 
+/** The repo a verb acts on: `explicit` (its `--repo`), else `GITHUB_REPOSITORY`, else the origin
+ *  remote of `checkout` when one is given; null when none is set. Throws a UserError when the
+ *  value is not owner/name ({@link assertRepoName}). */
+export function currentRepo(explicit: string | undefined, checkout?: string): string | null {
+  if (explicit !== undefined) return assertRepoName(explicit, '--repo');
+  const env = process.env.GITHUB_REPOSITORY;
+  if (env) return assertRepoName(env, 'GITHUB_REPOSITORY');
+  return checkout === undefined ? null : originRepo(checkout);
+}
+
 /** owner/repo from the origin remote, or null. */
 export function originRepo(repoRoot: string): string | null {
   try {
-    const url = git(repoRoot, ['remote', 'get-url', 'origin'], { quiet: true });
-    const m = /github\.com[/:]([^/]+\/[^/]+?)(?:\.git)?$/.exec(url);
-    return m ? m[1]! : null;
+    return repoFromGithubUrl(git(repoRoot, ['remote', 'get-url', 'origin'], { quiet: true }));
   } catch {
     return null;
   }
@@ -438,7 +444,7 @@ export const realGhPr: GhPr = {
   },
 
   prHead(repo, pr) {
-    return gh(['api', `repos/${assertRepoName(repo)}/pulls/${pr}`, '--jq', '.head.sha']);
+    return gh(['api', `repos/${assertRepoName(repo, '--repo')}/pulls/${pr}`, '--jq', '.head.sha']);
   },
 };
 
@@ -861,7 +867,7 @@ export function cachedJournal(
   paperRoot: string,
   now = Date.now(),
 ): JournalCache {
-  assertRepoName(journalRepo);
+  assertRepoName(journalRepo, 'instance_repo in .github/actions/engine/pins.yml');
   const root = join(paperRoot, '_build', 'journal', ...journalRepo.split('/'));
   // Inside .git, so the journal's own files are exactly what was fetched.
   const stamp = join(root, '.git', 'oak-fetched');
@@ -909,7 +915,7 @@ export function latestEngineRelease(engineRepo: string): string {
 /** Shallow-clones `engineRepo` at `tag` into the empty directory `dest`, for {@link handOff} in
  *  pinned.ts. Plain git, as {@link cachedJournal}: an author may have no gh login. */
 export function cloneEngineTag(engineRepo: string, tag: string, dest: string): void {
-  const url = `https://github.com/${assertRepoName(engineRepo)}.git`;
+  const url = `https://github.com/${assertRepoName(engineRepo, 'engine_repo')}.git`;
   run('git', ['clone', '--depth', '1', '--quiet', '--branch', tag, '--', url, dest]);
 }
 

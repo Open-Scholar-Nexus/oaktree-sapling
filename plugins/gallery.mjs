@@ -69,7 +69,7 @@ export function loadRegistry(file = REGISTRY_PATH) {
   return entries;
 }
 
-const GITHUB_REPO = /^[A-Za-z0-9][A-Za-z0-9-]*\/(?!\.\.?$)[A-Za-z0-9._-]+$/;
+const GITHUB_REPO = /^[A-Za-z0-9][A-Za-z0-9-]{0,38}\/(?!\.\.?$)[A-Za-z0-9._-]{1,100}$/;
 
 /** A registry `location`: `{ repo }` for `owner/name`, `{ path }` for a `./` or `../` folder in
  *  the journal repo, else null. A copy of `parseLocation` in `src/schema.ts`, held to it by

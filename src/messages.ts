@@ -911,8 +911,8 @@ export const pr = {
 export const workflow = {
   // deposit
   depositUsage: 'oak deposit: usage: oak deposit <prepare|publish|status> [...]',
-  badRepoName: (got: string): string =>
-    `--repo takes owner/name, not ${JSON.stringify(got.slice(0, 60))}.`,
+  badRepoName: (source: string, got: string): string =>
+    `${source} takes a GitHub repo as owner/name, not ${JSON.stringify(got.slice(0, 60))}.`,
 
   previewBadJournal: (path: string, why: string): string =>
     `${path} could not be read (${why}), so the preview fell back to an artifact link. ` +
@@ -949,6 +949,9 @@ export const workflow = {
         'zenodo-prepare) or --token. A sandbox run never falls back to the production token.'
       : 'oak deposit: no token. Set ZENODO_TOKEN or pass --token.',
   depositNoRepo: 'deposit prepare: pass --repo owner/repo (or set GITHUB_REPOSITORY)',
+  depositBadGithubUrl: (mystPath: string, got: string): string =>
+    `project.github in ${mystPath} is not a github.com repo URL ` +
+    `(${JSON.stringify(got.slice(0, 80))}). Set it to https://github.com/<owner>/<repo>.`,
   depositPublishArgs: 'deposit publish: --pdf and --tag are required',
   depositDoiPrOpened: (url: string): string => `deposit prepare: opened DOI PR ${url}`,
   depositDoiPrFailed: (message: string): string =>

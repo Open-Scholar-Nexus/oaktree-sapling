@@ -2,9 +2,12 @@
  * gh.ts runs commands, so these check the arguments it passes: no secret in argv, no captured
  * stderr where it would be posted, and validation before `git fetch` [R103] [R104].
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   assertIngestSource,
+  assertRepoName,
+  cachedJournal,
+  currentRepo,
   changedFiles,
   labelChildOutput,
   openDoiPr,
@@ -82,6 +85,32 @@ describe('assertIngestSource', () => {
       expect(e).toBeInstanceOf(UserError);
       expect((e as Error).message).toContain('--from');
     }
+  });
+});
+
+describe('assertRepoName', () => {
+  it('accepts owner/name', () => {
+    for (const ok of ['Open-Scholar-Nexus/oaktree-sapling', 'acme/acme.github.io', 'a/b_c.d'])
+      expect(assertRepoName(ok, '--repo')).toBe(ok);
+  });
+
+  it('refuses a value that is a path or an option', () => {
+    for (const bad of [
+      '../..',
+      'a/..',
+      'a/.',
+      './a',
+      '-o/x',
+      'a.b/c',
+      'a/b/c',
+      'a',
+      `${'o'.repeat(40)}/x`,
+    ])
+      expect(() => assertRepoName(bad, '--repo'), bad).toThrow(UserError);
+  });
+
+  it('keeps cachedJournal inside _build/journal', () => {
+    expect(() => cachedJournal('../..', '/nonexistent-paper')).toThrow(UserError);
   });
 });
 
@@ -432,5 +461,35 @@ describe('commitStatusFor: the Journal checks result as a commit status', () => 
     const description = commitStatusFor('Journal checks', run('x'.repeat(200))).description;
     expect(description).toHaveLength(140);
     expect(description.endsWith('…')).toBe(true);
+  });
+});
+
+describe('currentRepo', () => {
+  beforeEach(() => {
+    child.respond = (args) =>
+      args.slice(2).join(' ') === 'remote get-url origin'
+        ? { status: 0, stdout: 'git@github.com:acme/from-origin.git\n', stderr: '' }
+        : { status: 1, stdout: '', stderr: '' };
+  });
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('takes --repo, then GITHUB_REPOSITORY, then the origin remote of the checkout', () => {
+    vi.stubEnv('GITHUB_REPOSITORY', 'acme/from-env');
+    expect(currentRepo('acme/flag', '/paper')).toBe('acme/flag');
+    expect(currentRepo(undefined, '/paper')).toBe('acme/from-env');
+    vi.stubEnv('GITHUB_REPOSITORY', '');
+    expect(currentRepo(undefined, '/paper')).toBe('acme/from-origin');
+  });
+
+  it('is null without a checkout when --repo and GITHUB_REPOSITORY are unset', () => {
+    vi.stubEnv('GITHUB_REPOSITORY', '');
+    expect(currentRepo(undefined)).toBeNull();
+  });
+
+  it('refuses a value that is not owner/name, naming where it came from', () => {
+    expect(() => currentRepo('../..')).toThrow('--repo takes');
+    expect(() => currentRepo('')).toThrow('--repo takes');
+    vi.stubEnv('GITHUB_REPOSITORY', '-h/x');
+    expect(() => currentRepo(undefined)).toThrow('GITHUB_REPOSITORY takes');
   });
 });
