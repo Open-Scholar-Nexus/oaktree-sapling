@@ -63,9 +63,19 @@ export function readPin(
   } catch {
     return undefined;
   }
-  const pins = findPins(paperRoot);
-  const v = pins ? readDoc(pins).get('engine_repo') : undefined;
-  return { engineRepo: typeof v === 'string' && v ? v : defaultRepo, version, pinsPath: pins };
+  const { value, pinsPath } = readPinsValue(paperRoot, 'engine_repo');
+  return { engineRepo: value ?? defaultRepo, version, pinsPath };
+}
+
+/** A string from the repo's `pins.yml` ({@link findPins}) and the file's path. `value` is
+ *  undefined when the file or the key is absent. */
+export function readPinsValue(
+  paperRoot: string,
+  key: 'engine_repo' | 'instance_repo',
+): { value?: string; pinsPath?: string } {
+  const pinsPath = findPins(paperRoot);
+  const v = pinsPath ? readDoc(pinsPath).get(key) : undefined;
+  return { value: typeof v === 'string' && v ? v : undefined, pinsPath };
 }
 
 /** `$XDG_CACHE_HOME`, or `~/.cache` when it is unset or relative (XDG requires absolute). */

@@ -805,3 +805,39 @@ describe.skipIf(bundleState() === 'absent')('validate with a malformed --repo', 
     expect(readFileSync(report, 'utf8')).toContain('--repo takes a GitHub repo as owner/name');
   });
 });
+
+describe.skipIf(bundleState() === 'absent')('deposit finds the journal as build does', () => {
+  beforeAll(assertBundleNotStale);
+
+  it('stops before Zenodo when no journal repo is found', () => {
+    const paper = mkdtempSync(join(tmpdir(), 'oak-deposit-'));
+    writeFileSync(join(paper, 'myst.yml'), 'version: 1\nproject:\n  title: x\n');
+    const r = oak(['deposit', 'status', '--sandbox', '--token', 'x', '--paper', paper]);
+    expect(r.code).toBe(2);
+    expect(r.stderr).toContain('oak deposit: no journal repo found');
+    expect(r.stderr).toContain("a deposit without the journal's Zenodo settings");
+  });
+});
+
+describe.skipIf(bundleState() === 'absent')("pins.yml's journal comes before a journal.yml", () => {
+  beforeAll(assertBundleNotStale);
+
+  it('beside the paper, which an author can add without an editor', () => {
+    const paper = mkdtempSync(join(tmpdir(), 'oak-pinned-journal-'));
+    writeFileSync(join(paper, 'myst.yml'), 'version: 1\nproject:\n  title: x\n');
+    writeFileSync(join(paper, 'journal.yml'), 'name: Not the journal\n');
+    mkdirSync(join(paper, '.github', 'actions', 'engine'), { recursive: true });
+    writeFileSync(
+      join(paper, '.github', 'actions', 'engine', 'pins.yml'),
+      'instance_repo: acme/journal\n',
+    );
+    // github.com points at an empty folder, so the pinned journal's clone fails offline.
+    const r = oak(['deposit', 'status', '--sandbox', '--token', 'x', '--paper', paper], {
+      GIT_CONFIG_COUNT: '1',
+      GIT_CONFIG_KEY_0: `url.file://${mkdtempSync(join(tmpdir(), 'oak-mirrors-'))}/.insteadOf`,
+      GIT_CONFIG_VALUE_0: 'https://github.com/',
+    });
+    expect(r.code).toBe(2);
+    expect(r.stderr).toContain('could not clone the journal acme/journal');
+  });
+});

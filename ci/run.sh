@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Runs oak in a paper's CI. The engine action has already checked out oak at the pinned version
-# and set INSTANCE_REPO; this adds typst, the journal repo and the base URL.
+# Runs oak in a paper's CI. The engine action has already checked out oak at the pinned version;
+# this adds typst and the base URL. oak finds the journal repo from pins.yml itself.
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -34,17 +34,6 @@ if [ "$verb" = "build" ] || [ "$verb" = "release" ]; then
   extra+=(--base-url "$base_url")
 fi
 
-# The verbs that read journal settings get a clone of the journal repo [R19] [R27]
-# [R189] [R192].
-# "." means this repo is the journal, and oak finds it on its own.
-if [ "$verb" = "build" ] || [ "$verb" = "release" ] || [ "$verb" = "deploy-preview" ] || [ "$verb" = "validate" ] || [ "$verb" = "deposit" ]; then
-  if [ -n "${INSTANCE_REPO:-}" ] && [ "${INSTANCE_REPO}" != "." ]; then
-    inst_dir="$(mktemp -d)"
-    git clone --depth 1 "https://github.com/${INSTANCE_REPO}.git" "$inst_dir"
-    extra+=(--instance "$inst_dir")
-  fi
-fi
-
 # A paper below the repo root (co-located). "." is oak's default, so it is not passed.
 if [ -n "${PAPER_DIR:-}" ] && [ "$PAPER_DIR" != "." ]; then
   case "$verb" in
@@ -55,7 +44,6 @@ fi
 echo "::group::engine context"
 echo "engine dir : $engine"
 echo "verb       : $verb"
-echo "instance   : ${INSTANCE_REPO:-<co-located>}"
 echo "paper      : ${PAPER_DIR:-.}"
 echo "extra args : ${extra[*]:-<none>}"
 # Whether each secret is set, never its value.

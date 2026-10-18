@@ -164,11 +164,11 @@ export const usage = (): string =>
   `Run by the workflows (rarely typed by hand)\n` +
   `  oak post-checks --report <path> --repo <owner/repo> --sha <headsha> --base <branch>\n` +
   `                  --verified-head <headsha>\n` +
-  `  oak deploy-preview <site> [--verified-head <headsha>] [--instance <dir>] [--repo <owner/repo>]\n` +
+  `  oak deploy-preview <site> [--verified-head <headsha>] [--instance <dir> | --no-instance] [--repo <owner/repo>]\n` +
   `  oak notify new-version [--pr <n> | --site <dir>] [--repo <owner/repo>]\n` +
-  `  oak deposit prepare --repo <owner/repo> [--site-url <url>] [--sandbox] [--instance <dir>]\n` +
-  `  oak deposit publish --pdf <path> --tag <vX.Y.Z> [--site-url <url>] [--sandbox] [--instance <dir>]\n` +
-  `  oak deposit status  [--sandbox] [--instance <dir>]\n` +
+  `  oak deposit prepare --repo <owner/repo> [--site-url <url>] [--sandbox] [--instance <dir> | --no-instance]\n` +
+  `  oak deposit publish --pdf <path> --tag <vX.Y.Z> [--site-url <url>] [--sandbox] [--instance <dir> | --no-instance]\n` +
+  `  oak deposit status  [--sandbox] [--instance <dir> | --no-instance]\n` +
   `  oak release --tag <vX.Y.Z> [--no-build] [--paper <dir>] [--instance <dir> | --no-instance] [--site-url <url>]\n` +
   `  oak conformance reset   --repo <owner/name>\n` +
   `  oak conformance run   --repo <owner/name> --tag <vX.Y.Z> [--fork-repo <owner/name>]\n` +
@@ -524,7 +524,17 @@ export const upgrade = {
  * ═════════════════════════════════════════════════════════════════════════════════════════ */
 
 /** The verbs that find a journal repo the way `oak build` does. */
-export type JournalVerb = 'build' | 'start' | 'validate' | 'release';
+export type JournalVerb = 'build' | 'start' | 'validate' | 'release' | 'deposit' | 'deploy-preview';
+
+/** What `--no-instance` gives each verb, for {@link build.noInstance}. */
+const WITHOUT_JOURNAL: Record<JournalVerb, string> = {
+  build: 'an unbranded build',
+  start: 'an unbranded preview',
+  validate: 'a bare, engine-only check',
+  release: 'an unbranded build',
+  deposit: "a deposit without the journal's Zenodo settings",
+  'deploy-preview': "a preview without the journal's settings",
+};
 
 export const build = {
   done: (id: string): string => `oak build: done (id=${id})`,
@@ -573,7 +583,7 @@ export const build = {
     `Set instance_repo in pins.yml to the journal's owner/repo (\`oak bootstrap paper ` +
     `--instance\` writes it), or pass --instance <path to a clone of the journal> or ` +
     `--no-instance for ` +
-    `${verb === 'validate' ? 'a bare, engine-only check' : verb === 'start' ? 'an unbranded preview' : 'an unbranded build'}. ` +
+    `${WITHOUT_JOURNAL[verb]}. ` +
     `See ${docsUrl(DOCS.paperJournalLink)}`,
 
   /** Where a local run without `--instance` got the journal settings ({@link JournalCache}). */

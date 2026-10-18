@@ -220,7 +220,9 @@ export interface DeployPreviewInput {
   siteDir: string;
   /** The default branch's checkout. */
   repoRoot: string;
-  instanceRoot: string | null;
+  /** The journal repo; null without one, or why it could not be found, and the preview then
+   *  falls back as for a bad journal.yml. */
+  instanceRoot: string | null | { problem: string };
   /** GITHUB_REPOSITORY and GITHUB_SERVER_URL, for the fallback link and labels. */
   repo: string | null;
   serverUrl: string;
@@ -265,7 +267,10 @@ export async function cmdDeployPreview(
   if (stripped.length)
     process.stderr.write(annotate('warning', msg.workflow.previewStripped(stripped)) + '\n');
 
-  const { preview, problem } = loadJournalPreview(instanceRoot);
+  const { preview, problem } =
+    typeof instanceRoot === 'object' && instanceRoot !== null
+      ? { ...loadJournalPreview(null), problem: instanceRoot.problem }
+      : loadJournalPreview(instanceRoot);
   if (problem) process.stderr.write(annotate('warning', problem) + '\n');
   // Deep-link the Build paper run holding the artifact (workflow_run.id), else the Actions tab.
   const runUrl = input.artifactRunId
