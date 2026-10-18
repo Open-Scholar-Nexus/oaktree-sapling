@@ -225,6 +225,14 @@ describe('readPin', () => {
     writeFileSync(join(repo, 'myst.yml'), readFileSync(join(paper('v1.0.0'), 'myst.yml')));
     expect(readPin(repo, DEFAULT_REPO)?.engineRepo).toBe(DEFAULT_REPO);
   });
+
+  it('outside a git repo, reads only the paper folder pins.yml', () => {
+    const outer = paper(null, 'outside/oaktree-sapling');
+    const sub = join(outer, 'p');
+    mkdirSync(sub);
+    writeFileSync(join(sub, 'myst.yml'), readFileSync(join(paper('v1.0.0'), 'myst.yml')));
+    expect(readPin(sub, DEFAULT_REPO)?.engineRepo).toBe(DEFAULT_REPO);
+  });
 });
 
 describe('runVersion for oak bootstrap --engine-version', () => {
