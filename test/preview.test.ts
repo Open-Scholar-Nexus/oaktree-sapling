@@ -256,10 +256,14 @@ describe('recordUrlForDoi', () => {
 });
 
 describe('hasVersionTag', () => {
-  it('detects v* tags, ignoring blanks', () => {
+  it('detects version tags, ignoring blanks', () => {
     expect(hasVersionTag(['v1.0.0', 'other'])).toBe(true);
     expect(hasVersionTag(['sometag', ''])).toBe(false);
     expect(hasVersionTag([])).toBe(false);
+  });
+
+  it('counts only the tags oak release publishes', () => {
+    expect(hasVersionTag(['v1.0.0-rc1', 'v2', 'very-old', 'v0.0.0-cert-1'])).toBe(false);
   });
 });
 
@@ -525,7 +529,7 @@ describe('runNewVersionReminder', () => {
     gh: fakeGh({ versionTags: () => tags }),
   });
 
-  it('skips on a first-deposit paper (no v* tags)', () => {
+  it('skips on a first-deposit paper (no version tags)', () => {
     const { input: i, gh } = input(mystWith('10.5281/zenodo.1'), []);
     const out = runNewVersionReminder(i, gh.gh);
     expect(out.result.reminder).toBe('skipped');

@@ -35,7 +35,13 @@ import { join, resolve, basename, relative, isAbsolute } from 'node:path';
 import { createHash } from 'node:crypto';
 import AdmZip from 'adm-zip';
 import { readDoc, writeDoc, readJournalStamp, DERIVED_CONFIG_FILE } from './yaml-io.js';
-import { JournalConfig, repoFromGithubUrl, sameRepo, type ZenodoConfig } from './schema.js';
+import {
+  JournalConfig,
+  PAPER_VERSION_TAG,
+  repoFromGithubUrl,
+  sameRepo,
+  type ZenodoConfig,
+} from './schema.js';
 import * as msg from './messages.js';
 
 export const ZENODO_PROD = 'https://zenodo.org/api';
@@ -940,8 +946,7 @@ export async function cmdPublish(input: PublishInput): Promise<Outcome> {
   if (isSandboxDoi(conceptDoi) !== sandbox) {
     return err(2, `DOI prefix says sandbox=${isSandboxDoi(conceptDoi)} but --sandbox=${sandbox}.`);
   }
-  if (!/^v\d+\.\d+\.\d+$/.test(tag))
-    return err(2, `tag must match vMAJOR.MINOR.PATCH (got ${tag})`);
+  if (!PAPER_VERSION_TAG.test(tag)) return err(2, `tag must match vMAJOR.MINOR.PATCH (got ${tag})`);
   const version = tag.slice(1);
 
   if (!existsSync(pdf)) return err(2, `--pdf not found: ${pdf}`);

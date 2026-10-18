@@ -11,7 +11,7 @@ import { createHash } from 'node:crypto';
 import { readDoc } from './yaml-io.js';
 import * as msg from './messages.js';
 import { annotate, firstLine, stickyMarker } from './messages.js';
-import { JournalConfig, type PreviewConfig } from './schema.js';
+import { JournalConfig, PAPER_VERSION_TAG, type PreviewConfig } from './schema.js';
 import { resolvePaperDir, takePaperDir, takePrNumber, verifyPrHead } from './artifact.js';
 
 /* --------------------------------------------------------------------------
@@ -39,8 +39,8 @@ export interface GhPr {
     label: string,
     opts?: { color?: string; description?: string },
   ): void;
-  /** `v*` tags through `gh api` [R23], since this job's checkout is shallow. `repo` null means
-   *  no tags. */
+  /** The {@link PAPER_VERSION_TAG} tags through `gh api` [R23], since this job's checkout is
+   *  shallow. `repo` null means no tags. */
   versionTags(repoRoot: string, repo: string | null): string[];
   /** The head commit of pull request `pr`, for {@link verifyPrHead}. */
   prHead(repo: string, pr: string): string;
@@ -203,9 +203,10 @@ export function recordUrlForDoi(
   return { error: msg.workflow.notifyBadDoi(doi) };
 }
 
-/** Whether the paper already has a published `v*` tag (⇒ a new-version reminder is due). */
+/** Whether the paper already has a version tag `oak release` publishes (⇒ a new-version
+ *  reminder is due). */
 export function hasVersionTag(tags: string[]): boolean {
-  return tags.some((t) => /^v/.test(t.trim()));
+  return tags.some((t) => PAPER_VERSION_TAG.test(t.trim()));
 }
 
 export function newVersionComment(doi: string, recordUrl: string): string {
@@ -331,8 +332,8 @@ export interface NotifyInput {
 }
 
 /** The new-version reminder [R16] [R23]: on a paper already published, posts a sticky reminder
- *  and a label. Before the first deposit (no tags) it does nothing. A `v*` tag with no readable
- *  DOI means published but unlinked, and fails (exit 1). */
+ *  and a label. Before the first deposit (no version tag) it does nothing. A version tag with no
+ *  readable DOI means published but unlinked, and fails (exit 1). */
 export function runNewVersionReminder(input: NotifyInput, gh: GhPr): Outcome {
   const { repoRoot, mystPath, repo, pr } = input;
   let tags: string[];
@@ -351,7 +352,7 @@ export function runNewVersionReminder(input: NotifyInput, gh: GhPr): Outcome {
   const doi = readProjectDoi(mystPath);
   if (!doi) {
     process.stderr.write(annotate('error', msg.workflow.notifyPublishedButUnlinked) + '\n');
-    return err(1, 'v* tag present but project.doi missing', { reminder: 'error' });
+    return err(1, 'version tag present but project.doi missing', { reminder: 'error' });
   }
   const parsed = recordUrlForDoi(doi);
   if ('error' in parsed) {

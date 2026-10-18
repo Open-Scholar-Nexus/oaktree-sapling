@@ -13,10 +13,10 @@ oak upgrade --repo <owner>/<paper-repo>
 
 `oak` prints a plan, then opens a pull request that sets the version and replaces the workflows under `.github/` and `CODEOWNERS` with the release's own, keeping any code owner added to `CODEOWNERS`. A hand edit to them shows in that pull request's diff. It goes through the Journal checks and review like any other pull request, and merging it is all there is to do. Running `oak upgrade` again for the same release updates that pull request.
 
-`--to <tag>` picks a release other than the newest. Without it, a version newer than the newest release, a branch or a commit is left as it is. `--files-only` replaces the files and leaves the version. When the release's workflows need a newer engine than the version that pull request would set, `oak` stops before changing anything and names the oldest version they run with.
+`--to <tag>` picks a release other than the newest, named `vX.Y.Z` or `vX.Y.Z-dev.N`. Without it, a version newer than the newest release is left as it is, and a version that is not a release tag, such as a branch, moves to the newest release. `--files-only` replaces the files and leaves the version. When the release's workflows need a newer engine than the version that pull request would set, `oak` stops before changing anything and names the oldest version they run with.
 
 (pins-local)=
-`oak start`, `oak build` and `oak validate` run the version `myst.yml` names, as the paper's CI does. When the `oak` you installed is another version, it downloads that version into `~/.cache/oak` the first time, runs it, and says which version runs. If `.github/actions/engine/pins.yml` names an engine repository other than oaktree-sapling's own, `oak` asks before downloading from it.
+`oak start`, `oak build` and `oak validate` run the version `myst.yml` names, as the paper's CI does, and refuse the versions CI refuses: anything but a release tag. When the `oak` you installed is another version, it downloads that version into `~/.cache/oak` the first time, runs it, and says which version runs. If `.github/actions/engine/pins.yml` names an engine repository other than oaktree-sapling's own, `oak` asks before downloading from it.
 
 (site-pins)=
 ## The journal website's versions

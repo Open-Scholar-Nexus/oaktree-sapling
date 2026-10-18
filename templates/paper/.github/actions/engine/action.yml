@@ -36,14 +36,21 @@ runs:
         # Release tags only, on every event: myst.yml is ungated, and a commit or PR ref can be fork code.
         # https://scholar.nexus/oaktree-sapling/design/paper-ci#design-paper-ci-engine-ref
         # The pattern also refuses a newline, which would forge a second $GITHUB_OUTPUT line.
-        if ! [[ "$ref" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+        # ENGINE_VERSION in the engine's src/schema.ts.
+        version='^v[0-9]+\.[0-9]+\.[0-9]+(-dev\.[0-9]+)?$'
+        if ! [[ "$ref" =~ $version ]]; then
           echo "::error::engine version '$ref' in $myst is not a release tag; pin one, like v1.2.3"
           exit 1
         fi
         # An older engine posts to the PR number a fork's artifact names, unchecked.
         min=$(yq '.min_engine_version // ""' .github/actions/engine/pins.yml)
-        core() { local v="${1#v}"; printf '%s\n' "${v%%-*}"; }
-        if [ -n "$min" ] && ! printf '%s\n' "$(core "$min")" "$(core "$ref")" | sort -VC; then
+        if [ -n "$min" ] && ! [[ "$min" =~ $version ]]; then
+          echo "::error::min_engine_version in pins.yml is not a release tag like v1.2.3"
+          exit 1
+        fi
+        # As compareEngineVersions: vX.Y.Z-dev.N sorts as X.Y.Z.0.N, before vX.Y.Z as X.Y.Z.1.0.
+        key() { local v="${1#v}"; case "$v" in *-dev.*) echo "${v%%-*}.0.${v##*.}" ;; *) echo "$v.1.0" ;; esac; }
+        if [ -n "$min" ] && ! printf '%s\n' "$(key "$min")" "$(key "$ref")" | sort -VC; then
           echo "::error::$myst pins engine $ref; these workflows need $min or newer. Run oak upgrade."
           exit 1
         fi

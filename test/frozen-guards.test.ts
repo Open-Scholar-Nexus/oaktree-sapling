@@ -23,6 +23,12 @@ import { join } from 'node:path';
 import { parseDocument } from 'yaml';
 import { readdirSync } from 'node:fs';
 import { SECRET_MAP } from '../src/bootstrap.js';
+import {
+  ENGINE_VERSION,
+  PAPER_VERSION_TAG,
+  compareEngineVersions,
+  isStableEngineVersion,
+} from '../src/schema.js';
 
 const SHIM = 'templates/paper';
 
@@ -49,29 +55,30 @@ function run(script: string, env: Record<string, string>, cwd?: string) {
   return { code: r.status ?? 1, out: (r.stdout ?? '') + (r.stderr ?? '') };
 }
 
+/** Runs the engine action's ref step with `yq` stubbed to print `value` for myst.yml and `min`
+ *  for pins.yml, and a real GITHUB_OUTPUT file. */
+function refStep(value: string, min = '') {
+  const script = stepScript('.github/actions/engine/action.yml', 'ref');
+  const dir = mkdtempSync(join(tmpdir(), 'oak-ref-'));
+  const bin = mkdtempSync(join(tmpdir(), 'oak-bin-'));
+  writeFileSync(join(dir, 'myst.yml'), 'project: {}');
+  writeFileSync(
+    join(bin, 'yq'),
+    `#!/bin/sh\ncase "$2" in *pins.yml) printf '%s' "$YQ_MIN" ;; *) printf '%s' "$YQ_VALUE" ;; esac\n`,
+  );
+  chmodSync(join(bin, 'yq'), 0o755);
+  const outFile = join(dir, 'gh_output');
+  writeFileSync(outFile, '');
+  const r = run(
+    script,
+    { PATH: `${bin}:${process.env.PATH}`, YQ_VALUE: value, YQ_MIN: min, GITHUB_OUTPUT: outFile },
+    dir,
+  );
+  return { ...r, output: readFileSync(outFile, 'utf8') };
+}
+
 describe('the engine action refuses a malformed ref before echoing it ([R155])', () => {
   const script = stepScript('.github/actions/engine/action.yml', 'ref');
-
-  /** Runs the ref step with `yq` stubbed to print `value` for myst.yml and `min` for pins.yml,
-   *  and a real GITHUB_OUTPUT file. */
-  function refStep(value: string, min = '') {
-    const dir = mkdtempSync(join(tmpdir(), 'oak-ref-'));
-    const bin = mkdtempSync(join(tmpdir(), 'oak-bin-'));
-    writeFileSync(join(dir, 'myst.yml'), 'project: {}');
-    writeFileSync(
-      join(bin, 'yq'),
-      `#!/bin/sh\ncase "$2" in *pins.yml) printf '%s' "$YQ_MIN" ;; *) printf '%s' "$YQ_VALUE" ;; esac\n`,
-    );
-    chmodSync(join(bin, 'yq'), 0o755);
-    const outFile = join(dir, 'gh_output');
-    writeFileSync(outFile, '');
-    const r = run(
-      script,
-      { PATH: `${bin}:${process.env.PATH}`, YQ_VALUE: value, YQ_MIN: min, GITHUB_OUTPUT: outFile },
-      dir,
-    );
-    return { ...r, output: readFileSync(outFile, 'utf8') };
-  }
 
   // [R41]: myst.yml is ungated, so the rule holds on every event.
   it('refuses an unmerged oak pull request, a raw commit or a branch, on any event', () => {
@@ -85,16 +92,16 @@ describe('the engine action refuses a malformed ref before echoing it ([R155])',
 
   it('refuses a version below min_engine_version, which skips checks the workflows need', () => {
     for (const v of ['v0.2.0', 'v0.2.10', 'v0.0.0-dev.49']) {
-      const r = refStep(v, 'v0.3.0-0');
+      const r = refStep(v, 'v0.3.0-dev.1');
       expect(r.code).toBe(1);
-      expect(r.out).toContain('need v0.3.0-0 or newer');
+      expect(r.out).toContain('need v0.3.0-dev.1 or newer');
       expect(r.output).toBe('');
     }
   });
 
-  it('allows min_engine_version and above, its pre-releases included', () => {
-    for (const v of ['v0.3.0-0', 'v0.3.0-dev.2', 'v0.3.0', 'v0.3.1', 'v0.10.0', 'v1.0.0']) {
-      expect(refStep(v, 'v0.3.0-0').code).toBe(0);
+  it('allows min_engine_version and above, its dev releases included', () => {
+    for (const v of ['v0.3.0-dev.1', 'v0.3.0-dev.12', 'v0.3.0', 'v0.3.1', 'v0.10.0', 'v1.0.0']) {
+      expect(refStep(v, 'v0.3.0-dev.1').code).toBe(0);
     }
   });
 
@@ -355,7 +362,7 @@ describe('the templates declare the oldest engine they run with', () => {
     const { readMinEngine } = await import('../src/upgrade.js');
     const { renderPaperTemplate } = await import('../src/bootstrap.js');
     const min = readMinEngine(SHIM);
-    expect(min).toMatch(/^v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/);
+    expect(min).toMatch(ENGINE_VERSION);
     const repo = mkdtempSync(join(tmpdir(), 'oak-min-'));
     renderPaperTemplate(SHIM, repo, {
       engineRepo: 'me/engine',
@@ -365,5 +372,64 @@ describe('the templates declare the oldest engine they run with', () => {
       edition: 'e',
     });
     expect(readMinEngine(repo)).toBe(min);
+  });
+});
+
+describe('version rule parity', () => {
+  // The workflows and the release script cannot import TypeScript, so each keeps its own copy of
+  // a rule in src/schema.ts.
+  /** The pattern of the `[[ ... =~ <pattern> ]]` test in `file`. */
+  const pattern = (file: string) => /=~ (\S+) \]\]/.exec(readFileSync(file, 'utf8'))![1]!;
+  const matches = (re: string, v: string) =>
+    spawnSync('bash', ['-c', `[[ $1 =~ ${re} ]]`, '_', v]).status === 0;
+  const engineCopies = ['scripts/cut-engine-release.sh', '.github/workflows/conformance.yml'];
+  const stableCopy = '.github/workflows/npm-publish.yml';
+
+  // [input, engine version, stable engine version, paper version tag]
+  const cases: Array<[string, boolean, boolean, boolean]> = [
+    ['v1.2.3', true, true, true],
+    ['v0.0.0', true, true, true],
+    ['v0.3.0-dev.12', true, false, false],
+    ['v1.2.3-dev.0', true, false, false],
+    ['v1.0.0-rc1', false, false, false],
+    ['v1.2.3-rc.1', false, false, false],
+    ['v1.2.3-0', false, false, false],
+    ['v1.2', false, false, false],
+    ['1.2.3', false, false, false],
+    ['main', false, false, false],
+    ['refs/pull/7/merge', false, false, false],
+    ['v1.2.3\nx=y', false, false, false],
+    ['', false, false, false],
+  ];
+  it.each(cases)('%j reads the same everywhere', (v, engine, stable, paper) => {
+    expect(ENGINE_VERSION.test(v)).toBe(engine);
+    expect(isStableEngineVersion(v)).toBe(stable);
+    expect(PAPER_VERSION_TAG.test(v)).toBe(paper);
+    for (const file of engineCopies) expect(matches(pattern(file), v), file).toBe(engine);
+    expect(matches(pattern(stableCopy), v), stableCopy).toBe(stable);
+    if (v) expect(refStep(v).code === 0, 'the engine action').toBe(engine);
+  });
+
+  // [min_engine_version, pin, passes]
+  const order: Array<[string, string, boolean]> = [
+    ['v0.3.0-dev.1', 'v0.3.0-dev.2', true],
+    ['v0.3.0-dev.10', 'v0.3.0-dev.9', false],
+    ['v0.3.0-dev.9', 'v0.3.0', true],
+    ['v1.0.0', 'v1.0.0-dev.3', false],
+    ['v0.9.9', 'v0.10.0', true],
+    ['v1.2.3', 'v1.2.3', true],
+    ['v2.0.0', 'v1.99.99', false],
+  ];
+  it.each(order)(
+    'min %s, pin %s: the engine action orders as compareEngineVersions',
+    (min, pin, passes) => {
+      expect(compareEngineVersions(pin, min)! >= 0).toBe(passes);
+      expect(refStep(pin, min).code === 0).toBe(passes);
+    },
+  );
+
+  it('orders nothing but engine versions', () => {
+    expect(compareEngineVersions('main', 'v1.0.0')).toBeNull();
+    expect(refStep('v1.0.0', 'v0.3.0-0').code).toBe(1);
   });
 });

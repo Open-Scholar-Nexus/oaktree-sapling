@@ -17,7 +17,9 @@ import {
   DERIVED_CONFIG_FILE,
   dropJournalStamp,
 } from './yaml-io.js';
-import type { JournalStamp } from './schema.js';
+import { ENGINE_VERSION, type JournalStamp } from './schema.js';
+import * as msg from './messages.js';
+import { UserError } from './messages.js';
 
 export interface BuildOpts {
   all?: boolean;
@@ -118,6 +120,10 @@ export async function materializeDerived(
   // The version and edition, read before the merge [design §6a]. The path names the file in the
   // error.
   const { version: engineVersion, edition } = readEngineCoordinateRaw(doc, authorPath);
+  // Refused as the engine action refuses it, also when OAK_USE_RUNNING skips `handOff`.
+  if (!ENGINE_VERSION.test(engineVersion)) {
+    throw new UserError(msg.build.badEngineVersion(engineVersion, authorPath));
+  }
 
   // Pass 1. The author's config fills the derived file's base, where myst's merge is predictable,
   // and the engine layers stay `extends:`. Extending the author's myst.yml instead would make its
