@@ -4,10 +4,11 @@
  * `error:` or `reason:` field of a result. A message built from variables gets past it; a
  * `log('  ✓ done')` does not.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { annotate } from '../src/messages.js';
 
 const srcDir = join(fileURLToPath(new URL('..', import.meta.url)), 'src');
 
@@ -101,5 +102,16 @@ describe('every printed string lives in messages.ts', () => {
     ]) {
       expect(src).toContain(pointer);
     }
+  });
+});
+
+describe('annotate', () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('escapes % and every line break, so a message holds one workflow command', () => {
+    vi.stubEnv('GITHUB_ACTIONS', 'true');
+    expect(annotate('error', 'a\r::warning::x\n::notice::y 100%')).toBe(
+      '::error::a%0D::warning::x%0A::notice::y 100%25',
+    );
   });
 });

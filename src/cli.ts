@@ -16,13 +16,13 @@ import {
 } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { parseDocument } from 'yaml';
 import type { ComposeInput } from './compose.js';
 import type { MaterializeInput, StartOpts } from './materialize.js';
 import type { JournalStamp } from './schema.js';
 import type { HandoffContext, HandoffDeps, HandoffVerb } from './pinned.js';
 import * as msg from './messages.js';
 import { annotate, inCI, UserError } from './messages.js';
+import { readDoc } from './yaml-io.js';
 
 // oak only runs as the CJS bundle [R51] (ci/run.sh and local runs both call dist/cli.cjs), so
 // `__dirname` is the bundle's directory; @types/node declares it for tsc.
@@ -111,7 +111,15 @@ async function resolveInstanceRoot(
   const { cachedJournal, journalStamp } = await import('./gh.js');
   const found = (root: string) => ({ root, stamp: journalStamp(root, paperRoot) });
   if (explicit) return found(resolve(explicit));
-  const journalRepo = (await import('./pinned.js')).readPinsValue(paperRoot, 'instance_repo').value;
+  let journalRepo: string | undefined;
+  try {
+    journalRepo = (await import('./pinned.js')).readPinsValue(paperRoot, 'instance_repo').value;
+  } catch (err) {
+    // A pins.yml with a YAML error (`readDoc`) is returned, so `oak validate` reports it and
+    // deploy-preview falls back to the artifact link.
+    if (!(err instanceof UserError)) throw err;
+    return { error: err.message };
+  }
   if (!journalRepo || journalRepo === '.') {
     if (existsSync(join(paperRoot, 'journal.yml'))) return found(paperRoot);
     return { error: msg.build.noInstance(verb, paperRoot) };
@@ -138,12 +146,7 @@ function isJournalRepo(root: string): boolean {
   const mystPath = join(root, 'myst.yml');
   if (!existsSync(mystPath)) return true;
   try {
-    const v = parseDocument(readFileSync(mystPath, 'utf8')).getIn([
-      'project',
-      'options',
-      'oaktree-sapling',
-      'version',
-    ]);
+    const v = readDoc(mystPath).getIn(['project', 'options', 'oaktree-sapling', 'version']);
     return !(typeof v === 'string' && v);
   } catch {
     return false;
@@ -252,10 +255,7 @@ function dropSymlinks(dir: string): void {
  *  myst.yml itself. */
 function readProjectIdQuietly(paperRoot: string): string | null {
   try {
-    const v = parseDocument(readFileSync(join(paperRoot, 'myst.yml'), 'utf8')).getIn([
-      'project',
-      'id',
-    ]);
+    const v = readDoc(join(paperRoot, 'myst.yml')).getIn(['project', 'id']);
     return typeof v === 'string' && v ? v : null;
   } catch {
     return null;
@@ -563,7 +563,7 @@ async function cmdRelease(argv: string[]): Promise<number> {
   }
   const mystPath = mystPathOf(argv);
 
-  const doi = parseDocument(readFileSync(mystPath, 'utf8')).getIn(['project', 'doi']);
+  const doi = readDoc(mystPath).getIn(['project', 'doi']);
   if (typeof doi !== 'string' || !doi) {
     process.stderr.write(msg.workflow.releaseNoDoi + '\n');
     return 2;
@@ -698,7 +698,7 @@ async function cmdNotify(argv: string[]): Promise<number> {
  *  version key as a finding. */
 function readEditionQuietly(paperRoot: string): string | null {
   try {
-    const v = parseDocument(readFileSync(join(paperRoot, 'myst.yml'), 'utf8')).getIn([
+    const v = readDoc(join(paperRoot, 'myst.yml')).getIn([
       'project',
       'options',
       'oaktree-sapling',

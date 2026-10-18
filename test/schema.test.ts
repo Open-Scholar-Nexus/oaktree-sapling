@@ -5,6 +5,7 @@ import { parse } from 'yaml';
 import {
   OaktreeSaplingOptions,
   repoFromGithubUrl,
+  pagesUrl,
   readEngineOptions,
   JournalConfig,
   Registry,
@@ -303,5 +304,16 @@ describe('repoFromGithubUrl', () => {
       'https://github.com/acme/paper///',
     ])
       expect(repoFromGithubUrl(url), url).toBeNull();
+  });
+});
+
+describe('pagesUrl', () => {
+  it('is a project site under the repo name, with a lowercase owner', () => {
+    expect(pagesUrl('Me/Config')).toBe('https://me.github.io/Config/');
+  });
+
+  it('is the root for a repo named <owner>.github.io, in any case', () => {
+    expect(pagesUrl('Me/me.github.io')).toBe('https://me.github.io/');
+    expect(pagesUrl('Me/ME.GitHub.io')).toBe('https://me.github.io/');
   });
 });

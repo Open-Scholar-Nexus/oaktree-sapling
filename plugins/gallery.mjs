@@ -81,6 +81,14 @@ export function parseLocation(value) {
   return null;
 }
 
+/** The GitHub Pages URL of `owner/name`, the root for a repo named `<owner>.github.io`. A copy
+ *  of `pagesUrl` in `src/schema.ts`, held to it by `Pages URL parity` in `test/gallery.test.ts`. */
+export function pagesUrl(repo) {
+  const [owner, name] = repo.split('/');
+  const host = `${owner.toLowerCase()}.github.io`;
+  return name.toLowerCase() === host ? `https://${host}/` : `https://${host}/${name}/`;
+}
+
 /** A paper's edition, from its fetched `myst.yml`, or undefined. */
 export function editionOf(config) {
   return config?.project?.options?.['oaktree-sapling']?.edition;
@@ -129,10 +137,9 @@ export function paperUrls(entry) {
     );
   }
   const { repo } = location;
-  const [owner, name] = repo.split('/');
   const raw = `https://raw.githubusercontent.com/${repo}/HEAD/`;
   return {
-    siteUrl: entry.site_url ?? `https://${owner.toLowerCase()}.github.io/${name}`,
+    siteUrl: entry.site_url ?? pagesUrl(repo),
     configUrl: `${raw}myst.yml`,
     thumbUrl: `${raw}thumbnails/thumbnail.png`,
   };

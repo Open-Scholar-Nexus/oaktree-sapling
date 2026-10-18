@@ -9,7 +9,6 @@ import { join } from 'node:path';
 import {
   cmdConformanceReset,
   cmdConformanceRun,
-  pagesUrlFor,
   CONFORMANCE_LABEL,
   CERT_BRANCH_PREFIX,
   CERT_TAG_MARKER,
@@ -21,6 +20,7 @@ import {
 } from '../src/conformance.js';
 import { JOURNAL_BUNDLE_NAME, RESERVED_BUNDLE_NAMES } from '../src/zenodo.js';
 import { UPGRADE_BRANCH_PREFIX } from '../src/upgrade.js';
+import { pagesUrl } from '../src/schema.js';
 
 const REPO = 'me/fixture-paper-repo';
 
@@ -302,7 +302,7 @@ describe('cmdConformanceRun', () => {
       tag: TAG,
       prNumber: 7,
       mergeSha: 'merge-sha',
-      pagesUrl: pagesUrlFor(REPO),
+      pagesUrl: pagesUrl(REPO),
       previewPr: 21,
       previewUrl: 'https://cert-x.oaktree-sapling-test.pages.dev',
       depositTag: CERT_DEPOSIT_TAG,
@@ -469,7 +469,7 @@ describe('cmdConformanceRun', () => {
     // Only the /fixture-paper-repo/ Pages URL gives 404; the pages.dev preview gives 200.
     const out = await cmdConformanceRun(
       { repo: REPO, tag: TAG },
-      runDeps(gh, { probe: async (url) => (url === pagesUrlFor(REPO) ? 404 : 200) }),
+      runDeps(gh, { probe: async (url) => (url === pagesUrl(REPO) ? 404 : 200) }),
     );
     expect(out.exitCode).toBe(1);
     expect(out.result).toMatchObject({ status: 'failed', path: 'push-main' });

@@ -16,6 +16,7 @@ import { STICKY_PREVIEW } from './preview.js';
 import { stickyMarker } from './messages.js';
 import { JOURNAL_BUNDLE_NAME, RESERVED_BUNDLE_NAMES } from './zenodo.js';
 import { UPGRADE_BRANCH_PREFIX } from './upgrade.js';
+import { pagesUrl } from './schema.js';
 
 /** The label on every pull request a run opens, which is how `reset` finds them, including pull
  *  requests from the fork, whose branch names it does not know. */
@@ -315,12 +316,6 @@ function runOutcome(
   return run;
 }
 
-/** The GitHub Pages URL of a repo (`owner.github.io/name/`). */
-export function pagesUrlFor(repo: string): string {
-  const [owner, name] = repo.split('/');
-  return `https://${owner}.github.io/${name}/`;
-}
-
 export interface RunInput {
   repo: string;
   tag: string; // engine version V under test
@@ -419,9 +414,9 @@ export async function cmdConformanceRun(input: RunInput, deps: ConformanceDeps):
     );
 
     // 6. Pages serves the site, beyond the deploy job passing.
-    const pagesUrl = pagesUrlFor(repo);
-    await assertServes200({ probe, sleep }, pagesUrl, 'Pages');
-    log(`Pages 200: ${pagesUrl}`);
+    const siteUrl = pagesUrl(repo);
+    await assertServes200({ probe, sleep }, siteUrl, 'Pages');
+    log(`Pages 200: ${siteUrl}`);
 
     // 7. The Journal checks Check Run was posted on main, so post-checks ran.
     await pollUntil(
@@ -613,7 +608,7 @@ export async function cmdConformanceRun(input: RunInput, deps: ConformanceDeps):
         skipped,
         prNumber,
         mergeSha,
-        pagesUrl,
+        pagesUrl: siteUrl,
         previewPr: previewPr.number,
         previewUrl,
         depositTag,

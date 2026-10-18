@@ -72,12 +72,13 @@ export function inCI(): boolean {
 
 /**
  * A warning or error line. `::warning::…` becomes an annotation in a workflow log and is noise in
- * a terminal, so it is added only in CI. There a message is escaped, since a raw newline cuts the
- * annotation at its first line.
+ * a terminal, so it is added only in CI. There a message is escaped as GitHub specifies, since the
+ * runner reads a line after a raw CR or LF as a new workflow command.
  */
 export function annotate(kind: 'notice' | 'warning' | 'error', message: string): string {
   if (!inCI()) return kind === 'warning' ? `warning: ${message}` : message;
-  return `::${kind}::${message.replace(/%/g, '%25').replace(/\r?\n/g, '%0A')}`;
+  const escaped = message.replace(/%/g, '%25').replace(/\r/g, '%0D').replace(/\n/g, '%0A');
+  return `::${kind}::${escaped}`;
 }
 
 /**
@@ -190,6 +191,34 @@ export const version = (v: string): string => `oak ${v}`;
 
 export const flagNeedsPort = (name: string, got: string): string =>
   `--${name} needs a port number, not '${got}'.`;
+
+/** A YAML file the parser reports an error in (yaml-io.ts `parseYaml`). `why` is the parser's
+ *  first line, which gives the line and column. */
+export const yamlInvalid = (file: string, why: string, duplicateKey: boolean): string =>
+  `${file} is not valid YAML: ${why}. ` +
+  (duplicateKey
+    ? 'A key can appear only once in the same block; keep one of them.'
+    : 'Fix that line and run again.');
+
+/** A YAML file with a `---` (or `...`) line that starts a second document (yaml-io.ts
+ *  `parseYaml`). */
+export const yamlMultipleDocs = (file: string, line: number, marker: string): string =>
+  `${file} holds more than one YAML document: the ${marker} at line ${line} splits it. Keep ` +
+  `one document: delete that line, and merge what follows into the rest.`;
+
+/** A YAML value with `: ` in it, read as a second key (yaml-io.ts `parseYaml`). */
+export const yamlColonInValue = (file: string, line: number): string =>
+  `${file} is not valid YAML: the value at line ${line} holds a colon and a space, which YAML ` +
+  `reads as a new key. Put the whole value in quotes, like title: "Tides: a study".`;
+
+/** A YAML line where a key is expected but none is written (yaml-io.ts `parseYaml`). */
+export const yamlNotKeyValue = (file: string, line: number): string =>
+  `${file} is not valid YAML: line ${line} should be a key, a colon and a space, then the ` +
+  `value (id: my-paper). Fix that line and run again.`;
+
+/** journal.yml parses but a setting has the wrong shape (yaml-io.ts `readJournalConfig`). */
+export const journalInvalid = (file: string, why: string): string =>
+  `${file} has a setting oak cannot read (${why}). Fix it in the journal repo and run again.`;
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════
  * The confirm prompt: every plan ends here.
@@ -946,9 +975,10 @@ export const workflow = {
   badRepoName: (source: string, got: string): string =>
     `${source} takes a GitHub repo as owner/name, not ${JSON.stringify(got.slice(0, 60))}.`,
 
-  previewBadJournal: (path: string, why: string): string =>
-    `${path} could not be read (${why}), so the preview fell back to an artifact link. ` +
-    `Fix the journal config and re-run; nothing else in this run depends on it.`,
+  /** `why` is the reading error, which names journal.yml (yaml-io.ts `readJournalConfig`). */
+  previewBadJournal: (why: string): string =>
+    `${why} Until then the preview falls back to an artifact link; nothing else in this run ` +
+    `depends on it`,
 
   postChecksBadReport: (path: string): string =>
     `${path} is not a checks report (no checkRun.conclusion). It comes from the ` +

@@ -8,7 +8,7 @@
 import { existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
-import { readDoc } from './yaml-io.js';
+import { readDoc, readJournalConfig } from './yaml-io.js';
 import * as msg from './messages.js';
 import { annotate, firstLine, stickyMarker } from './messages.js';
 import { JournalConfig, PAPER_VERSION_TAG, type PreviewConfig } from './schema.js';
@@ -87,12 +87,11 @@ export function loadJournalPreview(instanceRoot: string | null): {
 } {
   const empty = () => ({ preview: JournalConfig.parse({ name: 'x' }).preview });
   if (!instanceRoot) return empty();
-  const path = join(instanceRoot, 'journal.yml');
-  if (!existsSync(path)) return empty();
   try {
-    return { preview: JournalConfig.parse(readDoc(path).toJS() ?? {}).preview };
+    const journal = readJournalConfig(instanceRoot);
+    return journal ? { preview: journal.preview } : empty();
   } catch (e) {
-    return { ...empty(), problem: msg.workflow.previewBadJournal(path, firstLine(e)) };
+    return { ...empty(), problem: msg.workflow.previewBadJournal(firstLine(e)) };
   }
 }
 
@@ -349,7 +348,15 @@ export function runNewVersionReminder(input: NotifyInput, gh: GhPr): Outcome {
     return ok({ reminder: 'skipped', reason: msg.workflow.notifyFirstDeposit });
   }
 
-  const doi = readProjectDoi(mystPath);
+  let doi: string | null;
+  try {
+    doi = readProjectDoi(mystPath);
+  } catch (e) {
+    // A myst.yml with a YAML error (`readDoc`); the preview comment is already posted.
+    const why = firstLine(e);
+    process.stderr.write(annotate('error', why) + '\n');
+    return err(1, why, { reminder: 'error' });
+  }
   if (!doi) {
     process.stderr.write(annotate('error', msg.workflow.notifyPublishedButUnlinked) + '\n');
     return err(1, 'version tag present but project.doi missing', { reminder: 'error' });

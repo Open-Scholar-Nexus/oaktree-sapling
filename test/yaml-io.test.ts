@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   readDoc,
+  parseYaml,
   setExtends,
   applyOwnOverride,
   readEngineCoordinateRaw,
@@ -16,6 +17,11 @@ import {
   dropJournalStamp,
 } from '../src/yaml-io.js';
 import type { JournalStamp } from '../src/schema.js';
+import { UserError } from '../src/messages.js';
+import { runValidate } from '../src/validate.js';
+import type { MystEdge } from '../src/materialize.js';
+import { cmdPrepare, type ZenodoApi } from '../src/zenodo.js';
+import { loadJournalPreview, runNewVersionReminder, type GhPr } from '../src/preview.js';
 
 const fixturePaper = fileURLToPath(new URL('./fixture-paper/myst.yml', import.meta.url));
 const fixtureInstance = fileURLToPath(new URL('./fixture-instance', import.meta.url));
@@ -216,5 +222,107 @@ describe('the journal stamp under project.options.oaktree-sapling', () => {
       version: 'v1.0.0',
       edition: 'e',
     });
+  });
+});
+
+describe('a YAML error is refused the same way by every verb', () => {
+  /** A temporary directory holding `file` with a key written twice on line 4. */
+  function withDuplicateKey(file: string): string {
+    const dir = mkdtempSync(join(tmpdir(), 'oak-dupe-'));
+    writeFileSync(
+      join(dir, file),
+      'project:\n  id: p\n  doi: 10.5072/zenodo.1\n  doi: 10.5072/zenodo.2\n',
+    );
+    return join(dir, file);
+  }
+  const refusal = (path: string): string => {
+    try {
+      readDoc(path);
+    } catch (e) {
+      return (e as Error).message;
+    }
+    throw new Error(`${path} parsed`);
+  };
+
+  it('readDoc throws a UserError naming the file, the line and the fix', () => {
+    const path = withDuplicateKey('myst.yml');
+    expect(() => readDoc(path)).toThrow(UserError);
+    expect(refusal(path)).toContain(`${path} is not valid YAML: Map keys must be unique at line 4`);
+    expect(refusal(path)).toContain('can appear only once');
+  });
+
+  it('validate, deposit and the new-version reminder give that refusal for myst.yml', async () => {
+    const myst = withDuplicateKey('myst.yml');
+    const why = refusal(myst);
+    const paperRoot = join(myst, '..');
+    await expect(
+      runValidate({ paperRoot, instanceRoot: null, edge: {} as MystEdge }),
+    ).rejects.toThrow(why);
+    // Refused before any Zenodo call: the stub has no methods to call.
+    await expect(
+      cmdPrepare({
+        mystPath: myst,
+        repo: 'o/r',
+        api: { sandbox: true } as ZenodoApi,
+        instanceRoot: null,
+      }),
+    ).rejects.toThrow(why);
+    const gh = { versionTags: () => ['v1.0.0'] } as unknown as GhPr;
+    const reminder = runNewVersionReminder(
+      { repoRoot: paperRoot, mystPath: myst, repo: 'o/r', pr: '7' },
+      gh,
+    );
+    expect(reminder.exitCode).toBe(1);
+    expect(reminder.result.message).toBe(why);
+  });
+
+  it('deploy-preview falls back with that refusal as the reason for journal.yml', () => {
+    const journal = withDuplicateKey('journal.yml');
+    const got = loadJournalPreview(join(journal, '..'));
+    expect(got.preview.provider).toBe('artifact');
+    expect(got.problem).toContain(refusal(journal));
+  });
+});
+
+describe('a common YAML mistake is refused in plain words', () => {
+  const refusal = (text: string): string => {
+    try {
+      parseYaml(text, 'myst.yml');
+    } catch (e) {
+      expect(e).toBeInstanceOf(UserError);
+      return (e as Error).message;
+    }
+    throw new Error('parsed');
+  };
+
+  it('names the --- line that starts a second document, and says to keep one', () => {
+    for (const text of ['project:\n  id: p\n---\nversion: 1\n', '---\nid: p\n\n---\n']) {
+      const why = refusal(text);
+      expect(why).toContain('myst.yml holds more than one YAML document: the --- at line');
+      expect(why).toContain('Keep one document');
+      expect(why).not.toContain('parseAllDocuments');
+    }
+    expect(refusal('id: p\n---\nversion: 1\n')).toContain('the --- at line 2 splits it');
+    expect(refusal('---\nid: p\n\n---\n')).toContain('the --- at line 4 splits it');
+  });
+
+  it('names a ... line too, though the second document starts below it', () => {
+    expect(refusal('id: p\n...\n# next\nversion: 1\n')).toContain('the ... at line 2 splits it');
+  });
+
+  it('says to quote a value holding a colon and a space', () => {
+    const why = refusal('project:\n  title: Tides: a study\n');
+    expect(why).toContain('the value at line 2 holds a colon and a space');
+    expect(why).toContain('in quotes');
+  });
+
+  it('says what a line missing its key or colon should look like', () => {
+    for (const text of ['project:\n  id:p\n  title: x\n', 'project:\n  title Tides\n  id: p\n']) {
+      expect(refusal(text)).toContain('line 2 should be a key, a colon and a space');
+    }
+  });
+
+  it("keeps the parser's words for other errors", () => {
+    expect(refusal('project:\n  - a\n  id: p\n  - b\n')).toContain('is not valid YAML: ');
   });
 });

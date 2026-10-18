@@ -19,7 +19,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
-import { parseDocument } from 'yaml';
+import { parseYaml } from './yaml-io.js';
 import type { GitContext } from './zenodo.js';
 import { COMMIT_ID, locationRepo, type JournalStamp } from './schema.js';
 import { LABEL_ZENODO_FAILED, type GhPr, type PagesDeployer } from './preview.js';
@@ -966,7 +966,8 @@ function sameTreeAsRemote(repoRoot: string, branch: string): boolean {
 }
 
 /** A value from a YAML file in the test repo on the default branch, read through the
- *  Contents API, so no clone is needed. null when absent or unreadable. */
+ *  Contents API, so no clone is needed. null when the file or the value is absent, or the
+ *  token cannot read it; a YAML error throws (`parseYaml`). */
 function committedYamlValue(repo: string, file: string, path: string[]): string | null {
   let content: string;
   try {
@@ -976,7 +977,8 @@ function committedYamlValue(repo: string, file: string, path: string[]): string 
   }
   if (!content) return null;
   // GitHub wraps the base64 in newlines; Buffer ignores them.
-  const value = parseDocument(Buffer.from(content, 'base64').toString('utf8')).getIn(path);
+  const text = Buffer.from(content, 'base64').toString('utf8');
+  const value = parseYaml(text, `${repo}:${file}`).getIn(path);
   return value != null ? String(value) : null;
 }
 
@@ -1245,7 +1247,11 @@ export const realConformanceGh: ConformanceGh = {
         '{content: .content, sha: .sha}',
       ]),
     ) as { content: string; sha: string };
-    const doc = parseDocument(Buffer.from(meta.content, 'base64').toString('utf8')); // GitHub wraps base64 in \n; Buffer ignores them
+    // GitHub wraps base64 in \n; Buffer ignores them.
+    const doc = parseYaml(
+      Buffer.from(meta.content, 'base64').toString('utf8'),
+      `${forkRepo}:myst.yml@${branch}`,
+    );
     doc.setIn(['project', 'options', 'oaktree-sapling', 'version'], tag);
     const updated = Buffer.from(String(doc), 'utf8').toString('base64');
     ghAs(forkToken, [

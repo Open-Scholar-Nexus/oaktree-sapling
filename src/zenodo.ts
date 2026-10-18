@@ -12,6 +12,8 @@
  *    fixed files; a name clash with those is an error [R28].
  *  - The review pull request in the provenance comes from `gh api` (`GitContext.reviewPr`)
  *    [R35.2].
+ *  - The Project Website link is the paper's registry `site_url`, else its GitHub Pages URL,
+ *    unless `--site-url` names one. See `defaultSiteUrl`.
  *
  * Every command returns one JSON result with a `status` field, which the workflows read. A draft
  * is reused when one exists, `--sandbox` switches endpoints, and publish overwrites the metadata
@@ -34,10 +36,19 @@ import {
 import { join, resolve, basename, relative, isAbsolute } from 'node:path';
 import { createHash } from 'node:crypto';
 import AdmZip from 'adm-zip';
-import { readDoc, writeDoc, readJournalStamp, DERIVED_CONFIG_FILE } from './yaml-io.js';
+import {
+  readDoc,
+  readJournalConfig,
+  writeDoc,
+  readJournalStamp,
+  DERIVED_CONFIG_FILE,
+} from './yaml-io.js';
 import {
   JournalConfig,
+  locationRepo,
+  pagesUrl,
   PAPER_VERSION_TAG,
+  readRegistry,
   repoFromGithubUrl,
   sameRepo,
   type ZenodoConfig,
@@ -466,7 +477,10 @@ export function buildMetadata(input: MetadataInput): Record<string, unknown> {
   if (extraDescParas) desc.push(...extraDescParas.map((p) => `<p>${escapeHtml(p)}</p>`));
   const yt = youtubeUrl(project);
   if (yt) desc.push(`<p>Seminar Recording: <a href="${escapeHtml(yt)}">Watch on YouTube</a></p>`);
-  if (siteUrl) desc.push(`<p>Project Website: <a href="${siteUrl}">${siteUrl}</a></p>`);
+  if (siteUrl) {
+    const href = escapeHtml(siteUrl);
+    desc.push(`<p>Project Website: <a href="${href}">${href}</a></p>`);
+  }
   desc.push(`<p>Repository: <a href="${githubUrl}">${githubUrl}</a></p>`);
   const venue = project.venue;
   if (venue) {
@@ -789,14 +803,30 @@ function assertEngineArchive(zipPath: string): void {
  * ------------------------------------------------------------------------ */
 
 /** Reads the journal's `zenodo:` block from `<instanceRoot>/journal.yml`. A new journal, or a
- *  build with no journal, gets empty defaults. */
+ *  build with no journal, gets empty defaults. A journal.yml oak cannot read throws, so a
+ *  deposit never goes out without the journal's settings. */
 export function loadJournalZenodo(instanceRoot: string | null): ZenodoConfig {
-  if (!instanceRoot) return JournalConfig.parse({ name: 'x' }).zenodo;
-  const path = join(instanceRoot, 'journal.yml');
-  if (!existsSync(path)) return JournalConfig.parse({ name: 'x' }).zenodo;
-  const doc = readDoc(path);
-  const journal = JournalConfig.parse(doc.toJS() ?? {});
-  return journal.zenodo;
+  const journal = instanceRoot ? readJournalConfig(instanceRoot) : null;
+  return (journal ?? JournalConfig.parse({ name: 'x' })).zenodo;
+}
+
+/**
+ * The paper's website for the deposit's Project Website link: the `site_url` of the paper's entry
+ * in the journal's `registry/papers.yml`, else its GitHub Pages URL ({@link pagesUrl}), which is
+ * the rule `paperUrls` in `plugins/gallery.mjs` follows. Undefined without a repo.
+ */
+export function defaultSiteUrl(
+  repo: string | null,
+  instanceRoot: string | null,
+): string | undefined {
+  if (!repo) return undefined;
+  const path = instanceRoot ? join(instanceRoot, 'registry', 'papers.yml') : null;
+  const entries = path && existsSync(path) ? readRegistry(readDoc(path).toJS())?.entries : null;
+  const own = (entries ?? []).find((e) => {
+    const entryRepo = locationRepo(e.location);
+    return !!e.site_url && !!entryRepo && sameRepo(entryRepo, repo);
+  });
+  return own?.site_url ?? pagesUrl(repo);
 }
 
 /* --------------------------------------------------------------------------
@@ -830,6 +860,7 @@ function projectOf(doc: ReturnType<typeof readDoc>): any {
 export interface PrepareInput {
   mystPath: string;
   repo: string; // owner/repo
+  /** The Project Website link; {@link defaultSiteUrl} when absent, none when empty. */
   siteUrl?: string;
   api: ZenodoApi;
   instanceRoot: string | null;
@@ -844,7 +875,8 @@ export interface PrepareInput {
  * [R29].
  */
 export async function cmdPrepare(input: PrepareInput): Promise<Outcome> {
-  const { mystPath, repo, siteUrl, api, instanceRoot } = input;
+  const { mystPath, repo, api, instanceRoot } = input;
+  const siteUrl = input.siteUrl ?? defaultSiteUrl(repo, instanceRoot);
   const sandbox = api.sandbox;
   const doc = readDoc(mystPath);
   const project = projectOf(doc);
@@ -904,7 +936,7 @@ export async function cmdPrepare(input: PrepareInput): Promise<Outcome> {
   doc2.setIn(['project', 'github'], githubUrl);
   writeDoc(mystPath, doc2);
 
-  return ok({ concept_doi: cdoi, draft_url: draftUrl, deposition_id: dep.id });
+  return ok({ concept_doi: cdoi, draft_url: draftUrl, deposition_id: dep.id, site_url: siteUrl });
 }
 
 export interface PublishInput {
@@ -935,7 +967,7 @@ function readTypstVersion(engineRoot: string): string | null {
  * prefix, so a tag cannot reach the wrong one [R4]; `--sandbox` must agree.
  */
 export async function cmdPublish(input: PublishInput): Promise<Outcome> {
-  const { mystPath, pdf, tag, siteUrl, bundleOut, api, git, instanceRoot, engineRoot } = input;
+  const { mystPath, pdf, tag, bundleOut, api, git, instanceRoot, engineRoot } = input;
   const sandbox = api.sandbox;
   const doc = readDoc(mystPath);
   const project = projectOf(doc);
@@ -955,6 +987,7 @@ export async function cmdPublish(input: PublishInput): Promise<Outcome> {
   if (!githubUrl) return err(2, 'project.github missing; should have been set by prepare.');
   const repo = repoFromGithubUrl(githubUrl);
   if (!repo) return err(2, msg.workflow.depositBadGithubUrl(mystPath, githubUrl));
+  const siteUrl = input.siteUrl ?? defaultSiteUrl(repo, instanceRoot);
 
   const repoRoot = resolve(mystPath, '..');
 
@@ -1070,6 +1103,7 @@ export async function cmdPublish(input: PublishInput): Promise<Outcome> {
     draft_url: dep.links?.html,
     deposition_id: dep.id,
     bundle_dir: bundleOut,
+    site_url: siteUrl,
   });
 }
 
@@ -1085,7 +1119,7 @@ export interface StatusInput {
  * publish would send. Writes nothing.
  */
 export async function cmdStatus(input: StatusInput): Promise<Outcome> {
-  const { mystPath, siteUrl, api, instanceRoot } = input;
+  const { mystPath, api, instanceRoot } = input;
   const sandbox = api.sandbox;
   const doc = readDoc(mystPath);
   const project = projectOf(doc);
@@ -1122,7 +1156,7 @@ export async function cmdStatus(input: StatusInput): Promise<Outcome> {
     project,
     paperId: project.id ? String(project.id) : undefined,
     githubUrl: project.github ?? '',
-    siteUrl: siteUrl ?? '',
+    siteUrl: input.siteUrl ?? defaultSiteUrl(repoFromGithubUrl(project.github ?? ''), instanceRoot),
     zenodo: loadJournalZenodo(instanceRoot),
     abstractParas: abstractParagraphs(repoRoot),
     extraDescParas: zenodoExtraParagraphs(repoRoot),

@@ -9,8 +9,7 @@
  * myst.ts. The caller passes the repo, used to find the paper's own registry entry.
  */
 import * as msg from './messages.js';
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { parse } from 'yaml';
+import { existsSync, readdirSync } from 'node:fs';
 import {
   JournalConfig,
   checkIdShape,
@@ -29,6 +28,8 @@ import {
   readBrandAssetOptions,
   readAuthorTypstTemplate,
   authorSetsJournalStamp,
+  readDoc,
+  readJournalConfig,
   DERIVED_CONFIG_FILE,
 } from './yaml-io.js';
 import {
@@ -278,9 +279,8 @@ function emptyJournal(): JournalConfig {
  *  [R116]. */
 function loadJournal(instanceRoot: string | null, probes: FsProbes): JournalConfig | null {
   if (instanceRoot) {
-    const p = join(instanceRoot, 'journal.yml');
-    if (!probes.existsProbe(p)) return null;
-    return JournalConfig.parse(parse(readFileSync(p, 'utf8')));
+    if (!probes.existsProbe(join(instanceRoot, 'journal.yml'))) return null;
+    return readJournalConfig(instanceRoot);
   }
   return emptyJournal();
 }
@@ -294,7 +294,7 @@ function loadRegistry(
   if (!instanceRoot) return { registry: null, warnings: [] };
   const p = join(instanceRoot, 'registry', 'papers.yml');
   if (!probes.existsProbe(p)) return { registry: null, warnings: [] };
-  const read = readRegistry(parse(readFileSync(p, 'utf8')));
+  const read = readRegistry(readDoc(p).toJS());
   if (!read) return { registry: [], warnings: [msg.validate.registryNotList] };
   const warnings = read.skipped.map((e) =>
     e.reason === 'location'
@@ -371,7 +371,7 @@ export function checkLayerDisjointness(
 function readLayer(path: string, probes: FsProbes): unknown | null {
   if (!probes.existsProbe(path)) return null;
   try {
-    return parse(readFileSync(path, 'utf8'));
+    return readDoc(path).toJS();
   } catch {
     return null; // a malformed layer is another check's problem, not this one's
   }
@@ -652,6 +652,11 @@ export async function runValidate(
 ): Promise<ValidateResult> {
   const repo = opts.repo ?? null;
   const notes: string[] = [];
+
+  // A myst.yml with a YAML error stops here with the UserError every verb gives for it
+  // (`readDoc`), before compose or myst read the file.
+  const authorMyst = join(input.paperRoot, 'myst.yml');
+  if (existsSync(authorMyst)) readDoc(authorMyst);
 
   // Composed when there is something to compose [R82]: paper-base's thumbnail and typst export
   // exist only after the merge, so checking the author's file alone would pass them [R81].

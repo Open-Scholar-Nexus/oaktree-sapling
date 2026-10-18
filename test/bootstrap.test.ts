@@ -16,7 +16,6 @@ import {
   renderInstanceTemplate,
   renderSiteTemplate,
   galleryPluginUrl,
-  siteUrlFor,
   engineMystRange,
   buildReviewTree,
   cmdBootstrapPaper,
@@ -155,16 +154,6 @@ describe('renderInstanceTemplate', () => {
     expect(readFileSync(join(dest, 'editions/ed-2026.yml'), 'utf8')).toBe(
       readFileSync(join(INSTANCE_ROOT, 'editions/edition.yml'), 'utf8'),
     );
-  });
-});
-
-describe('siteUrlFor', () => {
-  it('is a project site under the repo name, with a lowercase owner', () => {
-    expect(siteUrlFor('Me/Config')).toBe('https://me.github.io/Config/');
-  });
-
-  it('is the root for a repo named <owner>.github.io', () => {
-    expect(siteUrlFor('Me/me.github.io')).toBe('https://me.github.io/');
   });
 });
 

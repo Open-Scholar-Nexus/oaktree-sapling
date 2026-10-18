@@ -58,7 +58,7 @@ When the deposit has a `template.zip`, unzip it too and add `--typst-template <t
 | `engine.zip` | oak at the version the paper pins, with typst and oak's PDF template |
 | `journal.zip` | the journal repository at the commit the build used |
 | `template.zip` | the PDF template, when it is the journal's or the author's |
-| `publication-provenance.json` | the paper's and the journal's repository and commit, the DOIs, and the typst version |
+| `publication-provenance.json` | the paper's and the journal's repository and commit, the paper's website, the DOIs, and the typst version |
 
 The files in the paper's `deposit/` folder are added beside them, and these names are reserved.
 
