@@ -40,7 +40,8 @@ execFileSync(
     join(engineDir, 'test', 'fixture-instance'),
     '--exports-only', // offline PDF canary via the in-engine template (HTML needs a network theme zip)
   ],
-  { stdio: 'inherit' },
+  // The fixture pins another version, so this oak builds it itself (handOff in src/pinned.ts).
+  { stdio: 'inherit', env: { ...process.env, OAK_USE_RUNNING: '1' } },
 );
 
 // Just report what was produced: the exact pinned path (compose TYPST_OUTPUT) is asserted by
