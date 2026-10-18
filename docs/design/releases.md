@@ -72,7 +72,7 @@ A paper repository that is its own journal (`instance_repo: "."` in `pins.yml`)[
 
 ## A stable release is `latest` before it is tested
 
-A stable `vX.Y.Z` enters `releases/latest` as soon as it is released, and `latest` is what `oak upgrade` resolves when no version is given; `oak bootstrap` names it in its plan when it is newer than the running `oak`. Conformance runs after the release, so a journal can pick up a release that has not passed it, and a release that fails stays `latest` until someone deletes it or makes a newer one.
+A stable `vX.Y.Z` enters `releases/latest` as soon as it is released, and `latest` is what `oak upgrade` resolves when no version is given. `oak bootstrap` pins the running `oak`'s version and names the npm package's `latest` in its plan when it is newer, and npm gets a release only once conformance passed on it. Conformance runs after the release, so a journal can pick up a release that has not passed it, and a release that fails stays `latest` until someone deletes it or makes a newer one.
 
 ## Conformance runs on releases
 

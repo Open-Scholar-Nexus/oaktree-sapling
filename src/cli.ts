@@ -1030,15 +1030,16 @@ async function cmdBootstrap(argv: string[]): Promise<number> {
       return 2;
     }
   }
-  const { pinnedEngineVersion, newerRelease } = await import('./engine-version.js');
+  const { pinnedEngineVersion, newerRelease, npmLatest } = await import('./engine-version.js');
   const pinned = pinnedEngineVersion(flag(rest, 'engine-version'), OAK_VERSION);
   gh.assertGhReady();
   const engineRepo = flag(rest, 'engine-repo') ?? ENGINE_REPO_DEFAULT;
   const { engineVersion } = pinned;
   const resolved = {
     ...pinned.resolved,
-    ...(pinned.resolved.engineVersionFrom === 'running-oak'
-      ? { newerRelease: newerRelease(OAK_VERSION, () => gh.latestEngineRelease(engineRepo)) }
+    // The npm package is oaktree-sapling's own, so another --engine-repo gets no notice.
+    ...(pinned.resolved.engineVersionFrom === 'running-oak' && engineRepo === ENGINE_REPO_DEFAULT
+      ? { newerRelease: await newerRelease(OAK_VERSION, npmLatest) }
       : {}),
     engineRepoFrom: (flag(rest, 'engine-repo') ? 'flag' : 'default') as 'flag' | 'default',
   };

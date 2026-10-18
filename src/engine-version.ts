@@ -42,14 +42,27 @@ export function pinnedEngineVersion(
   };
 }
 
-/** The newest stable release when it is newer than `running`, else undefined, also when the
- *  lookup fails. */
-export function newerRelease(running: string, newest: () => string): string | undefined {
+/** The newest release when it is newer than `running`, else undefined, also when the lookup
+ *  fails. */
+export async function newerRelease(
+  running: string,
+  newest: () => Promise<string>,
+): Promise<string | undefined> {
   let tag: string;
   try {
-    tag = newest();
+    tag = await newest();
   } catch {
     return undefined;
   }
   return (compareTags(tag, `v${running}`) ?? 0) > 0 ? tag : undefined;
+}
+
+/** The npm `latest` of oaktree-sapling as a tag. npm gets a release only after its conformance
+ *  passed (RELEASING.md), so this is what `npx oaktree-sapling@latest` runs. */
+export async function npmLatest(): Promise<string> {
+  const res = await fetch('https://registry.npmjs.org/oaktree-sapling/latest', {
+    signal: AbortSignal.timeout(5_000),
+  });
+  if (!res.ok) throw new Error(`npm registry: ${res.status}`);
+  return `v${((await res.json()) as { version: string }).version}`;
 }

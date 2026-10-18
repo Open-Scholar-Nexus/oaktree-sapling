@@ -64,20 +64,22 @@ describe('isStableVersion', () => {
 });
 
 describe('newerRelease', () => {
-  it('names the newest release when it is newer than the running oak', () => {
-    expect(newerRelease('1.2.3', () => 'v1.10.0')).toBe('v1.10.0');
+  const tag = (t: string) => async () => t;
+
+  it('names the newest release when it is newer than the running oak', async () => {
+    expect(await newerRelease('1.2.3', tag('v1.10.0'))).toBe('v1.10.0');
   });
 
-  it('is undefined when the running oak is the newest or newer', () => {
-    expect(newerRelease('1.2.3', () => 'v1.2.3')).toBeUndefined();
-    expect(newerRelease('1.2.3', () => 'v1.2.2')).toBeUndefined();
+  it('is undefined when the running oak is the newest or newer', async () => {
+    expect(await newerRelease('1.2.3', tag('v1.2.3'))).toBeUndefined();
+    expect(await newerRelease('1.2.3', tag('v1.2.2'))).toBeUndefined();
   });
 
-  it('is undefined when the lookup fails or returns no release tag', () => {
-    const fail = (): string => {
-      throw new Error('no stable release');
+  it('is undefined when the lookup fails or returns no release tag', async () => {
+    const fail = async (): Promise<string> => {
+      throw new Error('npm registry: 404');
     };
-    expect(newerRelease('1.2.3', fail)).toBeUndefined();
-    expect(newerRelease('1.2.3', () => 'nightly')).toBeUndefined();
+    expect(await newerRelease('1.2.3', fail)).toBeUndefined();
+    expect(await newerRelease('1.2.3', tag('nightly'))).toBeUndefined();
   });
 });
