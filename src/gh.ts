@@ -893,13 +893,8 @@ export function cachedJournal(
   return { root, state: 'cloned' };
 }
 
-/**
- * The latest stable release tag of `engineRepo`, from the `releases/latest` API: the newest
- * release that is neither a draft nor a pre-release, so `oak bootstrap` and `oak upgrade`
- * never pick a pre-release (RELEASING.md). One is used only when named (`--engine-version`,
- * `--to`). A 404 means no stable release yet: the probe is quiet, and `oak bootstrap` and
- * `oak upgrade` say how to proceed.
- */
+/** The newest stable release tag of `engineRepo` (`releases/latest` skips drafts and
+ *  pre-releases). Throws when there is none or the lookup fails. */
 export function latestEngineRelease(engineRepo: string): string {
   let tag = '';
   try {
