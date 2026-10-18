@@ -21,7 +21,7 @@ export function isStableVersion(running: string): boolean {
 
 /**
  * The tag to pin: `given` when set, else `v` + `running`. Throws a UserError when `given` is not
- * a release tag, or when it is unset and `running` is not a stable release. Needs no network, so
+ * shaped `vX.Y.Z` or `vX.Y.Z-dev.N`, or when it is unset and `running` is not a stable release. Needs no network, so
  * it runs before the gh check.
  */
 export function pinnedEngineVersion(
@@ -42,8 +42,8 @@ export function pinnedEngineVersion(
   };
 }
 
-/** The newest stable release when it is newer than `running`, else undefined. A failed lookup
- *  is undefined too: the notice it feeds is advice, and the pin does not depend on it. */
+/** The newest stable release when it is newer than `running`, else undefined, also when the
+ *  lookup fails. */
 export function newerRelease(running: string, newest: () => string): string | undefined {
   let tag: string;
   try {

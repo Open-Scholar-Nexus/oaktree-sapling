@@ -229,11 +229,9 @@ export const declared = {
     `${edition} (default): written as editions/${edition}.yml; papers name this id`,
 
   engineVersionGiven: (tag: string): string => tag,
-  /** `--engine-version` names a version other than the running oak's. */
   engineVersionGivenOther: (tag: string, running: string): string =>
     `${tag}: the files come from the running oak (${running})`,
   engineVersionDefault: (tag: string): string => `${tag} (default): the version of the running oak`,
-  /** Printed under the rows when a stable release is newer than the running oak. */
   newerRelease: (running: string, newer: string): string =>
     `  ! ${newer} is newer than this oak (${running}), so this repo is pinned to v${running}. ` +
     `To pin ${newer}, run this again with \`npx oaktree-sapling@latest\` or after ` +
@@ -1020,7 +1018,6 @@ export const workflow = {
   working: (what: string): string => `  … ${what}`,
 
   // the release lookup and the wrangler deploy (gh.ts)
-  /** A repo can have many pre-releases and still no stable release to move to. */
   noStableRelease: (engineRepo: string): string =>
     `no stable release on ${engineRepo} to move to. Pass --to <tag> to name one; ` +
     `pre-releases are excluded from "latest" on purpose, since a dev tag can be deleted.`,
