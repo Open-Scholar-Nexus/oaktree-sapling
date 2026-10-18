@@ -95,7 +95,7 @@ The npm package is a second way to get oak, and papers do not use it: their CI r
 
 `files` in `package.json` is an allowlist. It carries what the CLI reads at runtime, plus all of `ci/` and `plugins/`: papers use those from the checkout and from a pinned raw URL, but they are small, and shipping them keeps the tarball a subset of the checkout. `prepack` runs the typecheck and the bundle. `dist/` is gitignored, and `npm pack` leaves out a missing file without an error, so the bundle has to be built by a hook that runs on both `npm pack` and `npm publish`, which `prepublishOnly` does not.
 
-The package runs the commands a person types. The workflows run the rest from a checkout of the tag, which carries two things the tarball leaves out:
+`oak bootstrap`, `upgrade`, `validate`, `build` and `start` run from the package. The workflow commands run from a checkout of the tag, which carries two things the tarball leaves out:
 
 - `bin/typst`, built for linux x86_64 only. A local build exports the PDF with the typst on the system.
 - The git history `oak deposit` needs: it makes `engine.zip` with `git archive` over the engine directory, and `node_modules/oaktree-sapling` is not a git repository.

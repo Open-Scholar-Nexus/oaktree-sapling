@@ -1,17 +1,16 @@
 (start-setup)=
 # Create a journal
 
-## Before you start
+## Install
 
 `oak` needs Node 22 or later and the GitHub CLI, logged in to the account that will own the repositories:
 
 ```bash
+npm install -g oaktree-sapling
 gh auth login
 ```
 
 `oak bootstrap` checks for `gh` and a logged-in account before it does anything else.
-
-The command below runs `oak` with `npx`, without installing it. To create papers as well, install it with `npm install -g oaktree-sapling` and type `oak` in place of `npx oaktree-sapling`, as the other pages do.
 
 ## Choose where the repositories live
 
@@ -29,7 +28,7 @@ Then pass the team with `--owner @my-journal/editors` when you create each paper
 ## Create the journal
 
 ```bash
-npx oaktree-sapling bootstrap journal --repo <owner>/<journal-repo> \
+oak bootstrap journal --repo <owner>/<journal-repo> \
   --name "My Journal" \
   --edition 2026
 ```

@@ -40,9 +40,9 @@ The rest (`post-checks`, `deploy-preview`, `deposit`, `release`, `notify`, `conf
 
 ## What runs from the npm package
 
-The package runs the commands for setting up repos and working on a paper; the workflows run the rest in CI, from a checkout of the release tag.
+`oak bootstrap`, `oak upgrade`, `oak validate`, `oak build` and `oak start` run from the package. The workflow commands run in CI from a checkout of the release tag.
 
-`oak build` exports the PDF with the [typst](https://github.com/typst/typst) on your `PATH`, as for any local build. In CI, the release tag's linux x86_64 `bin/typst` is put on `PATH`.
+`oak build` needs [typst](https://github.com/typst/typst) on your `PATH` for the PDF. In CI it uses the release tag's `bin/typst`, built for linux x86_64.
 
 ## Editorial checks
 
