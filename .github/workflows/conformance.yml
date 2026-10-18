@@ -59,8 +59,7 @@ jobs:
             tag=$INPUT_TAG
             only_reset=$INPUT_ONLY_RESET
           fi
-          # ENGINE_VERSION in src/schema.ts.
-          if [ -n "$tag" ] && ! [[ $tag =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-dev\.(0|[1-9][0-9]*))?$ ]]; then
+          if [ -n "$tag" ] && ! [[ $tag =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-dev\.[0-9]+)?$ ]]; then
             echo "::error::not a release tag: $tag"
             exit 1
           fi

@@ -484,10 +484,11 @@ export const upgrade = {
     `v1.2.3 or v1.2.3-dev.4, and --files-only leaves it; nothing was changed. Run it without ` +
     `--files-only, which moves the version too.`,
 
+  /** Releases v0.3.0-dev.7 to v0.3.0-dev.13 write their minimum as `v0.3.0-0`. */
   badMinimum: (min: string, target: string): string =>
     `oak upgrade: pins.yml at ${target} names min_engine_version ${JSON.stringify(min.slice(0, 60))}, ` +
-    `not a release tag like v1.2.3 or v1.2.3-dev.4; nothing was changed. Pass --to <tag> naming ` +
-    `another release.`,
+    `which this oak cannot compare with a version; nothing was changed. Pass --to <tag> naming ` +
+    `a newer release.`,
 
   /** The pin this run leaves is older than the workflows it leaves need. */
   belowMinimum: (pin: string, min: string, filesOnly: boolean): string =>

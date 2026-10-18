@@ -243,20 +243,18 @@ export async function cmdUpgrade(input: UpgradeInput, deps: UpgradeDeps): Promis
   if (!ENGINE_VERSION.test(target)) {
     return refuse(msg.upgrade.badTarget(target, answers.engineRepo, targetGiven));
   }
-  const pinAfter = filesOnly ? answers.version : target;
-  if (!ENGINE_VERSION.test(pinAfter)) return refuse(msg.upgrade.badPin(pinAfter));
+  if (filesOnly && !ENGINE_VERSION.test(answers.version)) {
+    return refuse(msg.upgrade.badPin(answers.version));
+  }
 
   // The newest release never moves a pin back from a newer one. A pin that is not an engine
   // version runs nowhere, so it moves.
-  if (!targetGiven && answers.version) {
-    const order = compareEngineVersions(answers.version, target);
-    if (order !== null && order > 0) {
-      deps.log(msg.upgrade.pinAhead(answers.version, target, answers.engineRepo));
-      return {
-        exitCode: 0,
-        result: { status: 'ok', target, pin: answers.version, pr: null, pin_ahead: true },
-      };
-    }
+  if (!targetGiven && (compareEngineVersions(answers.version, target) ?? 0) > 0) {
+    deps.log(msg.upgrade.pinAhead(answers.version, target, answers.engineRepo));
+    return {
+      exitCode: 0,
+      result: { status: 'ok', target, pin: answers.version, pr: null, pin_ahead: true },
+    };
   }
   const versionChanged = !filesOnly && answers.version !== target;
 
@@ -267,6 +265,7 @@ export async function cmdUpgrade(input: UpgradeInput, deps: UpgradeDeps): Promis
 
   // The pin and the workflows this run leaves must agree: workflows above the pin call verbs it
   // lacks, and on GitHub that fails quietly.
+  const pinAfter = filesOnly ? answers.version : target;
   const minEngine = readMinEngine(templateAtTarget);
   if (minEngine) {
     const order = compareEngineVersions(pinAfter, minEngine);

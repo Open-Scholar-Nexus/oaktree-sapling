@@ -34,13 +34,11 @@ export function repoFromGithubUrl(url: string): string | null {
 }
 
 /** An oak version a paper or a flag can name: a release `vX.Y.Z` or a dev release `vX.Y.Z-dev.N`
- *  (RELEASING.md), with no leading zeros, so each version has one tag. It becomes a clone ref, a
- *  cache path and a `$GITHUB_OUTPUT` line. The engine action, `conformance.yml` and
- *  `scripts/cut-engine-release.sh` keep shell copies, and `npm-publish.yml` one of
- *  {@link isStableEngineVersion}, held to these by `version rule parity` in
- *  `test/frozen-guards.test.ts`. */
-export const ENGINE_VERSION =
-  /^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-dev\.(0|[1-9][0-9]*))?$/;
+ *  (RELEASING.md). It becomes a clone ref, a cache path and a `$GITHUB_OUTPUT` line. The engine
+ *  action, `conformance.yml` and `scripts/cut-engine-release.sh` keep shell copies, and
+ *  `npm-publish.yml` one of {@link isStableEngineVersion}, held to these by `version rule parity`
+ *  in `test/frozen-guards.test.ts`. */
+export const ENGINE_VERSION = /^v([0-9]+)\.([0-9]+)\.([0-9]+)(?:-dev\.([0-9]+))?$/;
 
 /** An {@link ENGINE_VERSION} without `-dev.N`: what `releases/latest` and npm carry. */
 export function isStableEngineVersion(tag: string): boolean {
@@ -68,9 +66,9 @@ function engineVersionKey(v: string): number[] | null {
   return m[4] === undefined ? [x, y, z, 1, 0] : [x, y, z, 0, Number(m[4])];
 }
 
-/** A paper's published version: a tag `vMAJOR.MINOR.PATCH` with no leading zeros, deposited on
- *  Zenodo as `MAJOR.MINOR.PATCH`. */
-export const PAPER_VERSION_TAG = /^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/;
+/** A paper's published version: a tag `vMAJOR.MINOR.PATCH`, deposited on Zenodo as
+ *  `MAJOR.MINOR.PATCH`. */
+export const PAPER_VERSION_TAG = /^v[0-9]+\.[0-9]+\.[0-9]+$/;
 
 /** A full git commit id, SHA-1 or SHA-256. */
 export const COMMIT_ID = /^([0-9a-f]{40}|[0-9a-f]{64})$/;

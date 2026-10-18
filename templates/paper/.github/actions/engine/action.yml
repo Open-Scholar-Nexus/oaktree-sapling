@@ -37,7 +37,7 @@ runs:
         # https://scholar.nexus/oaktree-sapling/design/paper-ci#design-paper-ci-engine-ref
         # The pattern also refuses a newline, which would forge a second $GITHUB_OUTPUT line.
         # ENGINE_VERSION in the engine's src/schema.ts.
-        version='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-dev\.(0|[1-9][0-9]*))?$'
+        version='^v[0-9]+\.[0-9]+\.[0-9]+(-dev\.[0-9]+)?$'
         if ! [[ "$ref" =~ $version ]]; then
           echo "::error::engine version '$ref' in $myst is not a release tag; pin one, like v1.2.3"
           exit 1

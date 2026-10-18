@@ -12,7 +12,7 @@ The run creates a draft on Zenodo and opens a pull request, **Reserve Zenodo DOI
 (tag-version)=
 ## 2. Tag the version
 
-Tag the merged `main` with a version number in the form `vMAJOR.MINOR.PATCH`, with no leading zeros, and push the tag:
+Tag the merged `main` with a version number in the form `vMAJOR.MINOR.PATCH`, and push the tag:
 
 ```bash
 git switch main

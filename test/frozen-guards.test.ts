@@ -394,8 +394,6 @@ describe('version rule parity', () => {
     ['v1.0.0-rc1', false, false, false],
     ['v1.2.3-rc.1', false, false, false],
     ['v1.2.3-0', false, false, false],
-    ['v01.2.3', false, false, false],
-    ['v1.2.3-dev.01', false, false, false],
     ['v1.2', false, false, false],
     ['1.2.3', false, false, false],
     ['main', false, false, false],
