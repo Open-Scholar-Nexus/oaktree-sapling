@@ -178,12 +178,6 @@ describe('handOff', () => {
     expect(calls.clones).toEqual([]);
   });
 
-  it('--use-running keeps this oak', async () => {
-    const { deps, calls } = fakes();
-    expect(await handOff(ctx(paper('v2.0.0'), ['--use-running']), deps)).toBeNull();
-    expect(calls.clones).toEqual([]);
-  });
-
   it('refuses a ref with no build in the clone', async () => {
     const { deps, calls } = fakes({ withBuild: false });
     await expect(handOff(ctx(paper('v2.0.0')), deps)).rejects.toThrow(/has no build/);
@@ -273,11 +267,11 @@ describe('runVersion for oak bootstrap --engine-version', () => {
     expect(calls.clones).toEqual([]);
   });
 
-  it('--use-running keeps this oak', async () => {
-    const { deps } = fakes();
+  it('OAK_USE_RUNNING keeps this oak', async () => {
+    const { deps, calls } = fakes();
     const pin = { engineRepo: DEFAULT_REPO, version: 'v0.9.0' };
-    expect(
-      await runVersion(pin, { kind: 'flag' }, bootstrapCtx(['--use-running']), deps),
-    ).toBeNull();
+    const c = { ...bootstrapCtx(), env: { [USE_RUNNING_ENV]: '1' } };
+    expect(await runVersion(pin, { kind: 'flag' }, c, deps)).toBeNull();
+    expect(calls.clones).toEqual([]);
   });
 });

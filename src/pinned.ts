@@ -17,8 +17,8 @@ export type HandoffVerb = PaperVerb | 'bootstrap';
 /** Where the version came from: the paper's files, or `--engine-version` and `--engine-repo`. */
 export type PinSource = { kind: 'paper'; mystPath: string; pinsPath?: string } | { kind: 'flag' };
 
-/** Set on the handed-off oak so it never hands off again; also an opt-out for engine
- *  development, like `--use-running`. */
+/** Set on the handed-off oak so it never hands off again, and by CI, the tests and engine
+ *  development to run this oak. */
 export const USE_RUNNING_ENV = 'OAK_USE_RUNNING';
 
 /** GitHub's owner and repository characters; a name cannot start with `.`, which also rules
@@ -92,7 +92,7 @@ export interface HandoffContext {
 
 /**
  * Runs the verb with the oak the paper pins and returns its exit code, or null when this oak
- * runs it: same version, no readable pin, `--use-running`, or {@link USE_RUNNING_ENV} set.
+ * runs it: same version, no readable pin, or {@link USE_RUNNING_ENV} set.
  * Throws a {@link UserError} for a malformed pin, a failed fetch, or a ref with no build.
  */
 export async function handOff(
@@ -153,7 +153,7 @@ export async function runVersion(
 }
 
 function usesRunning(ctx: HandoffContext): boolean {
-  return ctx.argv.includes('--use-running') || !!ctx.env[USE_RUNNING_ENV];
+  return !!ctx.env[USE_RUNNING_ENV];
 }
 
 /** Clones beside `dir` and renames it in, so only a complete clone sits at `dir`. */

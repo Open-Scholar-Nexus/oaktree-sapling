@@ -142,7 +142,7 @@ export const usage = (): string =>
   `      --instance    the journal repo this paper belongs to ('.' only if the journal\n` +
   `                    settings live in this same repo); --edition names one of its editions\n` +
   `  Both bootstrap verbs: --engine-version naming another oak version runs that version's\n` +
-  `  bootstrap, fetched once into ~/.cache/oak; --use-running keeps this oak.\n` +
+  `  bootstrap, fetched once into ~/.cache/oak.\n` +
   `  oak upgrade (--repo <owner/name> | --paper <dir>) [--to <tag>] [--files-only] [--yes]\n` +
   `                    move a paper repo to a newer engine version, as a pull request\n` +
   `\n` +
@@ -157,8 +157,9 @@ export const usage = (): string =>
   `                    and branding applied (the same config its CI builds). Reloads as you\n` +
   `                    edit; Ctrl-C stops it. Run in the journal repo, it previews the\n` +
   `                    journal website instead.\n` +
-  `  These three run the oak version the paper's myst.yml pins, fetched once into ~/.cache/oak.\n` +
-  `      --use-running run this oak, whatever the paper pins (also OAK_USE_RUNNING=1)\n` +
+  `  validate, build and start run the oak version the paper's myst.yml pins, fetched once\n` +
+  `  into ~/.cache/oak.\n` +
+  `  OAK_USE_RUNNING=1 runs this oak instead of fetching, for developing oak itself.\n` +
   `\n` +
   `Run by the workflows (rarely typed by hand)\n` +
   `  oak post-checks --report <path> --repo <owner/repo> --sha <headsha> --base <branch>\n` +
@@ -668,8 +669,8 @@ export const pinned = {
     current: string,
   ): string =>
     `oak ${verb}: running oak ${pin.version} from ${pin.engineRepo}, the version ` +
-    `${source.kind === 'paper' ? 'myst.yml pins' : '--engine-version names'} (${dir}). Pass ` +
-    `--use-running to run this oak (${current}).`,
+    `${source.kind === 'paper' ? 'myst.yml pins' : '--engine-version names'} (${dir}). Set ` +
+    `OAK_USE_RUNNING=1 to run this oak (${current}).`,
 
   downloading: (verb: HandoffVerb, pin: PinnedEngine, dir: string): string =>
     `oak ${verb}: downloading oak ${pin.version} from ${pin.engineRepo} into ${dir}.`,
@@ -686,7 +687,7 @@ export const pinned = {
 
   badVersion: (verb: HandoffVerb, got: string, where: string, current: string): string =>
     `oak ${verb}: the oak version in ${where} is ${JSON.stringify(got.slice(0, 60))}; pin a ` +
-    `release tag like v1.2.3, or pass --use-running to run this oak (${current}).`,
+    `release tag like v1.2.3, or set OAK_USE_RUNNING=1 to run this oak (${current}).`,
 
   badRepo: (verb: HandoffVerb, got: string, source: PinSource): string =>
     `oak ${verb}: ${
@@ -695,8 +696,8 @@ export const pinned = {
 
   fetchFailed: (verb: HandoffVerb, pin: PinnedEngine, source: PinSource, why: string): string =>
     `oak ${verb}: could not fetch oak ${pin.version} from ${pin.engineRepo} (${why}). Check ` +
-    `${source.kind === 'paper' ? 'the version in myst.yml' : '--engine-version'}, or pass ` +
-    `--use-running to run this oak.`,
+    `${source.kind === 'paper' ? 'the version in myst.yml' : '--engine-version'}, or set ` +
+    `OAK_USE_RUNNING=1 to run this oak.`,
 
   noBuild: (verb: HandoffVerb, pin: PinnedEngine, source: PinSource, dir: string): string =>
     `oak ${verb}: ${pin.engineRepo} ${pin.version} has no build (no dist/cli.cjs in ${dir}); ` +

@@ -141,7 +141,7 @@ The check runs in the workflow because it decides which engine to fetch, so ther
 
 Before any git call the repository must be `owner/name` in GitHub's characters, and the version `vX.Y.Z` or `vX.Y.Z-dev.N`; both also form the cache path. An `engine_repo` other than oak's own is fetched only after the person running oak confirms it (`--yes` confirms), because running the clone runs that repository's code with their access. `pins.yml` is gated on the paper's `main`, but a branch checked out from a pull request carries whatever its author wrote there.
 
-The oak it hands to runs with `OAK_USE_RUNNING=1` and never hands off again. `--use-running`, or the same variable, keeps the running oak. A checkout of the engine reports its `package.json` version with `-unreleased+<commit>` added, which matches no pin, so testing an engine change against a paper that pins a release needs one of them. `ci/run.sh` sets the variable, because the engine action has already checked out the pinned version.
+The oak it hands to runs with `OAK_USE_RUNNING=1` and never hands off again; the variable is inherited, so it also reaches every oak that oak starts. Setting it yourself keeps the running oak. A checkout of the engine reports its `package.json` version with `-unreleased+<commit>` added, which matches no pin, so testing an engine change against a paper needs it. `ci/run.sh` sets the variable, because the engine action has already checked out the pinned version.
 
 (design-paper-ci-limits)=
 

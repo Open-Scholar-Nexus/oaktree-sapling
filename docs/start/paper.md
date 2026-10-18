@@ -67,6 +67,6 @@ This writes the PDF to `_build/exports/paper.pdf`. It needs [typst](https://gith
 (paper-pinned-version)=
 ## The oak version your paper uses
 
-`oak start`, `oak build` and `oak validate` run the oak version named in the `oaktree-sapling` block of `myst.yml`, the one the paper's CI uses. When the oak you installed is another version, it downloads the named one into `~/.cache/oak` the first time and runs it, and says which version runs and where it came from. If `.github/actions/engine/pins.yml` names an engine repository other than oaktree-sapling's own, oak asks before downloading it. `--use-running` runs the oak you installed, for trying a newer version before the paper moves to it.
+`oak start`, `oak build` and `oak validate` run the oak version named in the `oaktree-sapling` block of `myst.yml`, the one the paper's CI uses. When the oak you installed is another version, it downloads the named one into `~/.cache/oak` the first time and runs it, and says which version runs and where it came from. If `.github/actions/engine/pins.yml` names an engine repository other than oaktree-sapling's own, oak asks before downloading it.
 
 [^settings]: The journal's logo, colours, edition and checks live in the journal's own repository, which the editors maintain and your paper repository names. Your paper's builds read them from there. [Journal settings in a paper](../guide/journal-settings.md) has the details.
