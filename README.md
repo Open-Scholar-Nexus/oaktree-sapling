@@ -40,9 +40,9 @@ The rest (`post-checks`, `deploy-preview`, `deposit`, `release`, `notify`, `conf
 
 ## What runs from the npm package
 
-`oak bootstrap` and `oak upgrade` run from the package, except that `oak bootstrap --engine-version` naming another version runs that version. `oak build`, `oak validate` and `oak start` run the version the paper's `myst.yml` pins, as its CI does: when the installed `oak` is another version, they download the pinned one into `~/.cache/oak` the first time and run it ([details](https://scholar.nexus/oaktree-sapling/start/paper#paper-pinned-version)). The workflow commands run in CI from a checkout of the release tag.
+`oak bootstrap` and `oak upgrade` run from the package. `oak build`, `oak validate` and `oak start` run the version the paper pins, downloaded into `~/.cache/oak` the first time ([details](https://scholar.nexus/oaktree-sapling/start/paper#paper-pinned-version)). The workflow commands run in CI from a checkout of the release tag.
 
-`oak build` needs [typst](https://github.com/typst/typst) on your `PATH` for the PDF. A downloaded version uses its own `bin/typst` instead when that runs on your machine; it is built for linux x86_64.
+`oak build` needs [typst](https://github.com/typst/typst) on your `PATH` for the PDF, unless the downloaded version's `bin/typst` (linux x86_64) runs on your machine.
 
 ## Editorial checks
 

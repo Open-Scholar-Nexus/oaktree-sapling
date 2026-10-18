@@ -36,16 +36,21 @@ export interface PinnedEngine {
 /** The nearest `pins.yml` from `paperRoot` up to the repo root, so a paper below the root
  *  (co-located) reads the repo's. Outside a git repo, only `paperRoot`'s own. */
 function findPins(paperRoot: string): string | undefined {
-  const dirs: string[] = [];
-  for (let dir = resolve(paperRoot); ; dir = dirname(dir)) {
-    dirs.push(dir);
-    if (existsSync(join(dir, '.git'))) break;
-    if (dirname(dir) === dir) {
-      dirs.length = 1;
-      break;
-    }
+  const start = resolve(paperRoot);
+  const top = repoRoot(start) ?? start;
+  for (let dir = start; ; dir = dirname(dir)) {
+    const pins = join(dir, PINS_FILE);
+    if (existsSync(pins)) return pins;
+    if (dir === top) return undefined;
   }
-  return dirs.map((dir) => join(dir, PINS_FILE)).find((pins) => existsSync(pins));
+}
+
+/** The nearest directory from `dir` up that holds `.git`. */
+function repoRoot(dir: string): string | undefined {
+  for (; ; dir = dirname(dir)) {
+    if (existsSync(join(dir, '.git'))) return dir;
+    if (dirname(dir) === dir) return undefined;
+  }
 }
 
 /** The version `<paperRoot>/myst.yml` pins and `engine_repo` from the repo's `pins.yml` (else
