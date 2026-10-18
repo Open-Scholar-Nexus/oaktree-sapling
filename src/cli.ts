@@ -1036,7 +1036,7 @@ async function cmdBootstrap(argv: string[]): Promise<number> {
   const { pinnedEngineVersion, newerRelease, npmLatest } = await import('./engine-version.js');
   const pinned = pinnedEngineVersion(flag(rest, 'engine-version'), OAK_VERSION);
   const engineRepo = flag(rest, 'engine-repo') ?? ENGINE_REPO_DEFAULT;
-  // A new repo's files come from the oak version it pins (DOCS.pinnedVersion).
+  // A new repo's files come from the oak version it pins.
   const { runVersion } = await import('./pinned.js');
   const handed = await runVersion(
     { engineRepo, version: pinned.engineVersion },
