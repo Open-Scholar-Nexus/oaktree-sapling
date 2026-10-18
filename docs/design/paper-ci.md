@@ -174,7 +174,7 @@ A workflow passes a value to a `run:` script through `env:`, not by splicing `${
 
 (r155)=
 
-Any value written to `$GITHUB_OUTPUT` is checked before writing. The file is line-oriented, so a value containing a newline appends a second `name=value` pair of the writer's choosing to the step's outputs. The engine version can carry fork-controlled text: the action's [`ref` step](src:templates/paper/.github/actions/engine/action.yml#L24-L50) reads it out of the paper's own `myst.yml`, where a YAML block scalar can span two lines, and refuses anything that is not a release tag. So can the verb's result: [`ci/run.sh`](src:ci/run.sh#L64-L72) writes it as one `result=` line of JSON, with any line break removed, and the workflows read it with `fromJSON`.
+Any value written to `$GITHUB_OUTPUT` is checked before writing. The file is line-oriented, so a value containing a newline appends a second `name=value` pair of the writer's choosing to the step's outputs. The engine version can carry fork-controlled text: the action's [`ref` step](src:templates/paper/.github/actions/engine/action.yml#L24-L50) reads it out of the paper's own `myst.yml`, where a YAML block scalar can span two lines, and refuses anything that is not a release tag. So can the verb's result: [`ci/run.sh`](src:ci/run.sh#L55-L63) writes it as one `result=` line of JSON, with any line break removed, and the workflows read it with `fromJSON`.
 
 (design-paper-ci-bad-input)=
 

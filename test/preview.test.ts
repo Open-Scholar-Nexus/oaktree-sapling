@@ -365,6 +365,20 @@ describe('cmdDeployPreview', () => {
     expect(c.body).toContain('/actions');
   });
 
+  it('falls back to an artifact comment when the journal repo was not found', async () => {
+    const dir = siteWithPr('7');
+    const { gh, stickies } = fakeGh();
+    const out = await cmdDeployPreview(
+      baseInput(dir, { instanceRoot: { problem: 'no journal repo found' } }),
+      { deployer: okDeployer(), gh },
+    );
+    expect(out.exitCode).toBe(0);
+    expect(out.result.preview).toBe('artifact');
+    expect(stickies.find((s) => s.header === STICKY_PREVIEW)!.body).toContain(
+      'no journal repo found',
+    );
+  });
+
   it('falls back to an artifact comment without the Cloudflare secrets', async () => {
     const dir = siteWithPr('7');
     const { gh, stickies } = fakeGh();

@@ -26,7 +26,7 @@ A field set in the paper's own `myst.yml` takes precedence over the same field f
 
 ## When a change to the journal applies
 
-In CI, every build clones the journal repository at its latest commit, so a change the editors push applies from each paper's next build.
+In CI, every run that reads the journal clones the journal repository at its latest commit, so a change the editors push applies from each paper's next run.
 
 On your machine, `oak` keeps a cached clone of the journal in the paper's `_build/journal/<owner>/<repo>` and reuses it for a week, then fetches it again. If the fetch fails, for example offline, it keeps using the cache and prints a warning. Each run prints which copy it used. To clear the cache and fetch the journal now, delete `_build/journal`.
 
@@ -38,4 +38,4 @@ On your machine, `oak` keeps a cached clone of the journal in the paper's `_buil
 `--no-instance`
 : Builds without the journal's settings: no logo, no edition frontmatter, and only oak's own checks.
 
-Both work with `oak start`, `oak build` and `oak validate`.
+Both work with every command that reads the journal's settings, such as `oak start` and `oak build`.

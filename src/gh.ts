@@ -888,7 +888,7 @@ export function cachedJournal(
   mkdirSync(dirname(root), { recursive: true });
   const tmp = mkdtempSync(join(dirname(root), '.clone-'));
   try {
-    // Plain git: journal repos are public, and an author may have no gh login.
+    // Plain git: journal repos are public [R189], and an author may have no gh login.
     run('git', ['clone', '--depth', '1', '--quiet', `https://github.com/${journalRepo}.git`, tmp]);
   } catch (err) {
     rmSync(tmp, { recursive: true, force: true });

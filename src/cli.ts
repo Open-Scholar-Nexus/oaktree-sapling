@@ -70,15 +70,6 @@ function has(argv: string[], name: string): boolean {
   return argv.includes(`--${name}`);
 }
 
-/** The `instance_repo` pin from the paper's `pins.yml`, or undefined when the file or the key
- *  is absent. */
-function readInstanceRepo(paperRoot: string): string | undefined {
-  const pins = join(paperRoot, '.github', 'actions', 'engine', 'pins.yml');
-  if (!existsSync(pins)) return undefined;
-  const v = parseDocument(readFileSync(pins, 'utf8')).get('instance_repo');
-  return typeof v === 'string' && v ? v : undefined;
-}
-
 /**
  * Asset overrides from the flags. `--typst-template` beats every other template; the
  * checkout's own `templates/typst` is the default, which a journal's or author's template
@@ -99,11 +90,11 @@ function assetOverridesFrom(argv: string[]): ComposeInput['assetOverrides'] {
 type ResolvedInstance = { root: string | null; stamp: JournalStamp | undefined };
 
 /**
- * Where the journal repo is [R38]: none with `--no-instance`, else `--instance`, else this repo
- * when a `journal.yml` sits beside the paper, else a cached clone of pins.yml's `instance_repo`.
- * The third case serves a repo that is its own journal, where the engine action passes no
- * `--instance` (`instance_repo: .`). Only a local run reaches the clone: CI passes `--instance`
- * (ci/run.sh).
+ * Where the journal repo is [R38]: none with `--no-instance`, else `--instance`, else a cached
+ * clone of pins.yml's `instance_repo`, else this repo when `instance_repo` is `.` or absent
+ * and a `journal.yml` sits beside the paper. pins.yml is editor-gated and that `journal.yml` is
+ * not, so the pin comes first. Every verb that reads journal settings finds it here, `deposit`
+ * and `deploy-preview` included, in CI too: `ci/run.sh` passes no `--instance`.
  *
  * Returns a root, with the {@link JournalStamp} the derived config records for it, or an error
  * string, and never exits, so `oak validate` can report the error.
@@ -120,9 +111,11 @@ async function resolveInstanceRoot(
   const { cachedJournal, journalStamp } = await import('./gh.js');
   const found = (root: string) => ({ root, stamp: journalStamp(root, paperRoot) });
   if (explicit) return found(resolve(explicit));
-  if (existsSync(join(paperRoot, 'journal.yml'))) return found(paperRoot);
-  const journalRepo = readInstanceRepo(paperRoot);
-  if (!journalRepo || journalRepo === '.') return { error: msg.build.noInstance(verb, paperRoot) };
+  const journalRepo = (await import('./pinned.js')).readPinsValue(paperRoot, 'instance_repo').value;
+  if (!journalRepo || journalRepo === '.') {
+    if (existsSync(join(paperRoot, 'journal.yml'))) return found(paperRoot);
+    return { error: msg.build.noInstance(verb, paperRoot) };
+  }
   try {
     const cache = cachedJournal(journalRepo, paperRoot);
     const line = msg.build.journalCache(verb, journalRepo, cache);
@@ -370,10 +363,6 @@ function never(): Promise<number> {
 function mystPathOf(argv: string[]): string {
   return resolve(flag(argv, 'myst') ?? join(flag(argv, 'paper') ?? '.', 'myst.yml'));
 }
-function instanceRootOf(argv: string[]): string | null {
-  const i = flag(argv, 'instance');
-  return i ? resolve(i) : null;
-}
 
 /** Keys the human summary leaves out: narrated already (`runbook`, printed line by line with
  *  `→`), or a markdown document for the pull request (`checkRun`). */
@@ -452,11 +441,14 @@ function emit(
 async function cmdDeposit(argv: string[]): Promise<number> {
   const sub = argv[0];
   const rest = argv.slice(1);
+  if (sub !== 'prepare' && sub !== 'publish' && sub !== 'status') {
+    process.stderr.write(msg.workflow.depositUsage + '\n');
+    return 2;
+  }
   const z = await import('./zenodo.js');
   const gh = await import('./gh.js');
 
   const mystPath = mystPathOf(rest);
-  const instanceRoot = instanceRootOf(rest);
   const sandbox = has(rest, 'sandbox');
   const siteUrl = flag(rest, 'site-url') ?? process.env.SITE_URL;
   // The environment picks the token, as in `oak release` [R102]; a sandbox run never uses the
@@ -468,6 +460,12 @@ async function cmdDeposit(argv: string[]): Promise<number> {
     return 2;
   }
   const api = new z.ZenodoApi(z.createFetchTransport(), sandbox, token);
+  const instance = await resolveInstanceRoot(rest, dirname(mystPath), 'deposit');
+  if ('error' in instance) {
+    process.stderr.write(instance.error + '\n');
+    return 2;
+  }
+  const instanceRoot = instance.root;
 
   if (sub === 'prepare') {
     const repo = gh.currentRepo(flag(rest, 'repo'));
@@ -516,14 +514,9 @@ async function cmdDeposit(argv: string[]): Promise<number> {
     return out.exitCode;
   }
 
-  if (sub === 'status') {
-    const out = await z.cmdStatus({ mystPath, siteUrl, api, instanceRoot });
-    emit(rest, out.result);
-    return out.exitCode;
-  }
-
-  process.stderr.write(msg.workflow.depositUsage + '\n');
-  return 2;
+  const out = await z.cmdStatus({ mystPath, siteUrl, api, instanceRoot });
+  emit(rest, out.result);
+  return out.exitCode;
 }
 
 function findExportedPdf(paperRoot: string): string | null {
@@ -642,11 +635,13 @@ async function cmdDeployPreview(argv: string[]): Promise<number> {
   const { eventHeadSha } = await import('./artifact.js');
   const siteDir = resolve(argv.find((a) => !a.startsWith('--')) ?? 'site');
   const myst = flag(argv, 'myst');
+  const paper = flag(argv, 'paper');
+  const instance = await resolveInstanceRoot(argv, resolve(paper ?? '.'), 'deploy-preview');
   const out = await preview.cmdDeployPreview(
     {
       siteDir,
       repoRoot: resolve('.'),
-      instanceRoot: instanceRootOf(argv),
+      instanceRoot: 'error' in instance ? { problem: instance.error } : instance.root,
       repo: gh.currentRepo(flag(argv, 'repo')),
       serverUrl: process.env.GITHUB_SERVER_URL ?? 'https://github.com',
       artifactRunId: process.env.PAPER_BUILD_RUN_ID,
@@ -655,7 +650,7 @@ async function cmdDeployPreview(argv: string[]): Promise<number> {
         accountId: process.env.CLOUDFLARE_ACCOUNT_ID,
       },
       verifiedHead: flag(argv, 'verified-head') ?? eventHeadSha(process.env),
-      paper: flag(argv, 'paper'),
+      paper,
       ...(myst ? { mystPath: resolve(myst) } : {}),
     },
     { deployer: gh.realPagesDeployer, gh: gh.realGhPr },
