@@ -568,7 +568,8 @@ async function cmdRelease(argv: string[]): Promise<number> {
     process.stderr.write(msg.workflow.releaseNoDoi + '\n');
     return 2;
   }
-  const zenodoDoi = (await import('./schema.js')).parseZenodoDoi(doi);
+  const { parseZenodoDoi } = await import('./schema.js');
+  const zenodoDoi = parseZenodoDoi(doi);
   if (!zenodoDoi) {
     process.stderr.write(msg.workflow.releaseNotZenodoDoi(doi) + '\n');
     return 2;

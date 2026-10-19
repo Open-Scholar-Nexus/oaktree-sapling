@@ -1067,9 +1067,7 @@ export const workflow = {
   notZenodoDoi: (doi: string): string =>
     `project.doi ${doi} is not a Zenodo DOI; write it as 10.5281/zenodo.<id>, or ` +
     `10.5072/zenodo.<id> from the sandbox`,
-  releaseNotZenodoDoi: (doi: string): string =>
-    `oak release: project.doi ${doi} is not a Zenodo DOI; write it as 10.5281/zenodo.<id>, or ` +
-    `10.5072/zenodo.<id> from the sandbox`,
+  releaseNotZenodoDoi: (doi: string): string => `oak release: ${workflow.notZenodoDoi(doi)}`,
   releaseNoToken: (sandbox: boolean): string =>
     `no token: set ${sandbox ? 'ZENODO_TOKEN_SANDBOX' : 'ZENODO_TOKEN'}`,
   releaseNoPdf: 'oak release: no PDF under _build/exports (did the typst export run?)',
