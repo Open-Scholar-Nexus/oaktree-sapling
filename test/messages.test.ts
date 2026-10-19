@@ -8,7 +8,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { annotate } from '../src/messages.js';
+import { annotate, validate } from '../src/messages.js';
 
 const srcDir = join(fileURLToPath(new URL('..', import.meta.url)), 'src');
 
@@ -113,5 +113,12 @@ describe('annotate', () => {
     expect(annotate('error', 'a\r::warning::x\n::notice::y 100%')).toBe(
       '::error::a%0D::warning::x%0A::notice::y 100%25',
     );
+  });
+});
+
+describe('composeFailed', () => {
+  it('ends the failure with one full stop', () => {
+    expect(validate.composeFailed('`oak upgrade` sets one.')).toContain('sets one. The paper');
+    expect(validate.composeFailed('boom')).toContain('boom. The paper');
   });
 });
