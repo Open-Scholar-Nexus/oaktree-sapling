@@ -18,6 +18,7 @@ import {
   paperUrn,
   cmdPrepare,
   cmdPublish,
+  defaultSiteUrl,
   BundleCollisionError,
   assertBundlePreconditions,
   TemplateArchiveError,
@@ -554,6 +555,72 @@ describe('cmdPrepare', () => {
     });
     expect(out.exitCode).toBe(2);
     expect(String(out.result.message)).toContain('downgrade');
+  });
+});
+
+describe('the Project Website link', () => {
+  /** A journal checkout holding only `registry/papers.yml`. */
+  function journalWith(registry: string): string {
+    const root = mkdtempSync(join(tmpdir(), 'oak-journal-'));
+    mkdirSync(join(root, 'registry'));
+    writeFileSync(join(root, 'registry', 'papers.yml'), registry);
+    return root;
+  }
+
+  it("defaults to the paper's GitHub Pages URL, also without a journal or a registry", () => {
+    expect(defaultSiteUrl('Acme/paper', null)).toBe('https://acme.github.io/paper/');
+    expect(defaultSiteUrl('acme/acme.github.io', journalWith('[]'))).toBe(
+      'https://acme.github.io/',
+    );
+  });
+
+  it("takes the site_url of the paper's own registry entry, matching the repo in any case", () => {
+    const journal = journalWith(
+      '- id: other\n  location: acme/other\n  site_url: https://other.example.org/\n' +
+        '- id: mine\n  location: Acme/Paper\n  site_url: https://journal.example.org/mine\n',
+    );
+    expect(defaultSiteUrl('acme/paper', journal)).toBe('https://journal.example.org/mine');
+    expect(defaultSiteUrl('acme/third', journal)).toBe('https://acme.github.io/third/');
+  });
+
+  it('is left out without a repo', () => {
+    expect(defaultSiteUrl(null, null)).toBeUndefined();
+  });
+
+  /** The metadata `cmdPrepare` sends, for a run given `siteUrl`. */
+  async function preparedMetadata(siteUrl?: string): Promise<any> {
+    const { transport, calls } = fakeTransport(({ method }) =>
+      method === 'POST' ? { json: dep({ id: 5, conceptrecid: 5 }) } : { json: [] },
+    );
+    const api = new ZenodoApi(transport, true, 't');
+    const out = await cmdPrepare({
+      mystPath: paperRepo(BARE_MYST),
+      repo: 'o/r',
+      siteUrl,
+      api,
+      instanceRoot: null,
+    });
+    expect(out.exitCode).toBe(0);
+    return (calls.find((c) => c.method === 'POST')!.opts.json as any).metadata;
+  }
+
+  it('links the default from the description and the related identifiers', async () => {
+    const md = await preparedMetadata();
+    expect(md.description).toContain(
+      'Project Website: <a href="https://o.github.io/r/">https://o.github.io/r/</a>',
+    );
+    expect(md.related_identifiers).toContainEqual({
+      identifier: 'https://o.github.io/r/',
+      relation: 'isIdenticalTo',
+      scheme: 'url',
+    });
+  });
+
+  it('uses --site-url when given, and an empty one leaves the link out', async () => {
+    expect((await preparedMetadata('https://x.example.org/')).description).toContain(
+      'href="https://x.example.org/"',
+    );
+    expect((await preparedMetadata('')).description).not.toContain('Project Website');
   });
 });
 

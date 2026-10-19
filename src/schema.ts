@@ -70,6 +70,18 @@ function engineVersionKey(v: string): number[] | null {
  *  `MAJOR.MINOR.PATCH`. */
 export const PAPER_VERSION_TAG = /^v[0-9]+\.[0-9]+\.[0-9]+$/;
 
+/**
+ * The GitHub Pages URL of `owner/name`: `https://<owner>.github.io/<name>/`, or the root for a
+ * repo named `<owner>.github.io`, which Pages serves as the account's own site. Pages hosts are
+ * lowercase. `plugins/gallery.mjs` keeps a copy, held to this one by `Pages URL parity` in
+ * `test/gallery.test.ts`.
+ */
+export function pagesUrl(repo: string): string {
+  const [owner, name] = repo.split('/');
+  const host = `${owner!.toLowerCase()}.github.io`;
+  return name!.toLowerCase() === host ? `https://${host}/` : `https://${host}/${name}/`;
+}
+
 /** A full git commit id, SHA-1 or SHA-256. */
 export const COMMIT_ID = /^([0-9a-f]{40}|[0-9a-f]{64})$/;
 
@@ -229,8 +241,8 @@ export const RegistryEntry = z
     edition: EDITION_ID.optional(),
     doi: z.string().optional(),
     /**
-     * Where the paper is published, when that is not `https://<owner>.github.io/<name>`, which
-     * the gallery otherwise derives from the location. Display data such as the title is
+     * Where the paper is published, when that is not its GitHub Pages URL ({@link pagesUrl}),
+     * which the gallery otherwise derives from the location. Display data such as the title is
      * still fetched from the paper, never stored here [R197].
      */
     site_url: z.string().optional(),

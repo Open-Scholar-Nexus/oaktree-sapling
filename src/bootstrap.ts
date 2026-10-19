@@ -19,6 +19,7 @@ import { isMap, isScalar } from 'yaml';
 import { readDoc } from './yaml-io.js';
 import { themeZipUrl } from './assets.js';
 import { LABEL_EDITOR_ACTION, LABEL_ZENODO_FAILED } from './preview.js';
+import { pagesUrl } from './schema.js';
 
 /* --------------------------------------------------------------------------
  * Settings and template rendering (pure)
@@ -277,14 +278,6 @@ export function renderInstanceTemplate(
  *  it. */
 export function galleryPluginUrl(engineRepo: string, engineVersion: string): string {
   return `https://raw.githubusercontent.com/${engineRepo}/${engineVersion}/plugins/gallery.mjs`;
-}
-
-/** The GitHub Pages URL for `owner/repo`: a project site under a path, or the root for a repo
- *  named `<owner>.github.io`. Pages hosts are lowercase. */
-export function siteUrlFor(repo: string): string {
-  const [owner, name] = repo.split('/');
-  const host = `${owner!.toLowerCase()}.github.io`;
-  return name!.toLowerCase() === host ? `https://${host}/` : `https://${host}/${name}/`;
 }
 
 /**
@@ -772,7 +765,7 @@ function pagesSteps(
       actions.homepage = 'already set';
       log(msg.bootstrap.logHomepageExists(current));
     } else {
-      const url = siteUrlFor(repo);
+      const url = pagesUrl(repo);
       prov.setHomepage(repo, url);
       actions.homepage = 'set';
       log(msg.bootstrap.logHomepageSet(url));
@@ -1209,7 +1202,7 @@ export async function cmdBootstrapJournal(
     edition,
     journalName: input.name,
     repo,
-    ...(withSite ? { siteUrl: siteUrlFor(repo) } : {}),
+    ...(withSite ? { siteUrl: pagesUrl(repo) } : {}),
   };
 
   const repoThere = prov.repoExists(repo);
@@ -1239,7 +1232,7 @@ export async function cmdBootstrapJournal(
         : msg.bootstrap.planSeedCoLocated,
     external
       ? withSite
-        ? msg.bootstrap.planPages(siteUrlFor(repo))
+        ? msg.bootstrap.planPages(pagesUrl(repo))
         : msg.bootstrap.planNoSite
       : msg.bootstrap.planProvisioning,
     // As for papers, a rerun does not seed again, so a changed `--name`, `--edition` or
@@ -1358,7 +1351,7 @@ export async function cmdBootstrapJournal(
   // Pages, through the same read-first calls the paper path uses.
   pagesSteps(repo, prov, step, actions, log);
 
-  const siteUrl = siteUrlFor(repo);
+  const siteUrl = pagesUrl(repo);
   actions.site = 'stamped';
   log(msg.bootstrap.logSiteAdded(siteUrl));
   runbook.push(msg.bootstrap.runbookSite(siteUrl));

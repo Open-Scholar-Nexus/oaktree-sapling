@@ -36,6 +36,9 @@ Takes `--typst-template <dir>`, as [`oak build`](#build) does.
 (deposit)=
 ## deposit
 
+`--site-url <url>`
+: The paper's website, which the deposit links as its Project Website. Without it, oak links the `site_url` of the paper's entry in the journal's [`registry/papers.yml`](#file-registry), else the paper's GitHub Pages address. An empty value leaves the link out. [`oak release`](#release) takes it too.
+
 (release)=
 ## release
 

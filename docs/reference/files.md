@@ -8,6 +8,8 @@
 
 The journal's settings, read by every paper build. Every field but `name` is optional, and oak ignores fields it does not know. How to use them: [Configure the journal](../guide/journal-yml.md).
 
+Every oak command reads it the same way, and stops with the file and the line when it is not valid YAML (a key written twice, an unquoted value holding `: `, or a `---` line that starts a second document) or a field has the wrong type. A pull request preview falls back to the artifact link instead and says why in its comment. oak reads a paper's `myst.yml` and `pins.yml` with the same rule.
+
 | field | default | |
 |---|---|---|
 | `name` | | The journal's name. Required. `oak bootstrap journal --name` also writes it to the brand's `logo_text`, the edition's `venue` and the website's title, which are what the papers show. |
@@ -38,7 +40,7 @@ The papers the journal website lists, one entry each, in the order the website s
 |---|---|---|
 | `id` | | The paper's `project.id`. Required. When it differs from the `project.id` of the paper at `location`, that paper's Journal checks fail. |
 | `location` | | Where the paper is. Required. `owner/name` is a GitHub repository, with the paper at its root. A `./` or `../` path is a folder in the journal repository, relative to its root. The website build fails on one. |
-| `site_url` | `https://<owner>.github.io/<name>` | The paper's website, when it is published somewhere else. |
+| `site_url` | `https://<owner>.github.io/<name>/`, or `https://<owner>.github.io/` for a repository named `<owner>.github.io` | The paper's website, when it is published somewhere else. The journal website and the paper's Zenodo deposit both link it. |
 
 The website reads each paper's title, keywords, edition and DOI from the paper's `myst.yml`. It lists every entry except a paper whose DOI is a Zenodo sandbox one (`10.5072/…`), which it leaves out with a warning in the build log. A paper with no DOI is listed. An entry oak cannot read is skipped by the Journal checks, with a warning, and fails the website build, naming the entry.
 

@@ -19,9 +19,10 @@ import {
   renderCards,
   clearCache,
   parseLocation as galleryParseLocation,
+  pagesUrl as galleryPagesUrl,
   REGISTRY_PATH,
 } from '../plugins/gallery.mjs';
-import { parseLocation } from '../src/schema.js';
+import { pagesUrl, parseLocation } from '../src/schema.js';
 
 const entry = (over: Record<string, unknown> = {}) => ({
   id: 'j-2026-alpha',
@@ -93,10 +94,24 @@ describe('location rule parity', () => {
   });
 });
 
+describe('Pages URL parity', () => {
+  // gallery.mjs cannot import TypeScript, so it keeps its own copy of pagesUrl.
+  it.each(['me/alpha-paper', 'Me/Alpha-Paper', 'me/me.github.io', 'Me/ME.github.io'])(
+    '%s gives the same URL in src/schema.ts and gallery.mjs',
+    (repo) => {
+      expect(galleryPagesUrl(repo)).toBe(pagesUrl(repo));
+    },
+  );
+
+  it('links a paper in the <owner>.github.io repo to the root site', () => {
+    expect(paperUrls(entry({ location: 'me/me.github.io' })).siteUrl).toBe('https://me.github.io/');
+  });
+});
+
 describe('paperUrls', () => {
   it('derives the Pages URL from the repository when site_url is absent', () => {
     const u = paperUrls(entry());
-    expect(u.siteUrl).toBe('https://me.github.io/alpha-paper');
+    expect(u.siteUrl).toBe('https://me.github.io/alpha-paper/');
     expect(u.configUrl).toBe('https://raw.githubusercontent.com/me/alpha-paper/HEAD/myst.yml');
     expect(u.thumbUrl).toBe(
       'https://raw.githubusercontent.com/me/alpha-paper/HEAD/thumbnails/thumbnail.png',
@@ -117,7 +132,7 @@ describe('paperUrls', () => {
 
   it('lowercases the owner in the Pages URL, as GitHub serves it', () => {
     expect(paperUrls(entry({ location: 'Me/Alpha-Paper' })).siteUrl).toBe(
-      'https://me.github.io/Alpha-Paper',
+      'https://me.github.io/Alpha-Paper/',
     );
   });
 
@@ -146,7 +161,7 @@ describe('cardFrom', () => {
   it('renders title + thumbnail + keywords, linked to the paper site', () => {
     const card = cardFrom(entry(), config());
     expect(card.type).toBe('card');
-    expect(card.url).toBe('https://me.github.io/alpha-paper');
+    expect(card.url).toBe('https://me.github.io/alpha-paper/');
     expect(kinds(card)).toEqual(['header', 'image', 'paragraph']);
     expect(card.children[0].children[0].value).toBe('An Alpha Paper');
     expect(card.children[1].url).toContain('thumbnails/thumbnail.png');

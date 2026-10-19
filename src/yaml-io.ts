@@ -4,11 +4,11 @@
  */
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { isMap, isSeq, parseDocument, type Document } from 'yaml';
+import { isMap, isSeq, parseDocument, type Document, type YAMLError } from 'yaml';
 import { BRAND_ASSET_KEYS, type OwnOverride } from './compose.js';
-import { EDITION_ID, JournalStamp } from './schema.js';
+import { EDITION_ID, JournalConfig, JournalStamp } from './schema.js';
 import * as msg from './messages.js';
-import { UserError } from './messages.js';
+import { firstLine, UserError } from './messages.js';
 
 /**
  * The derived config oak builds from [R71]: the author's `myst.yml` plus the `extends:` chain
@@ -56,8 +56,57 @@ export function dropJournalStamp(doc: Document): void {
   if (doc.hasIn(JOURNAL_KEY)) doc.deleteIn(JOURNAL_KEY);
 }
 
+/**
+ * Parses YAML into a Document, or throws a {@link UserError} naming `source` when the parser
+ * reports an error: a duplicate key, bad indentation, a second document. Every YAML oak reads
+ * goes through here, so each verb accepts and refuses the same files. Warnings (an unknown tag,
+ * an ambiguous alias) leave every value defined, so they pass.
+ */
+export function parseYaml(text: string, source: string): Document {
+  const doc = parseDocument(text);
+  const first = doc.errors[0];
+  if (first) throw new UserError(yamlRefusal(first, text, source));
+  return doc;
+}
+
+/** The refusal for a parser error: a plain cause for the errors authors commonly make, the
+ *  parser's own first line for the rest. */
+function yamlRefusal(e: YAMLError, text: string, source: string): string {
+  const lines = text.split(/\r?\n/);
+  const { line, col } = e.linePos?.[0] ?? { line: 1, col: 1 };
+  switch (e.code) {
+    case 'MULTIPLE_DOCS': {
+      // The parser points where the second document starts, at or after its marker line.
+      let at = line;
+      while (at > 1 && !/^(---|\.\.\.)(\s|$)/.test(lines[at - 1] ?? '')) at--;
+      return msg.yamlMultipleDocs(source, at, lines[at - 1]?.startsWith('...') ? '...' : '---');
+    }
+    case 'MULTILINE_IMPLICIT_KEY':
+      return msg.yamlNotKeyValue(source, line);
+    case 'BLOCK_AS_IMPLICIT_KEY':
+      // The same code covers other shapes, which keep the parser's text.
+      if ((lines[line - 1] ?? '').slice(col - 1).includes(': ')) {
+        return msg.yamlColonInValue(source, line);
+      }
+  }
+  const why = firstLine(e).replace(/:$/, '');
+  return msg.yamlInvalid(source, why, e.code === 'DUPLICATE_KEY');
+}
+
+/** Reads a YAML file through {@link parseYaml}. */
 export function readDoc(path: string): Document {
-  return parseDocument(readFileSync(path, 'utf8'));
+  return parseYaml(readFileSync(path, 'utf8'), path);
+}
+
+/** The journal's settings from `<instanceRoot>/journal.yml`, checked against
+ *  {@link JournalConfig}, or null when the file is absent. Throws a {@link UserError} naming the
+ *  file for bad YAML or a bad setting. */
+export function readJournalConfig(instanceRoot: string): JournalConfig | null {
+  const path = join(instanceRoot, 'journal.yml');
+  if (!existsSync(path)) return null;
+  const parsed = JournalConfig.safeParse(readDoc(path).toJS() ?? {});
+  if (!parsed.success) throw new UserError(msg.journalInvalid(path, firstLine(parsed.error)));
+  return parsed.data;
 }
 
 export function writeDoc(path: string, doc: Document): void {
@@ -104,7 +153,7 @@ export function readBrandAssetOptions(instanceRoot: string): {
   const brandPath = join(instanceRoot, 'brand', 'brand.yml');
   const empty = { site: {}, project: {} };
   if (!existsSync(brandPath)) return empty;
-  const doc = parseDocument(readFileSync(brandPath, 'utf8'));
+  const doc = readDoc(brandPath);
   const lift = (namespace: 'site' | 'project', keys: readonly string[]) => {
     const out: Record<string, string> = {};
     for (const key of keys) {
@@ -123,10 +172,7 @@ export function readBrandAssetOptions(instanceRoot: string): {
  *  the author's and oak's [R76]. It lives in journal.yml, which myst never reads, because
  *  brand.yml is a myst config layer and myst warns about keys it does not know. */
 export function readJournalTypstTemplate(instanceRoot: string): string | undefined {
-  const journalPath = join(instanceRoot, 'journal.yml');
-  if (!existsSync(journalPath)) return undefined;
-  const value = parseDocument(readFileSync(journalPath, 'utf8')).get('typst_template');
-  return typeof value === 'string' && value ? value : undefined;
+  return readJournalConfig(instanceRoot)?.typst_template || undefined;
 }
 
 /** Reads the author's own typst `template:` from `<paperRoot>/myst.yml`. The composed config
@@ -137,7 +183,7 @@ export function readAuthorTypstTemplate(paperRoot: string): string | undefined {
   if (!existsSync(authorPath)) return undefined;
   let config: unknown;
   try {
-    config = parseDocument(readFileSync(authorPath, 'utf8')).toJS();
+    config = readDoc(authorPath).toJS();
   } catch {
     return undefined;
   }
