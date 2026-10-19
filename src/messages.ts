@@ -1094,7 +1094,7 @@ export const workflow = {
     'notify: a version tag (vX.Y.Z) exists but project.doi is missing from myst.yml; the ' +
     'repo is published but unlinked. Fix myst.yml before tagging the next release.',
   notifyBadDoi: (doi: string): string =>
-    `unrecognised DOI prefix: ${doi} (expected 10.5281/zenodo.* or 10.5072/zenodo.*)`,
+    `not a Zenodo DOI: ${doi} (expected 10.5281/zenodo.* or 10.5072/zenodo.*)`,
   notifyFirstDeposit: 'no version tags (vX.Y.Z) yet (first-deposit case)',
   notifyTagsFailed: (why: string): string =>
     `notify: gh could not list the repo's version tags (${why}); whether the paper is ` +

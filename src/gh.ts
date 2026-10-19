@@ -181,7 +181,8 @@ function ghOkAs(token: string, args: string[], alsoAbsent?: RegExp): boolean {
 }
 
 /** The non-empty lines `jq` prints over every page of the GitHub list endpoint `path`. `--jq`
- *  runs once per page, so `jq` prints one line per item. */
+ *  runs on each page alone, so `jq` should print one line per item; pick a "last" from the
+ *  joined result. */
 export function apiList(path: string, jq: string): string[] {
   return gh(['api', path, '--paginate', '--jq', jq])
     .split('\n')

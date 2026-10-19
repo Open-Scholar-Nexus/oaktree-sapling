@@ -845,7 +845,7 @@ describe.skipIf(bundleState() === 'absent')("pins.yml's journal comes before a j
 describe.skipIf(bundleState() === 'absent')('oak release reads the DOI before any token', () => {
   beforeAll(assertBundleNotStale);
 
-  it('refuses a DOI that is not a Zenodo one, rather than guess its environment', () => {
+  it('refuses a DOI that is not a Zenodo one', () => {
     const dir = mkdtempSync(join(tmpdir(), 'oak-release-doi-'));
     writeFileSync(
       join(dir, 'myst.yml'),
@@ -854,7 +854,7 @@ describe.skipIf(bundleState() === 'absent')('oak release reads the DOI before an
     );
     const { code, stderr } = oak(
       ['release', '--tag', 'v1.0.0', '--no-build', '--paper', dir, '--no-instance'],
-      { OAK_USE_RUNNING: '1', ZENODO_TOKEN: 'prod', ZENODO_TOKEN_SANDBOX: 'sandbox' },
+      { OAK_USE_RUNNING: '1', ZENODO_TOKEN: undefined, ZENODO_TOKEN_SANDBOX: undefined },
     );
     expect(code).toBe(2);
     expect(stderr).toContain('oak release: project.doi https://doi.org/10.5072/zenodo.5 is not');
