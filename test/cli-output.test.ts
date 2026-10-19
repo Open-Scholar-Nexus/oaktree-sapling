@@ -841,3 +841,22 @@ describe.skipIf(bundleState() === 'absent')("pins.yml's journal comes before a j
     expect(r.stderr).toContain('could not clone the journal acme/journal');
   });
 });
+
+describe.skipIf(bundleState() === 'absent')('oak release reads the DOI before any token', () => {
+  beforeAll(assertBundleNotStale);
+
+  it('refuses a DOI that is not a Zenodo one, rather than guess its environment', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'oak-release-doi-'));
+    writeFileSync(
+      join(dir, 'myst.yml'),
+      'version: 1\nproject:\n  doi: https://doi.org/10.5072/zenodo.5\n' +
+        '  options:\n    oaktree-sapling:\n      version: v9.9.9\n      edition: e\n',
+    );
+    const { code, stderr } = oak(
+      ['release', '--tag', 'v1.0.0', '--no-build', '--paper', dir, '--no-instance'],
+      { OAK_USE_RUNNING: '1', ZENODO_TOKEN: 'prod', ZENODO_TOKEN_SANDBOX: 'sandbox' },
+    );
+    expect(code).toBe(2);
+    expect(stderr).toContain('oak release: project.doi https://doi.org/10.5072/zenodo.5 is not');
+  });
+});

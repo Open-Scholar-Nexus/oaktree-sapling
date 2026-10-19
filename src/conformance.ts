@@ -16,7 +16,7 @@ import { STICKY_PREVIEW } from './preview.js';
 import { stickyMarker } from './messages.js';
 import { JOURNAL_BUNDLE_NAME, RESERVED_BUNDLE_NAMES } from './zenodo.js';
 import { UPGRADE_BRANCH_PREFIX } from './upgrade.js';
-import { pagesUrl } from './schema.js';
+import { pagesUrl, parseZenodoDoi } from './schema.js';
 
 /** The label on every pull request a run opens, which is how `reset` finds them, including pull
  *  requests from the fork, whose branch names it does not know. */
@@ -479,9 +479,9 @@ export async function cmdConformanceRun(input: RunInput, deps: ConformanceDeps):
     // deposit by the release's file names.
     phase = 'deposit';
 
-    // 1. The test repo's myst.yml must carry a sandbox DOI (10.5072/...).
+    // 1. The test repo's myst.yml must carry a sandbox DOI (10.5072/zenodo.<id>).
     const doi = gh.committedDoi(repo);
-    if (!doi || !doi.startsWith('10.5072/')) {
+    if (!doi || parseZenodoDoi(doi)?.sandbox !== true) {
       throw new Error(
         `the deposit test needs a committed sandbox DOI on the test repo (found ${doi ?? 'none'}); ` +
           `prepare-from-scratch coverage is deferred.`,

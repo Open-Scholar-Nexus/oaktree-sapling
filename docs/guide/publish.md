@@ -73,6 +73,8 @@ The run opens an issue titled **Zenodo publish failed for** the tag, labelled `z
 :::{dropdown} Testing on the Zenodo sandbox
 With **Use the Zenodo sandbox** ticked, the DOI is a sandbox one (`10.5072/zenodo.…`), and tags deposit on [sandbox.zenodo.org](https://sandbox.zenodo.org) with `ZENODO_TOKEN_SANDBOX`. A sandbox DOI never resolves, and the journal website leaves out a paper that has one. A paper with no DOI yet is listed.
 
+A tag deposits on the Zenodo the DOI names, read in the form Zenodo writes it: `10.5281/zenodo.<id>`, or `10.5072/zenodo.<id>` on the sandbox. The **Deposit version** workflow fails on any other form, such as a `https://doi.org/` link, before it uses either token.
+
 To move to the real Zenodo, run **Reserve DOI** again with the box unticked. Its pull request replaces the sandbox DOI with a real one.
 :::
 

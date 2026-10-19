@@ -102,6 +102,21 @@ export function underPaths(paths: readonly string[], path: string): boolean {
   return paths.some((g) => (g.endsWith('/') ? p === g.slice(0, -1) || p.startsWith(g) : p === g));
 }
 
+/** A Zenodo DOI as Zenodo mints it: `10.5281/zenodo.<id>`, or `10.5072/zenodo.<id>` on the
+ *  sandbox. */
+const ZENODO_DOI = /^10\.(5281|5072)\/zenodo\.([0-9]+)$/;
+
+/** The DOI prefix Zenodo, or its sandbox, gives a record id. */
+export function zenodoDoiPrefix(sandbox: boolean): string {
+  return sandbox ? '10.5072/zenodo.' : '10.5281/zenodo.';
+}
+
+/** The record id and environment of a {@link ZENODO_DOI}, else null. */
+export function parseZenodoDoi(doi: string): { sandbox: boolean; recordId: string } | null {
+  const m = ZENODO_DOI.exec(doi);
+  return m ? { sandbox: m[1] === '5072', recordId: m[2]! } : null;
+}
+
 /**
  * The journal checkout a build composed from, which the deposit archives as `journal.zip`
  * [R66]. oak writes it into `myst.oak.yml`; a value in the author's `myst.yml` is dropped.

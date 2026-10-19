@@ -686,6 +686,27 @@ describe('cmdPublish', () => {
     expect(out.exitCode).toBe(2);
   });
 
+  it('refuses a DOI that is not a Zenodo one, before calling Zenodo', async () => {
+    const mystPath = paperRepo(
+      BARE_MYST + '  doi: https://doi.org/10.5072/zenodo.5\n  github: https://github.com/o/r\n',
+    );
+    writeFileSync(mystPath.replace('myst.yml', 'paper.pdf'), '%PDF');
+    const { transport, calls } = fakeTransport(() => ({ json: {} }));
+    const out = await cmdPublish({
+      mystPath,
+      pdf: mystPath.replace('myst.yml', 'paper.pdf'),
+      tag: 'v1.0.0',
+      bundleOut: '/tmp/x',
+      api: new ZenodoApi(transport, false, 't'),
+      git: fakeGit,
+      instanceRoot: null,
+      engineRoot: mystPath.replace('myst.yml', ''),
+    });
+    expect(out.exitCode).toBe(2);
+    expect(String(out.result.message)).toContain('is not a Zenodo DOI');
+    expect(calls).toHaveLength(0);
+  });
+
   it('refuses a project.github that is not a github.com repo URL, before calling Zenodo', async () => {
     const mystPath = paperRepo(
       BARE_MYST + '  doi: 10.5072/zenodo.5\n  github: https://gitlab.com/o/r\n',
