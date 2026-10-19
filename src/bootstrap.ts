@@ -690,7 +690,7 @@ function partial(
   failed: StepFailure[],
   log: (m: string) => void,
 ): Outcome {
-  for (const line of runbook) log(`  → ${line}`);
+  for (const line of runbook) log(msg.bootstrap.logRunbookLine(line));
   log(msg.bootstrap.logPartial(failed.map((f) => f.step).join(', ')));
   return {
     exitCode: 1,
@@ -1097,7 +1097,7 @@ export async function cmdBootstrapPaper(
     mode === 'bare' && actions.main === 'seeded' ? [msg.bootstrap.runbookFillPaper(repo)] : [];
   const runbook = [...fill, ...contentRunbook, ...prov_.runbook, ...secretRunbook];
   const failed = [...contentFailed, ...prov_.failed, ...secretFailed];
-  for (const line of runbook) log(`  → ${line}`);
+  for (const line of runbook) log(msg.bootstrap.logRunbookLine(line));
   if (failed.length) log(msg.bootstrap.logPartial(failed.map((f) => f.step).join(', ')));
 
   return {
@@ -1273,7 +1273,7 @@ export async function cmdBootstrapJournal(
     const fill = actions.main === 'seeded' ? [msg.bootstrap.runbookFillPaper(repo)] : [];
     const runbook = [...fill, ...contentRunbook, ...settings.runbook, ...secrets.runbook];
     const failed = [...contentFailed, ...settings.failed, ...secrets.failed];
-    for (const line of runbook) log(`  → ${line}`);
+    for (const line of runbook) log(msg.bootstrap.logRunbookLine(line));
     if (failed.length) log(msg.bootstrap.logPartial(failed.map((f) => f.step).join(', ')));
     return {
       exitCode: failed.length ? 1 : 0,
@@ -1296,7 +1296,7 @@ export async function cmdBootstrapJournal(
   const runbook: string[] = [msg.bootstrap.runbookStartHere];
   if (!withSite) {
     const allRunbook = [...contentRunbook, ...runbook];
-    for (const line of allRunbook) log(`  → ${line}`);
+    for (const line of allRunbook) log(msg.bootstrap.logRunbookLine(line));
     if (contentFailed.length)
       log(msg.bootstrap.logPartial(contentFailed.map((f) => f.step).join(', ')));
     return {
@@ -1322,7 +1322,7 @@ export async function cmdBootstrapJournal(
   log(msg.bootstrap.logSiteAdded(siteUrl));
   runbook.push(msg.bootstrap.runbookSite(siteUrl));
   const allRunbook = [...contentRunbook, ...runbook];
-  for (const line of allRunbook) log(`  → ${line}`);
+  for (const line of allRunbook) log(msg.bootstrap.logRunbookLine(line));
   if (contentFailed.length)
     log(msg.bootstrap.logPartial(contentFailed.map((f) => f.step).join(', ')));
 

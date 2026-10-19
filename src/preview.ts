@@ -370,7 +370,9 @@ export function runNewVersionReminder(input: NotifyInput, gh: GhPr): Outcome {
   }
   const parsed = recordUrlForDoi(doi);
   if ('error' in parsed) {
-    process.stderr.write(annotate('error', `notify: ${parsed.error}`) + '\n');
+    process.stderr.write(
+      annotate('error', msg.workflow.notifyRecordUrlFailed(parsed.error)) + '\n',
+    );
     return err(1, parsed.error, { reminder: 'error' });
   }
 

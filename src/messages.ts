@@ -435,6 +435,7 @@ export const bootstrap = {
     `  ✓ deleted the repository secret ${name}; its environments hold it now`,
   logSiteAdded: (siteUrl: string): string => `  ✓ journal website added: ${siteUrl}`,
   logStepFailed: (step: string, why: string): string => `  ✗ ${step} failed: ${why}`,
+  logRunbookLine: (line: string): string => `  → ${line}`,
   logPartial: (steps: string): string =>
     `  ! this run is incomplete; failed steps: ${steps}. What to do about each is in the ` +
     'runbook above.',
@@ -955,6 +956,10 @@ export const pr = {
     `unknown check id "${id}"; the ids the journal can ask for, and how to change the set: ` +
     `${docsUrl(DOCS.checksChanging)}`,
   checkTableHeader: '| Check | Status | Detail |\n| --- | --- | --- |',
+  checkTableRow: (id: string, status: string, optional: boolean, detail: string): string =>
+    `| ${id} | ${status}${optional ? ' (optional)' : ''} | ${detail} |`,
+  checkRunNote: (note: string): string => `> ⚠️ ${note}`,
+  shimMore: (n: number): string => `, +${n} more`,
 
   /** A pull request that edits the files the checks run from. A warning, never a failure:
    *  upgrade pull requests edit them too. */
@@ -1093,6 +1098,7 @@ export const workflow = {
   notifyPublishedButUnlinked:
     'notify: a version tag (vX.Y.Z) exists but project.doi is missing from myst.yml; the ' +
     'repo is published but unlinked. Fix myst.yml before tagging the next release.',
+  notifyRecordUrlFailed: (why: string): string => `notify: ${why}`,
   notifyBadDoi: (doi: string): string =>
     `not a Zenodo DOI: ${doi} (expected 10.5281/zenodo.* or 10.5072/zenodo.*)`,
   notifyFirstDeposit: 'no version tags (vX.Y.Z) yet (first-deposit case)',
