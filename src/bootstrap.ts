@@ -18,7 +18,7 @@ import { join, dirname, posix } from 'node:path';
 import { isMap, isScalar } from 'yaml';
 import { readDoc } from './yaml-io.js';
 import { themeZipUrl } from './assets.js';
-import { LABEL_EDITOR_ACTION, LABEL_ZENODO_FAILED } from './preview.js';
+import { LABEL_EDITOR_ACTION, LABEL_ZENODO_FAILED, type Outcome } from './preview.js';
 import { pagesUrl } from './schema.js';
 
 /* --------------------------------------------------------------------------
@@ -529,11 +529,6 @@ export interface BootstrapDeps {
   confirm(plan: string[]): Promise<boolean>;
   /** A new temporary directory for rendering the seed (default: the OS temp dir). */
   workdir(): string;
-}
-
-export interface Outcome {
-  exitCode: number;
-  result: Record<string, unknown>;
 }
 
 /**

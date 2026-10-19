@@ -56,6 +56,7 @@ import {
   type ZenodoConfig,
 } from './schema.js';
 import * as msg from './messages.js';
+import { err, ok, type Outcome } from './preview.js';
 
 export const ZENODO_PROD = 'https://zenodo.org/api';
 export const ZENODO_SANDBOX = 'https://sandbox.zenodo.org/api';
@@ -825,25 +826,6 @@ export function defaultSiteUrl(
   });
   return own?.site_url ?? pagesUrl(repo);
 }
-
-/* --------------------------------------------------------------------------
- * Result envelope
- * ------------------------------------------------------------------------ */
-
-export interface Outcome {
-  exitCode: number;
-  /** Always has `status: 'ok' | 'error'`, which the workflows read. */
-  result: Record<string, unknown>;
-}
-
-const ok = (fields: Record<string, unknown>): Outcome => ({
-  exitCode: 0,
-  result: { status: 'ok', ...fields },
-});
-const err = (exitCode: number, message: string, fields: Record<string, unknown> = {}): Outcome => ({
-  exitCode,
-  result: { status: 'error', message, ...fields },
-});
 
 function projectOf(doc: ReturnType<typeof readDoc>): any {
   const p = doc.get('project');
