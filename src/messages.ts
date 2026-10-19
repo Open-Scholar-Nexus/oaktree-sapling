@@ -889,9 +889,9 @@ export const validate = {
     `checked the paper's own myst.yml ONLY: it could not be combined with the journal's ` +
     `settings (${failure}), so anything the journal or its edition adds was not checked.`,
   composeFailed: (failure: string): string =>
-    `myst.oak.yml could not be composed: ${failure}. The paper's own config caused it, so ` +
-    `\`oak build\` fails the same way; the checks below ran on the paper's myst.yml alone, ` +
-    `without oak's defaults, the edition or the branding.`,
+    `myst.oak.yml could not be composed: ${failure.replace(/\.$/, '')}. The paper's own ` +
+    `config caused it, so \`oak build\` fails the same way; the checks below ran on the paper's ` +
+    `myst.yml alone, without oak's defaults, the edition or the branding.`,
 
   editorialLoadFailed: (message: string): string =>
     `could not load the paper project for editorial checks: ${message}`,
