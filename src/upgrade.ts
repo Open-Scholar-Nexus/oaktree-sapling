@@ -22,7 +22,7 @@ import {
   type TemplateAnswers,
 } from './bootstrap.js';
 import * as msg from './messages.js';
-import { err, type Outcome } from './preview.js';
+import { err, type Outcome } from './result.js';
 import {
   compareEngineVersions,
   ENGINE_MANAGED_PATHS,

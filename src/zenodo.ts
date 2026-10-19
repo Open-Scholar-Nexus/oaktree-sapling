@@ -56,7 +56,7 @@ import {
   type ZenodoConfig,
 } from './schema.js';
 import * as msg from './messages.js';
-import { err, ok, type Outcome } from './preview.js';
+import { err, ok, type Outcome } from './result.js';
 
 export const ZENODO_PROD = 'https://zenodo.org/api';
 export const ZENODO_SANDBOX = 'https://sandbox.zenodo.org/api';

@@ -12,7 +12,8 @@
  * This holds only a token for the test repo; the Cloudflare and Zenodo secrets stay in the
  * test repo and are used by its own runs.
  */
-import { STICKY_PREVIEW, type Outcome } from './preview.js';
+import { STICKY_PREVIEW } from './preview.js';
+import type { Outcome } from './result.js';
 import { stickyMarker } from './messages.js';
 import { JOURNAL_BUNDLE_NAME, RESERVED_BUNDLE_NAMES } from './zenodo.js';
 import { UPGRADE_BRANCH_PREFIX } from './upgrade.js';

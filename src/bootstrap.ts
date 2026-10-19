@@ -18,7 +18,8 @@ import { join, dirname, posix } from 'node:path';
 import { isMap, isScalar } from 'yaml';
 import { readDoc } from './yaml-io.js';
 import { themeZipUrl } from './assets.js';
-import { LABEL_EDITOR_ACTION, LABEL_ZENODO_FAILED, type Outcome } from './preview.js';
+import { LABEL_EDITOR_ACTION, LABEL_ZENODO_FAILED } from './preview.js';
+import type { Outcome } from './result.js';
 import { pagesUrl } from './schema.js';
 
 /* --------------------------------------------------------------------------
