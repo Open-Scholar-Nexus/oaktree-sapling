@@ -6,9 +6,10 @@
  * and website, public) and `--co-located` (the paper workflows and a starter paper, no website).
  */
 import { describe, it, expect } from 'vitest';
-import { mkdtempSync, readFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, readFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { parseDocument } from 'yaml';
 import { themeZipUrl } from '../src/assets.js';
 import {
@@ -17,7 +18,6 @@ import {
   renderSiteTemplate,
   galleryPluginUrl,
   engineMystRange,
-  buildReviewTree,
   cmdBootstrapPaper,
   cmdBootstrapJournal,
   RULESET_V_TAGS,
@@ -28,6 +28,7 @@ import {
   type BootstrapDeps,
 } from '../src/bootstrap.js';
 import { LABEL_EDITOR_ACTION, LABEL_ZENODO_FAILED } from '../src/preview.js';
+import { takeEngineManagedPaths } from '../src/gh.js';
 
 const PAPER_ROOT = 'templates/paper';
 const INSTANCE_ROOT = 'templates/instance';
@@ -233,23 +234,77 @@ describe('engineMystRange', () => {
   });
 });
 
-describe('buildReviewTree (--from)', () => {
-  it("restores the editor's whole .github, including pins.yml, and drops the author's", () => {
-    const author = {
+/** A git repo whose `main` holds `mainFiles`, with `authorFiles` staged as the work tree, the
+ *  state `ingestReviewBranch` reaches before it calls `takeEngineManagedPaths`. */
+function reviewRepo(
+  mainFiles: Record<string, string>,
+  authorFiles: Record<string, string>,
+): string {
+  const dir = mkdtempSync(join(tmpdir(), 'oak-review-'));
+  const git = (...args: string[]) =>
+    execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', ...args], { cwd: dir });
+  const write = (files: Record<string, string>) => {
+    for (const [rel, body] of Object.entries(files)) {
+      mkdirSync(dirname(join(dir, rel)), { recursive: true });
+      writeFileSync(join(dir, rel), body);
+    }
+  };
+  git('init', '-q', '-b', 'main');
+  write(mainFiles);
+  git('add', '-A');
+  git('commit', '-qm', 'main');
+  git('rm', '-rqf', '.');
+  write(authorFiles);
+  git('add', '-A');
+  return dir;
+}
+
+/** The staged tree after `takeEngineManagedPaths(dir, 'main')`, path to content. */
+function reviewTree(dir: string): Record<string, string> {
+  takeEngineManagedPaths(dir, 'main');
+  const out: Record<string, string> = {};
+  const paths = execFileSync('git', ['ls-files'], { cwd: dir, encoding: 'utf8' });
+  for (const rel of paths.split('\n').filter(Boolean))
+    out[rel] = readFileSync(join(dir, rel), 'utf8');
+  return out;
+}
+
+describe('the review branch takes the engine-managed paths from main [R121]', () => {
+  it("replaces the author's .github, pins.yml included, and CODEOWNERS", () => {
+    const tree = reviewTree(
+      reviewRepo(
+        {
+          '.github/actions/engine/pins.yml': 'engine_repo: me/engine',
+          '.github/workflows/build-paper.yml': 'frozen ci',
+          CODEOWNERS: '/.github/ @alice',
+        },
+        {
+          'index.md': 'author paper',
+          '.github/actions/engine/pins.yml': 'engine_repo: EVIL/attacker',
+          '.github/workflows/build-paper.yml': 'malicious',
+          CODEOWNERS: '/.github/ @mallory',
+          'paper-environment.yml': 'dependencies: []',
+        },
+      ),
+    );
+    expect(tree).toEqual({
       'index.md': 'author paper',
-      '.github/actions/engine/pins.yml': 'engine_repo: EVIL/attacker',
-      '.github/workflows/build-paper.yml': 'malicious',
-    };
-    const main = {
+      // The author's: the review pull request needs a code owner for it.
+      'paper-environment.yml': 'dependencies: []',
       '.github/actions/engine/pins.yml': 'engine_repo: me/engine',
       '.github/workflows/build-paper.yml': 'frozen ci',
       CODEOWNERS: '/.github/ @alice',
-    };
-    const review = buildReviewTree(author, main);
-    expect(review['index.md']).toBe('author paper'); // author content survives
-    expect(review['.github/actions/engine/pins.yml']).toBe('engine_repo: me/engine'); // the editor's
-    expect(review['.github/workflows/build-paper.yml']).toBe('frozen ci');
-    expect(review['CODEOWNERS']).toBe('/.github/ @alice');
+    });
+  });
+
+  it('drops an author .github path main does not have', () => {
+    const tree = reviewTree(
+      reviewRepo(
+        { '.github/workflows/build-paper.yml': 'frozen' },
+        { 'index.md': 'a', '.github/workflows/evil.yml': 'on: push' },
+      ),
+    );
+    expect(Object.keys(tree).sort()).toEqual(['.github/workflows/build-paper.yml', 'index.md']);
   });
 });
 
@@ -1213,17 +1268,6 @@ describe('cmdBootstrapJournal', () => {
     expect(out.exitCode).toBe(2);
     expect(out.result.status).toBe('error');
     expect(String(out.result.error)).toContain('--co-located');
-  });
-});
-
-describe("buildReviewTree drops the author's files under the editor's paths [R121]", () => {
-  it('drops an author .github path that main does not have', () => {
-    // Here main lacks the author's path, so restoring main's `.github/` would not cover it.
-    const tree = buildReviewTree(
-      { 'index.md': 'a', '.github/workflows/evil.yml': 'on: push' },
-      { '.github/workflows/build-paper.yml': 'frozen' },
-    );
-    expect(Object.keys(tree).sort()).toEqual(['.github/workflows/build-paper.yml', 'index.md']);
   });
 });
 

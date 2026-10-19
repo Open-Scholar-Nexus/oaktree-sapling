@@ -950,6 +950,7 @@ export const pr = {
     `${passed} passed, ${failed} failed` +
     (warnings ? `, ${warnings} warning${warnings === 1 ? '' : 's'}` : ''),
   checkRunTitleShimTouched: (title: string): string => `⚠️ CI workflows modified: ${title}`,
+  checkRunTitleShimUnlisted: (title: string): string => `⚠️ CI workflows may be modified: ${title}`,
   unknownCheckId: (id: string): string =>
     `unknown check id "${id}"; the ids the journal can ask for, and how to change the set: ` +
     `${docsUrl(DOCS.checksChanging)}`,
@@ -962,6 +963,11 @@ export const pr = {
     `The results below come from its own copy of them, so they may not be the journal's ` +
     `checks. Unless this is an oak upgrade, an editor should read those changes before ` +
     `trusting the report.`,
+  /** A pull request whose changed files GitHub did not list in full, so gated ones may hide. */
+  shimWarningUnlisted: (paths: string[]): string =>
+    `> ⚠️ **GitHub did not list every file this pull request changes**, so it may change the ` +
+    `files that run the checks (${paths.join(', ')}). An editor should read its changes to ` +
+    `those files before trusting the report.`,
 };
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════

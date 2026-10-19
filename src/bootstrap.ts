@@ -337,36 +337,6 @@ function copyFileBytes(src: string, dest: string): void {
 }
 
 /* --------------------------------------------------------------------------
- * The review tree for an author's repo (pure): `.github/` comes from main
- * ------------------------------------------------------------------------ */
-
-/**
- * The review tree: the author's content, with the whole `.github/` (`pins.yml` included) and the
- * root `CODEOWNERS` taken from `main`; the author's files at those paths are replaced. Pure, so
- * the rule is testable; `ingestReviewBranch` must do the same [R121].
- */
-export function buildReviewTree(
-  authorFiles: Record<string, string>,
-  mainFiles: Record<string, string>,
-): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const [path, content] of Object.entries(authorFiles)) {
-    if (isEditorControlled(path)) continue; // author-side trust boundary never survives
-    out[path] = content;
-  }
-  for (const [path, content] of Object.entries(mainFiles)) {
-    if (isEditorControlled(path)) out[path] = content; // editor-side wins
-  }
-  return out;
-}
-
-/** The paths taken from the editors' `main`: the `.github/` subtree and CODEOWNERS. */
-function isEditorControlled(path: string): boolean {
-  const p = path.replace(/^\.\//, '');
-  return p === '.github' || p.startsWith('.github/') || p === 'CODEOWNERS';
-}
-
-/* --------------------------------------------------------------------------
  * Provisioner (injected; the real one is in gh.ts)
  * ------------------------------------------------------------------------ */
 
@@ -389,8 +359,9 @@ export interface Provisioner {
   /** Seeds `branch` of `repo` with one commit from a prepared directory, and pushes. */
   seedBranch(repo: string, branch: string, sourceDir: string, message: string): void;
   /**
-   * Builds a `review` branch: the author's content (`sourceUrl` at `sourceRef`) with the whole
-   * `.github/` from `origin/main`, and pushes it. Needs `main` seeded.
+   * Builds a `review` branch: the author's content (`sourceUrl` at `sourceRef`) with the
+   * engine-managed paths from `origin/main` (`takeEngineManagedPaths` in gh.ts), and pushes it.
+   * Needs `main` seeded.
    */
   ingestReviewBranch(
     repo: string,

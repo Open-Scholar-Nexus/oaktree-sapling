@@ -10,6 +10,7 @@ import { basename, isAbsolute, relative } from 'node:path';
 import { DERIVED_CONFIG_FILE } from './yaml-io.js';
 import * as messages from './messages.js';
 import { annotate } from './messages.js';
+import { GATED_PATHS, underPaths } from './schema.js';
 import type { ISession } from 'myst-cli';
 import {
   checks as CURVENOTE_DEFINITIONS,
@@ -182,9 +183,9 @@ export interface ChecksReport {
  * The sticky comment for a report: the sticky marker, a headline from the Check Run's
  * conclusion and title, the same table, and a footer.
  */
-export function checksComment(report: ChecksReport, shimTouched: string[] = []): string {
+export function checksComment(report: ChecksReport, shimTouched: string[] | null = []): string {
   const { conclusion, title, summary } = report.checkRun;
-  const banner = shimTouched.length ? [shimWarning(shimTouched), ''] : [];
+  const banner = shimFlagged(shimTouched) ? [shimWarning(shimTouched), ''] : [];
   return [
     messages.stickyMarker(STICKY_CHECKS),
     ...banner,
@@ -196,18 +197,23 @@ export function checksComment(report: ChecksReport, shimTouched: string[] = []):
   ].join('\n');
 }
 
-/** The gated paths [design §6a]: `.github/`, `CODEOWNERS` and `paper-environment.yml`. A pull
- *  request that changes them can change how the checks run, so post-checks warns that its report
- *  cannot be fully trusted [R83]. */
-export function frozenPathsTouched(changed: string[]): string[] {
-  return changed.filter(
-    (p) => p === 'CODEOWNERS' || p === 'paper-environment.yml' || p.startsWith('.github/'),
-  );
+/** The changed files under {@link GATED_PATHS} [design §6a], or null when the list of changed
+ *  files is null. A pull request that changes them can change how the checks run, so post-checks
+ *  warns that its report cannot be fully trusted [R83]. */
+export function frozenPathsTouched(changed: string[] | null): string[] | null {
+  return changed && changed.filter((p) => underPaths(GATED_PATHS, p));
 }
 
-/** The warning for a pull request that edits the gated files. It never changes the conclusion,
- *  since upgrade pull requests edit these files too. Shown in the comment and the Check Run. */
-export function shimWarning(touched: string[]): string {
+/** Whether post-checks warns: a gated file changed, or the changed files are unknown (null). */
+function shimFlagged(touched: string[] | null): boolean {
+  return touched === null || touched.length > 0;
+}
+
+/** The warning for a pull request that edits the gated files, or whose changed files could not
+ *  all be listed (null). It never changes the conclusion, since upgrade pull requests edit these
+ *  files too. Shown in the comment and the Check Run. */
+export function shimWarning(touched: string[] | null): string {
+  if (touched === null) return messages.pr.shimWarningUnlisted(GATED_PATHS.map((p) => `\`${p}\``));
   const shown = touched
     .slice(0, 5)
     .map((f) => `\`${f}\``)
@@ -236,21 +242,30 @@ export interface PostChecksOutcome {
  * needs `GH_TOKEN`.
  */
 export function cmdPostChecks(
-  input: { report: ChecksReport; repo: string; sha: string; pr?: string; shimTouched?: string[] },
+  input: {
+    report: ChecksReport;
+    repo: string;
+    sha: string;
+    pr?: string;
+    shimTouched?: string[] | null;
+  },
   deps: PostChecksDeps,
 ): PostChecksOutcome {
   const { report, repo, sha, pr } = input;
-  const shimTouched = input.shimTouched ?? [];
+  const shimTouched = input.shimTouched === undefined ? [] : input.shimTouched;
   const warnings: string[] = [];
   let checkRunPosted = false;
   let commentPosted = false;
 
   // Shown on the check itself, but `conclusion` stays: upgrade pull requests edit these files
   // too, and CODEOWNERS is the gate [R83].
-  const checkRunToPost = shimTouched.length
+  const checkRunToPost = shimFlagged(shimTouched)
     ? {
         ...report.checkRun,
-        title: messages.pr.checkRunTitleShimTouched(report.checkRun.title),
+        title:
+          shimTouched === null
+            ? messages.pr.checkRunTitleShimUnlisted(report.checkRun.title)
+            : messages.pr.checkRunTitleShimTouched(report.checkRun.title),
         summary: `${shimWarning(shimTouched)}\n\n${report.checkRun.summary}`,
       }
     : report.checkRun;

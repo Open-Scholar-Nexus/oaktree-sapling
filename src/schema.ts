@@ -86,6 +86,23 @@ export function pagesUrl(repo: string): string {
 export const COMMIT_ID = /^([0-9a-f]{40}|[0-9a-f]{64})$/;
 
 /**
+ * The paths in a paper repo that need an editor's review to change [R92], written as in
+ * `CODEOWNERS` without the leading `/`; a trailing `/` is a folder. `templates/paper/CODEOWNERS`
+ * keeps a copy, held to this one by `editor paths parity` in `test/checks.test.ts`.
+ */
+export const GATED_PATHS = ['.github/', 'CODEOWNERS', 'paper-environment.yml'] as const;
+
+/** The {@link GATED_PATHS} oak ships and resets, all but `paper-environment.yml`, which is the
+ *  author's. */
+export const ENGINE_MANAGED_PATHS = ['.github/', 'CODEOWNERS'] as const;
+
+/** Whether the repo-relative `path` is one of `paths`, or inside one of their folders. */
+export function underPaths(paths: readonly string[], path: string): boolean {
+  const p = path.replace(/^(\.?\/)+/, '');
+  return paths.some((g) => (g.endsWith('/') ? p === g.slice(0, -1) || p.startsWith(g) : p === g));
+}
+
+/**
  * The journal checkout a build composed from, which the deposit archives as `journal.zip`
  * [R66]. oak writes it into `myst.oak.yml`; a value in the author's `myst.yml` is dropped.
  * Absent for a `--no-instance` build. `repo: "."` is a paper repo that is its own journal, so

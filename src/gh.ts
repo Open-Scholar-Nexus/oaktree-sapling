@@ -5,7 +5,12 @@
  */
 import * as msg from './messages.js';
 import { UserError } from './messages.js';
-import { GITHUB_REPO, PAPER_VERSION_TAG, repoFromGithubUrl } from './schema.js';
+import {
+  ENGINE_MANAGED_PATHS,
+  GITHUB_REPO,
+  PAPER_VERSION_TAG,
+  repoFromGithubUrl,
+} from './schema.js';
 import { execFileSync, spawnSync } from 'node:child_process';
 import {
   cpSync,
@@ -117,6 +122,25 @@ function gitRaw(args: string[], cwd?: string): string {
   return run('git', args, { cwd });
 }
 
+/**
+ * Takes the {@link ENGINE_MANAGED_PATHS} in the git work tree at `dir` from `ref`, staged. A
+ * folder is deleted first: `git checkout <ref> -- <folder>` keeps files `ref` lacks, so an
+ * author's file there would reach a branch pushed to the base repo with our credentials [R121].
+ */
+export function takeEngineManagedPaths(dir: string, ref: string): void {
+  for (const path of ENGINE_MANAGED_PATHS) {
+    const p = path.replace(/\/$/, '');
+    if (path.endsWith('/')) gitRaw(['rm', '-rqf', '--ignore-unmatch', '--', p], dir);
+    let present = true;
+    try {
+      run('git', ['cat-file', '-e', `${ref}:${p}`], { cwd: dir, quiet: true });
+    } catch {
+      present = false;
+    }
+    if (present) gitRaw(['checkout', ref, '--', p], dir);
+  }
+}
+
 function gh(args: string[], opts: { input?: string; cwd?: string; quiet?: boolean } = {}): string {
   return run('gh', args, opts);
 }
@@ -154,6 +178,15 @@ function ghAs(
 /** {@link ghOk} with `GH_TOKEN` set to `token`. */
 function ghOkAs(token: string, args: string[], alsoAbsent?: RegExp): boolean {
   return ghOk(args, { ...process.env, GH_TOKEN: token }, alsoAbsent);
+}
+
+/** The non-empty lines `jq` prints over every page of the GitHub list endpoint `path`. `--jq`
+ *  runs once per page, so `jq` prints one line per item. */
+export function apiList(path: string, jq: string): string[] {
+  return gh(['api', path, '--paginate', '--jq', jq])
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean);
 }
 
 /** `repo` when it is `owner/name` ({@link GITHUB_REPO}); else throws a UserError naming `source`,
@@ -388,13 +421,11 @@ export const realGhPr: GhPr = {
     const marker = msg.stickyMarker(header);
     let existingId = '';
     try {
-      existingId = gh([
-        'api',
-        `repos/${repo}/issues/${prNumber}/comments`,
-        '--paginate',
-        '--jq',
-        `[.[] | select(.body | startswith("${marker}"))] | last | .id // empty`,
-      ]);
+      existingId =
+        apiList(
+          `repos/${repo}/issues/${prNumber}/comments`,
+          `.[] | select(.body | startswith("${marker}")) | .id`,
+        ).pop() ?? '';
     } catch {
       /* no comments or no read access: create one */
     }
@@ -506,19 +537,23 @@ export interface CheckRunPoster {
   create(repo: string, headSha: string, name: string, run: CheckRun): void;
 }
 
-/** Files changed between `base` and `head`, from the compare API. post-checks passes `head` from
- *  `github.event.workflow_run.head_sha`, which GitHub sets and the fork's artifact cannot, so
- *  the gated-files warning cannot be dodged. Returns [] on any error, so the warning never
- *  fails the post. */
-export function changedFiles(repo: string, base: string, head: string): string[] {
+/** The most changed files GitHub's compare API lists, all on its first page. */
+export const COMPARE_FILES_MAX = 300;
+
+/**
+ * Files changed between `base` and `head`, from the compare API, or null when the list may be
+ * incomplete: the lookup failed, or it reached {@link COMPARE_FILES_MAX}, past which a pull
+ * request can push a gated file. post-checks passes `head` from
+ * `github.event.workflow_run.head_sha`, which GitHub sets and the fork's artifact cannot. Never
+ * throws, so the gated-files warning never fails the post.
+ */
+export function changedFiles(repo: string, base: string, head: string): string[] | null {
   try {
-    const out = gh(
-      ['api', `repos/${repo}/compare/${base}...${head}`, '--paginate', '--jq', '.files[].filename'],
-      { quiet: true },
-    );
-    return out ? out.split('\n').filter(Boolean) : [];
+    const out = gh(['api', `repos/${repo}/compare/${base}...${head}`, '--jq', '.files[].filename']);
+    const files = out ? out.split('\n').filter(Boolean) : [];
+    return files.length < COMPARE_FILES_MAX ? files : null;
   } catch {
-    return [];
+    return null;
   }
 }
 
@@ -608,18 +643,7 @@ export const realProvisioner: Provisioner = {
     gitRaw(['checkout', '-B', 'review', 'origin/main'], tmp);
     gitRaw(['rm', '-rf', '.'], tmp);
     gitRaw(['checkout', 'FETCH_HEAD', '--', '.'], tmp);
-    // Delete, then restore: `git checkout <tree> -- .github` overwrites the paths the tree has and
-    // keeps the rest, so an author's file at a path main lacks would reach a branch pushed to the
-    // base repo with our credentials [R121].
-    gitRaw(['rm', '-rqf', '--ignore-unmatch', '--', '.github'], tmp);
-    gitRaw(['checkout', 'origin/main', '--', '.github'], tmp);
-    if (ghOk(['api', `repos/${repo}/contents/CODEOWNERS`])) {
-      try {
-        gitRaw(['checkout', 'origin/main', '--', 'CODEOWNERS'], tmp);
-      } catch {
-        /* CODEOWNERS may be under .github/, restored above */
-      }
-    }
+    takeEngineManagedPaths(tmp, 'origin/main');
     gitRaw(['add', '-A'], tmp);
     gitRaw([...BOT_ID, 'commit', '-m', opts.message], tmp);
     gitRaw(['push', 'origin', 'review'], tmp);
