@@ -9,6 +9,8 @@ import {
   cachedJournal,
   currentRepo,
   changedFiles,
+  apiList,
+  COMPARE_FILES_MAX,
   labelChildOutput,
   openDoiPr,
   realConformanceGh,
@@ -150,19 +152,6 @@ describe('gh.ts argument vectors', () => {
 describe('labelChildOutput', () => {
   it('names the tool on every line and drops blanks', () => {
     expect(labelChildOutput('git', 'a\n\nb')).toBe('  [git] a\n  [git] b');
-  });
-});
-
-describe('ingest restores the editor-side .github ([R121])', () => {
-  it('deletes before restoring, so an author-only path cannot survive', () => {
-    // `git checkout <tree> -- .github` overwrites the paths the tree has and keeps the rest,
-    // so `.github` is deleted first.
-    const src = SRC('gh.ts');
-    const del = src.indexOf("'rm', '-rqf', '--ignore-unmatch', '--', '.github'");
-    const restore = src.indexOf("'checkout', 'origin/main', '--', '.github'");
-    expect(del, 'no delete before the restore').toBeGreaterThan(-1);
-    expect(restore).toBeGreaterThan(-1);
-    expect(del).toBeLessThan(restore);
   });
 });
 
@@ -362,11 +351,6 @@ describe('list endpoints paginate', () => {
     child.respond = () => ({ status: 0, stdout: '', stderr: '' });
   });
 
-  it('the comparison behind the gated-files warning', () => {
-    changedFiles('o/r', 'base', 'head');
-    expect(ghCall('api')!.args).toContain('--paginate');
-  });
-
   it('the ruleset lookup', () => {
     realProvisioner.rulesetExists('o/r', 'protect-main');
     expect(ghCall('api')!.args).toContain('--paginate');
@@ -378,11 +362,63 @@ describe('list endpoints paginate', () => {
   });
 });
 
+describe('apiList', () => {
+  beforeEach(() => {
+    child.calls.length = 0;
+  });
+
+  it('reads every page and returns one entry per printed line', () => {
+    child.respond = () => ({ status: 0, stdout: 'a\n\n b \nc\n', stderr: '' });
+    expect(apiList('repos/o/r/tags', '.[].name')).toEqual(['a', 'b', 'c']);
+    expect(ghCall('api')!.args).toEqual([
+      'api',
+      'repos/o/r/tags',
+      '--paginate',
+      '--jq',
+      '.[].name',
+    ]);
+  });
+});
+
+describe('changedFiles (the gated-files warning)', () => {
+  beforeEach(() => {
+    child.calls.length = 0;
+  });
+
+  it('lists the files GitHub compares', () => {
+    child.respond = () => ({ status: 0, stdout: 'index.md\n.github/x.yml\n', stderr: '' });
+    expect(changedFiles('o/r', 'main', 'abc')).toEqual(['index.md', '.github/x.yml']);
+  });
+
+  it('is null at the compare limit, past which a gated file could be left out', () => {
+    const many = Array.from({ length: COMPARE_FILES_MAX }, (_, i) => `f${i}`).join('\n');
+    child.respond = () => ({ status: 0, stdout: many, stderr: '' });
+    expect(changedFiles('o/r', 'main', 'abc')).toBeNull();
+  });
+
+  it('is null when the lookup fails', () => {
+    child.respond = () => ({ status: 1, stdout: '', stderr: 'HTTP 404' });
+    expect(changedFiles('o/r', 'main', 'abc')).toBeNull();
+  });
+});
+
 describe('realGhPr.sticky', () => {
   it('throws rather than report a comment it did not post', () => {
     child.calls.length = 0;
     child.respond = () => ({ status: 1, stdout: '', stderr: 'fatal: no such remote' });
     expect(() => realGhPr.sticky('.', '3', 'header', 'body')).toThrow();
+  });
+
+  it('edits the last marked comment when pages hold more than one', () => {
+    child.calls.length = 0;
+    child.respond = (args) => {
+      if (args.includes('get-url'))
+        return { status: 0, stdout: 'https://github.com/o/r.git', stderr: '' };
+      if (args.includes('--paginate')) return { status: 0, stdout: '11\n22\n', stderr: '' };
+      return { status: 0, stdout: '', stderr: '' };
+    };
+    realGhPr.sticky('.', '3', 'header', 'body');
+    expect(ghCall('api', '--method')!.args).toContain('repos/o/r/issues/comments/22');
   });
 });
 

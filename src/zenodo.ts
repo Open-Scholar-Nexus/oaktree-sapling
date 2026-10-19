@@ -48,17 +48,17 @@ import {
   locationRepo,
   pagesUrl,
   PAPER_VERSION_TAG,
+  parseZenodoDoi,
   readRegistry,
   repoFromGithubUrl,
   sameRepo,
+  zenodoDoiPrefix,
   type ZenodoConfig,
 } from './schema.js';
 import * as msg from './messages.js';
 
 export const ZENODO_PROD = 'https://zenodo.org/api';
 export const ZENODO_SANDBOX = 'https://sandbox.zenodo.org/api';
-const PREFIX_PROD = '10.5281/zenodo.';
-const PREFIX_SANDBOX = '10.5072/zenodo.';
 
 const ORCID_RE = /^\d{4}-\d{4}-\d{4}-\d{3}[\dX]$/;
 
@@ -101,11 +101,8 @@ export function depositCollisions(names: string[]): string[] {
 export function apiBase(sandbox: boolean): string {
   return sandbox ? ZENODO_SANDBOX : ZENODO_PROD;
 }
-function doiPrefix(sandbox: boolean): string {
-  return sandbox ? PREFIX_SANDBOX : PREFIX_PROD;
-}
-export function isSandboxDoi(doi: string): boolean {
-  return doi.startsWith(PREFIX_SANDBOX);
+function isSandboxDoi(doi: string): boolean {
+  return doi.startsWith(zenodoDoiPrefix(true));
 }
 
 /** The paper's identity on Zenodo [R7]: a URN independent of where the paper lives, stored as a
@@ -307,8 +304,8 @@ export class ZenodoApi {
   async latestVersionDepId(conceptDoi: string): Promise<number | null> {
     let items = await this.listMyDepositions({ q: `conceptdoi:"${conceptDoi}"` });
     if (items.length === 0) {
-      const m = /zenodo\.(\d+)/.exec(conceptDoi);
-      if (m) items = await this.listMyDepositions({ q: `conceptrecid:${m[1]}` });
+      const recordId = parseZenodoDoi(conceptDoi)?.recordId;
+      if (recordId) items = await this.listMyDepositions({ q: `conceptrecid:${recordId}` });
     }
     items.sort((a, b) => String(b.created ?? '').localeCompare(String(a.created ?? '')));
     return items[0]?.id ?? null;
@@ -327,7 +324,7 @@ function matchRelated(items: Deposition[], identifier: string): Deposition | nul
 /** The deposition's concept DOI. `conceptdoi` is only set after first publish; before that,
  *  build it from `conceptrecid`. */
 export function conceptDoiFor(dep: Deposition, sandbox: boolean): string {
-  return dep.conceptdoi ?? `${doiPrefix(sandbox)}${dep.conceptrecid}`;
+  return dep.conceptdoi ?? `${zenodoDoiPrefix(sandbox)}${dep.conceptrecid}`;
 }
 
 /* --------------------------------------------------------------------------
@@ -975,8 +972,10 @@ export async function cmdPublish(input: PublishInput): Promise<Outcome> {
   const conceptDoi: string | undefined = project.doi;
   if (!conceptDoi)
     return err(2, 'project.doi missing; run prepare and merge that PR before tagging.');
-  if (isSandboxDoi(conceptDoi) !== sandbox) {
-    return err(2, `DOI prefix says sandbox=${isSandboxDoi(conceptDoi)} but --sandbox=${sandbox}.`);
+  const parsed = parseZenodoDoi(conceptDoi);
+  if (!parsed) return err(2, msg.workflow.notZenodoDoi(conceptDoi));
+  if (parsed.sandbox !== sandbox) {
+    return err(2, `DOI prefix says sandbox=${parsed.sandbox} but --sandbox=${sandbox}.`);
   }
   if (!PAPER_VERSION_TAG.test(tag)) return err(2, `tag must match vMAJOR.MINOR.PATCH (got ${tag})`);
   const version = tag.slice(1);
@@ -1025,7 +1024,7 @@ export async function cmdPublish(input: PublishInput): Promise<Outcome> {
   }
   let dep = await api.getDeposition(latestId);
 
-  const expectedConcept = `${doiPrefix(sandbox)}${dep.conceptrecid}`;
+  const expectedConcept = `${zenodoDoiPrefix(sandbox)}${dep.conceptrecid}`;
   if (conceptDoi !== expectedConcept) {
     return err(
       2,
@@ -1068,7 +1067,7 @@ export async function cmdPublish(input: PublishInput): Promise<Outcome> {
   if (!bucket) return err(4, 'No bucket URL in deposition (unexpected Zenodo API shape).');
 
   // Predicted from the deposition id; matches what Zenodo assigns at publish.
-  const predictedVersionDoi = `${doiPrefix(sandbox)}${dep.id}`;
+  const predictedVersionDoi = `${zenodoDoiPrefix(sandbox)}${dep.id}`;
   const provenance: BundleProvenance = {
     repo,
     commit_sha: sha,

@@ -1,5 +1,7 @@
-# Editors review the launchers, the pins and the environment; content and myst.yml stay with the author.
+# Editors review the launchers, the pins, the environment and the engine's folders; content and myst.yml stay with the author.
 # https://scholar.nexus/oaktree-sapling/design/paper-ci#design-paper-ci-codeowners
 /.github/                @pollomarzo
 /CODEOWNERS              @pollomarzo
 /paper-environment.yml   @pollomarzo
+/node_modules/           @pollomarzo
+/.engine/                @pollomarzo

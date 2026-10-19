@@ -22,7 +22,12 @@ import {
   type TemplateAnswers,
 } from './bootstrap.js';
 import * as msg from './messages.js';
-import { compareEngineVersions, ENGINE_VERSION } from './schema.js';
+import {
+  compareEngineVersions,
+  ENGINE_MANAGED_PATHS,
+  ENGINE_VERSION,
+  underPaths,
+} from './schema.js';
 import type { cmdConformanceReset } from './conformance.js';
 
 /** The branch prefix; the target tag follows it. Exported for {@link cmdConformanceReset},
@@ -86,9 +91,8 @@ export function readAnswers(repoRoot: string): TemplateAnswers {
  * Differences: each engine-managed file rendered at the target, compared with the file on disk
  * ------------------------------------------------------------------------ */
 
-/** The engine-managed files: everything under `.github/`, and `CODEOWNERS`. All are gated
- *  (checks.ts `frozenPathsTouched`), but `paper-environment.yml` is gated and the author's, so
- *  like `myst.yml`, `index.md` and `bib.bib` it is never reset. */
+/** The template's files under {@link ENGINE_MANAGED_PATHS}. `paper-environment.yml` is gated
+ *  but the author's, so like `myst.yml`, `index.md` and `bib.bib` it is never reset. */
 function frozenFiles(templateAtTarget: string): string[] {
   const out: string[] = [];
   const walk = (dir: string, prefix: string): void => {
@@ -96,7 +100,7 @@ function frozenFiles(templateAtTarget: string): string[] {
       const abs = join(dir, name);
       const rel = prefix ? posix.join(prefix, name) : name;
       if (statSync(abs).isDirectory()) walk(abs, rel);
-      else if (rel === CODEOWNERS_REL || rel.startsWith('.github/')) out.push(rel);
+      else if (underPaths(ENGINE_MANAGED_PATHS, rel)) out.push(rel);
     }
   };
   walk(templateAtTarget, '');

@@ -11,7 +11,7 @@ import { createHash } from 'node:crypto';
 import { readDoc, readJournalConfig } from './yaml-io.js';
 import * as msg from './messages.js';
 import { annotate, firstLine, stickyMarker } from './messages.js';
-import { JournalConfig, PAPER_VERSION_TAG, type PreviewConfig } from './schema.js';
+import { JournalConfig, PAPER_VERSION_TAG, parseZenodoDoi, type PreviewConfig } from './schema.js';
 import { resolvePaperDir, takePaperDir, takePrNumber, verifyPrHead } from './artifact.js';
 
 /* --------------------------------------------------------------------------
@@ -187,19 +187,17 @@ export function artifactComment(runUrl: string, reason: string): string {
   return [stickyMarker(STICKY_PREVIEW), msg.pr.previewArtifact(runUrl, reason)].join('\n');
 }
 
-/** Zenodo record URL from a DOI prefix (sandbox `10.5072` vs prod `10.5281`); an unknown prefix
+/** The Zenodo record URL of a {@link parseZenodoDoi} DOI, on the sandbox or not; any other DOI
  *  returns an error the caller fails loud on, since a published paper's DOI must parse. */
 export function recordUrlForDoi(
   doi: string,
 ): { doi: string; recordUrl: string } | { error: string } {
-  const map: Array<[string, string]> = [
-    ['10.5072/zenodo.', 'https://sandbox.zenodo.org/records/'],
-    ['10.5281/zenodo.', 'https://zenodo.org/records/'],
-  ];
-  for (const [prefix, base] of map) {
-    if (doi.startsWith(prefix)) return { doi, recordUrl: `${base}${doi.slice(prefix.length)}` };
-  }
-  return { error: msg.workflow.notifyBadDoi(doi) };
+  const parsed = parseZenodoDoi(doi);
+  if (!parsed) return { error: msg.workflow.notifyBadDoi(doi) };
+  const base = parsed.sandbox
+    ? 'https://sandbox.zenodo.org/records/'
+    : 'https://zenodo.org/records/';
+  return { doi, recordUrl: `${base}${parsed.recordId}` };
 }
 
 /** Whether the paper already has a version tag `oak release` publishes (⇒ a new-version

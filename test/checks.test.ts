@@ -11,6 +11,9 @@ import {
   type ChecksReport,
   type PostChecksDeps,
 } from '../src/checks.js';
+import { codeownersColumns } from '../src/bootstrap.js';
+import { ENGINE_MANAGED_PATHS, GATED_PATHS, underPaths } from '../src/schema.js';
+import { readFileSync } from 'node:fs';
 
 // The editorial checks read myst's processed project, so they run only in a real session, in
 // validate.integration.test.ts. This tests how results become a Check Run.
@@ -297,7 +300,7 @@ describe('cmdPostChecks, with fakes for GitHub', () => {
 });
 
 describe('frozenPathsTouched (the gated files)', () => {
-  it('matches .github/**, CODEOWNERS and paper-environment.yml, ignores paper content', () => {
+  it('matches every gated path, ignores paper content', () => {
     const changed = [
       'index.md',
       '.github/workflows/check-paper.yml',
@@ -305,16 +308,47 @@ describe('frozenPathsTouched (the gated files)', () => {
       'data/x.csv',
       'paper-environment.yml',
       '.github/actions/engine/pins.yml',
+      'node_modules/bufferutil/index.js',
+      '.engine/dist/cli.cjs',
     ];
     expect(frozenPathsTouched(changed)).toEqual([
       '.github/workflows/check-paper.yml',
       'CODEOWNERS',
       'paper-environment.yml',
       '.github/actions/engine/pins.yml',
+      'node_modules/bufferutil/index.js',
+      '.engine/dist/cli.cjs',
     ]);
   });
   it('a change to content only touches no gated file', () => {
     expect(frozenPathsTouched(['index.md', 'myst.yml', 'figures/f1.png'])).toEqual([]);
+  });
+  it('keeps an unknown list unknown, so the warning still shows', () => {
+    expect(frozenPathsTouched(null)).toBeNull();
+  });
+  it('matches whole names only', () => {
+    for (const p of ['.github', './.github/x', '/CODEOWNERS'])
+      expect(underPaths(GATED_PATHS, p)).toBe(true);
+    for (const p of [
+      '.githubx/a',
+      'docs/CODEOWNERS',
+      'CODEOWNERS.bak',
+      'x/paper-environment.yml',
+      'x/node_modules/a',
+    ])
+      expect(underPaths(GATED_PATHS, p)).toBe(false);
+  });
+});
+
+describe('editor paths parity', () => {
+  // GitHub reads CODEOWNERS itself, so the template keeps its own copy of GATED_PATHS.
+  it('templates/paper/CODEOWNERS names exactly the gated paths', () => {
+    const src = readFileSync('templates/paper/CODEOWNERS', 'utf8');
+    const named = Object.keys(codeownersColumns(src)).map((p) => p.replace(/^\//, ''));
+    expect(named.sort()).toEqual([...GATED_PATHS].sort());
+  });
+  it('every engine-managed path is gated', () => {
+    for (const p of ENGINE_MANAGED_PATHS) expect(GATED_PATHS).toContain(p);
   });
 });
 
@@ -338,6 +372,15 @@ describe('cmdPostChecks: the gated-files warning', () => {
     expect(runs[0]!.run.summary).toContain('changes the files that run the checks');
     expect(stickies[0]!.body).toContain('changes the files that run the checks');
     expect(stickies[0]!.body).toContain('`.github/workflows/check-paper.yml`');
+  });
+
+  it('with the changed files unknown: warns, naming the gated paths', () => {
+    const { deps, runs, stickies } = fakePost();
+    cmdPostChecks({ report: report(), repo: 'o/r', sha: 'abc', pr: '7', shimTouched: null }, deps);
+    expect(runs[0]!.run.conclusion).toBe(report().checkRun.conclusion);
+    expect(runs[0]!.run.title).toContain('CI workflows may be modified');
+    expect(stickies[0]!.body).toContain('GitHub did not list every file');
+    expect(stickies[0]!.body).toContain('`paper-environment.yml`');
   });
 
   it('without shimTouched: posts the report as it is, with no warning', () => {

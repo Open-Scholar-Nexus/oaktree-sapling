@@ -950,6 +950,7 @@ export const pr = {
     `${passed} passed, ${failed} failed` +
     (warnings ? `, ${warnings} warning${warnings === 1 ? '' : 's'}` : ''),
   checkRunTitleShimTouched: (title: string): string => `⚠️ CI workflows modified: ${title}`,
+  checkRunTitleShimUnlisted: (title: string): string => `⚠️ CI workflows may be modified: ${title}`,
   unknownCheckId: (id: string): string =>
     `unknown check id "${id}"; the ids the journal can ask for, and how to change the set: ` +
     `${docsUrl(DOCS.checksChanging)}`,
@@ -962,6 +963,11 @@ export const pr = {
     `The results below come from its own copy of them, so they may not be the journal's ` +
     `checks. Unless this is an oak upgrade, an editor should read those changes before ` +
     `trusting the report.`,
+  /** A pull request whose changed files GitHub did not list in full, so gated ones may hide. */
+  shimWarningUnlisted: (paths: string[]): string =>
+    `> ⚠️ **GitHub did not list every file this pull request changes**, so it may change the ` +
+    `files that run the checks (${paths.join(', ')}). An editor should read its changes to ` +
+    `those files before trusting the report.`,
 };
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════
@@ -1058,6 +1064,10 @@ export const workflow = {
   // release
   releaseNoTag: 'oak release: --tag vX.Y.Z is required',
   releaseNoDoi: 'oak release: project.doi missing; run prepare and merge that pull request first.',
+  notZenodoDoi: (doi: string): string =>
+    `project.doi ${doi} is not a Zenodo DOI; write it as 10.5281/zenodo.<id>, or ` +
+    `10.5072/zenodo.<id> from the sandbox`,
+  releaseNotZenodoDoi: (doi: string): string => `oak release: ${workflow.notZenodoDoi(doi)}`,
   releaseNoToken: (sandbox: boolean): string =>
     `no token: set ${sandbox ? 'ZENODO_TOKEN_SANDBOX' : 'ZENODO_TOKEN'}`,
   releaseNoPdf: 'oak release: no PDF under _build/exports (did the typst export run?)',
@@ -1084,7 +1094,7 @@ export const workflow = {
     'notify: a version tag (vX.Y.Z) exists but project.doi is missing from myst.yml; the ' +
     'repo is published but unlinked. Fix myst.yml before tagging the next release.',
   notifyBadDoi: (doi: string): string =>
-    `unrecognised DOI prefix: ${doi} (expected 10.5281/zenodo.* or 10.5072/zenodo.*)`,
+    `not a Zenodo DOI: ${doi} (expected 10.5281/zenodo.* or 10.5072/zenodo.*)`,
   notifyFirstDeposit: 'no version tags (vX.Y.Z) yet (first-deposit case)',
   notifyTagsFailed: (why: string): string =>
     `notify: gh could not list the repo's version tags (${why}); whether the paper is ` +

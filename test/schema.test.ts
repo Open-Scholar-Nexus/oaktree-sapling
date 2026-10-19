@@ -17,6 +17,7 @@ import {
   RegistryEntry,
   ENGINE_ID_SENTINEL,
   toJsonSchemas,
+  parseZenodoDoi,
 } from '../src/schema.js';
 
 const read = (rel: string) =>
@@ -304,6 +305,24 @@ describe('repoFromGithubUrl', () => {
       'https://github.com/acme/paper///',
     ])
       expect(repoFromGithubUrl(url), url).toBeNull();
+  });
+});
+
+describe('parseZenodoDoi', () => {
+  it('reads a DOI Zenodo or its sandbox minted', () => {
+    expect(parseZenodoDoi('10.5281/zenodo.42')).toEqual({ sandbox: false, recordId: '42' });
+    expect(parseZenodoDoi('10.5072/zenodo.7')).toEqual({ sandbox: true, recordId: '7' });
+  });
+
+  it('is null for any other spelling, so no verb guesses an environment for it', () => {
+    for (const doi of [
+      'https://doi.org/10.5072/zenodo.7',
+      '10.5072/other',
+      '10.5281/zenodo.42 ',
+      '10.5281/zenodo.abc',
+      '10.1234/zenodo.1',
+    ])
+      expect(parseZenodoDoi(doi)).toBeNull();
   });
 });
 
