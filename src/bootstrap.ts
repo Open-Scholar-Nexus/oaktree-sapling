@@ -19,6 +19,7 @@ import { isMap, isScalar } from 'yaml';
 import { readDoc } from './yaml-io.js';
 import { themeZipUrl } from './assets.js';
 import { LABEL_EDITOR_ACTION, LABEL_ZENODO_FAILED } from './preview.js';
+import type { Outcome } from './result.js';
 import { pagesUrl } from './schema.js';
 
 /* --------------------------------------------------------------------------
@@ -531,11 +532,6 @@ export interface BootstrapDeps {
   workdir(): string;
 }
 
-export interface Outcome {
-  exitCode: number;
-  result: Record<string, unknown>;
-}
-
 /**
  * Where each value the user did not type came from, so the plan can say so. Only the CLI knows:
  * by the time a value arrives here, a default and a typed value look the same.
@@ -695,7 +691,7 @@ function partial(
   failed: StepFailure[],
   log: (m: string) => void,
 ): Outcome {
-  for (const line of runbook) log(`  → ${line}`);
+  for (const line of runbook) log(msg.bootstrap.logRunbookLine(line));
   log(msg.bootstrap.logPartial(failed.map((f) => f.step).join(', ')));
   return {
     exitCode: 1,
@@ -1102,7 +1098,7 @@ export async function cmdBootstrapPaper(
     mode === 'bare' && actions.main === 'seeded' ? [msg.bootstrap.runbookFillPaper(repo)] : [];
   const runbook = [...fill, ...contentRunbook, ...prov_.runbook, ...secretRunbook];
   const failed = [...contentFailed, ...prov_.failed, ...secretFailed];
-  for (const line of runbook) log(`  → ${line}`);
+  for (const line of runbook) log(msg.bootstrap.logRunbookLine(line));
   if (failed.length) log(msg.bootstrap.logPartial(failed.map((f) => f.step).join(', ')));
 
   return {
@@ -1278,7 +1274,7 @@ export async function cmdBootstrapJournal(
     const fill = actions.main === 'seeded' ? [msg.bootstrap.runbookFillPaper(repo)] : [];
     const runbook = [...fill, ...contentRunbook, ...settings.runbook, ...secrets.runbook];
     const failed = [...contentFailed, ...settings.failed, ...secrets.failed];
-    for (const line of runbook) log(`  → ${line}`);
+    for (const line of runbook) log(msg.bootstrap.logRunbookLine(line));
     if (failed.length) log(msg.bootstrap.logPartial(failed.map((f) => f.step).join(', ')));
     return {
       exitCode: failed.length ? 1 : 0,
@@ -1301,7 +1297,7 @@ export async function cmdBootstrapJournal(
   const runbook: string[] = [msg.bootstrap.runbookStartHere];
   if (!withSite) {
     const allRunbook = [...contentRunbook, ...runbook];
-    for (const line of allRunbook) log(`  → ${line}`);
+    for (const line of allRunbook) log(msg.bootstrap.logRunbookLine(line));
     if (contentFailed.length)
       log(msg.bootstrap.logPartial(contentFailed.map((f) => f.step).join(', ')));
     return {
@@ -1327,7 +1323,7 @@ export async function cmdBootstrapJournal(
   log(msg.bootstrap.logSiteAdded(siteUrl));
   runbook.push(msg.bootstrap.runbookSite(siteUrl));
   const allRunbook = [...contentRunbook, ...runbook];
-  for (const line of allRunbook) log(`  → ${line}`);
+  for (const line of allRunbook) log(msg.bootstrap.logRunbookLine(line));
   if (contentFailed.length)
     log(msg.bootstrap.logPartial(contentFailed.map((f) => f.step).join(', ')));
 

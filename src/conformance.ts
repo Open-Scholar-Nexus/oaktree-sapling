@@ -13,6 +13,7 @@
  * test repo and are used by its own runs.
  */
 import { STICKY_PREVIEW } from './preview.js';
+import type { Outcome } from './result.js';
 import { stickyMarker } from './messages.js';
 import { JOURNAL_BUNDLE_NAME, RESERVED_BUNDLE_NAMES } from './zenodo.js';
 import { UPGRADE_BRANCH_PREFIX } from './upgrade.js';
@@ -143,11 +144,6 @@ export interface ConformanceDeps {
 
 /** `reset` needs only the cleanup calls. */
 export type ResetDeps = Pick<ConformanceDeps, 'gh' | 'log'>;
-
-export interface Outcome {
-  exitCode: number;
-  result: Record<string, unknown>;
-}
 
 export interface ResetInput {
   /** The test repo, `owner/name`. Pull requests from the fork show up here too; `reset`

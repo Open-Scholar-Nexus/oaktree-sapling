@@ -134,15 +134,14 @@ export function toCheckRun(
 
   const esc = (s: string) => s.replace(/\|/g, '\\|');
   const rows = results
-    .map(
-      (r) =>
-        `| ${esc(r.id)} | ${r.status}${r.optional ? ' (optional)' : ''} | ${esc(r.message ?? '')} |`,
+    .map((r) =>
+      messages.pr.checkTableRow(esc(r.id), r.status, Boolean(r.optional), esc(r.message ?? '')),
     )
     .join('\n');
   const table = `${messages.pr.checkTableHeader}\n${rows}`;
   // Notes describe the run itself and never change `conclusion`; they render above the table.
   const summary = notes.length
-    ? `${notes.map((n) => `> ⚠️ ${n}`).join('\n>\n')}\n\n${table}`
+    ? `${notes.map(messages.pr.checkRunNote).join('\n>\n')}\n\n${table}`
     : table;
 
   const annotations: CheckRunAnnotation[] = failed
@@ -218,7 +217,7 @@ export function shimWarning(touched: string[] | null): string {
     .slice(0, 5)
     .map((f) => `\`${f}\``)
     .join(', ');
-  const more = touched.length > 5 ? `, +${touched.length - 5} more` : '';
+  const more = touched.length > 5 ? messages.pr.shimMore(touched.length - 5) : '';
   return messages.pr.shimWarning(shown, more);
 }
 

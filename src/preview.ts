@@ -13,6 +13,7 @@ import * as msg from './messages.js';
 import { annotate, firstLine, stickyMarker } from './messages.js';
 import { JournalConfig, PAPER_VERSION_TAG, parseZenodoDoi, type PreviewConfig } from './schema.js';
 import { resolvePaperDir, takePaperDir, takePrNumber, verifyPrHead } from './artifact.js';
+import { err, ok, type Outcome } from './result.js';
 
 /* --------------------------------------------------------------------------
  * Injected; the real ones are in gh.ts
@@ -45,23 +46,6 @@ export interface GhPr {
   /** The head commit of pull request `pr`, for {@link verifyPrHead}. */
   prHead(repo: string, pr: string): string;
 }
-
-/* --------------------------------------------------------------------------
- * Result envelope, as in zenodo.ts: the `status` the workflows read
- * ------------------------------------------------------------------------ */
-
-export interface Outcome {
-  exitCode: number;
-  result: Record<string, unknown>;
-}
-const ok = (fields: Record<string, unknown>): Outcome => ({
-  exitCode: 0,
-  result: { status: 'ok', ...fields },
-});
-const err = (exitCode: number, message: string, fields: Record<string, unknown> = {}): Outcome => ({
-  exitCode,
-  result: { status: 'error', message, ...fields },
-});
 
 /* --------------------------------------------------------------------------
  * Sticky comment headers and labels. Do not rename: GitHub stores them
@@ -361,7 +345,9 @@ export function runNewVersionReminder(input: NotifyInput, gh: GhPr): Outcome {
   }
   const parsed = recordUrlForDoi(doi);
   if ('error' in parsed) {
-    process.stderr.write(annotate('error', `notify: ${parsed.error}`) + '\n');
+    process.stderr.write(
+      annotate('error', msg.workflow.notifyRecordUrlFailed(parsed.error)) + '\n',
+    );
     return err(1, parsed.error, { reminder: 'error' });
   }
 

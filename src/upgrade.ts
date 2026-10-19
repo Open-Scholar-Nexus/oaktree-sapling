@@ -22,6 +22,7 @@ import {
   type TemplateAnswers,
 } from './bootstrap.js';
 import * as msg from './messages.js';
+import { err, type Outcome } from './result.js';
 import {
   compareEngineVersions,
   ENGINE_MANAGED_PATHS,
@@ -197,11 +198,6 @@ export interface UpgradeInput {
   filesOnly?: boolean; // leave the version in myst.yml as it is
 }
 
-export interface Outcome {
-  exitCode: number;
-  result: Record<string, unknown>;
-}
-
 /** Writes the target version into `myst.yml`. */
 function bumpVersion(repoRoot: string, target: string): void {
   const myst = join(repoRoot, 'myst.yml');
@@ -229,26 +225,19 @@ export async function cmdUpgrade(input: UpgradeInput, deps: UpgradeDeps): Promis
   const { repoRoot, filesOnly = false } = input;
   const answers = readAnswers(repoRoot);
   if (!answers.engineRepo) {
-    return {
-      exitCode: 2,
-      result: { status: 'error', message: msg.upgrade.notAPaperRepo(PINS_REL) },
-    };
+    return err(2, msg.upgrade.notAPaperRepo(PINS_REL));
   }
   // A target oak picked is printed, as in bootstrap: `--to v1.2.3` is reproducible, "the newest
   // right now" is not.
   const targetGiven = Boolean(input.to);
   const target = input.to ?? deps.resolveTarget(answers.engineRepo);
-  const refuse = (message: string, extra: Record<string, unknown> = {}): Outcome => ({
-    exitCode: 2,
-    result: { status: 'error', message, ...extra },
-  });
   // The target becomes a clone ref, a branch name and the pin, and the engine action refuses any
   // pin that is not an engine version.
   if (!ENGINE_VERSION.test(target)) {
-    return refuse(msg.upgrade.badTarget(target, answers.engineRepo, targetGiven));
+    return err(2, msg.upgrade.badTarget(target, answers.engineRepo, targetGiven));
   }
   if (filesOnly && !ENGINE_VERSION.test(answers.version)) {
-    return refuse(msg.upgrade.badPin(answers.version));
+    return err(2, msg.upgrade.badPin(answers.version));
   }
 
   // The newest release never moves a pin back from a newer one. A pin that is not an engine
@@ -279,7 +268,7 @@ export async function cmdUpgrade(input: UpgradeInput, deps: UpgradeDeps): Promis
         : order < 0
           ? msg.upgrade.belowMinimum(pinAfter, minEngine, filesOnly)
           : null;
-    if (why) return refuse(why, { target, pin: pinAfter, min_engine_version: minEngine });
+    if (why) return err(2, why, { target, pin: pinAfter, min_engine_version: minEngine });
   }
 
   if (!versionChanged && !filesChanged) {
