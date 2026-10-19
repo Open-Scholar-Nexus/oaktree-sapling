@@ -300,7 +300,7 @@ describe('cmdPostChecks, with fakes for GitHub', () => {
 });
 
 describe('frozenPathsTouched (the gated files)', () => {
-  it('matches .github/**, CODEOWNERS and paper-environment.yml, ignores paper content', () => {
+  it('matches every gated path, ignores paper content', () => {
     const changed = [
       'index.md',
       '.github/workflows/check-paper.yml',
@@ -308,12 +308,16 @@ describe('frozenPathsTouched (the gated files)', () => {
       'data/x.csv',
       'paper-environment.yml',
       '.github/actions/engine/pins.yml',
+      'node_modules/bufferutil/index.js',
+      '.engine/dist/cli.cjs',
     ];
     expect(frozenPathsTouched(changed)).toEqual([
       '.github/workflows/check-paper.yml',
       'CODEOWNERS',
       'paper-environment.yml',
       '.github/actions/engine/pins.yml',
+      'node_modules/bufferutil/index.js',
+      '.engine/dist/cli.cjs',
     ]);
   });
   it('a change to content only touches no gated file', () => {
@@ -325,7 +329,13 @@ describe('frozenPathsTouched (the gated files)', () => {
   it('matches whole names only', () => {
     for (const p of ['.github', './.github/x', '/CODEOWNERS'])
       expect(underPaths(GATED_PATHS, p)).toBe(true);
-    for (const p of ['.githubx/a', 'docs/CODEOWNERS', 'CODEOWNERS.bak', 'x/paper-environment.yml'])
+    for (const p of [
+      '.githubx/a',
+      'docs/CODEOWNERS',
+      'CODEOWNERS.bak',
+      'x/paper-environment.yml',
+      'x/node_modules/a',
+    ])
       expect(underPaths(GATED_PATHS, p)).toBe(false);
   });
 });

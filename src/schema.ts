@@ -90,7 +90,13 @@ export const COMMIT_ID = /^([0-9a-f]{40}|[0-9a-f]{64})$/;
  * `CODEOWNERS` without the leading `/`; a trailing `/` is a folder. `templates/paper/CODEOWNERS`
  * keeps a copy, held to this one by `editor paths parity` in `test/checks.test.ts`.
  */
-export const GATED_PATHS = ['.github/', 'CODEOWNERS', 'paper-environment.yml'] as const;
+export const GATED_PATHS = [
+  '.github/',
+  'CODEOWNERS',
+  'paper-environment.yml',
+  'node_modules/',
+  '.engine/',
+] as const;
 
 /** The {@link GATED_PATHS} oak ships and resets, all but `paper-environment.yml`, which is the
  *  author's. */

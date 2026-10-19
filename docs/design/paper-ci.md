@@ -14,7 +14,7 @@ Two terms recur below. A flow that needs a token runs as two workflows: **Stage 
 An author with push access opens a pull request from a branch. Stage 1 runs their content on a GitHub-hosted runner, a fresh machine discarded after the job, with a read-only token. Their pull request reaches `main` through the `protect-main` rule, which requires the editorial checks to pass and requires an editor's review for any change under `CODEOWNERS`. The author's code runs only in jobs that hold no secret, and every job that holds a secret runs code from `main` or from an editor's `v*` tag.
 
 (r83)=
-A pull request from a fork, the default for an outside contributor, adds a step before anything runs: GitHub holds the run for a maintainer's approval when the contributor has never had anything merged into the repository. That is GitHub's default for a public repository, `oak bootstrap` leaves it there, and the [runbook](src:src/messages.ts#L470-L473) tells the editor to expect the approval click. Once approved, the fork's run builds like any other, and any edit it makes to a gated file needs an editor's review before it can merge. The checks comment also [flags](src:src/checks.ts#L200-L205) a pull request that touches `.github/`, `CODEOWNERS` or `paper-environment.yml`, and one whose changed files GitHub could not list in full.
+A pull request from a fork, the default for an outside contributor, adds a step before anything runs: GitHub holds the run for a maintainer's approval when the contributor has never had anything merged into the repository. That is GitHub's default for a public repository, `oak bootstrap` leaves it there, and the [runbook](src:src/messages.ts#L470-L473) tells the editor to expect the approval click. Once approved, the fork's run builds like any other, and any edit it makes to a gated file needs an editor's review before it can merge. The checks comment also [flags](src:src/checks.ts#L200-L205) a pull request that touches a gated file, and one whose changed files GitHub could not list in full.
 :::
 
 (design-paper-ci-trust)=
@@ -48,11 +48,12 @@ The author changes the content and `myst.yml`, including the engine version, wit
 
 (r92)=
 
-[`CODEOWNERS`](src:templates/paper/CODEOWNERS#L3-L5) tells GitHub who must review a change to the files it names. It only blocks a merge behind a branch rule that requires a code owner's review, and the pull request's workflows still run before anyone reviews it. `oak bootstrap` creates that rule as [`protect-main`](src:src/bootstrap.ts#L416-L452). Our CODEOWNERS names three things:
+[`CODEOWNERS`](src:templates/paper/CODEOWNERS#L3-L7) tells GitHub who must review a change to the files it names. It only blocks a merge behind a branch rule that requires a code owner's review, and the pull request's workflows still run before anyone reviews it. `oak bootstrap` creates that rule as [`protect-main`](src:src/bootstrap.ts#L416-L452). Our CODEOWNERS names five things:
 
 - `.github/`, so an editor approves any change to the launchers or to `pins.yml`, which could otherwise name a different engine repository, or a journal repository whose MyST plugins run at build time.
 - `CODEOWNERS` itself, so a pull request cannot remove the gate in the same change.
 - `paper-environment.yml`. Installing a conda package runs its install scripts, so the file decides code that runs in every build. The action installs it only in jobs that hold no secret, as [below](#r207).
+- `node_modules/` and `.engine/`. The engine runs from `.engine/` in the paper checkout, so Node looks up any package the bundle does not contain in those two folders, including in the jobs that hold a token.
 
 (design-paper-ci-upgrade)=
 A paper moves to a new release when an editor runs `oak upgrade` with their own login. It opens one pull request that sets the version in `myst.yml` and replaces the launchers with the release's own, and that pull request goes through the code-owner review like any other change under `.github/`.[^why-no-scheduled-upgrade]
@@ -186,9 +187,9 @@ The engine repository in `pins.yml` and the version in `myst.yml` both fail loud
 
 (r137)=
 
-Stage 2 rejects malformed input with a clear error. A report that is not JSON, or JSON without the `checkRun.conclusion` field, makes `post-checks` [exit 1](src:src/cli.ts#L938-L951) naming the file and what is wrong with it. An absent `pr-number` file means a push build and is not an error, and an absent `paper` file means `.`. A present and malformed one is a corrupt or hostile artifact, so Stage 2 fails.
+Stage 2 rejects malformed input with a clear error. A report that is not JSON, or JSON without the `checkRun.conclusion` field, makes `post-checks` [exit 1](src:src/cli.ts#L939-L952) naming the file and what is wrong with it. An absent `pr-number` file means a push build and is not an error, and an absent `paper` file means `.`. A present and malformed one is a corrupt or hostile artifact, so Stage 2 fails.
 
-[`oak validate --report`](src:src/cli.ts#L797-L800) exits 0 whenever it wrote a report, a failing one included, because `post-checks.yml` runs only after a successful Stage 1. It exits non-zero only when no report was written.
+[`oak validate --report`](src:src/cli.ts#L798-L801) exits 0 whenever it wrote a report, a failing one included, because `post-checks.yml` runs only after a successful Stage 1. It exits non-zero only when no report was written.
 
 (design-paper-ci-artifact-contract)=
 
