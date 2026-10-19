@@ -1,4 +1,4 @@
-# Editors review the launchers, the pins, the environment and the folders Node loads the engine's code from; content and myst.yml stay with the author.
+# Editors review the launchers, the pins, the environment and the engine's folders; content and myst.yml stay with the author.
 # https://scholar.nexus/oaktree-sapling/design/paper-ci#design-paper-ci-codeowners
 /.github/                @pollomarzo
 /CODEOWNERS              @pollomarzo
