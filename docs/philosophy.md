@@ -1,7 +1,7 @@
 (philosophy)=
 # Philosophy
 
-Oaktree Sapling sets up a journal on free services and on tools a researcher already uses or can learn in an afternoon. This page explains each choice, for anyone deciding whether to adopt it.
+Oaktree Sapling sets up a journal on free services and on tools a researcher already uses or can learn in an afternoon. It suits a small journal run by volunteers, publishing computational papers by authors who already keep their code on GitHub. This page explains each choice, for anyone deciding whether to adopt it.
 
 ## Papers are written in MyST
 
@@ -36,7 +36,14 @@ Publishing a version deposits it to [Zenodo](https://zenodo.org), which gives it
 
 A paper builds with the engine release named in its `myst.yml`, checked out from the engine repository at that release's tag. If the engine stops being maintained, each paper keeps building with the release it names, for as long as that release and the web theme it downloads stay on GitHub. A journal can also run its papers from its own fork of the engine repository, release tags included, by naming that fork in the paper's [`pins.yml`](src:templates/paper/.github/actions/engine/pins.yml#L4).
 
-## Alternatives
+## Limits
+
+- Review is public. Anyone can read a pull request on a public repository, so a journal that needs blind or confidential review has to run it somewhere else.
+- Authors work in git. Someone who writes in Word or Overleaf has to move the paper to MyST and learn to open a pull request, and coauthors edit through commits.
+- Papers get DataCite DOIs through Zenodo. Registering with Crossref, and applying to indexes such as Scopus or PubMed, is left to the journal.
+- Editors work in GitHub's interface. Assigning reviewers, tracking deadlines and chasing late reviews happen in issues and pull requests, by hand.
+
+## Open alternatives
 
 [ReScience C](https://rescience.github.io)
 : Publishes replications of computational studies. Each submission is reviewed in a public GitHub issue and published on Zenodo, using only GitHub and Zenodo. Oaktree Sapling is close to it in setup, and packages that setup as a tool: `oak` creates the repositories, the editorial checks run on every pull request, and a journal upgrades when the engine does.
