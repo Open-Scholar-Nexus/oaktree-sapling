@@ -38,10 +38,10 @@ A paper builds with the engine release named in its `myst.yml`, checked out from
 
 ## Limits
 
-- Review is public. Anyone can read a pull request on a public repository, so a journal that needs blind or confidential review has to run it somewhere else.
-- Authors work in git. Someone who writes in Word or Overleaf has to move the paper to MyST and learn to open a pull request, and coauthors edit through commits.
-- Papers get DataCite DOIs through Zenodo. Registering with Crossref, and applying to indexes such as Scopus or PubMed, is left to the journal.
-- Editors work in GitHub's interface. Assigning reviewers, tracking deadlines and chasing late reviews happen in issues and pull requests, by hand.
+- Review happens in pull requests on public repositories, which anyone can read, so a journal that needs blind or confidential review runs it elsewhere.
+- A paper drafted in Word or Overleaf has to be converted to MyST, and its authors then edit it through commits.
+- Each paper gets a DataCite DOI through Zenodo. Registering with Crossref, and applying to indexes such as Scopus or PubMed, is left to the journal.
+- Editors assign reviewers, track deadlines and remind late reviewers by hand, in GitHub issues and pull requests.
 
 ## Open alternatives
 
