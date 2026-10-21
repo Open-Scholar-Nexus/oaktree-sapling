@@ -1,7 +1,7 @@
 (philosophy)=
 # Philosophy
 
-Oaktree Sapling sets up a journal on free services and on tools a researcher already uses or can learn in an afternoon. It suits a small journal run by volunteers, publishing computational papers by authors who already keep their code on GitHub. This page explains each choice, for anyone deciding whether to adopt it.
+Oaktree Sapling sets up a journal on free services and on tools a researcher already uses or can learn in an afternoon. It could suit a small journal of computational papers, or a conference publishing its papers. This page explains each choice, for anyone deciding whether to adopt it.
 
 ## Papers are written in MyST
 
@@ -38,10 +38,12 @@ A paper builds with the engine release named in its `myst.yml`, checked out from
 
 ## Limits
 
-- Review happens in pull requests on public repositories, which anyone can read, so a journal that needs blind or confidential review runs it elsewhere.
+- Review happens in pull requests on public repositories, so anyone can read the reviews, and authors see who wrote them[^blind].
 - A paper drafted in Word or Overleaf has to be converted to MyST, and its authors then edit it through commits.
 - Each paper gets a DataCite DOI through Zenodo. Registering with Crossref, and applying to indexes such as Scopus or PubMed, is left to the journal.
 - Editors assign reviewers, track deadlines and remind late reviewers by hand, in GitHub issues and pull requests.
+
+[^blind]: `oak` sets up open review, and its guides cover that. A journal can arrange other kinds itself: reviewers could comment from separate GitHub accounts or through an editor, and review could happen in a private repository, which on GitHub's free plan would have neither branch rules nor Pages.
 
 ## Open alternatives
 
@@ -65,7 +67,7 @@ A paper builds with the engine release named in its `myst.yml`, checked out from
 
 ## Costs and accounts
 
-A journal set up with Oaktree Sapling has little to run: a paper is built only when it changes, and what readers get is a static website, which costs little to serve[^scope]. So every service it uses is free at its scale: GitHub Actions and Pages for public repositories, Cloudflare Pages for the previews, and Zenodo[^sustainability].
+It's free. A journal set up with Oaktree Sapling has little to run: a paper is built only when it changes, and what readers get is a static website, which costs little to serve[^scope]. So every service it uses is free at its scale: GitHub Actions and Pages for public repositories, Cloudflare Pages for the previews, and Zenodo[^sustainability].
 
 An author needs a GitHub account. The journal also needs a Cloudflare account for the previews and a Zenodo account for the deposits.
 
