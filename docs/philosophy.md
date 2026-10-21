@@ -11,7 +11,7 @@ MyST reads a document into a structure where each figure, equation and citation 
 
 :::{figure} #fig-gccm
 :label: fig-philosophy-gccm
-An interactive figure from a published paper: cross-map skill between land surface temperature (LST) and each candidate driver of urban heat in Ouagadougou, in both directions, with 95% confidence intervals. Data from [Lindner et al. (2026)](https://doi.org/10.5281/zenodo.20606263), Fig. 1D. Hover over a point for its values; click a legend entry to highlight one direction. In a paper's PDF, the chart is a static image ([how to embed one](https://mystmd.org/guide/reuse-jupyter-outputs)).
+An interactive figure from a published paper: cross-map skill between land surface temperature (LST) and each candidate driver of urban heat in Ouagadougou, in both directions, with 95% confidence intervals. Data from [Lindner et al. (2026)](https://impact-scholars.github.io/lindner-2026-ouaga-urban-heat-drivers/), Fig. 1D ([DOI](https://doi.org/10.5281/zenodo.20606263)). Hover over a point for its values; click a legend entry to highlight one direction. In a paper's PDF, the chart is a static image ([how to embed one](https://mystmd.org/guide/reuse-jupyter-outputs)).
 :::
 
 MyST is open source and part of [Project Jupyter](https://jupyter.org).
