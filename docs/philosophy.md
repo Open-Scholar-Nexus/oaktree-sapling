@@ -1,7 +1,7 @@
 (philosophy)=
 # Philosophy
 
-Oaktree Sapling sets up a journal on free services and on tools a researcher already uses or can learn in an afternoon. This page explains each choice, for anyone deciding whether to adopt it.
+Oaktree Sapling sets up a journal on free services and on tools a researcher already uses or can learn in an afternoon. It could suit a small journal of computational papers, or a conference publishing its papers. This page explains each choice, for anyone deciding whether to adopt it.
 
 ## Papers are written in MyST
 
@@ -11,7 +11,7 @@ MyST reads a document into a structure where each figure, equation and citation 
 
 :::{figure} #fig-gccm
 :label: fig-philosophy-gccm
-An interactive figure from a published paper: cross-map skill between land surface temperature (LST) and each candidate driver of urban heat in Ouagadougou, in both directions, with 95% confidence intervals. Data from [Lindner et al. (2026)](https://doi.org/10.5281/zenodo.20606263), Fig. 1D. Hover over a point for its values; click a legend entry to highlight one direction. In a paper's PDF, the chart is a static image ([how to embed one](https://mystmd.org/guide/reuse-jupyter-outputs)).
+An interactive figure from a published paper: cross-map skill between land surface temperature (LST) and each candidate driver of urban heat in Ouagadougou, in both directions, with 95% confidence intervals. Data from [Lindner et al. (2026)](https://impact-scholars.github.io/lindner-2026-ouaga-urban-heat-drivers/), Fig. 1D ([DOI](https://doi.org/10.5281/zenodo.20606263)). Hover over a point for its values; click a legend entry to highlight one direction. In a paper's PDF, the chart is a static image ([how to embed one](https://mystmd.org/guide/reuse-jupyter-outputs)).
 :::
 
 MyST is open source and part of [Project Jupyter](https://jupyter.org).
@@ -36,7 +36,16 @@ Publishing a version deposits it to [Zenodo](https://zenodo.org), which gives it
 
 A paper builds with the engine release named in its `myst.yml`, checked out from the engine repository at that release's tag. If the engine stops being maintained, each paper keeps building with the release it names, for as long as that release and the web theme it downloads stay on GitHub. A journal can also run its papers from its own fork of the engine repository, release tags included, by naming that fork in the paper's [`pins.yml`](src:templates/paper/.github/actions/engine/pins.yml#L4).
 
-## Alternatives
+## Limits
+
+- Review happens in pull requests on public repositories, so anyone can read the reviews, and authors see who wrote them[^blind].
+- A paper drafted in Word or Overleaf has to be converted to MyST, and its authors then edit it through commits.
+- Each paper gets a DataCite DOI through Zenodo. Registering with Crossref, and applying to indexes such as Scopus or PubMed, is left to the journal.
+- Editors assign reviewers, track deadlines and remind late reviewers by hand, in GitHub issues and pull requests.
+
+[^blind]: `oak` sets up open review, and its guides cover that. A journal can arrange other kinds itself: reviewers could comment from separate GitHub accounts or through an editor, and review could happen in a private repository, which on GitHub's free plan would have neither branch rules nor Pages.
+
+## Open alternatives
 
 [ReScience C](https://rescience.github.io)
 : Publishes replications of computational studies. Each submission is reviewed in a public GitHub issue and published on Zenodo, using only GitHub and Zenodo. Oaktree Sapling is close to it in setup, and packages that setup as a tool: `oak` creates the repositories, the editorial checks run on every pull request, and a journal upgrades when the engine does.
@@ -58,7 +67,7 @@ A paper builds with the engine release named in its `myst.yml`, checked out from
 
 ## Costs and accounts
 
-A journal set up with Oaktree Sapling has little to run: a paper is built only when it changes, and what readers get is a static website, which costs little to serve[^scope]. So every service it uses is free at its scale: GitHub Actions and Pages for public repositories, Cloudflare Pages for the previews, and Zenodo[^sustainability].
+It's free. A journal set up with Oaktree Sapling has little to run: a paper is built only when it changes, and what readers get is a static website, which costs little to serve[^scope]. So every service it uses is free at its scale: GitHub Actions and Pages for public repositories, Cloudflare Pages for the previews, and Zenodo[^sustainability].
 
 An author needs a GitHub account. The journal also needs a Cloudflare account for the previews and a Zenodo account for the deposits.
 
