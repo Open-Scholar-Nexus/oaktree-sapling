@@ -58,7 +58,7 @@ zenodo:
 Each pull request to a paper gets a preview of its website, by default as a downloadable copy of the built site. To give it a live link on Cloudflare Pages instead:
 
 1. In Cloudflare, create a Pages project to hold the previews, and an API token allowed to edit Cloudflare Pages.
-2. Set the token and the account id on each paper repository (see [Secrets](add-paper.md#paper-secrets)).
+2. Set the token and the account id on each paper repository (see [Secrets](../reference/secrets.md)).
 3. In `journal.yml`, set:
 
    ```yaml
