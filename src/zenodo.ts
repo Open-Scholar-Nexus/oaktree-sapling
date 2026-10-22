@@ -1,10 +1,11 @@
 /**
- * `oak deposit` (prepare, publish, status), and the core of `oak release`.
+ * `oak deposit` (prepare, publish, status), and the core of `oak release`, through Zenodo's
+ * InvenioRDM API (`/api/records`).
  *
  *  - The journal's description paragraph and Zenodo community come from `journal.yml`
- *    `zenodo:`; both are optional [R19]. See `loadJournalZenodo`.
- *  - Every lookup pages through all depositions [R20] [R35.1]: an account can hold more than a
- *    page, and a missed match makes `prepare` mint a second concept DOI.
+ *    `zenodo:`; both are optional [R19]. See `loadJournalZenodo` and `requestCommunity`.
+ *  - Every lookup pages through all the account's records [R20] [R35.1]: an account can hold
+ *    more than a page, and a missed match makes `prepare` mint a second concept DOI.
  *  - A deposit is identified by the paper's `project.id`, stored as a URN
  *    (`urn:oaktree-sapling:<id>`) beside the GitHub URL and looked up first, so it survives the
  *    repo moving [R7] [design §9].
@@ -189,11 +190,22 @@ export interface GitContext {
 }
 
 /* --------------------------------------------------------------------------
- * Zenodo API (every lookup pages through all results [R20] [R35.1])
+ * Zenodo's InvenioRDM API (every lookup pages through all results [R20] [R35.1])
  * ------------------------------------------------------------------------ */
 
-// Depositions are loosely typed: Zenodo owns the shape, we read a few fields by name.
-export type Deposition = Record<string, any>;
+/** Zenodo answers `/api/records` in its legacy shape unless asked for this one. */
+const RDM_JSON = 'application/vnd.inveniordm.v1+json';
+
+// Records are loosely typed: Zenodo owns the shape, we read a few fields by name.
+export type ZenodoRecord = Record<string, any>;
+
+/** What a draft is written with: the metadata, the custom fields, and open access to both. */
+export interface DraftBody {
+  metadata: Record<string, unknown>;
+  custom_fields: Record<string, unknown>;
+  access: { record: 'public'; files: 'public' };
+  files: { enabled: true };
+}
 
 export class ZenodoError extends Error {
   constructor(
@@ -223,21 +235,23 @@ export class ZenodoApi {
     opts: Parameters<ZenodoTransport['request']>[2] = {},
   ): Promise<TransportResponse> {
     const params = { ...opts.params, access_token: this.token };
-    const res = await this.t.request(method, `${this.api}${path}`, { ...opts, params });
+    const headers = { Accept: RDM_JSON, ...opts.headers };
+    const res = await this.t.request(method, `${this.api}${path}`, { ...opts, params, headers });
     if (!res.ok)
       throw new ZenodoError(`Zenodo ${method} ${path} → ${res.status}`, res.status, res.text);
     return res;
   }
 
-  /** Lists depositions page by page (`size=100`) until a short page [R20]. */
-  async listMyDepositions(opts: { q?: string } = {}): Promise<Deposition[]> {
+  /** The account's records and drafts, the latest version of each, page by page (`size=100`)
+   *  until a short page [R20]. */
+  async searchMyRecords(q?: string): Promise<ZenodoRecord[]> {
     const size = 100;
-    const out: Deposition[] = [];
+    const out: ZenodoRecord[] = [];
     for (let page = 1; ; page++) {
       const params: Record<string, string | number> = { size, page };
-      if (opts.q) params.q = opts.q;
-      const res = await this.call('GET', '/deposit/depositions', { params });
-      const batch = res.json() as Deposition[];
+      if (q) params.q = q;
+      const res = await this.call('GET', '/user/records', { params });
+      const batch = (res.json() as { hits?: { hits?: ZenodoRecord[] } } | null)?.hits?.hits;
       if (!Array.isArray(batch) || batch.length === 0) break;
       out.push(...batch);
       if (batch.length < size) break;
@@ -245,75 +259,95 @@ export class ZenodoApi {
     return out;
   }
 
-  async getDeposition(depId: string | number): Promise<Deposition> {
-    return (await this.call('GET', `/deposit/depositions/${depId}`)).json() as Deposition;
+  /** The record's draft when `draft`, else the published record. */
+  async getRecord(id: string, draft: boolean): Promise<ZenodoRecord> {
+    const path = draft ? `/records/${id}/draft` : `/records/${id}`;
+    return (await this.call('GET', path)).json() as ZenodoRecord;
   }
 
-  async createDeposition(metadata: Record<string, unknown>): Promise<Deposition> {
-    return (
-      await this.call('POST', '/deposit/depositions', { json: { metadata } })
-    ).json() as Deposition;
+  async createDraft(body: DraftBody): Promise<ZenodoRecord> {
+    return logDraftErrors((await this.call('POST', '/records', { json: body })).json());
   }
 
-  async updateMetadata(
-    depId: string | number,
-    metadata: Record<string, unknown>,
-  ): Promise<Deposition> {
-    return (
-      await this.call('PUT', `/deposit/depositions/${depId}`, { json: { metadata } })
-    ).json() as Deposition;
+  /** Replaces the draft's metadata and custom fields; Zenodo keeps its reserved DOI. */
+  async updateDraft(id: string, body: DraftBody): Promise<ZenodoRecord> {
+    return logDraftErrors((await this.call('PUT', `/records/${id}/draft`, { json: body })).json());
   }
 
-  async uploadFile(bucketUrl: string, name: string, data: Uint8Array): Promise<void> {
-    // The bucket PUT takes a bare URL (outside `/api`), so it skips `call`'s path join. The name
-    // comes from the author, so it is encoded: a raw `?` would end the path and append to the
-    // query string that carries the token [R107].
-    const res = await this.t.request('PUT', `${bucketUrl}/${encodeURIComponent(name)}`, {
-      params: { access_token: this.token },
+  async reserveDoi(id: string): Promise<ZenodoRecord> {
+    return (await this.call('POST', `/records/${id}/draft/pids/doi`)).json() as ZenodoRecord;
+  }
+
+  /** A community's id from its slug, the last part of its address. */
+  async communityId(slug: string): Promise<string> {
+    const res = await this.call('GET', `/communities/${encodeURIComponent(slug)}`);
+    return String((res.json() as { id: string }).id);
+  }
+
+  /** Makes the community the draft's review: publishing it then goes through the community. */
+  async setCommunityReview(id: string, communityId: string): Promise<void> {
+    await this.call('PUT', `/records/${id}/draft/review`, {
+      json: { receiver: { community: communityId }, type: 'community-submission' },
+    });
+  }
+
+  async draftFileNames(id: string): Promise<string[]> {
+    const res = await this.call('GET', `/records/${id}/draft/files`);
+    const entries = (res.json() as { entries?: Array<{ key: string }> } | null)?.entries ?? [];
+    return entries.map((e) => e.key);
+  }
+
+  async deleteDraftFile(id: string, name: string): Promise<void> {
+    await this.call('DELETE', `/records/${id}/draft/files/${encodeURIComponent(name)}`);
+  }
+
+  /** Adds a file to the draft: declare, send the bytes, commit. The name comes from the author,
+   *  so it is encoded: a raw `?` would end the path and append to the query string that
+   *  carries the token [R107]. */
+  async uploadFile(id: string, name: string, data: Uint8Array): Promise<void> {
+    const file = `/records/${id}/draft/files/${encodeURIComponent(name)}`;
+    await this.call('POST', `/records/${id}/draft/files`, { json: [{ key: name }] });
+    await this.call('PUT', `${file}/content`, {
       body: data,
+      headers: { 'Content-Type': 'application/octet-stream' },
       timeoutMs: 600_000,
     });
-    if (!res.ok) throw new ZenodoError(`upload ${name} → ${res.status}`, res.status, res.text);
+    await this.call('POST', `${file}/commit`);
   }
 
   /**
-   * Finds the deposition by id, then by GitHub URL [R7]: targeted `q` queries first (each paged),
-   * then a full scan when neither found the identifier. The scan depends on a match, not on rows
-   * coming back, since `q` matches phrases and a near miss returns rows [R100].
+   * Finds the paper's record by id, then by GitHub URL [R7]: targeted `q` queries first (each
+   * paged), then a full scan when neither found the identifier. The scan depends on a match, not
+   * on rows coming back [R100].
    */
-  async findDeposit(opts: { paperId?: string; githubUrl: string }): Promise<Deposition | null> {
+  async findDeposit(opts: { paperId?: string; githubUrl: string }): Promise<ZenodoRecord | null> {
     const urn = opts.paperId ? paperUrn(opts.paperId) : null;
+    const query = (id: string) => `metadata.related_identifiers.identifier:"${id}"`;
 
     if (urn) {
-      const hit = matchRelated(
-        await this.listMyDepositions({ q: `related.identifier:"${urn}"` }),
-        urn,
-      );
+      const hit = matchRelated(await this.searchMyRecords(query(urn)), urn);
       if (hit) return hit;
     }
-    const byUrl = matchRelated(
-      await this.listMyDepositions({ q: `related.identifier:"${opts.githubUrl}"` }),
-      opts.githubUrl,
-    );
+    const byUrl = matchRelated(await this.searchMyRecords(query(opts.githubUrl)), opts.githubUrl);
     if (byUrl) return byUrl;
 
-    const all = await this.listMyDepositions();
+    const all = await this.searchMyRecords();
     return (urn && matchRelated(all, urn)) || matchRelated(all, opts.githubUrl) || null;
   }
 
-  /** The newest deposition for a concept DOI (paged, the third lookup [R35.1]). */
-  async latestVersionDepId(conceptDoi: string): Promise<number | null> {
-    let items = await this.listMyDepositions({ q: `conceptdoi:"${conceptDoi}"` });
-    if (items.length === 0) {
-      const recordId = parseZenodoDoi(conceptDoi)?.recordId;
-      if (recordId) items = await this.listMyDepositions({ q: `conceptrecid:${recordId}` });
-    }
+  /** The newest version of a concept DOI, a draft when there is one, read fresh; null when the
+   *  account holds none [R35.1]. */
+  async latestVersion(conceptDoi: string): Promise<ZenodoRecord | null> {
+    const parentId = parseZenodoDoi(conceptDoi)?.recordId;
+    if (!parentId) return null;
+    const items = await this.searchMyRecords(`parent.id:${parentId}`);
     items.sort((a, b) => String(b.created ?? '').localeCompare(String(a.created ?? '')));
-    return items[0]?.id ?? null;
+    const hit = items[0];
+    return hit ? this.getRecord(String(hit.id), hit.is_draft === true) : null;
   }
 }
 
-function matchRelated(items: Deposition[], identifier: string): Deposition | null {
+function matchRelated(items: ZenodoRecord[], identifier: string): ZenodoRecord | null {
   for (const it of items) {
     for (const ri of it.metadata?.related_identifiers ?? []) {
       if (ri.identifier === identifier) return it;
@@ -322,10 +356,51 @@ function matchRelated(items: Deposition[], identifier: string): Deposition | nul
   return null;
 }
 
-/** The deposition's concept DOI. `conceptdoi` is only set after first publish; before that,
- *  build it from `conceptrecid`. */
-export function conceptDoiFor(dep: Deposition, sandbox: boolean): string {
-  return dep.conceptdoi ?? `${zenodoDoiPrefix(sandbox)}${dep.conceptrecid}`;
+/** Zenodo saves a draft that fails validation and lists why in `errors`; the files check fails
+ *  until the upload, so it is left out. */
+function logDraftErrors(rec: unknown): ZenodoRecord {
+  const r = rec as ZenodoRecord;
+  for (const e of r?.errors ?? []) {
+    if (e?.field === 'files.enabled') continue;
+    process.stderr.write(
+      `[warn] Zenodo draft ${r.id}: ${e?.field}: ${(e?.messages ?? []).join(' ')}\n`,
+    );
+  }
+  return r;
+}
+
+/** The concept DOI. Zenodo mints it on first publish; before that, build it from the parent id. */
+export function conceptDoiFor(rec: ZenodoRecord, sandbox: boolean): string {
+  return rec.parent?.pids?.doi?.identifier ?? `${zenodoDoiPrefix(sandbox)}${rec.parent?.id}`;
+}
+
+/** The version DOI: the draft's reserved one, else the one Zenodo mints from the record id. */
+function versionDoiFor(rec: ZenodoRecord, sandbox: boolean): string {
+  return rec.pids?.doi?.identifier ?? `${zenodoDoiPrefix(sandbox)}${rec.id}`;
+}
+
+/**
+ * Puts a first version's draft up for the journal's community [R19], as its review: the editor
+ * then submits it to the community, or publishes it there when they curate it. A later version
+ * stays in the communities its first version joined, and Zenodo takes no review for it.
+ */
+async function requestCommunity(
+  api: ZenodoApi,
+  rec: ZenodoRecord,
+  slug: string | undefined,
+): Promise<void> {
+  if (!slug) return;
+  const id = await api.communityId(slug);
+  if ((rec.parent?.communities?.ids ?? []).includes(id)) return;
+  if ((rec.versions?.index ?? 1) > 1) {
+    process.stderr.write(
+      `[warn] the record is not in the Zenodo community "${slug}", which Zenodo takes only ` +
+        `on a first version; an editor can submit the published record to it on Zenodo.\n`,
+    );
+    return;
+  }
+  if (rec.parent?.review?.receiver?.community === id) return;
+  await api.setCommunityReview(String(rec.id), id);
 }
 
 /* --------------------------------------------------------------------------
@@ -419,6 +494,54 @@ function youtubeUrl(project: any): string | null {
   return null;
 }
 
+/** MyST's aliases for the keys of an author's `name` object. */
+const NAME_ALIASES: Record<string, string> = {
+  surname: 'family',
+  last: 'family',
+  forename: 'given',
+  first: 'given',
+  particle: 'non_dropping_particle',
+  'non-dropping-particle': 'non_dropping_particle',
+  'dropping-particle': 'dropping_particle',
+};
+
+const text = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
+
+/**
+ * Zenodo's name parts for a MyST author `name`. The object form gives the given and family
+ * names; a string goes whole into `family_name`, unsplit, since a split can guess wrong.
+ */
+export function personName(name: unknown): { family_name: string; given_name?: string } {
+  if (name && typeof name === 'object') {
+    const n: Record<string, string> = {};
+    for (const [k, v] of Object.entries(name)) n[NAME_ALIASES[k] ?? k] = text(v);
+    const family = [n.non_dropping_particle, n.family, n.suffix].filter(Boolean).join(' ');
+    const given = [n.given, n.dropping_particle].filter(Boolean).join(' ');
+    if (family) return given ? { given_name: given, family_name: family } : { family_name: family };
+    return { family_name: n.literal || given };
+  }
+  return { family_name: String(name ?? '') };
+}
+
+/** An author's affiliation names. Each is a string, an object with a `name`, or the id of an
+ *  entry in the project's `affiliations`, as MyST reads them. */
+function affiliationNames(author: any, project: any): string[] {
+  const affName = (a: any): string => text(a?.name) || text(a?.institution);
+  const byId = new Map<string, string>();
+  for (const a of Array.isArray(project.affiliations) ? project.affiliations : []) {
+    const id = text(a?.id);
+    if (id && affName(a)) byId.set(id, affName(a));
+  }
+  const raw = author.affiliations ?? author.affiliation;
+  const list: unknown[] = Array.isArray(raw) ? raw : raw ? [raw] : [];
+  return list
+    .map((a: any) => {
+      if (typeof a === 'string') return byId.get(a.trim()) ?? a.trim();
+      return affName(a) || byId.get(text(a?.id) || text(a?.ref)) || '';
+    })
+    .filter(Boolean);
+}
+
 export interface MetadataInput {
   project: any;
   paperId?: string;
@@ -431,12 +554,19 @@ export interface MetadataInput {
   extraDescParas?: string[] | null;
 }
 
+const related = (identifier: string, relation: string, scheme: string) => ({
+  identifier,
+  relation_type: { id: relation },
+  scheme,
+});
+
 /**
- * Builds the deposition metadata from a myst project and the journal's `zenodo:` settings. The
- * description is HTML paragraphs (abstract, journal paragraph, extra part, links), and the
- * identity URN sits beside the GitHub URL [R7].
+ * Builds the draft from a myst project and the journal's `zenodo:` settings. The description is
+ * HTML paragraphs (abstract, journal paragraph, extra part, links), the identity URN sits beside
+ * the GitHub URL [R7], and the GitHub URL is also the code repository field. The community is
+ * the draft's review, set by {@link requestCommunity}.
  */
-export function buildMetadata(input: MetadataInput): Record<string, unknown> {
+export function buildDraft(input: MetadataInput): DraftBody {
   const {
     project,
     paperId,
@@ -449,19 +579,21 @@ export function buildMetadata(input: MetadataInput): Record<string, unknown> {
     extraDescParas,
   } = input;
 
-  const creators: Array<Record<string, string>> = [];
+  const creators: Array<Record<string, unknown>> = [];
   for (const a of project.authors ?? []) {
-    const c: Record<string, string> = { name: String(a.name) };
-    const affs = a.affiliations ?? [];
-    if (affs.length) c.affiliation = String(affs[0]);
+    const person: Record<string, unknown> = { type: 'personal', ...personName(a.name) };
     const orcid = String(a.orcid ?? '');
-    // Zenodo replaces `name` from the ORCID profile when the ORCID does not resolve, so invalid
+    // Zenodo replaces the name from the ORCID profile when the ORCID does not resolve, so invalid
     // and placeholder ORCIDs (the template's 0000-0000-...) are dropped.
     if (orcid && ORCID_RE.test(orcid) && !orcid.startsWith('0000-0000-')) {
-      c.orcid = orcid;
+      person.identifiers = [{ scheme: 'orcid', identifier: orcid }];
     } else if (orcid) {
-      process.stderr.write(`[warn] skipping invalid/placeholder ORCID for ${a.name}: ${orcid}\n`);
+      const who = [person.given_name, person.family_name].filter(Boolean).join(' ');
+      process.stderr.write(`[warn] skipping invalid/placeholder ORCID for ${who}: ${orcid}\n`);
     }
+    const c: Record<string, unknown> = { person_or_org: person };
+    const affs = affiliationNames(a, project);
+    if (affs.length) c.affiliations = affs.map((name) => ({ name }));
     creators.push(c);
   }
 
@@ -487,32 +619,32 @@ export function buildMetadata(input: MetadataInput): Record<string, unknown> {
   }
   if (project.funding) desc.push(`<p>Funding: ${project.funding}</p>`);
 
-  const related: Array<Record<string, string>> = [
-    { identifier: githubUrl, relation: 'isVersionOf', scheme: 'url' },
-  ];
+  const relatedIds = [related(githubUrl, 'isversionof', 'url')];
   // The identity URN [R7], which survives a repo move.
-  if (paperId)
-    related.push({ identifier: paperUrn(paperId), relation: 'isVersionOf', scheme: 'urn' });
-  if (siteUrl) related.push({ identifier: siteUrl, relation: 'isIdenticalTo', scheme: 'url' });
-  if (yt) related.push({ identifier: yt, relation: 'isSupplementedBy', scheme: 'url' });
+  if (paperId) relatedIds.push(related(paperUrn(paperId), 'isversionof', 'urn'));
+  if (siteUrl) relatedIds.push(related(siteUrl, 'isidenticalto', 'url'));
+  if (yt) relatedIds.push(related(yt, 'issupplementedby', 'url'));
 
   const md: Record<string, unknown> = {
-    upload_type: 'publication',
-    publication_type: 'article',
+    resource_type: { id: 'publication-article' },
     title: String(project.title),
     creators,
     description: desc.join(''),
-    license: licenseId,
-    related_identifiers: related,
-    access_right: 'open',
+    rights: [{ id: licenseId }],
+    related_identifiers: relatedIds,
+    // Zenodo needs a publisher to register the DOI.
+    publisher: 'Zenodo',
   };
-  // The journal's optional community [R19].
-  if (zenodo.community) md.communities = [{ identifier: zenodo.community }];
-  if (keywords.length) md.keywords = keywords;
+  if (keywords.length) md.subjects = keywords.map((subject: string) => ({ subject }));
   if (version !== undefined) md.version = version;
   const pubdate = publicationDate ?? project.date;
   if (pubdate) md.publication_date = String(pubdate);
-  return md;
+  return {
+    metadata: md,
+    custom_fields: { 'code:codeRepository': githubUrl },
+    access: { record: 'public', files: 'public' },
+    files: { enabled: true },
+  };
 }
 
 /* --------------------------------------------------------------------------
@@ -879,25 +1011,26 @@ export async function cmdPrepare(input: PrepareInput): Promise<Outcome> {
 
   const githubUrl = `https://github.com/${repo}`;
   const repoRoot = resolve(mystPath, '..');
-  const md = buildMetadata({
+  const zenodo = loadJournalZenodo(instanceRoot);
+  const body = buildDraft({
     project: projectOf(doc2),
     paperId: project.id ? String(project.id) : undefined,
     githubUrl,
     siteUrl,
-    zenodo: loadJournalZenodo(instanceRoot),
+    zenodo,
     abstractParas: abstractParagraphs(repoRoot),
     extraDescParas: zenodoExtraParagraphs(repoRoot),
   });
-  md.prereserve_doi = true;
 
   const existing = await api.findDeposit({
     paperId: project.id ? String(project.id) : undefined,
     githubUrl,
   });
-  let dep: Deposition;
-  if (existing && existing.submitted === false) {
+  let rec: ZenodoRecord;
+  // A first version never published is a draft to reuse; anything else has a concept DOI.
+  if (existing && existing.is_published === false && (existing.versions?.index ?? 1) === 1) {
     process.stderr.write(`[prepare] reusing draft ${existing.id}\n`);
-    dep = await api.updateMetadata(existing.id, md);
+    rec = await api.updateDraft(String(existing.id), body);
   } else if (existing) {
     return err(
       3,
@@ -905,17 +1038,24 @@ export async function cmdPrepare(input: PrepareInput): Promise<Outcome> {
         `Add its DOI to myst.yml manually.`,
     );
   } else {
-    dep = await api.createDeposition(md);
+    rec = await api.createDraft(body);
   }
+  if (!rec.pids?.doi) rec = await api.reserveDoi(String(rec.id));
+  await requestCommunity(api, rec, zenodo.community);
 
-  const cdoi = conceptDoiFor(dep, sandbox);
-  const draftUrl = dep.links?.html;
+  const cdoi = conceptDoiFor(rec, sandbox);
+  const draftUrl = rec.links?.self_html;
 
   doc2.setIn(['project', 'doi'], cdoi);
   doc2.setIn(['project', 'github'], githubUrl);
   writeDoc(mystPath, doc2);
 
-  return ok({ concept_doi: cdoi, draft_url: draftUrl, deposition_id: dep.id, site_url: siteUrl });
+  return ok({
+    concept_doi: cdoi,
+    draft_url: draftUrl,
+    deposition_id: Number(rec.id),
+    site_url: siteUrl,
+  });
 }
 
 export interface PublishInput {
@@ -1000,24 +1140,23 @@ export async function cmdPublish(input: PublishInput): Promise<Outcome> {
     );
   }
 
-  const latestId = await api.latestVersionDepId(conceptDoi);
-  if (latestId === null) {
+  let rec = await api.latestVersion(conceptDoi);
+  if (rec === null) {
     return err(2, `No Zenodo record matches ${conceptDoi} (token mismatch? deleted draft?)`);
   }
-  let dep = await api.getDeposition(latestId);
 
-  const expectedConcept = `${zenodoDoiPrefix(sandbox)}${dep.conceptrecid}`;
+  const expectedConcept = `${zenodoDoiPrefix(sandbox)}${rec.parent?.id}`;
   if (conceptDoi !== expectedConcept) {
     return err(
       2,
-      `Concept DOI sanity check failed: myst.yml has ${conceptDoi}, Zenodo's conceptrecid implies ${expectedConcept}`,
+      `Concept DOI sanity check failed: myst.yml has ${conceptDoi}, Zenodo's parent id implies ${expectedConcept}`,
     );
   }
 
-  if (dep.submitted) {
+  if (rec.is_published) {
     // The CI token lacks `deposit:actions`, which a new version needs, so an editor clicks "New
     // version" on Zenodo to create the empty draft.
-    const recordUrl = dep.links?.record_html ?? dep.links?.html;
+    const recordUrl = rec.links?.record_html ?? rec.links?.self_html;
     process.stderr.write(
       `::error title=Zenodo: editor must click 'New version'::No unsubmitted draft for this concept. ` +
         `Record: ${recordUrl ?? '(unavailable)'}\n`,
@@ -1030,33 +1169,34 @@ export async function cmdPublish(input: PublishInput): Promise<Outcome> {
       { record_url: recordUrl },
     );
   }
-  process.stderr.write(`[publish] reusing existing draft ${dep.id}\n`);
+  process.stderr.write(`[publish] reusing existing draft ${rec.id}\n`);
+  const id = String(rec.id);
 
-  const md = buildMetadata({
-    project,
-    paperId: project.id ? String(project.id) : undefined,
-    githubUrl,
-    siteUrl,
-    zenodo: loadJournalZenodo(instanceRoot),
-    version,
-    publicationDate: String(project.date ?? new Date().toISOString().slice(0, 10)),
-    abstractParas: abstractParagraphs(repoRoot),
-    extraDescParas: zenodoExtraParagraphs(repoRoot),
-  });
-  dep = await api.updateMetadata(dep.id, md);
+  const zenodo = loadJournalZenodo(instanceRoot);
+  rec = await api.updateDraft(
+    id,
+    buildDraft({
+      project,
+      paperId: project.id ? String(project.id) : undefined,
+      githubUrl,
+      siteUrl,
+      zenodo,
+      version,
+      publicationDate: String(project.date ?? new Date().toISOString().slice(0, 10)),
+      abstractParas: abstractParagraphs(repoRoot),
+      extraDescParas: zenodoExtraParagraphs(repoRoot),
+    }),
+  );
+  await requestCommunity(api, rec, zenodo.community);
 
-  const bucket = dep.links?.bucket;
-  if (!bucket) return err(4, 'No bucket URL in deposition (unexpected Zenodo API shape).');
-
-  // Predicted from the deposition id; matches what Zenodo assigns at publish.
-  const predictedVersionDoi = `${zenodoDoiPrefix(sandbox)}${dep.id}`;
+  const versionDoi = versionDoiFor(rec, sandbox);
   const provenance: BundleProvenance = {
     repo,
     commit_sha: sha,
     tag,
     site_url: siteUrl,
     concept_doi: conceptDoi,
-    version_doi: predictedVersionDoi,
+    version_doi: versionDoi,
     review_pr: await git.reviewPr(repoRoot, sha),
     journal_repo: journal?.repo ?? null,
     journal_commit: journal?.commit ?? null,
@@ -1072,17 +1212,19 @@ export async function cmdPublish(input: PublishInput): Promise<Outcome> {
     throw e;
   }
 
+  // A re-run, or files the editor imported from the last version, already hold some names.
+  const present = new Set(await api.draftFileNames(id));
   for (const p of files) {
-    process.stderr.write(`[publish] upload ${basename(p)}\n`);
-    await api.uploadFile(bucket, basename(p), readFileSync(p));
+    const name = basename(p);
+    process.stderr.write(`[publish] upload ${name}\n`);
+    if (present.has(name)) await api.deleteDraftFile(id, name);
+    await api.uploadFile(id, name, readFileSync(p));
   }
 
-  dep = await api.getDeposition(dep.id);
-  const versionDoi = dep.metadata?.doi ?? dep.doi ?? predictedVersionDoi;
   return ok({
     version_doi: versionDoi,
-    draft_url: dep.links?.html,
-    deposition_id: dep.id,
+    draft_url: rec.links?.self_html,
+    deposition_id: Number(rec.id),
     bundle_dir: bundleOut,
     site_url: siteUrl,
   });
@@ -1120,20 +1262,19 @@ export async function cmdStatus(input: StatusInput): Promise<Outcome> {
     out.warning = `DOI prefix vs --sandbox mismatch (doi=${conceptDoi}, sandbox=${sandbox})`;
   }
 
-  const latestId = await api.latestVersionDepId(conceptDoi);
-  if (latestId === null) {
+  const rec = await api.latestVersion(conceptDoi);
+  if (rec === null) {
     out.state = 'no record matches';
     return { exitCode: 0, result: out };
   }
-  const dep = await api.getDeposition(latestId);
-  out.latest_deposition_id = dep.id;
-  out.submitted = dep.submitted ?? false;
-  out.draft_url = dep.links?.html;
-  out.latest_version = dep.metadata?.version;
-  out.latest_doi = dep.metadata?.doi ?? dep.doi;
+  out.latest_deposition_id = Number(rec.id);
+  out.submitted = rec.is_published ?? false;
+  out.draft_url = rec.links?.self_html;
+  out.latest_version = rec.metadata?.version;
+  out.latest_doi = rec.pids?.doi?.identifier;
 
   const repoRoot = resolve(mystPath, '..');
-  const preview = buildMetadata({
+  const preview = buildDraft({
     project,
     paperId: project.id ? String(project.id) : undefined,
     githubUrl: project.github ?? '',
@@ -1142,8 +1283,8 @@ export async function cmdStatus(input: StatusInput): Promise<Outcome> {
     abstractParas: abstractParagraphs(repoRoot),
     extraDescParas: zenodoExtraParagraphs(repoRoot),
   });
-  out.metadata_preview_keys = Object.keys(preview).sort();
-  out.creator_count = (preview.creators as unknown[]).length;
-  out.description_preview = preview.description;
+  out.metadata_preview_keys = Object.keys(preview.metadata).sort();
+  out.creator_count = (preview.metadata.creators as unknown[]).length;
+  out.description_preview = preview.metadata.description;
   return { exitCode: 0, result: out };
 }
