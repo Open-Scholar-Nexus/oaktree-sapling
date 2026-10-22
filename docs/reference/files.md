@@ -21,7 +21,7 @@ Every oak command reads it the same way, and stops with the file and the line wh
 | `preview.provider` | `artifact` | `cloudflare` for live previews on Cloudflare Pages, `artifact` for a downloadable copy. See [live previews](../guide/journal-yml.md#live-previews). |
 | `preview.cf_project_name` | | The Cloudflare Pages project the previews go to. |
 | `preview.branch_pattern` | `paper-{repo}-{pr}` | The name of each preview inside the project, with `{repo}` and `{pr}` filled in. It is lowercased and cut to 28 characters by shortening `{repo}`, which then ends in a 4-character hash so that papers with similar names stay distinct. |
-| `zenodo.community` | | The Zenodo community every deposit joins. |
+| `zenodo.community` | | The Zenodo community a paper's first version is submitted to. See [Zenodo community](../guide/journal-yml.md#zenodo-community). |
 | `zenodo.description_blurb` | | A paragraph added to every deposit's description, after the abstract. |
 | `checks` | none | The editorial checks, one `id` each, plus `optional: true` and the check's own options. See [editorial checks](../guide/checks.md). |
 

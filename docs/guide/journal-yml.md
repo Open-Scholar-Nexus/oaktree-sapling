@@ -40,9 +40,10 @@ typst_template: ./typst-template
 
 A paper can set its own template in its `myst.yml` (`exports[].template`). It takes precedence over the journal's, and the Journal checks flag it for the editors.
 
+(zenodo-community)=
 ## Zenodo community and description
 
-Every deposit can join a [Zenodo community](https://help.zenodo.org/docs/communities/) and carry a paragraph about the journal after the abstract in its description:
+A paper can join a [Zenodo community](https://help.zenodo.org/docs/communities/), and every deposit can carry a paragraph about the journal after the abstract in its description:
 
 ```yaml
 zenodo:
@@ -50,7 +51,7 @@ zenodo:
   description_blurb: Published in My Journal.
 ```
 
-`community` is the community's identifier, the last part of its address on Zenodo. Both apply from the next [published version](publish.md).
+`community` is the community's identifier, the last part of its address on Zenodo. The paragraph applies from the next [published version](publish.md). The community applies to a paper whose first version is not published yet: that draft goes to the community for review when an editor publishes it ([publish on Zenodo](#publish-on-zenodo)), and later versions stay in the community. A paper published before the community was set joins it only when an editor submits its record to the community on Zenodo.
 
 (live-previews)=
 ## Live previews

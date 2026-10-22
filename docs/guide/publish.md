@@ -25,9 +25,12 @@ Creating a release with a new tag on GitHub does the same. Only editors can crea
 
 The tag starts the **Deposit version** workflow, which builds the paper and uploads the PDF, the sources, and the engine and journal settings that built them to the Zenodo draft ([what a deposit carries](#design-releases-deposit)). It attaches the same files to a GitHub release for the tag, and comments the draft's address on the tagged commit. The deposit links the paper's website.
 
+(publish-on-zenodo)=
 ## 3. Publish on Zenodo
 
 Open the draft on Zenodo, check it, and click **Publish**. The DOI resolves from then on.
+
+When the journal has a [Zenodo community](journal-yml.md#zenodo-community), the first version's draft is submitted to it, so the button reads **Submit for review** instead, and the paper is published once a curator of the community accepts it. An editor who curates the community sees **Publish to community**, which publishes it at once.
 
 (list-on-site)=
 ## 4. List it on the journal website
