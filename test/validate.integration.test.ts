@@ -347,7 +347,8 @@ describe.skipIf(bundleState() === 'absent')("oak validate, the journal's check f
     const r = spawnSync(
       'node',
       [bundle, 'validate', '--paper', paper, '--instance', journal, '--repo', repo, '--json'],
-      { encoding: 'utf8' },
+      // In paper CI the paper is the workspace, which annotation paths are relative to.
+      { encoding: 'utf8', env: { ...process.env, GITHUB_WORKSPACE: paper } },
     );
     return { exitCode: r.status ?? 1, out: JSON.parse(r.stdout) };
   }
