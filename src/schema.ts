@@ -199,7 +199,8 @@ export type ZenodoConfig = z.infer<typeof ZenodoConfig>;
 
 /**
  * An editorial check the journal turns on, by id, with its options. It lives in the journal
- * repo, which authors cannot change. `optional: true` reports without blocking a merge.
+ * repo, which authors cannot change. `optional: true` reports without blocking a merge. An id
+ * starting with `./` names a check file in the journal repo [R208].
  */
 export const Check = z
   .object({

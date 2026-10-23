@@ -33,6 +33,8 @@ export const DOCS = {
   checks: 'guide/checks',
   /** Adding, removing, and de-fanging checks. */
   checksChanging: 'guide/checks#changing-the-set',
+  /** A journal's own checks, written as JavaScript files in the journal repository. */
+  checksJournal: 'guide/checks#journal-checks',
   /** `oak validate` runs the paper's own plugin code; read before validating a submission. */
   validateRunsPaperCode: 'guide/checks#validate-runs-paper-code',
 

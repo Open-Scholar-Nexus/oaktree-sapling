@@ -43,6 +43,19 @@ Both external repositories are fetched before the engine runs: oaktree-sapling a
 (r71)=
 The assembled result is written to **`myst.oak.yml`**[^public], next to the paper's `myst.yml`, and MyST is pointed at that file instead[^compose]. It opens with a banner saying it is generated, the paper template gitignores it, and it is rewritten on every build.[^cleanup]
 
+(r208)=
+## The journal's own checks
+
+A journal lists its [own checks](../guide/checks.md#journal-checks) under `checks` in `journal.yml`, which authors cannot change, by the path of a JavaScript file in the journal repository. A paper's MyST `error_rules` or plugins cannot be the gate, since the paper's own `myst.yml` wins.
+
+The path is the check's id. No catalog id starts with `./`, so a path never collides with a Curvenote check and needs no precedence rule, and the row in the report names the file that produced it. Renaming the file renames the row. The resolved path has to stay inside the journal repository: in CI the journal is cloned into the paper's checkout, at `_build/journal/<owner>/<name>`, so a path leaving it reaches files the author controls. Only `.mjs` files load, because Node reads a `.js` file as CommonJS or as an ES module depending on a `package.json` the journal repository may not have.
+
+A check file gets plain data, `paper`, and two helper functions, where a Curvenote check gets a MyST session. It loads from the journal clone, where no packages are installed, so it cannot import myst-cli, and myst-cli does not run unbundled on Node 24 anyway. `paper` is built once per run, in the module that imports myst-cli, and each check gets its own copy of the trees.
+
+The journal repository is not pinned[^pinning], so one check file runs under every oak version the journal's papers pin. `paper` therefore only gains fields, as `journal.yml` does: a check reading a field an older oak lacks gets `undefined`. A paper pinned to an oak older than check files reports the path as an unknown check id.
+
+Every check's `validate` runs inside a `try`, Curvenote's included, so a check that throws becomes one error row under its id and the other checks still run.
+
 ## The pages here
 
 Each page takes one part (slice?) of oaktree-sapling and explains why it is built that way. What each part _does_ belongs in [Reference](../reference/files.md); this section is for the reasoning.

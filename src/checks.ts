@@ -4,12 +4,21 @@
  * The journal picks the set and an author cannot weaken it, which is why MyST's `error_rules`,
  * which the author controls, cannot be the gate.
  *
+ * A journal's own check files run beside them (journal-checks.ts) [R208].
+ *
  * `runChecks` runs them; `toCheckRun` turns the results into a GitHub Check Run.
  */
 import { basename, isAbsolute, relative } from 'node:path';
 import { DERIVED_CONFIG_FILE } from './yaml-io.js';
 import * as messages from './messages.js';
-import { annotate } from './messages.js';
+import { annotate, firstLine, UserError } from './messages.js';
+import {
+  checkFileLoader,
+  isCheckFile,
+  runCheckFile,
+  type ModuleImporter,
+  type Paper,
+} from './journal-checks.js';
 import { GATED_PATHS, underPaths } from './schema.js';
 import type { ISession } from 'myst-cli';
 import {
@@ -52,30 +61,54 @@ export interface JournalCheck {
 
 /**
  * Runs the journal's checks against a processed myst session (`MystEdge.withProjectSession`).
- * Each result gets the check's id, and `optional` when the journal set it. An unknown id becomes
- * an error result, so a misconfigured journal shows up in the report.
+ * Each result gets the check's id, and `optional` when the journal set it. An unknown id, a check
+ * that throws and a broken check file each become one error result, so a misconfigured journal
+ * shows up in the report and the remaining checks still run. A `./` id runs a check file from
+ * `journalRoot` on `readPaper()`'s data [R208].
  */
 export async function runChecks(
   session: ISession,
   journalChecks: JournalCheck[],
+  journalRoot: string | null,
+  readPaper: () => Paper,
+  importer?: ModuleImporter,
 ): Promise<EngineCheckResult[]> {
-  const catalog = await curvenoteChecks();
+  // The catalog loads myst-cli, so a run listing only check files does not import it [R51].
+  const catalog = journalChecks.some((jc) => !isCheckFile(jc.id)) ? await curvenoteChecks() : [];
+  const loadCheckFile = checkFileLoader(journalRoot, importer);
+  let paper: Paper | undefined;
   const out: EngineCheckResult[] = [];
   for (const jc of journalChecks) {
-    const impl = catalog.find((c) => c.id === jc.id);
-    if (!impl) {
+    const { optional, ...check } = jc;
+    const flag = optional ? { optional: true } : {};
+    const impl = isCheckFile(jc.id) ? undefined : catalog.find((c) => c.id === jc.id);
+    if (!isCheckFile(jc.id) && !impl) {
       out.push({
         id: jc.id,
         status: CheckStatus.error,
         message: messages.pr.unknownCheckId(jc.id),
+        ...flag,
       });
       continue;
     }
-    const { optional, ...check } = jc;
-    const res = await impl.validate(session, check as Check);
-    for (const r of Array.isArray(res) ? res : [res]) {
-      out.push({ ...r, id: jc.id, ...(optional ? { optional: true } : {}) });
+    if (!impl) paper ??= readPaper();
+    let results: CheckResult[];
+    try {
+      if (impl) {
+        const res = await impl.validate(session, check as Check);
+        results = Array.isArray(res) ? res : [res];
+      } else {
+        results = (await runCheckFile(loadCheckFile, jc.id, check, paper!)).map((r) => ({
+          ...r,
+          status: CheckStatus[r.status],
+        }));
+      }
+    } catch (e) {
+      const message = e instanceof UserError ? e.message : messages.pr.checkThrew(firstLine(e));
+      out.push({ id: jc.id, status: CheckStatus.error, message, ...flag });
+      continue;
     }
+    for (const r of results) out.push({ ...r, id: jc.id, ...flag });
   }
   return out;
 }

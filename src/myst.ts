@@ -14,10 +14,17 @@ import {
   processProject,
   findCurrentProjectAndLoad,
   findCurrentSiteAndLoad,
+  filterPages,
+  selectFile,
+  selectors,
 } from 'myst-cli';
 import type { ISession } from 'myst-cli';
+import { resolve } from 'node:path';
+import { toText } from 'myst-common';
+import { selectAll } from 'unist-util-select';
 import type { MystEdge, BuildOpts, StartOpts } from './materialize.js';
 import type { ResolvedProject } from './compose.js';
+import type { Paper } from './journal-checks.js';
 
 export function createMystEdge(): MystEdge {
   /**
@@ -89,6 +96,25 @@ export function createMystEdge(): MystEdge {
       } finally {
         process.chdir(prev);
       }
+    },
+    paperForChecks(session: ISession, root: string): Paper {
+      const state = session.store.getState();
+      const project = selectors.selectLocalProject(state, root);
+      if (!project) throw new Error(`myst has no processed project at ${root}`);
+      // `filterPages` puts the index page first.
+      const pages = filterPages(project).map(({ file }) => {
+        const data = selectFile(session, file);
+        if (!data) throw new Error(`myst has not processed ${file}`);
+        // `file` is relative to the paper root, the cwd `withProjectSession` loaded it from.
+        return { file: resolve(root, file), frontmatter: data.frontmatter, mdast: data.mdast };
+      });
+      return {
+        root,
+        project: selectors.selectLocalProjectConfig(state, root) ?? {},
+        pages,
+        toText,
+        selectAll,
+      };
     },
   };
 }
