@@ -23,7 +23,7 @@ Every oak command reads it the same way, and stops with the file and the line wh
 | `preview.branch_pattern` | `paper-{repo}-{pr}` | The name of each preview inside the project, with `{repo}` and `{pr}` filled in. It is lowercased and cut to 28 characters by shortening `{repo}`, which then ends in a 4-character hash so that papers with similar names stay distinct. |
 | `zenodo.community` | | The Zenodo community every deposit joins. |
 | `zenodo.description_blurb` | | A paragraph added to every deposit's description, after the abstract. |
-| `checks` | none | The editorial checks, one `id` each, plus `optional: true` and the check's own options. See [editorial checks](../guide/checks.md). |
+| `checks` | none | The editorial checks, one `id` each, plus `optional: true` and the check's own options. An `id` starting with `./` is the path of a [check file](#file-check-files). See [editorial checks](../guide/checks.md). |
 
 (file-brand-yml)=
 ## brand/brand.yml
@@ -43,6 +43,11 @@ The papers the journal website lists, one entry each, in the order the website s
 | `site_url` | `https://<owner>.github.io/<name>/`, or `https://<owner>.github.io/` for a repository named `<owner>.github.io` | The paper's website, when it is published somewhere else. The journal website and the paper's Zenodo deposit both link it. |
 
 The website reads each paper's title, keywords, edition and DOI from the paper's `myst.yml`. It lists every entry except a paper whose DOI is a Zenodo sandbox one (`10.5072/…`), which it leaves out with a warning in the build log. A paper with no DOI is listed. An entry oak cannot read is skipped by the Journal checks, with a warning, and fails the website build, naming the entry.
+
+(file-check-files)=
+## checks/&lt;name&gt;.mjs
+
+The journal's own checks, one JavaScript module each, wherever the `./` paths under `checks` in `journal.yml` point; `checks/` by convention. Every paper's Journal checks run them. How to write one: [the journal's own checks](../guide/checks.md#journal-checks).
 
 (file-pages-index)=
 ## pages/index.md

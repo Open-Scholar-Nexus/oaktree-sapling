@@ -718,11 +718,11 @@ export async function runValidate(
   const errors = layerA.filter((f) => f.severity === 'error');
   const warnings = layerA.filter((f) => f.severity === 'warn');
 
-  // Layer B: the journal's editorial checks (@curvenote/check-implementations). They read the
-  // myst store, so they run in a processed project session, on the derived config with its
-  // pass-2 additions [R82]. When Layer A finds a structural error myst cannot process the
-  // project, so Layer B is skipped rather than crash the report; otherwise it is guarded, so a
-  // myst or curvenote error becomes a check error.
+  // Layer B: the journal's editorial checks (@curvenote/check-implementations and the journal's
+  // check files [R208]). They read the myst store, so they run in a processed project session,
+  // on the derived config with its pass-2 additions [R82]. When Layer A finds a structural error
+  // myst cannot process the project, so Layer B is skipped. `runChecks` turns a check that
+  // throws into its own error row; a project myst cannot load becomes one check error here.
   // Layer A already blocked on missing journal settings [R116]; the default keeps the shape.
   const journal = loadJournal(input.instanceRoot, probes) ?? emptyJournal();
   let checks: EngineCheckResult[] = [];
@@ -742,7 +742,10 @@ export async function runValidate(
         ...unrunnable,
         ...(await input.edge.withProjectSession(
           input.paperRoot,
-          (session) => runChecks(session, runnable),
+          (session) =>
+            runChecks(session, runnable, input.instanceRoot, () =>
+              input.edge.paperForChecks(session, input.paperRoot),
+            ),
           configFile, // the COMPOSED config when we have one ([R82])
         )),
       ];
