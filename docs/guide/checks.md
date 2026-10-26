@@ -54,7 +54,7 @@ The checks are [Curvenote](https://curvenote.com)'s, from its open-source [`@cur
 
 Any of MyST's own [build rules](https://github.com/jupyter-book/mystmd/blob/main/packages/myst-common/src/ruleids.ts) can be listed too, such as `math-renders` or `image-exists`: the check fails when the build warns under that rule.
 
-An id that is neither a check nor the path of a [check file](#journal-checks) fails, with a link to this section.
+An id that is neither a check nor the path of a [check file](#journal-checks), or an option of the wrong type such as `max: lots`, fails, with a link to this section.
 
 (journal-checks)=
 ## The journal's own checks

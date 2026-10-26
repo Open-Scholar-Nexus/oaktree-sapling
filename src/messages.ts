@@ -962,6 +962,9 @@ export const pr = {
   checkThrew: (message: string): string =>
     `the check stopped with an error: ${message.replace(/\.$/, '')}. To show this as a ` +
     `warning, mark the check optional: ${docsUrl(DOCS.checksChanging)}`,
+  checkOptionsInvalid: (problems: string[]): string =>
+    `the check's options are wrong: ${problems.join('; ')}. Fix them in journal.yml: ` +
+    `${docsUrl(DOCS.checksChanging)}`,
 
   // ── the journal's check files; the row already names the file ─────────────────────────────
   checkFileOutside:
