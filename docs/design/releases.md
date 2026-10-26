@@ -60,6 +60,7 @@ When the deposit has a `template.zip`, unzip it too and add `--typst-template <t
 | `template.zip` | the PDF template, when it is the journal's or the author's |
 | `publication-provenance.json` | the paper's and the journal's repository and commit, the paper's website, the DOIs, and the typst version |
 
+(r28)=
 The files in the paper's `deposit/` folder are added beside them, and these names are reserved.
 
 `journal.zip` holds the journal commit the build used, which the build records in `myst.oak.yml` under `project.options.oaktree-sapling.journal`. The deposit runs in a job of its own and fetches that commit, so the archive matches the PDF even when the journal has changed since the build, as when a failed deposit job is re-run days later. The record's Zenodo metadata follows the journal's `zenodo:` settings as they are when the deposit runs. A build from journal files that are not a commit of their own repository, such as local changes, cannot be deposited.
@@ -76,8 +77,7 @@ A paper repository that is its own journal (`instance_repo: "."` in `pins.yml`)[
 
 Zenodo saves a draft that fails validation and lists the failures under `errors`, so oak fails on them, except the one for missing files, which the upload clears.
 
-(r28)=
-The bundle is the whole deposit: oak's files, plus the paper's `deposit/` folder, whose files may not take oak's names. Publish removes every file the draft holds before the upload, including those a new version imports from the one before.
+Publish removes every file the draft holds before the upload, including those a new version imports from the one before.
 
 (r19)=
 The journal's `zenodo:` paragraph and community are optional. The community is a review request on the first version only, and later versions stay in the communities the first one joined.

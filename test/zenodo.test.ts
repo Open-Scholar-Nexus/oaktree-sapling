@@ -5,7 +5,7 @@
  * [R19], the authors, the `deposit/` folder and its reserved names [R28], and prepare and
  * publish, including moving from sandbox to production [R29].
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { mkdtempSync, writeFileSync, mkdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -283,13 +283,26 @@ describe('buildDraft', () => {
     expect(draft.access).toEqual({ record: 'public', files: 'public' });
   });
 
-  it('drops placeholder or invalid ORCIDs and keeps valid ones', () => {
-    const { metadata } = buildDraft({ project, githubUrl: 'https://github.com/o/r', zenodo: {} });
+  it('drops placeholder or malformed ORCIDs with a warning, and keeps valid ones', () => {
+    const stderr = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
+    const authors = [...project.authors, { name: 'Bad Orcid', orcid: '1234' }];
+    const { metadata } = buildDraft({
+      project: { ...project, authors },
+      githubUrl: 'https://github.com/o/r',
+      zenodo: {},
+    });
+    const warnings = stderr.mock.calls.map((c) => String(c[0]));
+    stderr.mockRestore();
     const creators = metadata.creators as Array<Record<string, any>>;
     expect(creators[0]!.person_or_org.identifiers).toEqual([
       { scheme: 'orcid', identifier: '0000-0002-1825-0097' },
     ]);
     expect(creators[1]!.person_or_org.identifiers).toBeUndefined();
+    expect(creators[2]!.person_or_org.identifiers).toBeUndefined();
+    expect(warnings).toEqual([
+      expect.stringMatching(/^\[warn\] skipping invalid ORCID: .*"1234".*authors\.2/),
+      '[warn] skipping placeholder ORCID for Placeholder: 0000-0000-0000-0000\n',
+    ]);
   });
 
   it('sends every affiliation, as a string, an object with a name, or a project affiliation id', () => {

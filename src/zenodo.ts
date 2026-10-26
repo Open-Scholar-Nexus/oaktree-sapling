@@ -63,8 +63,6 @@ import { err, ok, type Outcome } from './result.js';
 export const ZENODO_PROD = 'https://zenodo.org/api';
 export const ZENODO_SANDBOX = 'https://sandbox.zenodo.org/api';
 
-const ORCID_RE = /^\d{4}-\d{4}-\d{4}-\d{3}[\dX]$/;
-
 /** Extra document part appended to the Zenodo description (e.g. shared authorship). */
 const ZENODO_EXTRA_PART = 'zenodo_extra_description';
 
@@ -286,7 +284,7 @@ export class ZenodoApi {
     });
   }
 
-  /** Removes every file the draft holds, those a new version imports included [R28]. */
+  /** Removes every file the draft holds, those a new version imports included. */
   async clearDraftFiles(id: string): Promise<void> {
     const res = await this.call('GET', `/records/${id}/draft/files`);
     const entries = (res.json() as { entries?: Array<{ key: string }> } | null)?.entries ?? [];
@@ -532,19 +530,25 @@ export function buildDraft(input: MetadataInput): DraftBody {
   } = input;
 
   // MyST reads the authors as it does for its own output: names parsed, affiliations as ids.
-  const fm = validateProjectFrontmatter(project, { property: 'project', messages: {} });
+  const messages: { errors?: Array<{ property: string; message: string }> } = {};
+  const fm = validateProjectFrontmatter(project, { property: 'project', messages });
+  // MyST drops a malformed ORCID; its other errors are `myst build`'s to report.
+  for (const e of messages.errors ?? []) {
+    if (e.property === 'orcid')
+      process.stderr.write(`[warn] skipping invalid ORCID: ${e.message}\n`);
+  }
   const affiliationName = new Map((fm.affiliations ?? []).map((a) => [a.id, a.name]));
   const creators: Array<Record<string, unknown>> = [];
   for (const a of fm.authors ?? []) {
     const person: Record<string, unknown> = { type: 'personal', ...personName(a.nameParsed) };
     const orcid = a.orcid ?? '';
-    // Zenodo replaces the name from the ORCID profile when the ORCID does not resolve, so invalid
-    // and placeholder ORCIDs (the template's 0000-0000-...) are dropped.
-    if (orcid && ORCID_RE.test(orcid) && !orcid.startsWith('0000-0000-')) {
+    // Zenodo replaces the name from the ORCID profile when the ORCID does not resolve, so the
+    // template's placeholder (0000-0000-...) is dropped.
+    if (orcid && !orcid.startsWith('0000-0000-')) {
       person.identifiers = [{ scheme: 'orcid', identifier: orcid }];
     } else if (orcid) {
       const who = [person.given_name, person.family_name].filter(Boolean).join(' ');
-      process.stderr.write(`[warn] skipping invalid/placeholder ORCID for ${who}: ${orcid}\n`);
+      process.stderr.write(`[warn] skipping placeholder ORCID for ${who}: ${orcid}\n`);
     }
     const c: Record<string, unknown> = { person_or_org: person };
     const affs = (a.affiliations ?? []).map((id) => affiliationName.get(id)).filter(Boolean);
