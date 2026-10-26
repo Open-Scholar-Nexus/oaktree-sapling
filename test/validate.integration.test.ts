@@ -16,7 +16,7 @@ import {
   cpSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { basename, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { bundleState, assertBundleNotStale } from './bundle-state.js';
 
@@ -343,12 +343,16 @@ describe.skipIf(bundleState() === 'absent')("oak validate, the journal's check f
     return dir;
   }
 
-  function validateWith(paper: string, journal: string): { exitCode: number; out: any } {
+  /** Annotation paths are relative to `workspace`, which in paper CI is the paper. */
+  function validateWith(
+    paper: string,
+    journal: string,
+    workspace = paper,
+  ): { exitCode: number; out: any } {
     const r = spawnSync(
       'node',
       [bundle, 'validate', '--paper', paper, '--instance', journal, '--repo', repo, '--json'],
-      // In paper CI the paper is the workspace, which annotation paths are relative to.
-      { encoding: 'utf8', env: { ...process.env, GITHUB_WORKSPACE: paper } },
+      { encoding: 'utf8', env: { ...process.env, GITHUB_WORKSPACE: workspace } },
     );
     return { exitCode: r.status ?? 1, out: JSON.parse(r.stdout) };
   }
@@ -359,7 +363,8 @@ describe.skipIf(bundleState() === 'absent')("oak validate, the journal's check f
     readFileSync(join(fixturePaper, 'index.md'), 'utf8') +
     '\n## Abstract\n\nThe abstract again.\n\n**Methods**\n\nWhat was done.\n';
   function failingPaper(): string {
-    const dir = mkdtempSync(join(tmpdir(), 'oak-val-checkfiles-paper-'));
+    const dir = join(mkdtempSync(join(tmpdir(), 'oak-val-checkfiles-')), 'paper');
+    mkdirSync(dir);
     for (const f of ['bib.bib', 'myst.yml']) copyFileSync(join(fixturePaper, f), join(dir, f));
     writeFileSync(join(dir, 'index.md'), failingIndex);
     return dir;
@@ -376,7 +381,10 @@ describe.skipIf(bundleState() === 'absent')("oak validate, the journal's check f
   }, 60_000);
 
   it('a bold line and an Abstract section fail both, annotated on their lines', () => {
-    const { exitCode, out } = validateWith(failingPaper(), journalWithCheckFiles(false));
+    // The paper in a subfolder of the workspace, so a page path relative to the paper would
+    // put the annotations on the wrong file.
+    const paper = failingPaper();
+    const { exitCode, out } = validateWith(paper, journalWithCheckFiles(false), dirname(paper));
     expect(exitCode).toBe(1);
     expect(out.checkRun.conclusion).toBe('failure');
     const rows = out.checks.filter((c: any) => checkFiles.includes(c.id));
@@ -388,8 +396,8 @@ describe.skipIf(bundleState() === 'absent')("oak validate, the journal's check f
       out.checkRun.annotations.map((a: any) => [a.path, a.start_line, a.annotation_level]),
     ).toEqual(
       expect.arrayContaining([
-        ['index.md', lineOf('**Methods**'), 'failure'],
-        ['index.md', lineOf('## Abstract'), 'failure'],
+        ['paper/index.md', lineOf('**Methods**'), 'failure'],
+        ['paper/index.md', lineOf('## Abstract'), 'failure'],
       ]),
     );
   }, 60_000);
