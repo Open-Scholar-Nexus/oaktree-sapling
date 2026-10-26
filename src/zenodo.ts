@@ -266,12 +266,12 @@ export class ZenodoApi {
   }
 
   async createDraft(body: DraftBody): Promise<ZenodoRecord> {
-    return logDraftErrors((await this.call('POST', '/records', { json: body })).json());
+    return checkDraft((await this.call('POST', '/records', { json: body })).json());
   }
 
   /** Replaces the draft's metadata and custom fields; Zenodo keeps its reserved DOI. */
   async updateDraft(id: string, body: DraftBody): Promise<ZenodoRecord> {
-    return logDraftErrors((await this.call('PUT', `/records/${id}/draft`, { json: body })).json());
+    return checkDraft((await this.call('PUT', `/records/${id}/draft`, { json: body })).json());
   }
 
   async reserveDoi(id: string): Promise<ZenodoRecord> {
@@ -356,15 +356,14 @@ function matchRelated(items: ZenodoRecord[], identifier: string): ZenodoRecord |
   return null;
 }
 
-/** Zenodo saves a draft that fails validation and lists why in `errors`; the files check fails
- *  until the upload, so it is left out. */
-function logDraftErrors(rec: unknown): ZenodoRecord {
+/** Throws when Zenodo saved the draft but listed validation `errors`, which would block the
+ *  editor's Publish. The files check fails until the upload, so it is left out. */
+function checkDraft(rec: unknown): ZenodoRecord {
   const r = rec as ZenodoRecord;
-  for (const e of r?.errors ?? []) {
-    if (e?.field === 'files.enabled') continue;
-    process.stderr.write(
-      `[warn] Zenodo draft ${r.id}: ${e?.field}: ${(e?.messages ?? []).join(' ')}\n`,
-    );
+  const errors = (r?.errors ?? []).filter((e: any) => e?.field !== 'files.enabled');
+  if (errors.length) {
+    const text = errors.map((e: any) => `${e?.field}: ${(e?.messages ?? []).join(' ')}`).join('; ');
+    throw new ZenodoError(`Zenodo draft ${r.id} has invalid metadata: ${text}`, 400, text);
   }
   return r;
 }
@@ -580,7 +579,9 @@ export function buildDraft(input: MetadataInput): DraftBody {
   } = input;
 
   const creators: Array<Record<string, unknown>> = [];
-  for (const a of project.authors ?? []) {
+  for (const entry of project.authors ?? []) {
+    // MyST takes an author written as plain text as its name.
+    const a = typeof entry === 'string' ? { name: entry } : entry;
     const person: Record<string, unknown> = { type: 'personal', ...personName(a.name) };
     const orcid = String(a.orcid ?? '');
     // Zenodo replaces the name from the ORCID profile when the ORCID does not resolve, so invalid
@@ -1034,8 +1035,8 @@ export async function cmdPrepare(input: PrepareInput): Promise<Outcome> {
   } else if (existing) {
     return err(
       3,
-      `Published deposit already exists (${existing.id}); refusing to create a parallel concept. ` +
-        `Add its DOI to myst.yml manually.`,
+      `Published deposit already exists (${conceptDoiFor(existing, sandbox)}); refusing to ` +
+        `create a parallel concept. Add that DOI to myst.yml manually.`,
     );
   } else {
     rec = await api.createDraft(body);
@@ -1212,13 +1213,12 @@ export async function cmdPublish(input: PublishInput): Promise<Outcome> {
     throw e;
   }
 
-  // A re-run, or files the editor imported from the last version, already hold some names.
-  const present = new Set(await api.draftFileNames(id));
+  // The bundle is the whole deposit [R28]: files from a re-run or imported from the last
+  // version are removed first.
+  for (const name of await api.draftFileNames(id)) await api.deleteDraftFile(id, name);
   for (const p of files) {
-    const name = basename(p);
-    process.stderr.write(`[publish] upload ${name}\n`);
-    if (present.has(name)) await api.deleteDraftFile(id, name);
-    await api.uploadFile(id, name, readFileSync(p));
+    process.stderr.write(`[publish] upload ${basename(p)}\n`);
+    await api.uploadFile(id, basename(p), readFileSync(p));
   }
 
   return ok({

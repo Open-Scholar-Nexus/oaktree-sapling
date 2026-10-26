@@ -329,6 +329,18 @@ describe('buildDraft', () => {
     expect(people[0]).toEqual({ type: 'personal', given_name: 'Ada', family_name: 'Lovelace' });
     expect(people[1]).toEqual({ type: 'personal', family_name: 'Josiah Carberry' });
   });
+
+  it('takes an author written as plain text as its name', () => {
+    const { metadata } = buildDraft({
+      project: { title: 'T', authors: ['Paolo Marzolo'] },
+      githubUrl: 'https://github.com/o/r',
+      zenodo: {},
+    });
+    const creators = metadata.creators as Array<Record<string, any>>;
+    expect(creators).toEqual([
+      { person_or_org: { type: 'personal', family_name: 'Paolo Marzolo' } },
+    ]);
+  });
 });
 
 describe('personName', () => {
@@ -705,6 +717,7 @@ describe('cmdPrepare', () => {
       instanceRoot: null,
     });
     expect(refused.exitCode).toBe(3);
+    expect(refused.result.message).toContain('(10.5072/zenodo.6)');
   });
 
   it("puts the draft up for the journal's community, by the community's id ([R19])", async () => {
@@ -883,12 +896,31 @@ describe('cmdPublish', () => {
     expect(content.opts.headers?.['Content-Type']).toBe('application/octet-stream');
   });
 
-  it('replaces a file the draft already holds under the same name', async () => {
-    const z = fakeZenodo(undefined, ['paper.pdf', 'old-notes.txt']);
+  it('removes every file the draft holds before uploading the bundle ([R28])', async () => {
+    const z = fakeZenodo(undefined, ['paper.pdf', 'template.zip']);
     const out = await publish(readyPaper(), z.api);
     expect(out.exitCode).toBe(0);
-    expect(z.deleted).toEqual(['paper.pdf']);
+    expect(z.deleted.sort()).toEqual(['paper.pdf', 'template.zip']);
     expect(z.uploaded).toContain('paper.pdf');
+    expect(z.uploaded).not.toContain('template.zip');
+    const steps = z.calls.map((c) => c.method);
+    expect(steps.lastIndexOf('DELETE')).toBeLessThan(steps.indexOf('POST'));
+  });
+
+  it('fails before uploading when Zenodo lists validation errors on the saved draft', async () => {
+    const invalid = rec({
+      id: '5',
+      parent: { id: '5' },
+      errors: [
+        { field: 'files.enabled', messages: ['Missing uploaded files.'] },
+        { field: 'metadata.rights.0.id', messages: ['Unknown license.'] },
+      ],
+    });
+    const z = fakeZenodo(invalid);
+    await expect(publish(readyPaper(), z.api)).rejects.toThrow(
+      /invalid metadata: metadata\.rights\.0\.id: Unknown license\.$/,
+    );
+    expect(z.uploaded).toEqual([]);
   });
 
   it("asks an editor for a new version when the concept's newest version is published", async () => {
