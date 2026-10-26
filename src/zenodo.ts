@@ -37,6 +37,7 @@ import {
 import { join, resolve, basename, relative, isAbsolute } from 'node:path';
 import { createHash } from 'node:crypto';
 import AdmZip from 'adm-zip';
+import { validateProjectFrontmatter, type Name } from 'myst-frontmatter';
 import {
   readDoc,
   readJournalConfig,
@@ -259,12 +260,6 @@ export class ZenodoApi {
     return out;
   }
 
-  /** The record's draft when `draft`, else the published record. */
-  async getRecord(id: string, draft: boolean): Promise<ZenodoRecord> {
-    const path = draft ? `/records/${id}/draft` : `/records/${id}`;
-    return (await this.call('GET', path)).json() as ZenodoRecord;
-  }
-
   async createDraft(body: DraftBody): Promise<ZenodoRecord> {
     return checkDraft((await this.call('POST', '/records', { json: body })).json());
   }
@@ -291,14 +286,13 @@ export class ZenodoApi {
     });
   }
 
-  async draftFileNames(id: string): Promise<string[]> {
+  /** Removes every file the draft holds, those a new version imports included [R28]. */
+  async clearDraftFiles(id: string): Promise<void> {
     const res = await this.call('GET', `/records/${id}/draft/files`);
     const entries = (res.json() as { entries?: Array<{ key: string }> } | null)?.entries ?? [];
-    return entries.map((e) => e.key);
-  }
-
-  async deleteDraftFile(id: string, name: string): Promise<void> {
-    await this.call('DELETE', `/records/${id}/draft/files/${encodeURIComponent(name)}`);
+    for (const { key } of entries) {
+      await this.call('DELETE', `/records/${id}/draft/files/${encodeURIComponent(key)}`);
+    }
   }
 
   /** Adds a file to the draft: declare, send the bytes, commit. The name comes from the author,
@@ -318,7 +312,7 @@ export class ZenodoApi {
   /**
    * Finds the paper's record by id, then by GitHub URL [R7]: targeted `q` queries first (each
    * paged), then a full scan when neither found the identifier. The scan depends on a match, not
-   * on rows coming back [R100].
+   * on rows coming back, since `q` matches phrases and a near miss returns rows [R100].
    */
   async findDeposit(opts: { paperId?: string; githubUrl: string }): Promise<ZenodoRecord | null> {
     const urn = opts.paperId ? paperUrn(opts.paperId) : null;
@@ -335,15 +329,17 @@ export class ZenodoApi {
     return (urn && matchRelated(all, urn)) || matchRelated(all, opts.githubUrl) || null;
   }
 
-  /** The newest version of a concept DOI, a draft when there is one, read fresh; null when the
-   *  account holds none [R35.1]. */
+  /** The newest version of a concept DOI, a draft when there is one; null when the account holds
+   *  none [R35.1]. It is re-read by id, since the search index can lag behind the record. */
   async latestVersion(conceptDoi: string): Promise<ZenodoRecord | null> {
     const parentId = parseZenodoDoi(conceptDoi)?.recordId;
     if (!parentId) return null;
     const items = await this.searchMyRecords(`parent.id:${parentId}`);
     items.sort((a, b) => String(b.created ?? '').localeCompare(String(a.created ?? '')));
     const hit = items[0];
-    return hit ? this.getRecord(String(hit.id), hit.is_draft === true) : null;
+    if (!hit) return null;
+    const path = hit.is_draft === true ? `/records/${hit.id}/draft` : `/records/${hit.id}`;
+    return (await this.call('GET', path)).json() as ZenodoRecord;
   }
 }
 
@@ -356,8 +352,7 @@ function matchRelated(items: ZenodoRecord[], identifier: string): ZenodoRecord |
   return null;
 }
 
-/** Throws when Zenodo saved the draft but listed validation `errors`, which would block the
- *  editor's Publish. The files check fails until the upload, so it is left out. */
+/** Throws on the validation `errors` Zenodo saves a draft with, except missing files. */
 function checkDraft(rec: unknown): ZenodoRecord {
   const r = rec as ZenodoRecord;
   const errors = (r?.errors ?? []).filter((e: any) => e?.field !== 'files.enabled');
@@ -378,11 +373,8 @@ function versionDoiFor(rec: ZenodoRecord, sandbox: boolean): string {
   return rec.pids?.doi?.identifier ?? `${zenodoDoiPrefix(sandbox)}${rec.id}`;
 }
 
-/**
- * Puts a first version's draft up for the journal's community [R19], as its review: the editor
- * then submits it to the community, or publishes it there when they curate it. A later version
- * stays in the communities its first version joined, and Zenodo takes no review for it.
- */
+/** Sets the journal's community [R19] as the first version's review, so the editor's button
+ *  submits it there. A later version stays in its first version's communities. */
 async function requestCommunity(
   api: ZenodoApi,
   rec: ZenodoRecord,
@@ -493,52 +485,13 @@ function youtubeUrl(project: any): string | null {
   return null;
 }
 
-/** MyST's aliases for the keys of an author's `name` object. */
-const NAME_ALIASES: Record<string, string> = {
-  surname: 'family',
-  last: 'family',
-  forename: 'given',
-  first: 'given',
-  particle: 'non_dropping_particle',
-  'non-dropping-particle': 'non_dropping_particle',
-  'dropping-particle': 'dropping_particle',
-};
-
-const text = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
-
-/**
- * Zenodo's name parts for a MyST author `name`. The object form gives the given and family
- * names; a string goes whole into `family_name`, unsplit, since a split can guess wrong.
- */
-export function personName(name: unknown): { family_name: string; given_name?: string } {
-  if (name && typeof name === 'object') {
-    const n: Record<string, string> = {};
-    for (const [k, v] of Object.entries(name)) n[NAME_ALIASES[k] ?? k] = text(v);
-    const family = [n.non_dropping_particle, n.family, n.suffix].filter(Boolean).join(' ');
-    const given = [n.given, n.dropping_particle].filter(Boolean).join(' ');
-    if (family) return given ? { given_name: given, family_name: family } : { family_name: family };
-    return { family_name: n.literal || given };
-  }
-  return { family_name: String(name ?? '') };
-}
-
-/** An author's affiliation names. Each is a string, an object with a `name`, or the id of an
- *  entry in the project's `affiliations`, as MyST reads them. */
-function affiliationNames(author: any, project: any): string[] {
-  const affName = (a: any): string => text(a?.name) || text(a?.institution);
-  const byId = new Map<string, string>();
-  for (const a of Array.isArray(project.affiliations) ? project.affiliations : []) {
-    const id = text(a?.id);
-    if (id && affName(a)) byId.set(id, affName(a));
-  }
-  const raw = author.affiliations ?? author.affiliation;
-  const list: unknown[] = Array.isArray(raw) ? raw : raw ? [raw] : [];
-  return list
-    .map((a: any) => {
-      if (typeof a === 'string') return byId.get(a.trim()) ?? a.trim();
-      return affName(a) || byId.get(text(a?.id) || text(a?.ref)) || '';
-    })
-    .filter(Boolean);
+/** Zenodo's name parts for an author name as MyST parses it. Zenodo has no field for a suffix,
+ *  so it goes with the family name. */
+function personName(n: Name = {}): { family_name: string; given_name?: string } {
+  const family = [n.non_dropping_particle, n.family, n.suffix].filter(Boolean).join(' ');
+  const given = [n.given, n.dropping_particle].filter(Boolean).join(' ');
+  if (family) return given ? { given_name: given, family_name: family } : { family_name: family };
+  return { family_name: given || n.literal || '' };
 }
 
 export interface MetadataInput {
@@ -578,12 +531,13 @@ export function buildDraft(input: MetadataInput): DraftBody {
     extraDescParas,
   } = input;
 
+  // MyST reads the authors as it does for its own output: names parsed, affiliations as ids.
+  const fm = validateProjectFrontmatter(project, { property: 'project', messages: {} });
+  const affiliationName = new Map((fm.affiliations ?? []).map((a) => [a.id, a.name]));
   const creators: Array<Record<string, unknown>> = [];
-  for (const entry of project.authors ?? []) {
-    // MyST takes an author written as plain text as its name.
-    const a = typeof entry === 'string' ? { name: entry } : entry;
-    const person: Record<string, unknown> = { type: 'personal', ...personName(a.name) };
-    const orcid = String(a.orcid ?? '');
+  for (const a of fm.authors ?? []) {
+    const person: Record<string, unknown> = { type: 'personal', ...personName(a.nameParsed) };
+    const orcid = a.orcid ?? '';
     // Zenodo replaces the name from the ORCID profile when the ORCID does not resolve, so invalid
     // and placeholder ORCIDs (the template's 0000-0000-...) are dropped.
     if (orcid && ORCID_RE.test(orcid) && !orcid.startsWith('0000-0000-')) {
@@ -593,7 +547,7 @@ export function buildDraft(input: MetadataInput): DraftBody {
       process.stderr.write(`[warn] skipping invalid/placeholder ORCID for ${who}: ${orcid}\n`);
     }
     const c: Record<string, unknown> = { person_or_org: person };
-    const affs = affiliationNames(a, project);
+    const affs = (a.affiliations ?? []).map((id) => affiliationName.get(id)).filter(Boolean);
     if (affs.length) c.affiliations = affs.map((name) => ({ name }));
     creators.push(c);
   }
@@ -1042,7 +996,6 @@ export async function cmdPrepare(input: PrepareInput): Promise<Outcome> {
     rec = await api.createDraft(body);
   }
   if (!rec.pids?.doi) rec = await api.reserveDoi(String(rec.id));
-  await requestCommunity(api, rec, zenodo.community);
 
   const cdoi = conceptDoiFor(rec, sandbox);
   const draftUrl = rec.links?.self_html;
@@ -1213,9 +1166,7 @@ export async function cmdPublish(input: PublishInput): Promise<Outcome> {
     throw e;
   }
 
-  // The bundle is the whole deposit [R28]: files from a re-run or imported from the last
-  // version are removed first.
-  for (const name of await api.draftFileNames(id)) await api.deleteDraftFile(id, name);
+  await api.clearDraftFiles(id);
   for (const p of files) {
     process.stderr.write(`[publish] upload ${basename(p)}\n`);
     await api.uploadFile(id, basename(p), readFileSync(p));

@@ -30,7 +30,7 @@ The tag starts the **Deposit version** workflow, which builds the paper and uplo
 
 Open the draft on Zenodo, check it, and click **Publish**. The DOI resolves from then on.
 
-When the journal has a [Zenodo community](journal-yml.md#zenodo-community), the first version's draft is submitted to it, so the button reads **Submit for review** instead, and the paper is published once a curator of the community accepts it. An editor who curates the community sees **Publish to community**, which publishes it at once.
+When the journal has a [Zenodo community](journal-yml.md#zenodo-community), the first version's button reads **Submit for review**, and the paper is published once a curator of the community accepts it. An editor who curates the community sees **Publish to community**, which publishes it at once.
 
 (list-on-site)=
 ## 4. List it on the journal website

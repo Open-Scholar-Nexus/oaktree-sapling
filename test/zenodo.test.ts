@@ -15,7 +15,6 @@ import { parseDocument } from 'yaml';
 import {
   ZenodoApi,
   buildDraft,
-  personName,
   buildBundle,
   paperUrn,
   cmdPrepare,
@@ -118,6 +117,7 @@ function fakeZenodo(
     const path = pathOf(r.url);
     const file = /\/draft\/files\/([^/]+)(\/content|\/commit)?$/.exec(path);
     if (r.method === 'GET' && path === '/api/user/records') return { json: hits([draft]) };
+    if (path.startsWith('/api/communities/')) return { json: { id: 'c0ffee' } };
     if (r.method === 'GET' && path === `/api/records/${id}/draft/files`)
       return { json: { entries: files.map((key) => ({ key })) } };
     if (r.method === 'GET' && path.startsWith(`/api/records/${id}`)) return { json: draft };
@@ -316,50 +316,31 @@ describe('buildDraft', () => {
     expect(creators[2]!.affiliations).toBeUndefined();
   });
 
-  it('sends given and family names from the object form, and a string name whole', () => {
+  it('sends the names as MyST parses them, aliases and particles included', () => {
     const { metadata } = buildDraft({
       project: {
         title: 'T',
-        authors: [{ name: { given: 'Ada', family: 'Lovelace' } }, { name: 'Josiah Carberry' }],
+        authors: [
+          { name: { given: 'Ada', family: 'Lovelace' } },
+          { name: { first: 'Vincent', particle: 'van', surname: 'Gogh' } },
+          { name: { forename: 'Ludwig', 'dropping-particle': 'van', last: 'Beethoven' } },
+          { name: 'Josiah Carberry' },
+          'Paolo Marzolo',
+          { name: 'Plato' },
+        ],
       },
       githubUrl: 'https://github.com/o/r',
       zenodo: {},
     });
     const people = (metadata.creators as Array<Record<string, any>>).map((c) => c.person_or_org);
-    expect(people[0]).toEqual({ type: 'personal', given_name: 'Ada', family_name: 'Lovelace' });
-    expect(people[1]).toEqual({ type: 'personal', family_name: 'Josiah Carberry' });
-  });
-
-  it('takes an author written as plain text as its name', () => {
-    const { metadata } = buildDraft({
-      project: { title: 'T', authors: ['Paolo Marzolo'] },
-      githubUrl: 'https://github.com/o/r',
-      zenodo: {},
-    });
-    const creators = metadata.creators as Array<Record<string, any>>;
-    expect(creators).toEqual([
-      { person_or_org: { type: 'personal', family_name: 'Paolo Marzolo' } },
+    expect(people).toEqual([
+      { type: 'personal', given_name: 'Ada', family_name: 'Lovelace' },
+      { type: 'personal', given_name: 'Vincent', family_name: 'van Gogh' },
+      { type: 'personal', given_name: 'Ludwig van', family_name: 'Beethoven' },
+      { type: 'personal', given_name: 'Josiah', family_name: 'Carberry' },
+      { type: 'personal', given_name: 'Paolo', family_name: 'Marzolo' },
+      { type: 'personal', family_name: 'Plato' },
     ]);
-  });
-});
-
-describe('personName', () => {
-  it("takes MyST's aliases and particles", () => {
-    expect(personName({ first: 'Vincent', particle: 'van', surname: 'Gogh' })).toEqual({
-      given_name: 'Vincent',
-      family_name: 'van Gogh',
-    });
-    expect(
-      personName({ forename: 'Ludwig', 'dropping-particle': 'van', last: 'Beethoven' }),
-    ).toEqual({ given_name: 'Ludwig van', family_name: 'Beethoven' });
-  });
-
-  it('keeps a name it cannot split whole', () => {
-    expect(personName({ literal: 'Grace Hopper' })).toEqual({ family_name: 'Grace Hopper' });
-    expect(personName({ given: 'Madonna' })).toEqual({ family_name: 'Madonna' });
-    expect(personName('Grace Brewster Murray Hopper')).toEqual({
-      family_name: 'Grace Brewster Murray Hopper',
-    });
   });
 });
 
@@ -637,11 +618,7 @@ const BARE_MYST = `project:
  * A Zenodo where the account holds `existing` (none by default): `POST /api/records` creates
  * draft `id`, and reserving its DOI answers with it.
  */
-function prepareZenodo(
-  id: string,
-  existing: ZenodoRecord[] = [],
-  community?: { slug: string; id: string },
-) {
+function prepareZenodo(id: string, existing: ZenodoRecord[] = []) {
   const created = rec({ id, parent: { id }, links: { self_html: `https://z/uploads/${id}` } });
   const reserved = { ...created, pids: { doi: { identifier: `10.5072/zenodo.${id}` } } };
   const { transport, calls } = fakeTransport((r) => {
@@ -651,8 +628,6 @@ function prepareZenodo(
     if (r.method === 'PUT' && path.endsWith('/draft'))
       return { json: { ...existing[0], pids: {} } };
     if (path.endsWith('/draft/pids/doi')) return { json: reserved };
-    if (community && path === `/api/communities/${community.slug}`)
-      return { json: { id: community.id } };
     return { json: {} };
   });
   return { transport, calls };
@@ -718,24 +693,6 @@ describe('cmdPrepare', () => {
     });
     expect(refused.exitCode).toBe(3);
     expect(refused.result.message).toContain('(10.5072/zenodo.6)');
-  });
-
-  it("puts the draft up for the journal's community, by the community's id ([R19])", async () => {
-    const community = { slug: 'fixture-community', id: 'c0ffee' };
-    const { transport, calls } = prepareZenodo('5', [], community);
-    const out = await cmdPrepare({
-      mystPath: paperRepo(BARE_MYST),
-      repo: 'o/r',
-      api: new ZenodoApi(transport, true, 't'),
-      instanceRoot: journalWithCommunity(community.slug),
-    });
-    expect(out.exitCode).toBe(0);
-    const review = calls.find((c) => pathOf(c.url) === '/api/records/5/draft/review')!;
-    expect(review.method).toBe('PUT');
-    expect(review.opts.json).toEqual({
-      receiver: { community: 'c0ffee' },
-      type: 'community-submission',
-    });
   });
 
   it('refuses a same-env re-prepare but allows sandbox→prod replacement ([R29])', async () => {
@@ -975,7 +932,16 @@ describe('cmdPublish', () => {
 
     const first = fakeZenodo();
     expect((await publish(builtAgainstJournal(), first.api, journal, git)).exitCode).toBe(0);
-    expect(reviewOf(first)).toHaveLength(1);
+    expect(reviewOf(first).map((c) => [c.method, c.opts.json])).toEqual([
+      ['PUT', { receiver: { community: 'c0ffee' }, type: 'community-submission' }],
+    ]);
+
+    // A draft already up for the community, as after the editor's Submit for review, is left be.
+    const submitted = fakeZenodo(
+      rec({ id: '5', parent: { id: '5', review: { receiver: { community: 'c0ffee' } } } }),
+    );
+    expect((await publish(builtAgainstJournal(), submitted.api, journal, git)).exitCode).toBe(0);
+    expect(reviewOf(submitted)).toHaveLength(0);
 
     // Zenodo takes no review for a new version: it stays in its first version's communities.
     const next = fakeZenodo(rec({ id: '9', parent: { id: '5' }, versions: { index: 2 } }));

@@ -68,6 +68,22 @@ A paper repository that is its own journal (`instance_repo: "."` in `pins.yml`)[
 
 [^own-journal]: Planned, in development.
 
+(design-releases-zenodo)=
+
+## Zenodo deposits
+
+`oak deposit` uses Zenodo's InvenioRDM API, whose `/api/records` answers in Zenodo's older response format unless the request asks for `application/vnd.inveniordm.v1+json`.
+
+Zenodo saves a draft that fails validation and lists the failures under `errors`, so oak fails on them, except the one for missing files, which the upload clears.
+
+(r28)=
+The bundle is the whole deposit: oak's files, plus the paper's `deposit/` folder, whose files may not take oak's names. Publish removes every file the draft holds before the upload, including those a new version imports from the one before.
+
+(r19)=
+The journal's `zenodo:` paragraph and community are optional. The community is a review request on the first version only, and later versions stay in the communities the first one joined.
+
+Zenodo mints the concept DOI on the first publish, so until then oak builds it from the record's parent id, which that DOI carries.
+
 (r114)=
 
 ## A stable release is `latest` before it is tested

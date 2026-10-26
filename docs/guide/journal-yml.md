@@ -51,7 +51,7 @@ zenodo:
   description_blurb: Published in My Journal.
 ```
 
-`community` is the community's identifier, the last part of its address on Zenodo. The paragraph applies from the next [published version](publish.md). The community applies to a paper whose first version is not published yet: that draft goes to the community for review when an editor publishes it ([publish on Zenodo](#publish-on-zenodo)), and later versions stay in the community. A paper published before the community was set joins it only when an editor submits its record to the community on Zenodo.
+`community` is the community's identifier, the last part of its address on Zenodo. The paragraph applies from the next [published version](publish.md). The community applies to a paper whose first version is not published yet: an editor submits that draft to the community ([publish on Zenodo](publish.md#publish-on-zenodo)), and later versions stay in the community. A paper published before the community was set joins it only when an editor submits its record to the community on Zenodo.
 
 (live-previews)=
 ## Live previews
