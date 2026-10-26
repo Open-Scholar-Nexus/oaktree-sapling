@@ -955,13 +955,20 @@ export const pr = {
   checkRunTitleShimUnlisted: (title: string): string => `⚠️ CI workflows may be modified: ${title}`,
   unknownCheckId: (id: string): string =>
     id.endsWith('.mjs')
-      ? `unknown check id "${id}"; a check file's path starts with ./, as in "./${id}": ` +
+      ? `unknown check id "${id}"; a check file's path starts with ./, as in ` +
+        `"./${id.replace(/^\/+/, '')}": ` +
         `${docsUrl(DOCS.checksJournal)}`
       : `unknown check id "${id}"; the ids the journal can ask for, and how to change the set: ` +
         `${docsUrl(DOCS.checksChanging)}`,
   checkThrew: (message: string): string =>
     `the check stopped with an error: ${message.replace(/\.$/, '')}. To show this as a ` +
     `warning, mark the check optional: ${docsUrl(DOCS.checksChanging)}`,
+  checkOptionsIgnored: (problems: string[]): string =>
+    `the check ran without some of its options: ${problems.join('; ')}. Fix them in ` +
+    `journal.yml: ${docsUrl(DOCS.checksChanging)}`,
+  checkOptionsInvalid: (problems: string[]): string =>
+    `the check's options are wrong: ${problems.join('; ')}. Fix them in journal.yml: ` +
+    `${docsUrl(DOCS.checksChanging)}`,
 
   // ── the journal's check files; the row already names the file ─────────────────────────────
   checkFileOutside:
@@ -981,6 +988,9 @@ export const pr = {
   checkFileThrew: (message: string): string =>
     `the check stopped with an error: ${message.replace(/\.$/, '')}. See ` +
     `${docsUrl(DOCS.checksJournal)}`,
+  checkFilePaperUnreadable: (message: string): string =>
+    `the journal's check could not run: ${message.replace(/\.$/, '')}. ` +
+    `Your paper is not the cause; raise this with the journal's editors`,
   checkFileBadResult: (field: string, problem: string): string =>
     `the check returned a result oak cannot read${field ? ` (at ${field})` : ''}: ` +
     `${problem.replace(/\.$/, '')}. ` +

@@ -1,8 +1,8 @@
 /**
- * journal-checks.ts: the journal's own check files, named in `journal.yml` `checks:` by a `./`
- * path into the journal repository [R208].
+ * journal-checks.ts: the journal's own check files, named in `journal.yml` `checks:` by a
+ * relative `./` path into the journal repository [R208].
  *
- * A check file loads from the journal clone, where myst-cli is not installed [R51], so it gets
+ * A check file loads from the journal clone, where myst-cli is not installed, so it gets
  * {@link Paper}: plain data and two helpers.
  */
 import { statSync } from 'node:fs';
@@ -16,7 +16,7 @@ import { UserError, firstLine } from './messages.js';
 
 /** One page of the paper, as MyST processed it. */
 export interface PaperPage {
-  /** Absolute path. */
+  /** Absolute path to the page's file. */
   file: string;
   frontmatter: Record<string, any>;
   mdast: GenericParent;
@@ -24,11 +24,12 @@ export interface PaperPage {
 
 /** What a check file's `validate` gets. Fields are only ever added [R208]. */
 export interface Paper {
-  /** The paper folder, absolute. */
+  /** Absolute path to the paper folder. */
   root: string;
   /** The project frontmatter as MyST resolved it. */
   project: Record<string, any>;
-  /** One per page in the table of contents, `index.md` first. */
+  /** One per page, in table-of-contents order: the root page, which Curvenote's checks read as
+   *  the article, then the rest. */
   pages: PaperPage[];
   toText(node: GenericNode | GenericNode[]): string;
   selectAll(selector: string, node: GenericNode): GenericNode[];
@@ -73,32 +74,51 @@ const CheckFileResult = z.object({
   optional: z.boolean().optional(),
 });
 
+/** A check file's default export. */
+interface CheckFile {
+  validate(paper: Paper, options: Record<string, unknown>): unknown;
+}
+
 /**
- * Imports the check file `id` names and runs its `validate` on a copy of `paper`'s data, so a
- * check that edits a tree leaves the next one unaffected. Returns the results; an empty list adds
- * no row. Throws a {@link UserError} when the file does not load or has no `validate`, when
- * `validate` throws, or when a result has the wrong shape.
+ * Imports the check file at `abs` and returns its default export, once it has a `validate`
+ * function. Throws a {@link UserError} when the file does not load or has no `validate`.
  */
-export async function runCheckFile(
-  journalRoot: string | null,
-  id: string,
-  options: Record<string, unknown>,
-  paper: Paper,
-): Promise<CheckResult[]> {
-  const url = pathToFileURL(resolveCheckFile(journalRoot, id)).href;
-  let mod: { default?: { validate?: unknown } };
+async function importCheckFile(abs: string): Promise<CheckFile> {
+  let mod: { default?: Partial<CheckFile> };
   try {
-    mod = await import(url);
+    mod = await import(pathToFileURL(abs).href);
   } catch (e) {
     throw new UserError(messages.pr.checkFileImportFailed(firstLine(e)));
   }
   const check = mod.default;
   if (typeof check?.validate !== 'function') throw new UserError(messages.pr.checkFileNoValidate);
-  const own = {
-    ...paper,
-    project: structuredClone(paper.project),
-    pages: structuredClone(paper.pages),
-  };
+  return check as CheckFile;
+}
+
+/**
+ * Imports the check file `id` names and runs its `validate` on a copy of `readPaper()`'s data, so a
+ * check that edits a tree leaves the next one unaffected. Returns the results; an empty list adds
+ * no row. Throws a {@link UserError} when the file does not load or has no `validate`, when oak
+ * cannot read the paper, when `validate` throws, or when a result has the wrong shape.
+ */
+export async function runCheckFile(
+  journalRoot: string | null,
+  id: string,
+  options: Record<string, unknown>,
+  readPaper: () => Paper,
+): Promise<CheckResult[]> {
+  const check = await importCheckFile(resolveCheckFile(journalRoot, id));
+  let own: Paper;
+  try {
+    const paper = readPaper();
+    own = {
+      ...paper,
+      project: structuredClone(paper.project),
+      pages: structuredClone(paper.pages),
+    };
+  } catch (e) {
+    throw new UserError(messages.pr.checkFilePaperUnreadable(firstLine(e)));
+  }
   let res: unknown;
   try {
     res = await check.validate(own, options);

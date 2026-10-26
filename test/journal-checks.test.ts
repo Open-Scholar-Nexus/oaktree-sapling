@@ -95,6 +95,7 @@ describe('a check file path is refused', () => {
 
   it('an id ending in .mjs without ./ gets a hint', () => {
     expect(messages.pr.unknownCheckId('checks/x.mjs')).toContain('"./checks/x.mjs"');
+    expect(messages.pr.unknownCheckId('/checks/x.mjs')).toContain('"./checks/x.mjs"');
     expect(messages.pr.unknownCheckId('checks/x.mjs')).toContain(docsUrl(DOCS.checksJournal));
   });
 });
@@ -115,6 +116,31 @@ describe('loading and options', () => {
 
   it('an empty list adds no row', async () => {
     expect(await run([{ id: './echo.mjs', result: [] }])).toEqual([]);
+  });
+});
+
+describe('a paper oak cannot read', () => {
+  it('every check file sends the author to the editors', async () => {
+    const out = await runChecks(
+      session,
+      [{ id: './echo.mjs' }, { id: './throws.mjs' }],
+      journalRoot,
+      () => {
+        throw new Error('no project');
+      },
+    );
+    const message = messages.pr.checkFilePaperUnreadable('no project');
+    expect(out).toEqual([
+      { id: './echo.mjs', status: 'error', message },
+      { id: './throws.mjs', status: 'error', message },
+    ]);
+  });
+
+  it('is not read for a check file that does not load', async () => {
+    const out = await runChecks(session, [{ id: './missing.mjs' }], journalRoot, () => {
+      throw new Error('unreachable');
+    });
+    expect(out[0]!.message).toBe(messages.pr.checkFileMissing(`${journalRoot}/missing.mjs`));
   });
 });
 

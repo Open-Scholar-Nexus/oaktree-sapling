@@ -414,3 +414,47 @@ describe.skipIf(bundleState() === 'absent')("oak validate, the journal's check f
     expect(out.checkRun.summary).toContain(`| ${checkFiles[0]} | fail (optional) |`);
   }, 60_000);
 });
+
+describe.skipIf(bundleState() === 'absent')("oak validate, a catalog check's options", () => {
+  beforeAll(assertBundleNotStale);
+
+  it("get Curvenote's defaults and types; a wrong one is an error row, an unknown one a warning", () => {
+    const journal = mkdtempSync(join(tmpdir(), 'oak-val-options-'));
+    cpSync(fixtureInstance, journal, { recursive: true });
+    const journalYml = readFileSync(join(journal, 'journal.yml'), 'utf8').replace(
+      '  - id: keywords-defined\n',
+      '  - id: keywords-defined\n' +
+        '  - id: keywords-length\n' +
+        '  - id: keywords-length\n    max: "1"\n' +
+        '  - id: keywords-length\n    max: lots\n' +
+        '  - id: keywords-length\n    maxx: 1\n',
+    );
+    writeFileSync(join(journal, 'journal.yml'), journalYml);
+    const r = spawnSync(
+      'node',
+      [
+        bundle,
+        'validate',
+        '--paper',
+        fixturePaper,
+        '--instance',
+        journal,
+        '--repo',
+        repo,
+        '--json',
+      ],
+      { encoding: 'utf8' },
+    );
+    const rows = JSON.parse(r.stdout).checks.filter((c: any) => c.id === 'keywords-length');
+    // The fixture paper has two keywords; `max` defaults to 5.
+    expect(rows).toMatchObject([
+      { status: 'pass', message: 'Correct number of keywords (2/5)' },
+      { status: 'fail', message: 'Too many keywords (2/1)' },
+      { status: 'error' },
+      { status: 'error', optional: true },
+      { status: 'pass', message: 'Correct number of keywords (2/5)' },
+    ]);
+    expect(rows[2].message).toContain("'max' must be a number: lots");
+    expect(rows[3].message).toContain('extra key ignored: maxx');
+  }, 60_000);
+});

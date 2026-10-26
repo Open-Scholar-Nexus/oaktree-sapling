@@ -1,7 +1,7 @@
 (guide-checks)=
 # Editorial checks
 
-The editorial checks are the requirements a paper has to meet before its pull request can merge, such as having an abstract or an ORCID for every author. The journal lists them under `checks` in `journal.yml`, and every pull request to a paper runs them, posting the result as a comment and as the **Journal checks** status. oak adds checks of its own on every paper: a wrong [paper id](journal-yml.md#id-pattern) or a missing `index.md` or `myst.yml` blocks the merge too, and a missing thumbnail or logo file shows a warning.
+The editorial checks are the requirements a paper has to meet before its pull request can merge, such as having an abstract or an ORCID for every author. The journal lists them under `checks` in `journal.yml`, and every pull request to a paper runs them, posting the result as a comment and as the **Journal checks** status. oak adds checks of its own on every paper (structural in nature): a wrong [paper id](journal-yml.md#id-pattern) or a missing `index.md` or `myst.yml` blocks the merge too, and a missing thumbnail or logo file shows a warning.
 
 A new journal starts with:
 
@@ -54,10 +54,10 @@ The checks are [Curvenote](https://curvenote.com)'s, from its open-source [`@cur
 
 Any of MyST's own [build rules](https://github.com/jupyter-book/mystmd/blob/main/packages/myst-common/src/ruleids.ts) can be listed too, such as `math-renders` or `image-exists`: the check fails when the build warns under that rule.
 
-An id that is neither a check nor the path of a [check file](#journal-checks) fails, with a link to this section.
+A check fails, with a link to this section, when its id is neither a check above nor the path of a [check file](#journal-checks), or when an option has the wrong type, such as `max: lots`. An option the check does not have, such as a misspelled `maxx`, adds a warning, and the check runs without it.
 
 (journal-checks)=
-## The journal's own checks
+## Custom checks
 
 A journal can write a check as a JavaScript file in the journal repository and list it by its path:
 
@@ -70,16 +70,16 @@ checks:
   optional: true
 ```
 
-The path starts with `./`, is relative to the root of the journal repository, stays inside it, and ends in `.mjs`. `checks/` is the usual folder. The path names the check's row in the report, so renaming the file renames the row. The entry's other fields, except `optional`, reach the check as its options.
+The path must start with `./`, be relative to the root of the journal repository, stay inside it and end in `.mjs`. `checks/` is the usual folder. The path names the check's row in the report, so renaming the file renames the row. The entry's other fields, except `optional`, reach the check as its options.
 
-oak runs check files from v0.3.0. A paper pinned to an older version reports the path as an unknown check id, which blocks its merge, so list a new check file as `optional: true` until the journal's papers have [moved to that version](pins.md).
+oak runs check files from v0.3.0. A paper pinned to an older version reports the path as an unknown check id, which blocks its merge, so you may want to list a new check file as `optional: true` until the journal's papers have [moved to that version](pins.md).
 
 ### Writing a check file
 
-The file's default export has a `validate(paper, options)` function. This one finds a bold or italic line used as a heading:
+The file must have a default export with a `validate(paper, options)` function. This one finds a bold or italic line used as a heading:
 
 ```js
-// A bold or italic line on its own is a paragraph to MyST: no number, no contents entry, no link target.
+// A bold or italic line on its own is a paragraph in MyST: no number, no contents entry, no link target.
 export default {
   validate(paper) {
     const found = [];
@@ -123,13 +123,13 @@ export default {
 |---|---|
 | `root` | The paper's folder, an absolute path. |
 | `project` | The project frontmatter, such as `title`, `authors` and `keywords`. |
-| `pages` | One `{ file, frontmatter, mdast }` per page in the table of contents, `index.md` first: its absolute path, its own frontmatter, and its content as a tree. |
+| `pages` | One `{ file, frontmatter, mdast }` per page, in table-of-contents order and starting with the root page, which Curvenote's checks read as the article: its absolute path, its own frontmatter, and its content as a tree. |
 | `toText(node)` | The text of a node and everything under it. |
 | `selectAll(selector, node)` | The nodes under `node` that match a selector such as `'heading'`, from [`unist-util-select`](https://github.com/syntax-tree/unist-util-select). |
 
 MyST moves an `abstract:` to `parts.abstract`: of `project` when `myst.yml` sets it, of the page's `frontmatter` when the page does. A `+++ {"part": "abstract"}` block stays in `mdast`, as a `block` node with `data.part` set to `abstract`.
 
-The tree follows [MyST's document structure](https://mystmd.org/spec), from the MyST version in the paper's oak, so a MyST upgrade in oak can change the shape of a node. oak adds fields to `paper` and never renames or removes one. Each check gets its own copy of `project` and `pages`, so a check that changes them leaves the next one unaffected.
+The tree follows [MyST's document structure](https://mystmd.org/spec), from the MyST version in the paper's oak, so a MyST upgrade may change the shape of a node. oak adds fields to `paper` and never renames or removes one. Each check gets its own copy of `project` and `pages`, so a check that changes them leaves the next one unaffected.
 
 A check file can import Node's built-in modules, such as `node:path`, and other files in the journal repository. CI clones the journal repository without installing anything, so an import of a package fails there, even when it works on your machine.
 
@@ -141,7 +141,7 @@ From a clone of any paper, run `oak validate` against your copy of the journal r
 oak validate --instance ../<journal-repo>
 ```
 
-It runs the journal's checks, check files included, as they are on disk, uncommitted edits too. `oak validate` runs the version of oak the paper pins, so the paper must pin one that runs check files.
+It runs the journal's checks, check files included, as they are on disk, uncommitted edits too. `oak validate` runs the version of oak the paper pins, so the paper must pin one that runs check files (>= v0.3.0).
 
 ### When a check file breaks
 

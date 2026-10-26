@@ -658,11 +658,10 @@ export async function runValidate(
   const authorMyst = join(input.paperRoot, 'myst.yml');
   if (existsSync(authorMyst)) readDoc(authorMyst);
 
-  // Composed when there is something to compose [R82]: paper-base's thumbnail and typst export
-  // exist only after the merge, so checking the author's file alone would pass them [R81].
-  // Shared with `oak build` so the two read the same config [R71]. A bare local run or
-  // `--no-instance` has nothing to compose [R193]. Guarded: validate reports, and a crash tells
-  // the author less than a finding.
+  // Validates the config `oak build` reads [R71]: the author's myst.yml merged with paper-base
+  // and the journal's settings [R82]. The thumbnail and the typst export come from paper-base,
+  // so Layer A checks them only after the merge [R81]. A bare local run or `--no-instance` has
+  // no journal to merge, and validates the author's myst.yml as it is [R193].
   let project: { id?: string; exports?: Array<Record<string, unknown>>; thumbnail?: string };
   let configFile: string | undefined;
   let composeFailure: string | undefined;
@@ -738,17 +737,15 @@ export async function runValidate(
   checks = unrunnable;
   if (structuralErrors.length === 0) {
     try {
-      checks = [
-        ...unrunnable,
-        ...(await input.edge.withProjectSession(
-          input.paperRoot,
-          (session) =>
-            runChecks(session, runnable, input.instanceRoot, () =>
-              input.edge.paperForChecks(session, input.paperRoot),
-            ),
-          configFile, // the COMPOSED config when we have one ([R82])
-        )),
-      ];
+      const ran = await input.edge.withProjectSession(
+        input.paperRoot,
+        (session) => {
+          const readPaper = () => input.edge.paperForChecks(session, input.paperRoot);
+          return runChecks(session, runnable, input.instanceRoot, readPaper);
+        },
+        configFile, // the composed config, when there is one
+      );
+      checks = [...unrunnable, ...ran];
     } catch (e) {
       checks = [
         ...unrunnable,
