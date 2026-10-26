@@ -38,8 +38,8 @@ function handBuiltPaper(): Paper {
   };
 }
 
-function run(checks: JournalCheck[], paper: Paper = handBuiltPaper(), importer?: never) {
-  return runChecks(session, checks, journalRoot, () => paper, importer);
+function run(checks: JournalCheck[], paper: Paper = handBuiltPaper()) {
+  return runChecks(session, checks, journalRoot, () => paper);
 }
 
 const pass = { status: 'pass', message: 'fine' };
@@ -100,21 +100,11 @@ describe('a check file path is refused', () => {
 });
 
 describe('loading and options', () => {
-  it('a file listed twice is imported once and gets each entry its own options', async () => {
-    const urls: string[] = [];
-    const importer = (async (url: string) => {
-      urls.push(url);
-      return import(url);
-    }) as never;
-    const out = await run(
-      [
-        { id: './echo.mjs', result: { status: 'pass', message: 'first' } },
-        { id: './echo.mjs', result: { status: 'fail', message: 'second' } },
-      ],
-      handBuiltPaper(),
-      importer,
-    );
-    expect(urls).toHaveLength(1);
+  it('a file listed twice gets each entry its own options', async () => {
+    const out = await run([
+      { id: './echo.mjs', result: { status: 'pass', message: 'first' } },
+      { id: './echo.mjs', result: { status: 'fail', message: 'second' } },
+    ]);
     expect(out.map((r) => r.message)).toEqual(['first', 'second']);
   });
 

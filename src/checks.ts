@@ -12,13 +12,7 @@ import { basename, isAbsolute, relative } from 'node:path';
 import { DERIVED_CONFIG_FILE } from './yaml-io.js';
 import * as messages from './messages.js';
 import { annotate, firstLine, UserError } from './messages.js';
-import {
-  checkFileLoader,
-  isCheckFile,
-  runCheckFile,
-  type ModuleImporter,
-  type Paper,
-} from './journal-checks.js';
+import { isCheckFile, runCheckFile, type Paper } from './journal-checks.js';
 import { GATED_PATHS, underPaths } from './schema.js';
 import type { ISession } from 'myst-cli';
 import {
@@ -71,44 +65,28 @@ export async function runChecks(
   journalChecks: JournalCheck[],
   journalRoot: string | null,
   readPaper: () => Paper,
-  importer?: ModuleImporter,
 ): Promise<EngineCheckResult[]> {
   // The catalog loads myst-cli, so a run listing only check files does not import it [R51].
   const catalog = journalChecks.some((jc) => !isCheckFile(jc.id)) ? await curvenoteChecks() : [];
-  const loadCheckFile = checkFileLoader(journalRoot, importer);
   let paper: Paper | undefined;
   const out: EngineCheckResult[] = [];
-  for (const jc of journalChecks) {
-    const { optional, ...check } = jc;
+  for (const { optional, ...check } of journalChecks) {
     const flag = optional ? { optional: true } : {};
-    const impl = isCheckFile(jc.id) ? undefined : catalog.find((c) => c.id === jc.id);
-    if (!isCheckFile(jc.id) && !impl) {
-      out.push({
-        id: jc.id,
-        status: CheckStatus.error,
-        message: messages.pr.unknownCheckId(jc.id),
-        ...flag,
-      });
-      continue;
-    }
-    if (!impl) paper ??= readPaper();
     let results: CheckResult[];
     try {
-      if (impl) {
-        const res = await impl.validate(session, check as Check);
-        results = Array.isArray(res) ? res : [res];
+      if (isCheckFile(check.id)) {
+        results = await runCheckFile(journalRoot, check.id, check, (paper ??= readPaper()));
       } else {
-        results = (await runCheckFile(loadCheckFile, jc.id, check, paper!)).map((r) => ({
-          ...r,
-          status: CheckStatus[r.status],
-        }));
+        const impl = catalog.find((c) => c.id === check.id);
+        if (!impl) throw new UserError(messages.pr.unknownCheckId(check.id));
+        results = [await impl.validate(session, check as Check)].flat();
       }
     } catch (e) {
       const message = e instanceof UserError ? e.message : messages.pr.checkThrew(firstLine(e));
-      out.push({ id: jc.id, status: CheckStatus.error, message, ...flag });
+      out.push({ id: check.id, status: CheckStatus.error, message, ...flag });
       continue;
     }
-    for (const r of results) out.push({ ...r, id: jc.id, ...flag });
+    for (const r of results) out.push({ ...r, id: check.id, ...flag });
   }
   return out;
 }

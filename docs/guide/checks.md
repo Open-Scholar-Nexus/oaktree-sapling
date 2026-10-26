@@ -106,7 +106,7 @@ export default {
 };
 ```
 
-`validate` returns a result, a list of results, or a promise of either. An empty list adds no row. A result has these fields:
+`validate` returns a result, a list of results, or a promise of either. An empty list adds no row. A result is a [Curvenote](https://www.npmjs.com/package/@curvenote/check-definitions) `CheckResult`, and oak reads these of its fields:
 
 | field | |
 |---|---|
@@ -141,7 +141,7 @@ From a clone of any paper, run `oak validate` against your copy of the journal r
 oak validate --instance ../<journal-repo>
 ```
 
-It runs the journal's checks, check files included, as they are on disk, uncommitted edits too, and reads them again on every run. `oak validate` runs the version of oak the paper pins, so the paper must pin one that runs check files.
+It runs the journal's checks, check files included, as they are on disk, uncommitted edits too. `oak validate` runs the version of oak the paper pins, so the paper must pin one that runs check files.
 
 ### When a check file breaks
 
