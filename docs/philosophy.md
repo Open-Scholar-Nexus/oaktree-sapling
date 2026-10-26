@@ -1,7 +1,7 @@
 (philosophy)=
 # Philosophy
 
-Oaktree Sapling sets up a journal on free services and on tools a researcher already uses or can learn in an afternoon. It could suit a small journal of computational papers, or a conference publishing its papers. This page explains each choice, for anyone deciding whether to adopt it.
+Oaktree Sapling sets up a journal on free services and on tools a researcher already uses or can learn in an afternoon. This page explains each choice, for anyone deciding whether to adopt it.
 
 ## Papers are written in MyST
 
