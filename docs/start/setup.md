@@ -1,7 +1,7 @@
 (start-setup)=
 # Create a journal
 
-Besides GitHub, a journal uses Zenodo to publish papers and, optionally, Cloudflare for live previews: [Secrets](../reference/secrets.md) lists the tokens they need.
+Besides GitHub, a journal uses Zenodo to publish papers and, optionally, Cloudflare for live previews. Their tokens are set on each paper repository and listed in [Secrets](../reference/secrets.md).
 
 ## Install
 

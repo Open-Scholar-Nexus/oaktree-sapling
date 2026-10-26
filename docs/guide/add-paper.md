@@ -1,7 +1,7 @@
 (add-paper)=
 # Add a paper
 
-Each submission gets a repository of its own, created by an editor with `oak bootstrap paper`. The author works in that repository, and its workflows build, check and publish the paper with the journal's settings.
+Each submission gets a repository of its own, created by an editor with `oak bootstrap paper`. The author works in that repository, and its workflows build, check and publish the paper with the journal's settings. Draft deposits on Zenodo and live previews of pull requests need tokens, set when the repository is created (see [Secrets](#paper-secrets)).
 
 ## Create the repository
 
@@ -36,9 +36,18 @@ As with the journal, `oak` prints a plan, including every default it took, and a
 - Environments that keep each secret to the branch or tag that needs it: `zenodo-prepare` and `preview` for `main`, `zenodo-publish` for `v*` tags.
 - Permission for the workflows to open pull requests, which they use to write the paper's DOI into `myst.yml`.
 
+(paper-secrets)=
 ## Secrets
 
-Publishing on Zenodo and live previews need tokens on the paper repository. [Secrets](../reference/secrets.md) lists them, the scope each needs, and how to pass them to `oak bootstrap paper`.
+Draft deposits on Zenodo and live previews of pull requests need tokens, set on the paper repository's environments:
+
+`ZENODO_TOKEN`, `ZENODO_TOKEN_SANDBOX`
+: Used to create the paper's draft on Zenodo. Create each under **Applications** in the account settings on [Zenodo](https://zenodo.org/account/settings/applications/) or the [sandbox](https://sandbox.zenodo.org/account/settings/applications/), with the `deposit:write` scope only (see [Publish a paper](publish.md)).
+
+`CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`
+: Each pull request gets a live preview link, once the journal also [turns previews on](journal-yml.md#live-previews). Until both are set, a pull request gets a downloadable copy of the built site.
+
+Pass them to `oak bootstrap paper` as `--zenodo-token`, `--zenodo-token-sandbox`, `--cf-token` and `--cf-account`, or set the environment variables of the same names before running it. `oak` lists any that are still missing when it finishes, with the page to set them on.
 
 ## The author's first steps
 
