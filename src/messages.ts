@@ -134,8 +134,8 @@ export const usage = (): string =>
   `                    a public repo holding the journal's settings, branding, website and\n` +
   `                    list of published papers; each paper lives in a repo of its own that\n` +
   `                    points back at it\n` +
-  `      --co-located  not ready: one repo for the journal and its papers, with no journal\n` +
-  `                    website; today it holds a single paper\n` +
+  `      --co-located  one repo for the journal, its website and its papers, each paper in\n` +
+  `                    papers/<paper id>/\n` +
   `  oak bootstrap paper   --repo <owner/name> --instance <owner/journal-repo> --edition <id>\n` +
   `                        [--from <author-url> [--source-ref <ref>]]\n` +
   `                        [--engine-repo <owner/name>] [--engine-version <tag>] [--owner <@user|@org/team>]\n` +
@@ -144,6 +144,9 @@ export const usage = (): string =>
   `                    settings live in this same repo); --edition names one of its editions\n` +
   `  Both bootstrap verbs: --engine-version naming another oak version runs that version's\n` +
   `  bootstrap, fetched once into ~/.cache/oak.\n` +
+  `  oak add-paper --repo <owner/journal> --id <paper id> [--edition <id>] [--yes]\n` +
+  `                    in a co-located journal: fork it, add papers/<paper id>/ from the\n` +
+  `                    starter manuscript, and open the pull request an editor merges\n` +
   `  oak upgrade (--repo <owner/name> | --paper <dir>) [--to <tag>] [--files-only] [--yes]\n` +
   `                    move a paper repo to a newer engine version, as a pull request\n` +
   `\n` +
@@ -320,8 +323,8 @@ export const bootstrap = {
     docsUrl(DOCS.fileEditions),
 
   noSiteNeedsExternal:
-    '--no-site does not apply with --co-located: a co-located journal never gets a ' +
-    'website (an index over many papers in one repo is separate, unbuilt work).',
+    '--no-site does not apply with --co-located: the website is where a co-located journal ' +
+    'publishes its papers, each at /<paper id>/.',
 
   ghMissing:
     'oak bootstrap: the GitHub CLI (gh) is not on PATH. Install it, run `gh auth login`, ' +
@@ -334,7 +337,7 @@ export const bootstrap = {
   paperPlanHeader: (mode: 'ingest' | 'bare', repo: string): string =>
     `bootstrap paper (${mode === 'ingest' ? "importing an author's repo" : 'new, empty paper'}): ${repo}`,
   journalPlanHeader: (external: boolean, repo: string): string =>
-    `bootstrap journal (${external ? 'its own repo; papers live elsewhere' : 'journal and paper in one repo'}): ${repo}`,
+    `bootstrap journal (${external ? 'its own repo; papers live elsewhere' : 'journal, website and papers in one repo'}): ${repo}`,
 
   planRepoExists: '  ✓ repo exists',
   planCreateRepo: (isPrivate: boolean): string =>
@@ -353,7 +356,8 @@ export const bootstrap = {
   planSeedJournal: (withSite: boolean): string =>
     `  ○ commit to main: the journal's settings, branding and paper list${withSite ? ', plus the journal website' : ''} (${docsUrl(DOCS.files)})`,
   planSeedCoLocated:
-    "  ○ commit to main: the journal's settings, a starter paper and the workflows that build and check it",
+    "  ○ commit to main: the journal's settings, branding and paper list, the journal website, " +
+    'an empty papers/ folder, and the workflows that build, check and publish each paper',
 
   /** A rerun that changes an answer does not commit to main again, so it would succeed
    *  while changing nothing. */
@@ -398,7 +402,7 @@ export const bootstrap = {
   descriptionJournal:
     'Journal settings, branding and paper list, created by `oak bootstrap journal`',
   descriptionCoLocated:
-    'Journal and paper in one repo, created by `oak bootstrap journal --co-located`',
+    'Journal, website and papers in one repo, created by `oak bootstrap journal --co-located`',
 
   // ── the running log ────────────────────────────────────────────────────────────────────
   logCreated: (repo: string): string => `  ✓ created ${repo}`,
@@ -486,6 +490,13 @@ export const bootstrap = {
 
   runbookStartHere: `Next: clone the repo and edit journal.yml and brand/. See ${docsUrl(DOCS.journalStart)}`,
 
+  runbookAddPaper: (repo: string): string =>
+    `An author adds a paper with oak add-paper --repo ${repo} --id <paper id>, which opens a pull ` +
+    `request from their fork; merging it adds the paper as a draft, and listing it in ` +
+    `registry/papers.yml publishes it. See ${docsUrl(DOCS.journalStart)}`,
+  runbookColocatedSite: (siteUrl: string): string =>
+    `The website goes live at ${siteUrl} a few minutes after the first "Build paper" run on main ` +
+    'finishes (Actions tab).',
   runbookSite: (siteUrl: string): string =>
     `The website goes live at ${siteUrl} a few minutes after the first "Journal site" run ` +
     'finishes (Actions tab).',
@@ -513,8 +524,8 @@ export const upgrade = {
     `nothing was changed.`,
 
   /** `--files-only` would leave a version the engine action refuses. */
-  badPin: (pin: string): string =>
-    `oak upgrade: myst.yml pins ${JSON.stringify(pin.slice(0, 60))}, not a release tag like ` +
+  badPin: (pin: string, file = 'myst.yml'): string =>
+    `oak upgrade: ${file} pins ${JSON.stringify(pin.slice(0, 60))}, not a release tag like ` +
     `v1.2.3 or v1.2.3-dev.4, and --files-only leaves it; nothing was changed. Run it without ` +
     `--files-only, which moves the version too.`,
 
@@ -525,9 +536,9 @@ export const upgrade = {
     `a newer release.`,
 
   /** The pin this run leaves is older than the workflows it leaves need. */
-  belowMinimum: (pin: string, min: string, filesOnly: boolean): string =>
+  belowMinimum: (pin: string, min: string, filesOnly: boolean, file = 'myst.yml'): string =>
     `oak upgrade: the workflows need engine ${min} or newer, and this run would leave ` +
-    `myst.yml at ${pin}; nothing was changed. ` +
+    `${file} at ${pin}; nothing was changed. ` +
     (filesOnly
       ? `Run it without --files-only, which moves the version too.`
       : `Pass --to <tag> naming ${min} or newer.`),
@@ -539,8 +550,8 @@ export const upgrade = {
         ? ' (--to)'
         : `: the newest release of ${engineRepo} right now, no --to given (pass --to <tag> to pick one)`
     }`,
-  planBumpVersion: (from: string, target: string): string =>
-    `  ○ set the engine version in myst.yml: ${from || '(unset)'} → ${target}`,
+  planBumpVersion: (from: string, target: string, file = 'myst.yml'): string =>
+    `  ○ set the engine version in ${file}: ${from || '(unset)'} → ${target}`,
   planResync: (count: number, target: string, files: string): string =>
     `  ○ restore ${count} engine-managed file(s) that no longer match the ${target} template: ${files}`,
   planFilesMatch: (target: string): string =>
@@ -554,8 +565,8 @@ export const upgrade = {
 
   prTitle: (target: string): string => `Upgrade engine to ${target}`,
   prBodyHeader: (target: string): string => `Moves this repo to engine \`${target}\`.`,
-  prBodyVersion: (target: string): string =>
-    `- sets \`project.options.oaktree-sapling.version\` → \`${target}\` in myst.yml`,
+  prBodyVersion: (target: string, files: string[] = ['myst.yml']): string =>
+    `- sets the engine version → \`${target}\` in ${files.map((f) => `\`${f}\``).join(', ')}`,
   prBodyFiles: (target: string): string =>
     `- restores these engine-managed files to their ${target} version (a code owner must approve changes under \`.github/\`):`,
   planExtraFiles: (extra: string[]): string =>
@@ -909,6 +920,58 @@ export const validate = {
   editorialLoadFailed: (message: string): string =>
     `could not load the paper project for editorial checks: ${message}`,
   needsBuildArtifacts: 'requires build artifacts; run `oak build` first',
+};
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════
+ * `oak add-paper`: an author's submission of interest to a co-located journal.
+ * ═════════════════════════════════════════════════════════════════════════════════════════ */
+
+export const addPaper = {
+  usage:
+    'oak add-paper: usage: oak add-paper --repo <owner/journal> --id <paper id> [--edition <id>] [--yes]',
+  badId: (id: string): string =>
+    `oak add-paper: ${JSON.stringify(id.slice(0, 60))} is not a paper id: letters, digits, - and _, ` +
+    `starting with a letter or digit. It names the paper's folder, its tags and its Zenodo record.`,
+  noEdition: (id: string): string =>
+    `oak add-paper: the id ${id} carries no year to take the edition from; pass --edition <id>, ` +
+    `one of the journal's editions/<id>.yml.`,
+  badEdition: (edition: string): string =>
+    `oak add-paper: --edition ${JSON.stringify(edition.slice(0, 60))} is not an edition id (letters, digits, . _ -).`,
+  notColocated: (repo: string): string =>
+    `oak add-paper: ${repo} has no papers/ folder, so it is not a co-located journal; a paper ` +
+    `repository of its own is set up with oak bootstrap paper.`,
+  idRefused: (why: string): string => `oak add-paper: ${why}`,
+  idTaken: (id: string, repo: string): string =>
+    `oak add-paper: ${repo} already has papers/${id}; pick another id. A merged submission claims its id.`,
+  unknownEdition: (edition: string, repo: string, given: boolean): string =>
+    `oak add-paper: ${repo} has no editions/${edition}.yml` +
+    (given ? '' : ', the edition the year in the id names') +
+    '; pass --edition naming one of its editions.',
+  noEngineVersion: (repo: string): string =>
+    `oak add-paper: .github/actions/engine/pins.yml in ${repo} names no engine_version, so the ` +
+    `new paper would pin no engine; an editor runs oak upgrade on the journal first.`,
+  planHeader: (repo: string, id: string): string => `add-paper ${id} to ${repo}`,
+  planEdition: (edition: string, given: boolean): string =>
+    `  --edition  ${edition}${given ? '' : ' (default: the year in the id; it can change later, in myst.yml)'}`,
+  planFork: (fork: string, branch: string): string =>
+    `  ○ fork the journal as ${fork}, if you have no fork yet, and push branch ${branch} to it`,
+  planSeed: (dir: string, version: string): string =>
+    `  ○ commit the starter manuscript as ${dir}/, pinned to engine ${version}`,
+  planPr: (repo: string): string =>
+    `  ○ open a pull request to ${repo}: an editor merges it as a draft, which the website does not show yet`,
+  aborted: 'nothing was forked, pushed or opened.',
+  commitMessage: (id: string): string => `feat: add ${id}`,
+  logPushed: (fork: string, branch: string): string => `  ✓ pushed ${branch} to ${fork}`,
+  logPrOpened: (url: string): string => `  ✓ opened ${url}`,
+  prTitle: (id: string): string => `Submission of interest: ${id}`,
+  prBody: (id: string, dir: string): string =>
+    [
+      `Adds \`${dir}/\`, the starter manuscript for \`${id}\`. Merging it adds the paper as a draft: ` +
+        `it is on main, and the website shows it once an editor lists it in \`registry/papers.yml\`.`,
+      '',
+      'Until then the editorial checks report warnings; the id checks must pass. Later changes ' +
+        'come as pull requests that change this folder only.',
+    ].join('\n'),
 };
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════

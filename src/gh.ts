@@ -28,6 +28,7 @@ import type { CheckRun } from './checks.js';
 import type { EnvironmentReviewer, Provisioner } from './bootstrap.js';
 import type { UpgradePr } from './upgrade.js';
 import type { ConformanceGh } from './conformance.js';
+import type { AddPaperGh } from './add-paper.js';
 
 /**
  * git and gh output is captured, so the user can tell what oak did from what a tool it called
@@ -991,6 +992,46 @@ function sameTreeAsRemote(repoRoot: string, branch: string): boolean {
     git(repoRoot, ['rev-parse', 'FETCH_HEAD^{tree}'])
   );
 }
+
+/** The git and gh calls of `oak add-paper`, with the author's own gh login. */
+export const realAddPaperGh: AddPaperGh = {
+  authedUser,
+  checkout(repo, branch) {
+    const tmp = mkdtempSync(join(tmpdir(), 'oak-add-paper-'));
+    gh(['repo', 'clone', assertRepoName(repo, '--repo'), tmp, '--', '--depth', '1']);
+    gitRaw(['checkout', '-b', branch], tmp);
+    return tmp;
+  },
+  fork(repo) {
+    // Prints nothing on success; an existing fork is reused.
+    gh(['repo', 'fork', repo, '--clone=false', '--default-branch-only']);
+    return `${authedUser()}/${repo.split('/')[1]}`;
+  },
+  commitAndPush(dir, forkRepo, branch, paths, message) {
+    gitRaw(['add', '--', ...paths], dir);
+    gitRaw(['commit', '-m', message], dir);
+    gitRaw(
+      ['push', `https://github.com/${assertRepoName(forkRepo, 'fork')}.git`, `${branch}:${branch}`],
+      dir,
+    );
+  },
+  openPr(repo, opts) {
+    return gh([
+      'pr',
+      'create',
+      '--repo',
+      repo,
+      '--base',
+      defaultBranch(repo),
+      '--head',
+      opts.head,
+      '--title',
+      opts.title,
+      '--body',
+      opts.body,
+    ]);
+  },
+};
 
 /** A value from a YAML file in the test repo on the default branch, read through the
  *  Contents API, so no clone is needed. null when the file or the value is absent, or the

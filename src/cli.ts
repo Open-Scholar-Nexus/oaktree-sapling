@@ -40,6 +40,7 @@ type Verb =
   | 'bootstrap'
   | 'upgrade'
   | 'assemble'
+  | 'add-paper'
   | 'conformance';
 
 /** oak's root, the directory holding paper-base.yml: one up from the bundle, or two up from
@@ -1097,6 +1098,38 @@ async function cmdAssemble(argv: string[]): Promise<number> {
   return out.exitCode;
 }
 
+/** `oak add-paper --repo <owner/journal> --id <paper id>`: a submission of interest to a
+ *  co-located journal ({@link cmdAddPaper}). */
+async function cmdAddPaper(argv: string[]): Promise<number> {
+  const repo = flag(argv, 'repo');
+  const id = flag(argv, 'id');
+  if (!repo || !id) {
+    process.stderr.write(msg.addPaper.usage + '\n');
+    return 2;
+  }
+  const gh = await import('./gh.js');
+  gh.assertRepoName(repo, '--repo');
+  gh.assertGhReady();
+  const { cmdAddPaper: run } = await import('./add-paper.js');
+  const { paperTemplateRoot } = await import('./bootstrap.js');
+  const edition = flag(argv, 'edition');
+  const out = await run(
+    {
+      repo,
+      id,
+      ...(edition ? { edition } : {}),
+      paperTemplateRoot: paperTemplateRoot(engineRoot()),
+    },
+    {
+      gh: gh.realAddPaperGh,
+      log: (line) => process.stderr.write(line + '\n'),
+      confirm: makeConfirm(argv),
+    },
+  );
+  emit(argv, out.result, narrated);
+  return out.exitCode;
+}
+
 /** oak's own repo. */
 const ENGINE_REPO_DEFAULT = 'Open-Scholar-Nexus/oaktree-sapling';
 
@@ -1371,6 +1404,7 @@ async function cmdConformance(argv: string[]): Promise<number> {
 }
 
 const VERBS: Verb[] = [
+  'add-paper',
   'assemble',
   'build',
   'start',
@@ -1493,6 +1527,7 @@ async function main(argv: string[]): Promise<number> {
   if (verb === 'upgrade') return cmdUpgrade(argv.slice(1));
   if (verb === 'conformance') return cmdConformance(argv.slice(1));
   if (verb === 'assemble') return cmdAssemble(argv.slice(1));
+  if (verb === 'add-paper') return cmdAddPaper(argv.slice(1));
   // An unknown command is an error with a suggestion: printing usage alone would make a typo
   // look like a bare `oak`, as if the command ran and did nothing.
   if (verb) {

@@ -20,7 +20,8 @@ import { readDoc } from './yaml-io.js';
 import { themeZipUrl } from './assets.js';
 import { LABEL_EDITOR_ACTION, LABEL_ZENODO_FAILED } from './preview.js';
 import type { Outcome } from './result.js';
-import { pagesUrl } from './schema.js';
+import { ENGINE_MANAGED_PATHS, pagesUrl, underPaths } from './schema.js';
+import { PAPERS_DIR } from './projects.js';
 
 /* --------------------------------------------------------------------------
  * Settings and template rendering (pure)
@@ -226,10 +227,11 @@ export function renderPaperTemplate(
   paperRoot: string,
   destRoot: string,
   answers: TemplateAnswers,
+  keep: (rel: string) => boolean = () => true,
 ): string[] {
   const written: string[] = [];
   for (const rel of listFiles(paperRoot)) {
-    if (EXCLUDE_FROM_STAMP.has(rel.split('/')[0]!)) continue;
+    if (EXCLUDE_FROM_STAMP.has(rel.split('/')[0]!) || !keep(rel)) continue;
     if (rel === RENDER_PINS) writeRel(destRoot, rel, renderPins(paperRoot, answers));
     else if (rel === RENDER_CODEOWNERS)
       writeRel(
@@ -321,11 +323,12 @@ export function renderSiteTemplate(
   destRoot: string,
   answers: TemplateAnswers,
   mystRange: string,
+  keep: (rel: string) => boolean = () => true,
 ): string[] {
   const journalName = answers.journalName ?? JOURNAL_NAME_PLACEHOLDER;
   const written: string[] = [];
   for (const rel of listFiles(siteRoot)) {
-    if (EXCLUDE_FROM_STAMP.has(rel.split('/')[0]!)) continue;
+    if (EXCLUDE_FROM_STAMP.has(rel.split('/')[0]!) || !keep(rel)) continue;
     if (rel === RENDER_MYST) {
       const doc = readDoc(join(siteRoot, rel));
       doc.setIn(['project', 'title'], journalName);
@@ -346,6 +349,38 @@ export function renderSiteTemplate(
     written.push(stampRel(rel));
   }
   return written.sort();
+}
+
+/** The folder that holds a co-located repository's papers, kept in git while it is empty. */
+export const PAPERS_KEEP = posix.join(PAPERS_DIR, '.gitkeep');
+
+/**
+ * Renders a co-located repository into `destRoot`: the journal's settings, its website, the
+ * paper launchers and `CODEOWNERS` from the paper template, and an empty `papers/`. The website
+ * is built and deployed by the launchers (`oak assemble`), so the site template's own workflow
+ * is left out, as is the paper template's starter paper, which `oak add-paper` seeds per paper.
+ */
+export function renderColocatedTemplate(
+  roots: { paper: string; instance: string; site: string },
+  destRoot: string,
+  answers: TemplateAnswers,
+  mystRange: string,
+): string[] {
+  const written = [
+    ...renderInstanceTemplate(roots.instance, destRoot, answers),
+    ...renderSiteTemplate(
+      roots.site,
+      destRoot,
+      answers,
+      mystRange,
+      (rel) => !rel.startsWith('.github/'),
+    ),
+    ...renderPaperTemplate(roots.paper, destRoot, answers, (rel) =>
+      underPaths(ENGINE_MANAGED_PATHS, rel),
+    ),
+  ];
+  writeRel(destRoot, PAPERS_KEEP, '');
+  return [...written, PAPERS_KEEP].sort();
 }
 
 function copyRel(srcRoot: string, destRoot: string, rel: string): void {
@@ -1158,7 +1193,7 @@ export interface BootstrapJournalInput {
   requireChecks: boolean; // add "Journal checks" to protect-main required checks (default true)
   /** External journal only: also write the journal website and turn on Pages. Default true; `--no-site`
    *  gives a settings repo with no website [design §2]. `site: false` with `--co-located`
-   *  is a usage error: that kind never gets a site, so the flag would do nothing. */
+   *  is a usage error: the website is where a co-located journal publishes its papers. */
   site?: boolean;
   secrets: SecretInputs;
   /** Where the defaulted values came from, for the plan. */
@@ -1182,7 +1217,7 @@ export async function cmdBootstrapJournal(
       },
     };
   }
-  const withSite = external && input.site !== false;
+  const withSite = input.site !== false;
   const owner = resolveOwner(input, prov);
   const edition = input.edition ?? DEFAULT_EDITION;
 
@@ -1195,6 +1230,7 @@ export async function cmdBootstrapJournal(
     journalName: input.name,
     repo,
     ...(withSite ? { siteUrl: pagesUrl(repo) } : {}),
+    ...(external ? {} : { repoEngineVersion: input.engineVersion }),
   };
 
   const repoThere = prov.repoExists(repo);
@@ -1222,11 +1258,8 @@ export async function cmdBootstrapJournal(
       : external
         ? msg.bootstrap.planSeedJournal(withSite)
         : msg.bootstrap.planSeedCoLocated,
-    external
-      ? withSite
-        ? msg.bootstrap.planPages(pagesUrl(repo))
-        : msg.bootstrap.planNoSite
-      : msg.bootstrap.planProvisioning,
+    withSite ? msg.bootstrap.planPages(pagesUrl(repo)) : msg.bootstrap.planNoSite,
+    ...(external ? [] : [msg.bootstrap.planProvisioning]),
     // As for papers, a rerun does not seed again, so a changed `--name`, `--edition` or
     // `--engine-version` does not reach a seeded main.
     ...(mainThere ? [msg.bootstrap.planAlreadySeededJournal] : []),
@@ -1281,8 +1314,16 @@ export async function cmdBootstrapJournal(
     // rendered one after the other.
     if (withSite) renderSiteTemplate(deps.siteTemplateRoot, seedDir, answers, deps.mystRange);
   } else {
-    renderPaperTemplate(deps.paperTemplateRoot, seedDir, answers); // the paper, `instance_repo: .`
-    renderInstanceTemplate(deps.instanceTemplateRoot, seedDir, answers); // its journal settings
+    renderColocatedTemplate(
+      {
+        paper: deps.paperTemplateRoot,
+        instance: deps.instanceTemplateRoot,
+        site: deps.siteTemplateRoot,
+      },
+      seedDir,
+      answers,
+      deps.mystRange,
+    );
   }
 
   if (!mainThere) {
@@ -1296,8 +1337,13 @@ export async function cmdBootstrapJournal(
   if (!external) {
     const settings = applyProvisioning(repo, owner, deps, actions, input.requireChecks);
     const secrets = applySecrets(repo, input.secrets, deps, actions);
-    const fill = actions.main === 'seeded' ? [msg.bootstrap.runbookFillPaper(repo)] : [];
-    const runbook = [...fill, ...contentRunbook, ...settings.runbook, ...secrets.runbook];
+    const siteUrl = pagesUrl(repo);
+    const start = [
+      msg.bootstrap.runbookStartHere,
+      msg.bootstrap.runbookAddPaper(repo),
+      msg.bootstrap.runbookColocatedSite(siteUrl),
+    ];
+    const runbook = [...start, ...contentRunbook, ...settings.runbook, ...secrets.runbook];
     const failed = [...contentFailed, ...settings.failed, ...secrets.failed];
     for (const line of runbook) log(msg.bootstrap.logRunbookLine(line));
     if (failed.length) log(msg.bootstrap.logPartial(failed.map((f) => f.step).join(', ')));
@@ -1309,6 +1355,7 @@ export async function cmdBootstrapJournal(
         tier: input.tier,
         actions,
         secrets_set: secrets.set,
+        site_url: siteUrl,
         runbook,
         ...(failed.length ? { failed: failed.map((f) => `${f.step}: ${f.why}`) } : {}),
       },
