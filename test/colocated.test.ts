@@ -26,6 +26,7 @@ import {
   paperDirOf,
 } from '../src/projects.js';
 import { findSelf, runLayerA, runValidate, type FsProbes } from '../src/validate.js';
+import { selectPapers } from '../src/papers.js';
 import { combineReports, refusedReport, checksComment, type ChecksReport } from '../src/checks.js';
 import { underPaths, GATED_PATHS } from '../src/schema.js';
 import { previewBranch } from '../src/preview.js';
@@ -34,9 +35,15 @@ import { bundleState, assertBundleNotStale, bundlePath } from './bundle-state.js
 
 const allTrue: FsProbes = { existsProbe: () => true, listTree: () => [] };
 
-/** A co-located repository: journal settings at the root, and a folder per paper id. */
+/** A co-located repository: journal settings at the root, pins.yml naming engine_version, and
+ *  a folder per paper id. */
 function colocatedRepo(papers: string[], registry = '[]\n'): string {
   const root = mkdtempSync(join(tmpdir(), 'oak-colo-'));
+  mkdirSync(join(root, '.github', 'actions', 'engine'), { recursive: true });
+  writeFileSync(
+    join(root, '.github', 'actions', 'engine', 'pins.yml'),
+    'engine_repo: me/engine\ninstance_repo: .\nengine_version: v1.0.0\n',
+  );
   writeFileSync(
     join(root, 'journal.yml'),
     'name: J\nid_pattern: "^[a-z0-9]+-\\\\d{4}-[a-z0-9-]+$"\n',
@@ -65,16 +72,41 @@ describe('discoverProjects', () => {
     expect(isColocated(root)).toBe(false);
   });
 
+  it('a paper repository with a papers/ folder of its own stays a paper repository', () => {
+    // The tier is read from pins.yml, which editors gate, never from a folder an author adds.
+    const root = mkdtempSync(join(tmpdir(), 'oak-paper-'));
+    mkdirSync(join(root, '.github', 'actions', 'engine'), { recursive: true });
+    writeFileSync(
+      join(root, '.github', 'actions', 'engine', 'pins.yml'),
+      'engine_repo: me/engine\n',
+    );
+    mkdirSync(join(root, 'papers', 'related-work'), { recursive: true });
+    writeFileSync(join(root, 'papers', 'related-work', 'myst.yml'), 'version: 1\n');
+    expect(isColocated(root)).toBe(false);
+    expect(discoverProjects(root)).toEqual(['.']);
+    const pick = selectPapers(root, { for: 'check', event: 'pull_request' }, () => [
+      'papers/related-work/myst.yml',
+    ]);
+    expect(pick.result.papers).toEqual([{ dir: '.', key: '' }]);
+  });
+
   it('is empty for a co-located repository with no paper yet', () => {
     expect(discoverProjects(colocatedRepo([]))).toEqual([]);
   });
 
-  it('leaves out a folder whose name is not a paper id', () => {
-    const root = colocatedRepo(['a-2026-one']);
+  it('refuses a paper folder not named by a paper id, which could be neither built nor checked', () => {
     for (const bad of ['.hidden', 'has space', '-dash']) {
+      const root = colocatedRepo(['a-2026-one']);
       mkdirSync(join(root, 'papers', bad));
       writeFileSync(join(root, 'papers', bad, 'myst.yml'), 'version: 1\n');
+      expect(() => discoverProjects(root), bad).toThrow(/not named by a paper id/);
     }
+  });
+
+  it('ignores a folder without a myst.yml and a file', () => {
+    const root = colocatedRepo(['a-2026-one']);
+    mkdirSync(join(root, 'papers', '.notes'));
+    writeFileSync(join(root, 'papers', '.gitkeep'), '');
     expect(discoverProjects(root)).toEqual(['papers/a-2026-one']);
   });
 });
@@ -537,3 +569,117 @@ describe.skipIf(bundleState() === 'absent')(
     });
   },
 );
+
+describe('oak papers: the papers a workflow run works on', () => {
+  const listed = '- id: a-1\n  location: ./papers/a-1\n- id: c-3\n  location: ./papers/c-3/\n';
+  const dirs = (o: { result: Record<string, unknown> }) =>
+    (o.result.papers as Array<{ dir: string }>).map((p) => p.dir);
+  const none = () => {
+    throw new Error('only a pull request reads the changed files');
+  };
+
+  it('a paper repository has its one paper, whatever the mode', () => {
+    const root = mkdtempSync(join(tmpdir(), 'oak-paper-'));
+    const out = selectPapers(root, { for: 'build', event: 'push' }, none);
+    expect(out.result).toMatchObject({
+      colocated: false,
+      count: 1,
+      papers: [{ dir: '.', key: '' }],
+    });
+    expect(selectPapers(root, { tag: 'v1.0.0' }, none).result.paper_dir).toBe('.');
+    expect(selectPapers(root, { id: '' }, none).result.paper_dir).toBe('.');
+    expect(selectPapers(root, { tag: 'a-1/v1.0.0' }, none).exitCode).toBe(2);
+    expect(selectPapers(root, { id: 'a-1' }, none).exitCode).toBe(2);
+  });
+
+  it('builds the listed papers on a push, and no draft', () => {
+    const root = colocatedRepo(['a-1', 'b-2', 'c-3'], listed);
+    const out = selectPapers(root, { for: 'build', event: 'push' }, none);
+    expect(out.result.papers).toEqual([
+      { dir: 'papers/a-1', key: 'a-1' },
+      { dir: 'papers/c-3', key: 'c-3' },
+    ]);
+    expect(out.result.colocated).toBe(true);
+  });
+
+  it('checks every paper on a push', () => {
+    const root = colocatedRepo(['a-1', 'b-2'], listed);
+    expect(dirs(selectPapers(root, { for: 'check', event: 'push' }, none))).toEqual([
+      'papers/a-1',
+      'papers/b-2',
+    ]);
+  });
+
+  it('on a pull request, builds and checks the papers it changes', () => {
+    const root = colocatedRepo(['a-1', 'b-2', 'c-3']);
+    const changed = () => ['papers/a-1/index.md', 'papers/c-3/fig.png'];
+    for (const f of ['build', 'check'] as const)
+      expect(dirs(selectPapers(root, { for: f, event: 'pull_request' }, changed))).toEqual([
+        'papers/a-1',
+        'papers/c-3',
+      ]);
+  });
+
+  it('a pull request changing anything outside papers/ checks every paper, and builds the changed ones', () => {
+    const root = colocatedRepo(['a-1', 'b-2']);
+    const changed = () => ['registry/papers.yml', 'papers/b-2/index.md'];
+    expect(dirs(selectPapers(root, { for: 'check', event: 'pull_request' }, changed))).toEqual([
+      'papers/a-1',
+      'papers/b-2',
+    ]);
+    expect(dirs(selectPapers(root, { for: 'build', event: 'pull_request' }, changed))).toEqual([
+      'papers/b-2',
+    ]);
+  });
+
+  it('a pull request changing no paper selects none', () => {
+    const root = colocatedRepo(['a-1']);
+    const out = selectPapers(root, { for: 'build', event: 'pull_request' }, () => [
+      'pages/index.md',
+    ]);
+    expect(out.result).toMatchObject({ papers: [], count: 0 });
+  });
+
+  it('a tag or an id names one existing paper', () => {
+    const root = colocatedRepo(['a-1']);
+    expect(selectPapers(root, { tag: 'a-1/v1.0.0' }, none).result.paper_dir).toBe('papers/a-1');
+    expect(selectPapers(root, { id: 'a-1' }, none).result.paper_dir).toBe('papers/a-1');
+    for (const tag of ['v1.0.0', 'gone/v1.0.0', '../x/v1.0.0', 'a-1/v1.0'])
+      expect(selectPapers(root, { tag }, none).exitCode, tag).toBe(2);
+    for (const id of ['', 'gone', '../a-1', 'a-1 x', 'a-1/..'])
+      expect(selectPapers(root, { id }, none).exitCode, id).toBe(2);
+  });
+});
+
+describe.skipIf(bundleState() === 'absent')('oak papers through the bundle', () => {
+  beforeAll(assertBundleNotStale);
+  const papers = (cwd: string, args: string[], env: Record<string, string> = {}) => {
+    const resultFile = join(mkdtempSync(join(tmpdir(), 'oak-result-')), 'result.json');
+    const r = spawnSync('node', [bundlePath, 'papers', ...args], {
+      cwd,
+      encoding: 'utf8',
+      env: { ...process.env, OAK_USE_RUNNING: '1', OAK_RESULT_FILE: resultFile, ...env },
+    });
+    const result = existsSync(resultFile) ? JSON.parse(readFileSync(resultFile, 'utf8')) : null;
+    return { code: r.status, result };
+  };
+
+  it('--id-env reads the reserve-doi input from PAPER_ID as one value', () => {
+    const root = colocatedRepo(['a-1']);
+    expect(papers(root, ['--id-env'], { PAPER_ID: 'a-1' }).result.paper_dir).toBe('papers/a-1');
+    // A space would split a spliced argument into two; through the environment it is one id,
+    // and not a paper.
+    expect(papers(root, ['--id-env'], { PAPER_ID: 'a-1 --tag v1.0.0' }).code).toBe(2);
+  });
+
+  it('records the selection as the result the workflows read', () => {
+    const root = colocatedRepo(['a-1'], '- id: a-1\n  location: ./papers/a-1\n');
+    const r = papers(root, ['--for', 'build'], { GITHUB_EVENT_NAME: 'push' });
+    expect(r.code).toBe(0);
+    expect(r.result).toMatchObject({
+      colocated: true,
+      count: 1,
+      papers: [{ dir: 'papers/a-1', key: 'a-1' }],
+    });
+  });
+});

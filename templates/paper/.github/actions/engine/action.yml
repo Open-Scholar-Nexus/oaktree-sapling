@@ -23,8 +23,8 @@ runs:
   using: composite
   steps:
     # The paper's own myst.yml, before extends. Key quoted: yq versions disagree on a bare hyphen.
-    # In a co-located repository a job with no paper of its own (paper-dir .) runs engine_version
-    # from pins.yml. https://scholar.nexus/oaktree-sapling/design/paper-ci#design-paper-ci-engine-ref
+    # pins.yml names engine_version in a co-located repository only, and a job with no paper of
+    # its own (paper-dir .) runs it. https://scholar.nexus/oaktree-sapling/design/paper-ci#design-paper-ci-colocated
     - id: ref
       shell: bash
       env:
@@ -35,9 +35,11 @@ runs:
           echo "::error::paper-dir must be . or papers/<paper id>"
           exit 1
         fi
-        if [ "${PAPER_DIR:-.}" = "." ] && [ -d papers ]; then
-          myst=.github/actions/engine/pins.yml
-          ref=$(yq '.engine_version // ""' "$myst")
+        pins=.github/actions/engine/pins.yml
+        engine=$(yq '.engine_version // ""' "$pins")
+        if [ "${PAPER_DIR:-.}" = "." ] && [ -n "$engine" ] && [ "$engine" != "null" ]; then
+          myst=$pins
+          ref=$engine
           key=engine_version
         else
           myst="${PAPER_DIR:-.}/myst.yml"

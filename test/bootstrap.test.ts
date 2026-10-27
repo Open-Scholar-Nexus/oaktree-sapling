@@ -1184,7 +1184,7 @@ describe('cmdBootstrapJournal', () => {
       'pages/index.md',
       'package.json',
       '.github/workflows/build-paper.yml',
-      '.github/actions/discover/action.yml',
+      '.github/actions/engine/action.yml',
       'CODEOWNERS',
       'papers/.gitkeep',
     ])

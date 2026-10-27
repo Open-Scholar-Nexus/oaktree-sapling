@@ -20,27 +20,27 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  discover:
+  # Which papers this run works on, chosen by oak; holds no secret.
+  papers:
     runs-on: ubuntu-latest
     outputs:
-      papers: ${{ steps.discover.outputs.papers }}
-      colocated: ${{ steps.discover.outputs.colocated }}
+      result: ${{ steps.papers.outputs.result }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 2 # a pull request's changed files: its merge commit against its base
-      - id: discover
-        uses: ./.github/actions/discover
+      - id: papers
+        uses: ./.github/actions/engine
         with:
-          for: build
+          args: papers --for build
 
   build:
-    needs: discover
-    if: ${{ needs.discover.outputs.papers != '[]' }}
+    needs: papers
+    if: ${{ fromJSON(needs.papers.outputs.result || '{}').count > 0 }}
     strategy:
       fail-fast: false
       matrix:
-        paper: ${{ fromJSON(needs.discover.outputs.papers) }}
+        paper: ${{ fromJSON(needs.papers.outputs.result || '{}').papers }}
     runs-on: ubuntu-latest
     outputs:
       # The starter paper is not deployed to Pages until myst.yml has a real id.
@@ -63,10 +63,10 @@ jobs:
 
   # Runs no paper code: the journal's own website build, then a copy of each paper's.
   assemble:
-    needs: [discover, build]
+    needs: [papers, build]
     if: >-
       ${{ !cancelled() && github.event_name != 'pull_request' &&
-          needs.discover.outputs.colocated == 'true' &&
+          fromJSON(needs.papers.outputs.result || '{}').colocated &&
           (needs.build.result == 'success' || needs.build.result == 'skipped') }}
     runs-on: ubuntu-latest
     steps:
@@ -88,10 +88,10 @@ jobs:
   deploy-pages:
     if: >-
       ${{ !cancelled() && github.event_name != 'pull_request' &&
-          ((needs.discover.outputs.colocated != 'true' && needs.build.result == 'success' &&
+          ((!fromJSON(needs.papers.outputs.result || '{}').colocated && needs.build.result == 'success' &&
             needs.build.outputs.placeholder != 'true') ||
-           (needs.discover.outputs.colocated == 'true' && needs.assemble.result == 'success')) }}
-    needs: [discover, build, assemble]
+           (fromJSON(needs.papers.outputs.result || '{}').colocated && needs.assemble.result == 'success')) }}
+    needs: [papers, build, assemble]
     permissions: # never at workflow level, or build holds them
       pages: write
       id-token: write
@@ -102,7 +102,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: ${{ needs.discover.outputs.colocated == 'true' && 'journal-site' || 'paper-build' }}
+          name: ${{ fromJSON(needs.papers.outputs.result || '{}').colocated && 'journal-site' || 'paper-build' }}
           path: site
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:

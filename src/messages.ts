@@ -175,6 +175,8 @@ export const usage = (): string =>
   `  oak deposit status  [--sandbox] [--instance <dir> | --no-instance]\n` +
   `  oak release --tag <vX.Y.Z | <paper id>/vX.Y.Z> [--no-build] [--paper <dir>] [--instance <dir> | --no-instance]\n` +
   `              [--site-url <url>]\n` +
+  `  oak papers (--for build|check | --tag <tag> | --id <paper id> | --id-env)\n` +
+  `                    the papers a workflow run works on, as JSON\n` +
   `  oak assemble --builds <dir> [--base-url <path>]\n` +
   `                    in a co-located repo: build the journal website and mount each listed\n` +
   `                    paper's build at /<paper id>/\n` +
@@ -923,6 +925,25 @@ export const validate = {
 };
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════
+ * `oak papers`: the papers a workflow run works on.
+ * ═════════════════════════════════════════════════════════════════════════════════════════ */
+
+export const papers = {
+  usage:
+    'oak papers: usage: oak papers (--for build|check | --tag <tag> | --id <paper id> | --id-env)',
+  tagNamesNoPaper: (tag: string, colocated: boolean): string =>
+    `oak papers: tag ${JSON.stringify(tag.slice(0, 80))} names no paper of this repository; ` +
+    (colocated
+      ? 'tag <paper id>/vX.Y.Z, naming a folder in papers/.'
+      : 'tag vX.Y.Z in a paper repository.'),
+  idInPaperRepo:
+    'oak papers: this is a paper repository, with its one paper at the root; leave the paper id empty.',
+  unknownId: (id: string): string =>
+    `oak papers: ${JSON.stringify(id.slice(0, 80))} is not one of this repository's papers; ` +
+    'give the id its folder in papers/ is named by.',
+};
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════
  * `oak add-paper`: an author's submission of interest to a co-located journal.
  * ═════════════════════════════════════════════════════════════════════════════════════════ */
 
@@ -1121,6 +1142,9 @@ export const workflow = {
   depositUsage: 'oak deposit: usage: oak deposit <prepare|publish|status> [...]',
   depositUnknownPaper: (dir: string): string =>
     `oak deposit: ${dir} is not one of this repository's papers (papers/<id>/myst.yml); name a paper by its folder.`,
+  badPaperFolder: (dir: string): string =>
+    `${dir} holds a myst.yml but is not named by a paper id (letters, digits, - and _, starting ` +
+    `with a letter or digit); rename the folder to the paper's project.id.`,
   badPaperId: (source: string, got: string): string =>
     `${source} takes a paper id (letters, digits, - and _), not ${JSON.stringify(got.slice(0, 60))}.`,
   badRepoName: (source: string, got: string): string =>

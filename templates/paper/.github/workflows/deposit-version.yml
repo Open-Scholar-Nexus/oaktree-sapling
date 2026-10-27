@@ -12,40 +12,40 @@ permissions:
   contents: read
 
 jobs:
+  # The paper the tag names, chosen by oak; holds no secret.
+  paper:
+    runs-on: ubuntu-latest
+    outputs:
+      result: ${{ steps.paper.outputs.result }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: paper
+        uses: ./.github/actions/engine
+        with:
+          args: papers --tag ${{ github.ref_name }}
+
   build: # no secrets: the paper's code runs here, never beside the token
+    needs: paper
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # The tag names the paper. Its shape is checked before it becomes a path.
-      - id: tag
-        env:
-          TAG: ${{ github.ref_name }}
-        run: |
-          if [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "paper-dir=." >> "$GITHUB_OUTPUT"
-          elif [[ "$TAG" =~ ^([A-Za-z0-9][A-Za-z0-9_-]{0,99})/v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "paper-dir=papers/${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
-          else
-            echo "::error::the tag is not vX.Y.Z or <paper id>/vX.Y.Z"
-            exit 1
-          fi
       - uses: ./.github/actions/engine
         with:
           args: build
           paper-env: true
-          paper-dir: ${{ steps.tag.outputs.paper-dir }}
+          paper-dir: ${{ fromJSON(needs.paper.outputs.result || '{}').paper_dir }}
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: release-build
           path: |
-            ${{ steps.tag.outputs.paper-dir }}/myst.oak.yml
-            ${{ steps.tag.outputs.paper-dir }}/_build/exports
-            ${{ steps.tag.outputs.paper-dir }}/_build/site/content
-            ${{ steps.tag.outputs.paper-dir }}/_build/templates
+            ${{ fromJSON(needs.paper.outputs.result || '{}').paper_dir }}/myst.oak.yml
+            ${{ fromJSON(needs.paper.outputs.result || '{}').paper_dir }}/_build/exports
+            ${{ fromJSON(needs.paper.outputs.result || '{}').paper_dir }}/_build/site/content
+            ${{ fromJSON(needs.paper.outputs.result || '{}').paper_dir }}/_build/templates
           if-no-files-found: error
 
   publish:
-    needs: build
+    needs: [paper, build]
     environment: zenodo-publish # v* and */v* tags only
     permissions:
       contents: write # attach the Release bundle + commit comment
@@ -56,27 +56,14 @@ jobs:
         with:
           fetch-depth: 0 # git archive + PR discovery need history
           persist-credentials: false # nothing here pushes
-      # The tag names the paper. Its shape is checked before it becomes a path.
-      - id: tag
-        env:
-          TAG: ${{ github.ref_name }}
-        run: |
-          if [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "paper-dir=." >> "$GITHUB_OUTPUT"
-          elif [[ "$TAG" =~ ^([A-Za-z0-9][A-Za-z0-9_-]{0,99})/v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "paper-dir=papers/${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
-          else
-            echo "::error::the tag is not vX.Y.Z or <paper id>/vX.Y.Z"
-            exit 1
-          fi
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: release-build
-          path: ${{ steps.tag.outputs.paper-dir }}
+          path: ${{ fromJSON(needs.paper.outputs.result || '{}').paper_dir }}
       - uses: ./.github/actions/engine
         with:
           args: release --tag ${{ github.ref_name }} --no-build
-          paper-dir: ${{ steps.tag.outputs.paper-dir }}
+          paper-dir: ${{ fromJSON(needs.paper.outputs.result || '{}').paper_dir }}
         env:
           GH_TOKEN: ${{ github.token }}
           ZENODO_TOKEN: ${{ secrets.ZENODO_TOKEN }}

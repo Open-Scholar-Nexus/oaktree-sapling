@@ -1,6 +1,8 @@
 /**
  * projects.ts: where a repository's papers are, for both tiers. A co-located repository holds
- * one paper per `papers/<id>/` folder; a paper repository holds one paper at its root.
+ * one paper per `papers/<id>/` folder; a paper repository holds one paper at its root. The tier
+ * is read from the gated `pins.yml` ({@link isColocated}), never from the folders an author can
+ * add.
  *
  * A folder name is a paper id, a tag prefix, an artifact name and a preview branch part, and a
  * fork pull request controls it, so every one is checked against {@link PAPER_ID}.
@@ -10,34 +12,50 @@ import { basename, dirname, join, posix, relative, resolve, sep } from 'node:pat
 import * as msg from './messages.js';
 import { UserError } from './messages.js';
 import { PAPER_VERSION_TAG } from './schema.js';
+import { readDoc } from './yaml-io.js';
 
 /** The folder holding a co-located repository's papers. */
 export const PAPERS_DIR = 'papers';
 
 /** A paper folder's name, which is its `project.id`: letters, digits, `_` and `-`, starting with
  *  a letter or digit. No `.` or `/`, so it is one path segment and a valid tag prefix. The engine
- *  action's `paper-dir` step and the discover action keep shell copies, held to this one by
- *  `paper id rule parity` in `test/frozen-guards.test.ts`. */
+ *  action's `ref` step keeps a shell copy, held to this one by `paper id rule parity` in
+ *  `test/frozen-guards.test.ts`. */
 export const PAPER_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$/;
 
-/** Whether `root` is a co-located repository: it has a `papers/` folder. */
+/** The pins.yml key naming a co-located repository's own engine, and marking it co-located. */
+export const ENGINE_VERSION_KEY = 'engine_version';
+
+const PINS_REL = join('.github', 'actions', 'engine', 'pins.yml');
+
+/** Whether `root` is a co-located repository: its `pins.yml`, which editors gate, names an
+ *  `engine_version`, the engine its jobs with no paper of their own run. The engine action's
+ *  `ref` step decides the same way. */
 export function isColocated(root: string): boolean {
-  const dir = join(root, PAPERS_DIR);
-  return existsSync(dir) && statSync(dir).isDirectory();
+  const pins = join(root, PINS_REL);
+  if (!existsSync(pins)) return false;
+  const v = readDoc(pins).get(ENGINE_VERSION_KEY);
+  return typeof v === 'string' && v !== '';
 }
 
 /**
- * The papers under `root`, as folders relative to it: `papers/<id>` for every folder there
- * holding a `myst.yml`, sorted, when `papers/` exists, else `.`. A folder whose name is not a
- * {@link PAPER_ID} is left out; `oak validate` reports it on the paper itself.
+ * The papers under `root`, as folders relative to it: in a co-located repository `papers/<id>`
+ * for every folder there holding a `myst.yml`, sorted, else `.`. Throws a UserError for such a
+ * folder not named by a {@link PAPER_ID}: its paper could be neither built nor checked.
  */
 export function discoverProjects(root: string): string[] {
   if (!isColocated(root)) return ['.'];
   const dir = join(root, PAPERS_DIR);
-  return readdirSync(dir)
-    .filter((name) => PAPER_ID.test(name) && existsSync(join(dir, name, 'myst.yml')))
-    .sort()
-    .map((name) => posix.join(PAPERS_DIR, name));
+  if (!existsSync(dir)) return [];
+  const papers = readdirSync(dir)
+    .filter(
+      (name) => statSync(join(dir, name)).isDirectory() && existsSync(join(dir, name, 'myst.yml')),
+    )
+    .sort();
+  const bad = papers.find((name) => !PAPER_ID.test(name));
+  if (bad !== undefined)
+    throw new UserError(msg.workflow.badPaperFolder(posix.join(PAPERS_DIR, bad)));
+  return papers.map((name) => posix.join(PAPERS_DIR, name));
 }
 
 /** The id a paper folder is named by: `<id>` for `papers/<id>`, null for `.` or anything else. */

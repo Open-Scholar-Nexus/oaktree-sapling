@@ -19,26 +19,27 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  discover:
+  # Which papers this run works on, chosen by oak; holds no secret.
+  papers:
     runs-on: ubuntu-latest
     outputs:
-      papers: ${{ steps.discover.outputs.papers }}
+      result: ${{ steps.papers.outputs.result }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 2 # a pull request's changed files: its merge commit against its base
-      - id: discover
-        uses: ./.github/actions/discover
+      - id: papers
+        uses: ./.github/actions/engine
         with:
-          for: check
+          args: papers --for check
 
   validate:
-    needs: discover
-    if: ${{ needs.discover.outputs.papers != '[]' }}
+    needs: papers
+    if: ${{ fromJSON(needs.papers.outputs.result || '{}').count > 0 }}
     strategy:
       fail-fast: false
       matrix:
-        paper: ${{ fromJSON(needs.discover.outputs.papers) }}
+        paper: ${{ fromJSON(needs.papers.outputs.result || '{}').papers }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

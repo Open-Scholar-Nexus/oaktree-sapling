@@ -17,35 +17,39 @@ on:
         default: true
 
 permissions:
-  contents: write # commit the DOI PR branch
-  pull-requests: write # open the DOI PR
+  contents: read
 
 jobs:
+  # The paper the input names, chosen by oak; holds no secret.
+  paper:
+    runs-on: ubuntu-latest
+    outputs:
+      result: ${{ steps.paper.outputs.result }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # The input reaches oak through env:, one value whatever it holds.
+      - id: paper
+        uses: ./.github/actions/engine
+        with:
+          args: papers --id-env
+        env:
+          PAPER_ID: ${{ inputs.paper }}
+
   prepare:
+    needs: paper
     environment: zenodo-prepare # Zenodo tokens; main only
+    permissions:
+      contents: write # commit the DOI PR branch
+      pull-requests: write # open the DOI PR
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      # One of the papers in papers/, by id, or the paper at the root.
-      - id: paper
-        env:
-          PAPER: ${{ inputs.paper }}
-        run: |
-          if [ ! -d papers ] && [ -z "$PAPER" ]; then
-            echo "paper-dir=." >> "$GITHUB_OUTPUT"
-          elif [[ "$PAPER" =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$ ]] && [ -f "papers/$PAPER/myst.yml" ]; then
-            echo "paper-dir=papers/$PAPER" >> "$GITHUB_OUTPUT"
-          else
-            echo "::error::the paper input is not one of this repository's papers; give the id its folder in papers/ is named by"
-            exit 1
-          fi
 
       # A sandbox run with no ZENODO_TOKEN_SANDBOX is refused.
       - uses: ./.github/actions/engine
         with:
           args: deposit prepare ${{ inputs.sandbox && '--sandbox' || '' }}
-          paper-dir: ${{ steps.paper.outputs.paper-dir }}
+          paper-dir: ${{ fromJSON(needs.paper.outputs.result || '{}').paper_dir }}
         env:
           GH_TOKEN: ${{ github.token }}
           ZENODO_TOKEN: ${{ secrets.ZENODO_TOKEN }}

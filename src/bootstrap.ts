@@ -21,7 +21,9 @@ import { themeZipUrl } from './assets.js';
 import { LABEL_EDITOR_ACTION, LABEL_ZENODO_FAILED } from './preview.js';
 import type { Outcome } from './result.js';
 import { ENGINE_MANAGED_PATHS, pagesUrl, underPaths } from './schema.js';
-import { PAPERS_DIR } from './projects.js';
+import { ENGINE_VERSION_KEY, PAPERS_DIR } from './projects.js';
+
+export { ENGINE_VERSION_KEY };
 
 /* --------------------------------------------------------------------------
  * Settings and template rendering (pure)
@@ -157,8 +159,6 @@ export function renderPins(templateRoot: string, answers: TemplateAnswers): stri
   return doc.toString();
 }
 
-/** The pins.yml key naming a co-located repository's own engine ({@link TemplateAnswers}). */
-export const ENGINE_VERSION_KEY = 'engine_version';
 const ENGINE_VERSION_COMMENT =
   " The engine this repository's jobs with no paper of their own run (the website, posting\n" +
   ' checks and previews); each paper pins its own in its myst.yml. oak upgrade moves both.';

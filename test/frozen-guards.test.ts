@@ -64,7 +64,7 @@ function refStep(value: string, min = '') {
   writeFileSync(join(dir, 'myst.yml'), 'project: {}');
   writeFileSync(
     join(bin, 'yq'),
-    `#!/bin/sh\ncase "$2" in *pins.yml) printf '%s' "$YQ_MIN" ;; *) printf '%s' "$YQ_VALUE" ;; esac\n`,
+    `#!/bin/sh\ncase "$1" in *min_engine*) printf '%s' "$YQ_MIN" ;; *engine_version*) ;; *) printf '%s' "$YQ_VALUE" ;; esac\n`,
   );
   chmodSync(join(bin, 'yq'), 0o755);
   const outFile = join(dir, 'gh_output');
@@ -198,7 +198,6 @@ describe('no template run: script puts an expression in the script [R153]', () =
     const files = [
       ...readdirSync(join(SHIM, '.github/workflows')).map((f) => `.github/workflows/${f}`),
       '.github/actions/engine/action.yml',
-      '.github/actions/discover/action.yml',
     ];
     const out: Array<{ where: string; script: string }> = [];
     for (const file of files) {
@@ -231,7 +230,6 @@ describe('workflow expressions', () => {
     const files = [
       ...readdirSync(join(SHIM, '.github/workflows')).map((f) => `.github/workflows/${f}`),
       '.github/actions/engine/action.yml',
-      '.github/actions/discover/action.yml',
     ];
     const out: Array<{ where: string; expr: string }> = [];
     for (const file of files) {
@@ -439,7 +437,7 @@ describe('version rule parity', () => {
 /* ---- the co-located tier ------------------------------------------------- */
 
 /** Runs `script` in `dir` with a `yq` stub: the query `.engine_version` prints YQ_ENGINE, a
- *  myst.yml query YQ_VALUE, `.min_engine_version` YQ_MIN, a registry query YQ_LOCATIONS. */
+ *  myst.yml query YQ_VALUE, `.min_engine_version` YQ_MIN. */
 function withYq(script: string, dir: string, env: Record<string, string>) {
   const bin = mkdtempSync(join(tmpdir(), 'oak-bin-'));
   writeFileSync(
@@ -448,7 +446,6 @@ function withYq(script: string, dir: string, env: Record<string, string>) {
       '#!/bin/sh',
       'case "$1" in',
       '  *engine_version*) case "$1" in *min_*) printf "%s" "$YQ_MIN" ;; *) printf "%s" "$YQ_ENGINE" ;; esac ;;',
-      '  *location*) printf "%s\\n" "$YQ_LOCATIONS" ;;',
       '  *) printf "%s" "$YQ_VALUE" ;;',
       'esac',
     ].join('\n') + '\n',
@@ -491,10 +488,14 @@ describe('the ref step in a co-located repository', () => {
     expect(r.output.trim()).toBe('ref=v2.0.0');
   });
 
+  it('a paper repository with a papers/ folder of its own still runs its myst.yml pin', () => {
+    // No engine_version in pins.yml: a paper repository, whatever folders an author adds.
+    const r = withYq(script, colocated(), { PAPER_DIR: '.', YQ_ENGINE: '', YQ_VALUE: 'v1.0.0' });
+    expect(r.code).toBe(0);
+    expect(r.output.trim()).toBe('ref=v1.0.0');
+  });
+
   it('holds engine_version to the same rules as a paper pin', () => {
-    const missing = withYq(script, colocated(), { PAPER_DIR: '.', YQ_ENGINE: '' });
-    expect(missing.code).toBe(1);
-    expect(missing.out).toContain('engine_version missing from .github/actions/engine/pins.yml');
     const branch = withYq(script, colocated(), { PAPER_DIR: '.', YQ_ENGINE: 'main' });
     expect(branch.code).toBe(1);
     const old = withYq(script, colocated(), {
@@ -515,159 +516,15 @@ describe('the ref step in a co-located repository', () => {
   });
 });
 
-describe('the discover action', () => {
-  const script = stepScript('.github/actions/discover/action.yml', 'discover');
-  const git = (dir: string, ...args: string[]) =>
-    spawnSync('git', ['-C', dir, '-c', 'user.name=t', '-c', 'user.email=t@t', ...args]);
-
-  /** A repo with `papers` committed, then a second commit changing `changed`. */
-  function repo(papers: string[] | null, changed: string[]) {
-    const dir = mkdtempSync(join(tmpdir(), 'oak-discover-'));
-    git(dir, 'init', '-q');
-    writeFileSync(join(dir, 'journal.yml'), 'name: J\n');
-    mkdirSync(join(dir, 'registry'));
-    writeFileSync(join(dir, 'registry', 'papers.yml'), '[]\n'); // yq is stubbed: YQ_LOCATIONS
-    for (const id of papers ?? []) {
-      mkdirSync(join(dir, 'papers', id), { recursive: true });
-      writeFileSync(join(dir, 'papers', id, 'myst.yml'), 'version: 1\n');
-    }
-    git(dir, 'add', '-A');
-    git(dir, 'commit', '-qm', 'base');
-    for (const f of changed) {
-      mkdirSync(join(dir, f, '..'), { recursive: true });
-      writeFileSync(join(dir, f), 'changed\n');
-    }
-    git(dir, 'add', '-A');
-    git(dir, 'commit', '-qm', 'change');
-    return dir;
-  }
-  const discover = (dir: string, env: Record<string, string>) => {
-    const r = withYq(script, dir, env);
-    const line = (k: string) =>
-      r.output
-        .split('\n')
-        .find((l) => l.startsWith(`${k}=`))
-        ?.slice(k.length + 1);
-    return {
-      ...r,
-      papers: line('papers') ? JSON.parse(line('papers')!) : null,
-      colocated: line('colocated'),
-    };
-  };
-  const dirs = (p: Array<{ dir: string }>) => p.map((x) => x.dir);
-
-  it('is the paper at the root in a paper repository', () => {
-    const d = discover(repo(null, ['index.md']), { FOR: 'build', EVENT: 'push' });
-    expect(d.papers).toEqual([{ dir: '.', key: '' }]);
-    expect(d.colocated).toBe('false');
-  });
-
-  it('builds the listed papers on a push, and no draft', () => {
-    const d = discover(repo(['a-1', 'b-2', 'c-3'], ['papers/a-1/index.md']), {
-      FOR: 'build',
-      EVENT: 'push',
-      YQ_LOCATIONS: './papers/a-1\n./papers/c-3/\nacme/external\n./papers/a-10',
-    });
-    expect(d.papers).toEqual([
-      { dir: 'papers/a-1', key: 'a-1' },
-      { dir: 'papers/c-3', key: 'c-3' },
-    ]);
-    expect(d.colocated).toBe('true');
-  });
-
-  it('checks every paper on a push', () => {
-    const d = discover(repo(['a-1', 'b-2'], ['x.md']), { FOR: 'check', EVENT: 'push' });
-    expect(dirs(d.papers)).toEqual(['papers/a-1', 'papers/b-2']);
-  });
-
-  it('on a pull request, builds and checks the papers it changes', () => {
-    const dir = repo(['a-1', 'b-2', 'c-3'], ['papers/a-1/index.md', 'papers/c-3/fig.png']);
-    for (const FOR of ['build', 'check'])
-      expect(dirs(discover(dir, { FOR, EVENT: 'pull_request' }).papers)).toEqual([
-        'papers/a-1',
-        'papers/c-3',
-      ]);
-  });
-
-  it('a pull request changing anything outside papers/ checks every paper, and builds the changed ones', () => {
-    const dir = repo(['a-1', 'b-2'], ['registry/papers.yml', 'papers/b-2/index.md']);
-    expect(dirs(discover(dir, { FOR: 'check', EVENT: 'pull_request' }).papers)).toEqual([
-      'papers/a-1',
-      'papers/b-2',
-    ]);
-    expect(dirs(discover(dir, { FOR: 'build', EVENT: 'pull_request' }).papers)).toEqual([
-      'papers/b-2',
-    ]);
-  });
-
-  it('a pull request changing no paper gives an empty list', () => {
-    const d = discover(repo(['a-1'], ['pages/index.md']), { FOR: 'build', EVENT: 'pull_request' });
-    expect(d.papers).toEqual([]);
-  });
-
-  it('a new paper on a pull request is found', () => {
-    const d = discover(repo([], ['papers/n-1/myst.yml']), { FOR: 'build', EVENT: 'pull_request' });
-    expect(dirs(d.papers)).toEqual(['papers/n-1']);
-  });
-
-  it('fails on a folder not named by a paper id, which would become a path and an artifact name', () => {
-    const d = discover(repo(['a-1'], ['papers/x.y/myst.yml']), { FOR: 'check', EVENT: 'push' });
-    expect(d.code).toBe(1);
-    expect(d.out).toContain('is not named by a paper id');
-    expect(d.output).not.toContain('papers=');
-  });
-});
-
-describe('the deposit tag and the reserve-doi input name the paper', () => {
-  const tagStep = stepScript('.github/workflows/deposit-version.yml', 'tag');
-  const paperStep = stepScript('.github/workflows/reserve-doi.yml', 'paper');
-
-  it.each([
-    ['v1.2.3', '.'],
-    ['a-2026-x/v1.0.0', 'papers/a-2026-x'],
-  ])('tag %s builds and deposits %s', (tag, dir) => {
-    const r = withYq(tagStep, mkdtempSync(join(tmpdir(), 'oak-tag-')), { TAG: tag });
-    expect(r.code).toBe(0);
-    expect(r.output.trim()).toBe(`paper-dir=${dir}`);
-  });
-
-  it.each(['v1.2', '../x/v1.0.0', 'a/b/v1.0.0', 'a/v1.0.0\npaper-dir=.', 'a$(id)/v1.0.0'])(
-    'refuses tag %j',
-    (tag) => {
-      const r = withYq(tagStep, mkdtempSync(join(tmpdir(), 'oak-tag-')), { TAG: tag });
-      expect(r.code).toBe(1);
-      expect(r.output).toBe('');
-    },
-  );
-
-  it('reserve-doi takes an id with a folder in papers/, or nothing in a paper repository', () => {
-    const colo = mkdtempSync(join(tmpdir(), 'oak-rdoi-'));
-    mkdirSync(join(colo, 'papers', 'a-1'), { recursive: true });
-    writeFileSync(join(colo, 'papers', 'a-1', 'myst.yml'), '');
-    expect(withYq(paperStep, colo, { PAPER: 'a-1' }).output.trim()).toBe('paper-dir=papers/a-1');
-    for (const bad of ['', 'b-2', '../a-1', 'a-1/..'])
-      expect(withYq(paperStep, colo, { PAPER: bad }).code, bad).toBe(1);
-    const paperRepo = mkdtempSync(join(tmpdir(), 'oak-rdoi-'));
-    expect(withYq(paperStep, paperRepo, { PAPER: '' }).output.trim()).toBe('paper-dir=.');
-    expect(withYq(paperStep, paperRepo, { PAPER: 'a-1' }).code).toBe(1);
-  });
-});
-
 describe('paper id rule parity', () => {
-  // The launchers cannot import TypeScript, so each keeps a copy of PAPER_ID in src/projects.ts.
-  const copies: Array<[string, RegExp]> = [
-    ['.github/actions/engine/action.yml', /papers\/(\[A-Za-z0-9\]\[A-Za-z0-9_-\]\{0,99\})/],
-    ['.github/actions/discover/action.yml', /id='\^(\[A-Za-z0-9\]\[A-Za-z0-9_-\]\{0,99\})\$'/],
-    ['.github/workflows/deposit-version.yml', /\^\((\[A-Za-z0-9\]\[A-Za-z0-9_-\]\{0,99\})\)\/v/],
-    ['.github/workflows/reserve-doi.yml', /\^(\[A-Za-z0-9\]\[A-Za-z0-9_-\]\{0,99\})\$/],
-  ];
-  it('every copy is PAPER_ID', async () => {
+  // The engine action checks paper-dir before oak runs, so it keeps a copy of PAPER_ID in
+  // src/projects.ts.
+  it("the ref step's copy is PAPER_ID", async () => {
     const { PAPER_ID } = await import('../src/projects.js');
-    for (const [file, re] of copies) {
-      const m = re.exec(readFileSync(join(SHIM, file), 'utf8'));
-      expect(m, file).not.toBeNull();
-      expect(`^${m![1]}$`, file).toBe(PAPER_ID.source);
-    }
+    const action = readFileSync(join(SHIM, '.github/actions/engine/action.yml'), 'utf8');
+    const m = /papers\/(\[A-Za-z0-9\]\[A-Za-z0-9_-\]\{0,99\})/.exec(action);
+    expect(m).not.toBeNull();
+    expect(`^${m![1]}$`).toBe(PAPER_ID.source);
   });
 });
 
@@ -680,15 +537,21 @@ describe('the launchers carry the paper folder through every workflow', () => {
           if (s.uses === './.github/actions/engine')
             calls.push([`${f}: ${name}`, s.with.args, s.with['paper-dir']]);
     }
-    // Stage 2 and the website are the repository's own: the engine reads their paper from the
-    // artifacts.
-    const repoLevel = ['deploy-preview', 'post-checks', 'assemble'];
+    // The selection, Stage 2 and the website are the repository's own: the engine reads their
+    // papers from the repository or the artifacts.
+    const repoLevel = ['papers', 'deploy-preview', 'post-checks', 'assemble'];
+    const fromPapersJob =
+      /^\$\{\{ fromJSON\(needs\.paper\.outputs\.result \|\| '\{\}'\)\.paper_dir \}\}$/;
     for (const [where, args, dir] of calls) {
       if (repoLevel.some((v) => args.startsWith(v))) expect(dir, where).toBeUndefined();
-      else
-        expect(dir, where).toMatch(
-          /^\$\{\{ (matrix\.paper\.dir|steps\.\w+\.outputs\.paper-dir) \}\}$/,
-        );
+      else if (dir !== '${{ matrix.paper.dir }}') expect(dir, where).toMatch(fromPapersJob);
+    }
+  });
+
+  it('no workflow picks papers itself: they come from the papers job result', () => {
+    for (const f of readdirSync(join(SHIM, '.github/workflows'))) {
+      const text = readFileSync(join(SHIM, '.github/workflows', f), 'utf8');
+      expect(text, f).not.toMatch(/papers\/\*|BASH_REMATCH|-d papers/);
     }
   });
 });

@@ -41,6 +41,7 @@ type Verb =
   | 'upgrade'
   | 'assemble'
   | 'add-paper'
+  | 'papers'
   | 'conformance';
 
 /** oak's root, the directory holding paper-base.yml: one up from the bundle, or two up from
@@ -1130,6 +1131,33 @@ async function cmdAddPaper(argv: string[]): Promise<number> {
   return out.exitCode;
 }
 
+/** `oak papers`: the papers a workflow run works on, in the current directory
+ *  ({@link selectPapers}). `--id-env` reads the id from `PAPER_ID`, so a workflow input reaches
+ *  oak as one value whatever it holds. */
+async function cmdPapers(argv: string[]): Promise<number> {
+  const forWhat = flag(argv, 'for');
+  const tag = flag(argv, 'tag');
+  const id = has(argv, 'id-env') ? (process.env.PAPER_ID ?? '') : flag(argv, 'id');
+  const mode: import('./papers.js').PapersMode | null =
+    forWhat === 'build' || forWhat === 'check'
+      ? { for: forWhat, event: process.env.GITHUB_EVENT_NAME ?? '' }
+      : tag !== undefined
+        ? { tag }
+        : id !== undefined
+          ? { id }
+          : null;
+  if (!mode) {
+    process.stderr.write(msg.papers.usage + '\n');
+    return 2;
+  }
+  const { selectPapers } = await import('./papers.js');
+  const gh = await import('./gh.js');
+  const root = resolve('.');
+  const out = selectPapers(root, mode, () => gh.changedFromParent(root));
+  emit(argv, out.result);
+  return out.exitCode;
+}
+
 /** oak's own repo. */
 const ENGINE_REPO_DEFAULT = 'Open-Scholar-Nexus/oaktree-sapling';
 
@@ -1414,6 +1442,7 @@ const VERBS: Verb[] = [
   'deposit',
   'release',
   'notify',
+  'papers',
   'bootstrap',
   'upgrade',
   'conformance',
@@ -1528,6 +1557,7 @@ async function main(argv: string[]): Promise<number> {
   if (verb === 'conformance') return cmdConformance(argv.slice(1));
   if (verb === 'assemble') return cmdAssemble(argv.slice(1));
   if (verb === 'add-paper') return cmdAddPaper(argv.slice(1));
+  if (verb === 'papers') return cmdPapers(argv.slice(1));
   // An unknown command is an error with a suggestion: printing usage alone would make a typo
   // look like a bare `oak`, as if the command ran and did nothing.
   if (verb) {

@@ -404,6 +404,12 @@ export function postCommitComment(repoRoot: string, sha: string, body: string): 
   gh(['api', `repos/${repo}/commits/${sha}/comments`, '-f', `body=${body}`]);
 }
 
+/** The files the checked-out commit changes against its first parent: on a `pull_request` run,
+ *  the merge commit against the base, which needs a checkout with `fetch-depth: 2`. */
+export function changedFromParent(repoRoot: string): string[] {
+  return git(repoRoot, ['diff', '--name-only', 'HEAD^1', 'HEAD']).split('\n').filter(Boolean);
+}
+
 /** Opens a failure issue when publishing fails, labelled for the editors. */
 export function openFailureIssue(repoRoot: string, title: string, body: string): void {
   const repo = originRepo(repoRoot);
