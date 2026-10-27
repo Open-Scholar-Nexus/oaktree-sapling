@@ -62,10 +62,14 @@ export const DOCS = {
   validate: 'reference/cli#validate',
   /** `oak post-checks`: the Check Run and sticky PR comment it posts from a validate report. */
   postChecks: 'reference/cli#post-checks',
-  /** `oak deposit <prepare|publish|status>`: the Zenodo verbs, and what `--sandbox` isolates. */
+  /** `oak deposit <prepare|upload|status>`: the Zenodo verbs, and what `--sandbox` isolates. */
   deposit: 'reference/cli#deposit',
-  /** `oak release --tag vX`: build, deposit, Release asset, and the comment or issue it leaves. */
+  /** `oak release --tag vX`: the build it deposits, the Release asset, and the comment or issue it leaves. */
   release: 'reference/cli#release',
+  /** `oak release --local-build`: building on the editor's computer, and what it exposes. */
+  publishLocalBuild: 'guide/publish#local-build',
+  /** Depositing from the editor's computer, for a journal with no Zenodo token on GitHub. */
+  publishFromTerminal: 'guide/publish#from-terminal',
   /** `oak notify new-version`: the standalone reminder and where its PR number comes from. */
   notify: 'reference/cli#notify',
   /** `oak bootstrap <paper|journal>`: onboarding a repo from templates. */

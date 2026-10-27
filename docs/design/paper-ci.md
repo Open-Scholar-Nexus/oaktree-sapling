@@ -14,7 +14,7 @@ Two terms recur below. A flow that needs a token runs as two workflows: **Stage 
 An author with push access opens a pull request from a branch. Stage 1 runs their content on a GitHub-hosted runner, a fresh machine discarded after the job, with a read-only token. Their pull request reaches `main` through the `protect-main` rule, which requires the editorial checks to pass and requires an editor's review for any change under `CODEOWNERS`. The author's code runs only in jobs that hold no secret, and every job that holds a secret runs code from `main` or from an editor's `v*` tag.
 
 (r83)=
-A pull request from a fork, the default for an outside contributor, adds a step before anything runs: GitHub holds the run for a maintainer's approval when the contributor has never had anything merged into the repository. That is GitHub's default for a public repository, `oak bootstrap` leaves it there, and the [runbook](src:src/messages.ts#L471-L474) tells the editor to expect the approval click. Once approved, the fork's run builds like any other, and any edit it makes to a gated file needs an editor's review before it can merge. The checks comment also [flags](src:src/checks.ts#L199-L204) a pull request that touches a gated file, and one whose changed files GitHub could not list in full.
+A pull request from a fork, the default for an outside contributor, adds a step before anything runs: GitHub holds the run for a maintainer's approval when the contributor has never had anything merged into the repository. That is GitHub's default for a public repository, `oak bootstrap` leaves it there, and the [runbook](src:src/messages.ts#L480-L483) tells the editor to expect the approval click. Once approved, the fork's run builds like any other, and any edit it makes to a gated file needs an editor's review before it can merge. The checks comment also [flags](src:src/checks.ts#L199-L204) a pull request that touches a gated file, and one whose changed files GitHub could not list in full.
 :::
 
 (design-paper-ci-trust)=
@@ -88,6 +88,9 @@ Branches cannot reach the tokens at all. A repository secret is readable by ever
 
 Inside those jobs the paper's code never runs. `deposit-version.yml` builds in a job with no secrets and hands the output to the deposit job, which runs `oak release --no-build`. The action installs `paper-environment.yml` only when a job asks, and only the build jobs ask. And the engine runs `wrangler` from an empty directory, so a `.npmrc` or `node_modules` in the paper cannot choose which wrangler receives the Cloudflare token.
 
+(design-paper-ci-zenodo)=
+The Zenodo tokens are optional. Zenodo gives a personal token its owner's full rights whatever scopes it lists (tested 2026-10-22), so a journal can leave them off GitHub and have an editor [deposit from the terminal](#from-terminal). The deposit job then ends with a notice, and the build job's artifact is what the editor's [`oak release`](src:src/release.ts) downloads, after checking that the run is the push of that tag at the tag's commit. It only reads and uploads that build, since the paper's code wrote it. `oak release --local-build` builds on the editor's computer instead, which runs the paper's plugins beside the token, so it warns first and names them.
+
 (design-paper-ci-stage2-inputs)=
 
 ### What Stage 2 takes from the artifact
@@ -138,9 +141,11 @@ The check runs in the workflow because it decides which engine to fetch, so ther
 
 ### Which engine code runs locally
 
-In CI the engine action checks out the version the paper pins, while locally an author runs whichever `oak` they installed, which can be several releases older or newer. A paper built with another engine can come out different or fail its checks. `oak build`, `oak validate` and `oak start` read the version from `myst.yml` and the repository from `pins.yml`, as CI does, so a local run uses the engine the paper's CI uses. When the running oak is another version, [`handOff`](src:src/pinned.ts) shallow-clones the pinned tag (`git clone --depth 1 --branch`) into `$XDG_CACHE_HOME/oak/<owner>/<name>/<tag>`, or `~/.cache/oak/...`, and runs that clone's `dist/cli.cjs` with the same arguments.
+In CI the engine action checks out the version the paper pins, while locally an author runs whichever `oak` they installed, which can be several releases older or newer. A paper built with another engine can come out different or fail its checks. `oak build`, `oak validate`, `oak start`, `oak release` and `oak deposit` read the version from `myst.yml` and the repository from `pins.yml`, as CI does, so a local run uses the engine the paper's CI uses. When the running oak is another version, [`handOff`](src:src/pinned.ts) shallow-clones the pinned tag (`git clone --depth 1 --branch`) into `$XDG_CACHE_HOME/oak/<owner>/<name>/<tag>`, or `~/.cache/oak/...`, and runs that clone's `dist/cli.cjs` with the same arguments.
 
 As in `ci/run.sh`, only a [release tag](#r57), the commit that carries `dist/cli.cjs`, runs. The clone's `bin/typst` goes on `PATH` when it runs on the machine. oak clones into a temporary folder next to the cache folder and renames it into place once the clone has finished, so an interrupted download leaves nothing behind that a later run would use.
+
+`oak release` and `oak deposit` also hand off when the running oak is the pinned version but is not a git checkout, as an npm install is not: the deposit's `engine.zip` is a `git archive` of the engine.
 
 `oak bootstrap --engine-version` naming another version also runs that version, cloned from `--engine-repo`, so a new repo's files come from the version it pins.
 
@@ -156,7 +161,7 @@ Before any git call, oak checks that the repository is `owner/name` written with
 Beyond the summary at the top of this page, these gaps remain:
 
 - **The check verdict is authored by Stage 1.** Stage 2 posts the report Stage 1 computed, so a fork that rewrites `check-paper.yml` can post a passing report. That rewrite is itself a change under `.github/`, so the comment flags it and merging it needs an editor. The verdict is a signal for the editor and not an authorisation decision, and the code-owner review is what stands between such a pull request and `main`.
-- **The DOI pull request's checks are held.** `reserve-doi.yml` opens it with the workflow's own `GITHUB_TOKEN`. GitHub holds the runs on that pull request for approval, and approving them does not start the preview, so the editor closes and reopens it to run the usual two stages. Each held run keeps its check suite, and GitHub files the `Journal checks` check run under the first of those suites. The merge rule does not read that suite, so `post-checks` also posts the same result as a [commit status](src:src/gh.ts#L585-L589) named `Journal checks`, which belongs to no suite. Running both stages from `reserve-doi.yml` instead [worked](https://github.com/Open-Scholar-Nexus/oaktree-sapling/pull/46), but it shipped a second path through both stages to every paper repository to save that click.
+- **The DOI pull request's checks are held.** `reserve-doi.yml` opens it with the workflow's own `GITHUB_TOKEN`. GitHub holds the runs on that pull request for approval, and approving them does not start the preview, so the editor closes and reopens it to run the usual two stages. Each held run keeps its check suite, and GitHub files the `Journal checks` check run under the first of those suites. The merge rule does not read that suite, so `post-checks` also posts the same result as a [commit status](src:src/gh.ts#L631-L635) named `Journal checks`, which belongs to no suite. Running both stages from `reserve-doi.yml` instead [worked](https://github.com/Open-Scholar-Nexus/oaktree-sapling/pull/46), but it shipped a second path through both stages to every paper repository to save that click.
 - **Anyone with write access can mark the Journal checks as passed.** The [branch rule](src:src/bootstrap.ts#L436-L444) asks for a passing result named `Journal checks` and accepts it from any source, so a collaborator can post one by hand through GitHub's API. What keeps such a pull request off `main` is the code-owner review. The DOI pull request that [`reserve-doi.yml`](src:templates/paper/.github/workflows/reserve-doi.yml) opens relies on this: its result reaches the rule only through the commit status `post-checks` posts. Restricting the rule to results from GitHub Actions would close this gap: a passing result would have to come from a workflow run, and a hand-posted one would no longer count. Before doing that, check that a DOI pull request can still merge.
 - **The branch rule can be removed.** An admin who deletes `protect-main` turns `CODEOWNERS` back into documentation.
 - **Anything we didn't consider.** See a gap in our design? [Open an issue](https://github.com/Open-Scholar-Nexus/oaktree-sapling/issues) to tell us.
@@ -187,9 +192,9 @@ The engine repository in `pins.yml` and the version in `myst.yml` both fail loud
 
 (r137)=
 
-Stage 2 rejects malformed input with a clear error. A report that is not JSON, or JSON without the `checkRun.conclusion` field, makes `post-checks` [exit 1](src:src/cli.ts#L939-L952) naming the file and what is wrong with it. An absent `pr-number` file means a push build and is not an error, and an absent `paper` file means `.`. A present and malformed one is a corrupt or hostile artifact, so Stage 2 fails.
+Stage 2 rejects malformed input with a clear error. A report that is not JSON, or JSON without the `checkRun.conclusion` field, makes `post-checks` [exit 1](src:src/cli.ts#L1022-L1035) naming the file and what is wrong with it. An absent `pr-number` file means a push build and is not an error, and an absent `paper` file means `.`. A present and malformed one is a corrupt or hostile artifact, so Stage 2 fails.
 
-[`oak validate --report`](src:src/cli.ts#L798-L801) exits 0 whenever it wrote a report, a failing one included, because `post-checks.yml` runs only after a successful Stage 1. It exits non-zero only when no report was written.
+[`oak validate --report`](src:src/cli.ts#L881-L884) exits 0 whenever it wrote a report, a failing one included, because `post-checks.yml` runs only after a successful Stage 1. It exits non-zero only when no report was written.
 
 (design-paper-ci-artifact-contract)=
 

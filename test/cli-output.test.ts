@@ -37,16 +37,19 @@ const fixtureRepo = 'open-scholar-nexus/fixture-sample-paper';
 /**
  * Runs the bundle as a terminal sees it. `CI` and `GITHUB_ACTIONS` are cleared, since they turn
  * the output into GitHub annotations; kept, these tests would pass locally and fail in CI.
+ * `inActions` sets `GITHUB_ACTIONS` again, for a run as a workflow sees it.
  */
 function oak(
   args: string[],
   extraEnv: Record<string, string | undefined> = {},
+  inActions = false,
 ): { code: number; stdout: string; stderr: string } {
   const env = { ...process.env, ...extraEnv };
   // undefined unsets a variable; an empty string would not reach the `??` fallback.
   for (const [k, v] of Object.entries(extraEnv)) if (v === undefined) delete env[k];
   delete env.CI;
   delete env.GITHUB_ACTIONS;
+  if (inActions) env.GITHUB_ACTIONS = 'true';
   const r = spawnSync('node', [bundlePath, ...args], { encoding: 'utf8', env });
   return { code: r.status ?? 1, stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
 }
@@ -860,3 +863,98 @@ describe.skipIf(bundleState() === 'absent')('oak release reads the DOI before an
     expect(stderr).toContain('oak release: project.doi https://doi.org/10.5072/zenodo.5 is not');
   });
 });
+
+describe.skipIf(bundleState() === 'absent')(
+  'oak release and oak deposit upload, before Zenodo',
+  () => {
+    beforeAll(assertBundleNotStale);
+
+    /** A paper with a committed sandbox DOI, outside any git repo. */
+    function sandboxPaper(): string {
+      const dir = mkdtempSync(join(tmpdir(), 'oak-release-'));
+      writeFileSync(
+        join(dir, 'myst.yml'),
+        'version: 1\nproject:\n  doi: 10.5072/zenodo.5\n' +
+          '  options:\n    oaktree-sapling:\n      version: v9.9.9\n      edition: e\n',
+      );
+      return dir;
+    }
+    const noTokens = {
+      OAK_USE_RUNNING: '1',
+      ZENODO_TOKEN: undefined,
+      ZENODO_TOKEN_SANDBOX: undefined,
+    };
+
+    it('refuses --local-build with --no-build, and a tag that is not a paper version', () => {
+      const dir = sandboxPaper();
+      const both = oak(
+        ['release', '--tag', 'v1.0.0', '--local-build', '--no-build', '--paper', dir],
+        noTokens,
+      );
+      expect(both.code).toBe(2);
+      expect(both.stderr).toContain('not both');
+      const bad = oak(['release', '--tag', 'v1.0.0;x', '--paper', dir], noTokens);
+      expect(bad.code).toBe(2);
+      expect(bad.stderr).toContain('--tag must be a paper version');
+    });
+
+    it('a local release needs the clone at the tag, checked before any build or download', () => {
+      const dir = sandboxPaper();
+      const r = oak(['release', '--tag', 'v1.0.0', '--paper', dir, '--no-instance'], {
+        ...noTokens,
+        ZENODO_TOKEN_SANDBOX: 'sandbox-token',
+      });
+      expect(r.code).toBe(2);
+      expect(r.stderr).toContain('this clone has no tag v1.0.0');
+    });
+
+    it('deposit upload takes the sandbox from the DOI, with no --sandbox', () => {
+      const r = oak(
+        ['deposit', 'upload', '--pdf', 'x.pdf', '--tag', 'v1.0.0', '--paper', sandboxPaper()],
+        { ...noTokens, ZENODO_TOKEN: 'production-secret' },
+      );
+      expect(r.code).toBe(2);
+      expect(r.stderr).toContain('ZENODO_TOKEN_SANDBOX');
+      expect(r.stdout + r.stderr).not.toContain('production-secret');
+    });
+
+    // An unset secret reaches the workflow step as an empty string.
+    const emptySecrets = { OAK_USE_RUNNING: '1', ZENODO_TOKEN: '', ZENODO_TOKEN_SANDBOX: '' };
+
+    it('the CI deposit with no token ends green with a notice to deposit from the terminal', () => {
+      const r = oak(
+        ['release', '--tag', 'v1.0.0', '--no-build', '--paper', sandboxPaper()],
+        emptySecrets,
+        true,
+      );
+      expect(r.code).toBe(0);
+      expect(r.stderr).toContain('::notice::oak release: the zenodo-publish environment has no');
+      expect(r.stderr).toContain('ZENODO_TOKEN_SANDBOX');
+      expect(r.stderr).toContain('oak release --tag v1.0.0');
+      expect(r.stderr).toContain('deposit: skipped');
+    });
+
+    it('the CI DOI reservation with no token fails, pointing at oak deposit prepare', () => {
+      const r = oak(
+        ['deposit', 'prepare', '--sandbox', '--paper', sandboxPaper()],
+        emptySecrets,
+        true,
+      );
+      expect(r.code).toBe(2);
+      expect(r.stderr).toContain('the zenodo-prepare environment has no ZENODO_TOKEN_SANDBOX');
+      expect(r.stderr).toContain('oak deposit prepare --sandbox');
+    });
+
+    it('a local release with no token is refused', () => {
+      const r = oak(['release', '--tag', 'v1.0.0', '--paper', sandboxPaper()], noTokens);
+      expect(r.code).toBe(2);
+      expect(r.stderr).toContain('the sandbox needs ZENODO_TOKEN_SANDBOX');
+    });
+
+    it('deposit publish is no verb: upload fills the draft', () => {
+      const r = oak(['deposit', 'publish', '--paper', sandboxPaper()], noTokens);
+      expect(r.code).toBe(2);
+      expect(r.stderr).toContain('<prepare|upload|status>');
+    });
+  },
+);

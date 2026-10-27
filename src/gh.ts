@@ -32,6 +32,7 @@ import type { CheckRun } from './checks.js';
 import type { EnvironmentReviewer, Provisioner } from './bootstrap.js';
 import type { UpgradePr } from './upgrade.js';
 import type { ConformanceGh } from './conformance.js';
+import type { CiBuildSource, CiJob, CiRun } from './release.js';
 
 /**
  * git and gh output is captured, so the user can tell what oak did from what a tool it called
@@ -220,7 +221,7 @@ const BOT_ID = [
   'user.email=41898282+github-actions[bot]@users.noreply.github.com',
 ];
 
-/** The real `GitContext` for `cmdPublish`. */
+/** The real `GitContext` for `cmdUpload`. */
 export const realGitContext: GitContext = {
   async headSha(repoRoot) {
     return git(repoRoot, ['rev-parse', 'HEAD']);
@@ -333,7 +334,7 @@ export function openDoiPr(repoRoot: string, opts: { conceptDoi: string }): strin
     '--title',
     msg.workflow.doiPrTitle,
     '--body',
-    msg.workflow.doiPrBody(opts.conceptDoi),
+    msg.workflow.doiPrBody(opts.conceptDoi, Boolean(process.env.GITHUB_ACTIONS)),
     '--head',
     branch,
   ];
@@ -406,6 +407,51 @@ export function openFailureIssue(repoRoot: string, title: string, body: string):
   const base = ['issue', 'create', ...(repo ? ['--repo', repo] : [])];
   gh([...base, '--title', title, '--body', body, '--label', LABEL_ZENODO_FAILED]);
 }
+
+/** Whether gh can call GitHub: `GH_TOKEN` is set, else `gh auth token` has a login. */
+export function ghLoggedIn(): boolean {
+  if (process.env.GH_TOKEN) return true;
+  try {
+    return Boolean(gh(['auth', 'token'], { quiet: true }));
+  } catch {
+    return false;
+  }
+}
+
+/** The real {@link CiBuildSource} for `oak release`: git in the paper's clone, gh for the run. */
+export const realCiBuildSource: CiBuildSource = {
+  originRepo,
+  tagCommit(paperRoot, tag) {
+    try {
+      return git(paperRoot, ['rev-parse', '--verify', '--quiet', `refs/tags/${tag}^{commit}`], {
+        quiet: true,
+      });
+    } catch {
+      return null;
+    }
+  },
+  headSha(paperRoot) {
+    return git(paperRoot, ['rev-parse', 'HEAD']);
+  },
+  trackedChanges(paperRoot) {
+    return git(paperRoot, ['status', '--porcelain', '--untracked-files=no']) !== '';
+  },
+  pushRuns(repo, sha) {
+    return apiList(
+      `repos/${repo}/actions/runs?event=push&head_sha=${sha}`,
+      '.workflow_runs[] | {id, path, event, headBranch: .head_branch, headSha: .head_sha, url: .html_url} | tojson',
+    ).map((l) => JSON.parse(l) as CiRun);
+  },
+  jobs(repo, runId) {
+    return apiList(
+      `repos/${repo}/actions/runs/${runId}/jobs`,
+      '.jobs[] | {name, status, conclusion, completedAt: .completed_at} | tojson',
+    ).map((l) => JSON.parse(l) as CiJob);
+  },
+  download(repo, runId, name, dest) {
+    gh(['run', 'download', String(runId), '--repo', repo, '--name', name, '--dir', dest]);
+  },
+};
 
 /* --------------------------------------------------------------------------
  * For preview.ts: deploy-preview and notify

@@ -40,7 +40,7 @@
  * Two TS files keep their own strings, both read only in a CI log:
  *   src/conformance.ts . `oak conformance` is the maintainers' release test; its lines are
  *                        progress markers.
- *   src/zenodo.ts ...... the `[prepare]`/`[publish]` progress markers and the Zenodo API's own
+ *   src/zenodo.ts ...... the `[prepare]`/`[upload]` progress markers and the Zenodo API's own
  *                        error bodies, echoed as they are. The one line for authors there is the
  *                        skipped-ORCID warning.
  *
@@ -158,19 +158,27 @@ export const usage = (): string =>
   `                    and branding applied (the same config its CI builds). Reloads as you\n` +
   `                    edit; Ctrl-C stops it. Run in the journal repo, it previews the\n` +
   `                    journal website instead.\n` +
-  `  validate, build and start run the oak version the paper's myst.yml pins, fetched once\n` +
-  `  into ~/.cache/oak.\n` +
+  `  validate, build, start, release and deposit run the oak version the paper's myst.yml pins,\n` +
+  `  fetched once into ~/.cache/oak.\n` +
   `  OAK_USE_RUNNING=1 runs this oak instead of fetching, for developing oak itself.\n` +
+  `\n` +
+  `Publishing a paper (the Reserve DOI and Deposit version workflows run these; a journal\n` +
+  `with no Zenodo token on GitHub runs them in a clone of the paper repo, gh logged in)\n` +
+  `  oak deposit prepare [--sandbox] [--repo <owner/repo>] [--site-url <url>] [--instance <dir> | --no-instance]\n` +
+  `                    reserve the DOI on Zenodo and open the pull request writing it into myst.yml\n` +
+  `  oak release --tag <vX.Y.Z> [--local-build | --no-build] [--publish-without-review] [--paper <dir>]\n` +
+  `              [--instance <dir> | --no-instance] [--site-url <url>]\n` +
+  `                    fill the Zenodo draft with the tag's build from its Deposit version run,\n` +
+  `                    attach the files to the tag's GitHub release, comment on the commit\n` +
+  `  oak deposit upload --pdf <path> --tag <vX.Y.Z> [--site-url <url>] [--instance <dir> | --no-instance]\n` +
+  `  oak deposit status [--sandbox] [--instance <dir> | --no-instance]\n` +
+  `  The Zenodo token comes from ZENODO_TOKEN, ZENODO_TOKEN_SANDBOX for the sandbox, or --token.\n` +
   `\n` +
   `Run by the workflows (rarely typed by hand)\n` +
   `  oak post-checks --report <path> --repo <owner/repo> --sha <headsha> --base <branch>\n` +
   `                  --verified-head <headsha>\n` +
   `  oak deploy-preview <site> [--verified-head <headsha>] [--instance <dir> | --no-instance] [--repo <owner/repo>]\n` +
   `  oak notify new-version [--pr <n> | --site <dir>] [--repo <owner/repo>]\n` +
-  `  oak deposit prepare --repo <owner/repo> [--site-url <url>] [--sandbox] [--instance <dir> | --no-instance]\n` +
-  `  oak deposit publish --pdf <path> --tag <vX.Y.Z> [--site-url <url>] [--sandbox] [--instance <dir> | --no-instance]\n` +
-  `  oak deposit status  [--sandbox] [--instance <dir> | --no-instance]\n` +
-  `  oak release --tag <vX.Y.Z> [--no-build] [--paper <dir>] [--instance <dir> | --no-instance] [--site-url <url>]\n` +
   `  oak conformance reset   --repo <owner/name>\n` +
   `  oak conformance run   --repo <owner/name> --tag <vX.Y.Z> [--fork-repo <owner/name>]\n` +
   `\n` +
@@ -451,9 +459,11 @@ export const bootstrap = {
   runbookSecrets: (repo: string, missing: string): string =>
     `Set the remaining secrets on their environments at https://github.com/${repo}/settings/environments : ` +
     missing +
-    '. Until they are set, publishing to Zenodo (ZENODO_TOKEN*) and live pull-request ' +
-    'previews (CLOUDFLARE_*) are skipped; everything else works, and a preview falls back ' +
-    'to a downloadable copy of the built site.',
+    '. Until they are set, CI deposits nothing to Zenodo (ZENODO_TOKEN*) and live ' +
+    'pull-request previews (CLOUDFLARE_*) are skipped; everything else works, and a preview ' +
+    'falls back to a downloadable copy of the built site. The Zenodo tokens are optional: ' +
+    'Zenodo ignores token scopes, so a journal can keep them off GitHub and deposit from an ' +
+    `editor's computer. ${docsUrl(DOCS.publishFromTerminal)}`,
 
   runbookRepoSecrets: (repo: string, names: string): string =>
     `${names} is still a repository secret on ${repo}, which a workflow on any branch can read. ` +
@@ -939,7 +949,8 @@ export const pr = {
       `1. Open the record: ${recordUrl}`,
       '2. Click **New version** to create an empty draft.',
       '',
-      'Pushing the new `v*` tag fills that draft. The editor then clicks **Publish** on Zenodo.',
+      'Pushing the new `v*` tag fills that draft; a journal with no Zenodo token on GitHub ' +
+        'runs `oak release --tag <tag>` instead. The editor then clicks **Publish** on Zenodo.',
       '',
       `Concept DOI: \`${doi}\``,
     ].join('\n'),
@@ -982,7 +993,7 @@ export const pr = {
 
 export const workflow = {
   // deposit
-  depositUsage: 'oak deposit: usage: oak deposit <prepare|publish|status> [...]',
+  depositUsage: 'oak deposit: usage: oak deposit <prepare|upload|status> [...]',
   badRepoName: (source: string, got: string): string =>
     `${source} takes a GitHub repo as owner/name, not ${JSON.stringify(got.slice(0, 60))}.`,
 
@@ -1016,16 +1027,33 @@ export const workflow = {
     `pull request #${pr} heads at ${actual}, not at ${built}, the commit this run built; ` +
     `refusing to post. A newer push gets its own run.`,
 
-  depositNoToken: (sandbox: boolean): string =>
+  /** `verb` is `deposit` or `release`. */
+  noZenodoToken: (verb: string, sandbox: boolean): string =>
     sandbox
-      ? 'oak deposit: --sandbox needs ZENODO_TOKEN_SANDBOX (an environment secret on ' +
-        'zenodo-prepare) or --token. A sandbox run never falls back to the production token.'
-      : 'oak deposit: no token. Set ZENODO_TOKEN or pass --token.',
+      ? `oak ${verb}: the sandbox needs ZENODO_TOKEN_SANDBOX or --token. A sandbox run never ` +
+        'falls back to the production token.'
+      : `oak ${verb}: no token. Set ZENODO_TOKEN or pass --token.`,
   depositNoRepo: 'deposit prepare: pass --repo owner/repo (or set GITHUB_REPOSITORY)',
   depositBadGithubUrl: (mystPath: string, got: string): string =>
     `project.github in ${mystPath} is not a github.com repo URL ` +
     `(${JSON.stringify(got.slice(0, 80))}). Set it to https://github.com/<owner>/<repo>.`,
-  depositPublishArgs: 'deposit publish: --pdf and --tag are required',
+  depositUploadArgs: 'oak deposit upload: --pdf and --tag are required',
+  depositNeedsNewVersion: (recordUrl: string): string =>
+    `no unsubmitted Zenodo draft for this concept DOI. Open the record, click New version, ` +
+    `then re-run the failed Deposit version job or run oak release again: ${recordUrl}`,
+  depositNeedsNewVersionAnnotation: (recordUrl: string | undefined): string =>
+    `::error title=Zenodo: editor must click 'New version'::No unsubmitted draft for this ` +
+    `concept. Record: ${recordUrl ?? '(unavailable)'}`,
+  depositTemplateBadName: (template: string): string =>
+    `the build's myst.oak.yml names the typst template "${template}", which is neither a ` +
+    `template directory nor a registry name (a name has no empty or ".." part and does not ` +
+    `start with /), so the deposit does not archive it. Name a template directory, a URL, or ` +
+    `a registry name in myst.yml and build again.`,
+  depositNoTokenInCi: (sandbox: boolean): string =>
+    `oak deposit: the zenodo-prepare environment has no ` +
+    `${sandbox ? 'ZENODO_TOKEN_SANDBOX' : 'ZENODO_TOKEN'}. Set it there, or reserve the DOI from ` +
+    `a clone of the paper repo on your computer with oak deposit prepare` +
+    `${sandbox ? ' --sandbox' : ''}. ${docsUrl(DOCS.publishFromTerminal)}`,
   depositDoiPrOpened: (url: string): string => `deposit prepare: opened DOI PR ${url}`,
   depositDoiPrFailed: (message: string): string =>
     `deposit prepare: DOI PR not opened (${message})`,
@@ -1049,37 +1077,92 @@ export const workflow = {
     `the whole workflow, so the build and the deposit read the same journal commit.`,
 
   /** The DOI pull request `gh.openDoiPr` opens. GitHub holds the checks on a pull request a
-   *  workflow opens, and approving them does not run the preview, so the body says what the
+   *  workflow opens, and approving them does not run the preview, so that body says what the
    *  editor clicks. */
   doiPrTitle: 'Reserve Zenodo DOI',
-  doiPrBody: (conceptDoi: string): string =>
+  doiPrBody: (conceptDoi: string, byWorkflow: boolean): string =>
     [
       `Writes the reserved concept DOI \`${conceptDoi}\` into \`myst.yml\`. Merge before tagging.`,
-      '',
-      '<details>',
-      '<summary>Why are the checks waiting?</summary>',
-      '',
-      'GitHub holds the checks on a pull request a workflow opens, and approving them does not ' +
-        'run the preview. To run the Journal checks and the preview, close and reopen this pull ' +
-        'request.',
-      '',
-      '</details>',
+      ...(byWorkflow
+        ? [
+            '',
+            '<details>',
+            '<summary>Why are the checks waiting?</summary>',
+            '',
+            'GitHub holds the checks on a pull request a workflow opens, and approving them does ' +
+              'not run the preview. To run the Journal checks and the preview, close and reopen ' +
+              'this pull request.',
+            '',
+            '</details>',
+          ]
+        : []),
     ].join('\n'),
 
   // release
   releaseNoTag: 'oak release: --tag vX.Y.Z is required',
-  releaseNoDoi: 'oak release: project.doi missing; run prepare and merge that pull request first.',
+  releaseBadTag: (tag: string): string =>
+    `oak release: --tag must be a paper version like v1.2.3, not ${JSON.stringify(tag.slice(0, 40))}.`,
+  releaseBuildFlags: 'oak release: pass --local-build or --no-build, not both.',
+  /** `verb` is `release` or `deposit upload`. */
+  noDoi: (verb: string): string =>
+    `oak ${verb}: project.doi missing; run oak deposit prepare and merge its pull request first.`,
   notZenodoDoi: (doi: string): string =>
     `project.doi ${doi} is not a Zenodo DOI; write it as 10.5281/zenodo.<id>, or ` +
     `10.5072/zenodo.<id> from the sandbox`,
-  releaseNotZenodoDoi: (doi: string): string => `oak release: ${workflow.notZenodoDoi(doi)}`,
-  releaseNoToken: (sandbox: boolean): string =>
-    `no token: set ${sandbox ? 'ZENODO_TOKEN_SANDBOX' : 'ZENODO_TOKEN'}`,
+  doiNotZenodo: (verb: string, doi: string): string => `oak ${verb}: ${workflow.notZenodoDoi(doi)}`,
   releaseNoPdf: 'oak release: no PDF under _build/exports (did the typst export run?)',
   releasePostStepsFailed: (message: string): string =>
     `oak release: uploading to the GitHub release or commenting failed (${message})`,
-  releaseCommitComment: (draft: string): string => `Zenodo draft populated: ${draft}`,
+  releaseNoGh: (tag: string, dir: string): string =>
+    `oak release: gh is not logged in, so the files were not attached to the GitHub release ` +
+    `and the commit got no comment. Run gh auth login, then gh release upload ${tag} ${dir}/*.`,
+  releaseCommitComment: (url: string, published: boolean): string =>
+    published ? `Zenodo record published: ${url}` : `Zenodo draft populated: ${url}`,
   releaseFailureIssue: (tag: string): string => `Zenodo publish failed for ${tag}`,
+  releaseNoTokenReason: 'no Zenodo token on GitHub',
+  releaseNoTokenInCi: (tag: string, sandbox: boolean): string =>
+    `oak release: the zenodo-publish environment has no ` +
+    `${sandbox ? 'ZENODO_TOKEN_SANDBOX' : 'ZENODO_TOKEN'}, so this run deposits nothing. To ` +
+    `deposit this build, run oak release --tag ${tag} in a clone of the paper repo on your ` +
+    `computer. ${docsUrl(DOCS.publishFromTerminal)}`,
+
+  // release: where the build comes from
+  releaseNoOrigin: (paperRoot: string): string =>
+    `oak release: ${paperRoot} has no GitHub origin remote, so its Deposit version run cannot ` +
+    `be found. Run it in a clone of the paper repo.`,
+  releaseNoTagHere: (tag: string): string =>
+    `oak release: this clone has no tag ${tag}. Run git fetch --tags, then git checkout ${tag}.`,
+  releaseNotAtTag: (tag: string, head: string): string =>
+    `oak release: HEAD is ${head.slice(0, 12)}, not ${tag}; the deposit archives HEAD. Run ` +
+    `git checkout ${tag} first.`,
+  releaseTrackedChanges: (tag: string): string =>
+    `oak release: this clone has changes to tracked files, and the deposit reads myst.yml from ` +
+    `the working tree. Commit or discard them, so it matches ${tag}.`,
+  releaseNoRun: (tag: string, repo: string): string =>
+    `oak release: no Deposit version run built ${tag} on ${repo}. Push the tag, or open the ` +
+    `Actions tab to see why none started.`,
+  releaseRunPending: (url: string): string =>
+    `oak release: the Deposit version run is still building; run this again once it finishes: ${url}`,
+  releaseRunFailed: (url: string, conclusion: string): string =>
+    `oak release: the Deposit version build ${conclusion === 'failure' ? 'failed' : `ended ${conclusion}`}, ` +
+    `so there is nothing to deposit. Fix it and push a new tag: ${url}`,
+  releaseCiFailed: (why: string): string =>
+    `oak release: could not get the build from GitHub (${why}). Check that gh is logged in ` +
+    `with access to the repo.`,
+  releaseFetched: (url: string): string => `oak release: using the build from ${url}`,
+  releaseNoBuild:
+    `oak release: --no-build deposits whatever is under _build as it is, which may be from ` +
+    `another tag or build, and the provenance records it as built on linux x86_64 with the ` +
+    `engine's typst, as in CI.`,
+  releaseLocalBuild: (plugins: string[], systemTypst: boolean): string =>
+    `oak release: --local-build runs the paper's code on this computer, with the Zenodo token ` +
+    `in the environment. Plugins the paper adds: ${plugins.length ? plugins.join(', ') : 'none'}. ` +
+    `Set up any environment paper-environment.yml describes yourself.` +
+    (systemTypst
+      ? ` The PDF is exported with the system typst, since the engine's is built for linux ` +
+        `x86_64 only, so it can differ from the CI build.`
+      : '') +
+    ` ${docsUrl(DOCS.publishLocalBuild)}`,
 
   // preview / notify
   previewProviderIsNot: (provider: string): string => `preview.provider is '${provider}'`,

@@ -16,7 +16,7 @@ oak upgrade --repo <owner>/<paper-repo>
 `--to <tag>` picks a release other than the newest, named `vX.Y.Z` or `vX.Y.Z-dev.N`. Without it, a version newer than the newest release is left as it is, and a version that is not a release tag, such as a branch, moves to the newest release. `--files-only` replaces the files and leaves the version. When the release's workflows need a newer engine than the version that pull request would set, `oak` stops before changing anything and names the oldest version they run with.
 
 (pins-local)=
-`oak start`, `oak build` and `oak validate` run the version `myst.yml` names, as the paper's CI does, and refuse the versions CI refuses: anything but a release tag. When the `oak` you installed is another version, it downloads that version into `~/.cache/oak` the first time, runs it, and says which version runs. If `.github/actions/engine/pins.yml` names an engine repository other than oaktree-sapling's own, `oak` asks before downloading from it.
+`oak start`, `oak build`, `oak validate`, `oak release` and `oak deposit` run the version `myst.yml` names, as the paper's CI does, and refuse the versions CI refuses: anything but a release tag. When the `oak` you installed is another version, it downloads that version into `~/.cache/oak` the first time, runs it, and says which version runs. `oak release` and `oak deposit` always run from that download, even at the same version, since the deposit archives the engine with `git archive`. If `.github/actions/engine/pins.yml` names an engine repository other than oaktree-sapling's own, `oak` asks before downloading from it.
 
 (site-pins)=
 ## The journal website's versions

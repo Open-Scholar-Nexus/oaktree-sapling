@@ -36,7 +36,7 @@ Working on a paper:
 - `oak build`: build the paper's website and PDF into `_build/`
 - `oak start`: preview it in a browser with the journal's settings applied
 
-The rest (`post-checks`, `deploy-preview`, `deposit`, `release`, `notify`, `conformance`) are run by the generated workflows and are rarely typed by hand.
+The rest (`post-checks`, `deploy-preview`, `deposit`, `release`, `notify`, `conformance`) are run by the generated workflows and are rarely typed by hand. A journal that keeps its Zenodo token off GitHub runs `deposit` and `release` from a clone of the paper repository instead.
 
 ## What runs from the npm package
 
