@@ -68,6 +68,8 @@ export const DOCS = {
   release: 'reference/cli#release',
   /** `oak release --local-build`: building on the editor's computer, and what it exposes. */
   publishLocalBuild: 'guide/publish#local-build',
+  /** Depositing from the editor's computer, for a journal with no Zenodo token on GitHub. */
+  publishFromTerminal: 'guide/publish#from-terminal',
   /** `oak notify new-version`: the standalone reminder and where its PR number comes from. */
   notify: 'reference/cli#notify',
   /** `oak bootstrap <paper|journal>`: onboarding a repo from templates. */
