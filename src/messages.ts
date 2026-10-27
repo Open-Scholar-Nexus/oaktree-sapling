@@ -162,7 +162,8 @@ export const usage = (): string =>
   `  fetched once into ~/.cache/oak.\n` +
   `  OAK_USE_RUNNING=1 runs this oak instead of fetching, for developing oak itself.\n` +
   `\n` +
-  `Publishing a paper (an editor, in a clone of the paper repo; needs gh logged in)\n` +
+  `Publishing a paper (the Reserve DOI and Deposit version workflows run these; a journal\n` +
+  `with no Zenodo token on GitHub runs them in a clone of the paper repo, gh logged in)\n` +
   `  oak deposit prepare [--sandbox] [--repo <owner/repo>] [--site-url <url>] [--instance <dir> | --no-instance]\n` +
   `                    reserve the DOI on Zenodo and open the pull request writing it into myst.yml\n` +
   `  oak release --tag <vX.Y.Z> [--local-build | --no-build] [--publish-without-review] [--paper <dir>]\n` +
@@ -458,9 +459,11 @@ export const bootstrap = {
   runbookSecrets: (repo: string, missing: string): string =>
     `Set the remaining secrets on their environments at https://github.com/${repo}/settings/environments : ` +
     missing +
-    '. Until they are set, publishing to Zenodo (ZENODO_TOKEN*) and live pull-request ' +
-    'previews (CLOUDFLARE_*) are skipped; everything else works, and a preview falls back ' +
-    'to a downloadable copy of the built site.',
+    '. Until they are set, CI deposits nothing to Zenodo (ZENODO_TOKEN*) and live ' +
+    'pull-request previews (CLOUDFLARE_*) are skipped; everything else works, and a preview ' +
+    'falls back to a downloadable copy of the built site. The Zenodo tokens are optional: ' +
+    'Zenodo ignores token scopes, so a journal can keep them off GitHub and deposit from an ' +
+    `editor's computer. ${docsUrl(DOCS.publishFromTerminal)}`,
 
   runbookRepoSecrets: (repo: string, names: string): string =>
     `${names} is still a repository secret on ${repo}, which a workflow on any branch can read. ` +
@@ -1038,6 +1041,11 @@ export const workflow = {
   depositNeedsNewVersion: (recordUrl: string): string =>
     `no unsubmitted Zenodo draft for this concept DOI. Open the record, click New version, ` +
     `then re-run the failed Deposit version job or run oak release again: ${recordUrl}`,
+  depositNoTokenInCi: (sandbox: boolean): string =>
+    `oak deposit: the zenodo-prepare environment has no ` +
+    `${sandbox ? 'ZENODO_TOKEN_SANDBOX' : 'ZENODO_TOKEN'}. Set it there, or reserve the DOI from ` +
+    `a clone of the paper repo on your computer with oak deposit prepare` +
+    `${sandbox ? ' --sandbox' : ''}. ${docsUrl(DOCS.publishFromTerminal)}`,
   depositDoiPrOpened: (url: string): string => `deposit prepare: opened DOI PR ${url}`,
   depositDoiPrFailed: (message: string): string =>
     `deposit prepare: DOI PR not opened (${message})`,
@@ -1103,6 +1111,12 @@ export const workflow = {
   releaseCommitComment: (url: string, published: boolean): string =>
     published ? `Zenodo record published: ${url}` : `Zenodo draft populated: ${url}`,
   releaseFailureIssue: (tag: string): string => `Zenodo publish failed for ${tag}`,
+  releaseNoTokenReason: 'no Zenodo token on GitHub',
+  releaseNoTokenInCi: (tag: string, sandbox: boolean): string =>
+    `oak release: the zenodo-publish environment has no ` +
+    `${sandbox ? 'ZENODO_TOKEN_SANDBOX' : 'ZENODO_TOKEN'}, so this run deposits nothing. To ` +
+    `deposit this build, run oak release --tag ${tag} in a clone of the paper repo on your ` +
+    `computer. ${docsUrl(DOCS.publishFromTerminal)}`,
 
   // release: where the build comes from
   releaseNoOrigin: (paperRoot: string): string =>
