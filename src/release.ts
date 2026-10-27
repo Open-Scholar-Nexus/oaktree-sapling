@@ -14,9 +14,9 @@ import { DERIVED_CONFIG_FILE, readDoc } from './yaml-io.js';
 import { galleryPluginUrl } from './bootstrap.js';
 import type { PinnedEngine } from './pinned.js';
 
-/** The workflow `templates/paper/.github/workflows/deposit-version.yml` names, its build job,
- *  and the artifact that job uploads. */
-export const DEPOSIT_WORKFLOW = 'Deposit version';
+/** The workflow file `templates/paper/.github/workflows/deposit-version.yml`, as a run's `path`
+ *  names it, its build job, and the artifact that job uploads. */
+export const DEPOSIT_WORKFLOW_PATH = '.github/workflows/deposit-version.yml';
 export const DEPOSIT_BUILD_JOB = 'build';
 export const RELEASE_ARTIFACT = 'release-build';
 
@@ -30,7 +30,8 @@ export const RELEASE_BUILD_PATHS = [
 
 export interface CiRun {
   id: number;
-  name: string;
+  /** The workflow file, relative to the repo root. */
+  path: string;
   event: string;
   /** The tag name, for a tag push. */
   headBranch: string;
@@ -42,6 +43,8 @@ export interface CiJob {
   name: string;
   status: string; // queued | in_progress | completed
   conclusion: string | null;
+  /** When the job finished, as ISO 8601; null until it does. */
+  completedAt: string | null;
 }
 
 export interface CiBuildSource {
@@ -75,7 +78,7 @@ export function depositRunFor(runs: CiRun[], tag: string, sha: string): CiRun | 
   return (
     runs.find(
       (r) =>
-        r.name === DEPOSIT_WORKFLOW &&
+        r.path === DEPOSIT_WORKFLOW_PATH &&
         r.event === 'push' &&
         r.headBranch === tag &&
         r.headSha === sha,
@@ -85,16 +88,16 @@ export function depositRunFor(runs: CiRun[], tag: string, sha: string): CiRun | 
 
 /**
  * Downloads the tag's build into `paperRoot`, replacing {@link RELEASE_BUILD_PATHS} there, and
- * returns its run. Throws a UserError while the build job runs, when it did not succeed, or when
- * there is no run. Only the build job is read, so a paper still carrying a publish job beside it
- * works too.
+ * returns its run and when its build job finished. Throws a UserError while the build job runs,
+ * when it did not succeed, or when there is no run. Only the build job is read, so a paper still
+ * carrying a publish job beside it works too.
  */
 export function fetchCiBuild(
   paperRoot: string,
   tag: string,
   sha: string,
   src: CiBuildSource,
-): CiRun {
+): { run: CiRun; builtAt: string | null } {
   const repo = src.originRepo(paperRoot);
   if (!repo) throw new UserError(msg.workflow.releaseNoOrigin(paperRoot));
   const fromGitHub = <T>(call: () => T): T => {
@@ -129,7 +132,7 @@ export function fetchCiBuild(
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }
-  return run;
+  return { run, builtAt: job.completedAt };
 }
 
 /** The `project.plugins` of the YAML file at `file`, as written: a string, or an entry's

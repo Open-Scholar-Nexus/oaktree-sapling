@@ -715,7 +715,7 @@ describe('cmdUpload', () => {
     ]);
   });
 
-  it('records the typst that exported the PDF, else the pinned one', async () => {
+  it('records the typst that exported the PDF, else the pinned one, and when it was built', async () => {
     const mystPath = paperRepo(
       BARE_MYST + '  doi: 10.5072/zenodo.5\n  github: https://github.com/o/r\n',
     );
@@ -723,7 +723,11 @@ describe('cmdUpload', () => {
     writeFileSync(join(root, 'paper.pdf'), '%PDF');
     writeFileSync(join(root, 'typst.version'), '0.14.2\n');
     withBuild(mystPath);
-    const recorded = async (over: { platform?: string; typstVersion?: string | null }) => {
+    const recorded = async (over: {
+      platform?: string;
+      typstVersion?: string | null;
+      builtAt?: string;
+    }) => {
       const provenance: Array<Record<string, unknown>> = [];
       const { transport } = fakeTransport((r) => {
         if (r.method === 'GET' && r.url.includes('/deposit/depositions/')) {
@@ -763,6 +767,12 @@ describe('cmdUpload', () => {
     expect(await recorded({ platform: 'darwin-arm64', typstVersion: null })).toMatchObject({
       typst_version: null,
     });
+    expect(await recorded({ builtAt: '2026-10-20T09:00:00Z' })).toMatchObject({
+      built_at: '2026-10-20T09:00:00Z',
+    });
+    const before = Date.now();
+    const now = Date.parse(String((await recorded({}))!.built_at));
+    expect(now).toBeGreaterThanOrEqual(before - 1000);
   });
 
   describe('with no unsubmitted draft', () => {

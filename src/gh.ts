@@ -439,13 +439,13 @@ export const realCiBuildSource: CiBuildSource = {
   pushRuns(repo, sha) {
     return apiList(
       `repos/${repo}/actions/runs?event=push&head_sha=${sha}`,
-      '.workflow_runs[] | {id, name, event, headBranch: .head_branch, headSha: .head_sha, url: .html_url} | tojson',
+      '.workflow_runs[] | {id, path, event, headBranch: .head_branch, headSha: .head_sha, url: .html_url} | tojson',
     ).map((l) => JSON.parse(l) as CiRun);
   },
   jobs(repo, runId) {
     return apiList(
       `repos/${repo}/actions/runs/${runId}/jobs`,
-      '.jobs[] | {name, status, conclusion} | tojson',
+      '.jobs[] | {name, status, conclusion, completedAt: .completed_at} | tojson',
     ).map((l) => JSON.parse(l) as CiJob);
   },
   download(repo, runId, name, dest) {

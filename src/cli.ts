@@ -631,9 +631,11 @@ async function cmdRelease(argv: string[]): Promise<number> {
   // `source.zip` and the provenance are HEAD's, and the metadata the working tree's myst.yml.
   const sha = inActions ? null : release.assertAtTag(paperRoot, tag, gh.realCiBuildSource);
 
+  let builtAt: string | undefined;
   if (sha && !localBuild && !noBuild) {
-    const run = release.fetchCiBuild(paperRoot, tag, sha, gh.realCiBuildSource);
-    process.stderr.write(msg.workflow.releaseFetched(run.url) + '\n');
+    const ci = release.fetchCiBuild(paperRoot, tag, sha, gh.realCiBuildSource);
+    builtAt = ci.builtAt ?? undefined;
+    process.stderr.write(msg.workflow.releaseFetched(ci.run.url) + '\n');
   } else if (!noBuild) {
     if (!inActions) {
       const { readPin } = await import('./pinned.js');
@@ -679,6 +681,7 @@ async function cmdRelease(argv: string[]): Promise<number> {
     engineRoot: engineRoot(),
     publish,
     ...(localBuild ? { platform: platformName(), typstVersion: await typstOnPath() } : {}),
+    ...(builtAt ? { builtAt } : {}),
   });
   emit(argv, out.result);
   if (out.exitCode !== 0) {
