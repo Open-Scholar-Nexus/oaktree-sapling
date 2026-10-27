@@ -4,7 +4,7 @@
  * journal's metadata from journal.yml [R19], the `deposit/` folder and its reserved names
  * [R28], and prepare and upload, including moving from sandbox to production [R29].
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { mkdtempSync, writeFileSync, mkdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -762,6 +762,57 @@ describe('cmdUpload', () => {
     });
     expect(await recorded({ platform: 'darwin-arm64', typstVersion: null })).toMatchObject({
       typst_version: null,
+    });
+  });
+
+  describe('with no unsubmitted draft', () => {
+    afterEach(() => {
+      vi.unstubAllEnvs();
+      vi.restoreAllMocks();
+    });
+    const needsNewVersion = async () => {
+      const mystPath = paperRepo(
+        BARE_MYST + '  doi: 10.5072/zenodo.5\n  github: https://github.com/o/r\n',
+      );
+      writeFileSync(mystPath.replace('myst.yml', 'paper.pdf'), '%PDF');
+      withBuild(mystPath);
+      const record = { record_html: 'https://sandbox.zenodo.org/records/5' };
+      const { transport } = fakeTransport((r) =>
+        r.url.includes('/deposit/depositions/')
+          ? { json: dep({ id: 5, conceptrecid: 5, submitted: true, links: record }) }
+          : { json: [dep({ id: 5, conceptrecid: 5 })] },
+      );
+      const stderr: string[] = [];
+      vi.spyOn(process.stderr, 'write').mockImplementation((c) => {
+        stderr.push(String(c));
+        return true;
+      });
+      const out = await cmdUpload({
+        mystPath,
+        pdf: mystPath.replace('myst.yml', 'paper.pdf'),
+        tag: 'v1.0.0',
+        bundleOut: mystPath.replace('myst.yml', '_bundle'),
+        api: new ZenodoApi(transport, true, 't'),
+        git: fakeGit,
+        instanceRoot: null,
+        engineRoot: mystPath.replace('myst.yml', ''),
+      });
+      expect(out.exitCode).toBe(5);
+      return stderr.join('');
+    };
+
+    it('annotates the run in GitHub Actions', async () => {
+      vi.stubEnv('GITHUB_ACTIONS', 'true');
+      expect(await needsNewVersion()).toContain(
+        "::error title=Zenodo: editor must click 'New version'::No unsubmitted draft for this " +
+          'concept. Record: https://sandbox.zenodo.org/records/5',
+      );
+    });
+
+    it('prints no annotation in a terminal', async () => {
+      vi.stubEnv('GITHUB_ACTIONS', undefined);
+      vi.stubEnv('CI', undefined);
+      expect(await needsNewVersion()).not.toContain('::error');
     });
   });
 

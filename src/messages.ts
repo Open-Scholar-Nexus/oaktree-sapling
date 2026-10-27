@@ -1041,6 +1041,9 @@ export const workflow = {
   depositNeedsNewVersion: (recordUrl: string): string =>
     `no unsubmitted Zenodo draft for this concept DOI. Open the record, click New version, ` +
     `then re-run the failed Deposit version job or run oak release again: ${recordUrl}`,
+  depositNeedsNewVersionAnnotation: (recordUrl: string | undefined): string =>
+    `::error title=Zenodo: editor must click 'New version'::No unsubmitted draft for this ` +
+    `concept. Record: ${recordUrl ?? '(unavailable)'}`,
   depositTemplateBadName: (template: string): string =>
     `the build's myst.oak.yml names the typst template "${template}", which is neither a ` +
     `template directory nor a registry name (a name has no empty or ".." part and does not ` +
