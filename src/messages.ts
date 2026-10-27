@@ -1150,6 +1150,10 @@ export const workflow = {
     `oak release: could not get the build from GitHub (${why}). Check that gh is logged in ` +
     `with access to the repo.`,
   releaseFetched: (url: string): string => `oak release: using the build from ${url}`,
+  releaseNoBuild:
+    `oak release: --no-build deposits whatever is under _build as it is, which may be from ` +
+    `another tag or build, and the provenance records it as built on linux x86_64 with the ` +
+    `engine's typst, as in CI.`,
   releaseLocalBuild: (plugins: string[], systemTypst: boolean): string =>
     `oak release: --local-build runs the paper's code on this computer, with the Zenodo token ` +
     `in the environment. Plugins the paper adds: ${plugins.length ? plugins.join(', ') : 'none'}. ` +
