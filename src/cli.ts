@@ -482,7 +482,10 @@ async function cmdDeposit(argv: string[]): Promise<number> {
   }
   const token = zenodoToken(rest, sandbox);
   if (!token) {
-    process.stderr.write(msg.workflow.noZenodoToken('deposit', sandbox) + '\n');
+    const why = process.env.GITHUB_ACTIONS
+      ? msg.workflow.depositNoTokenInCi(sandbox)
+      : msg.workflow.noZenodoToken('deposit', sandbox);
+    process.stderr.write(why + '\n');
     return 2;
   }
   const api = new z.ZenodoApi(z.createFetchTransport(), sandbox, token);
@@ -607,6 +610,13 @@ async function cmdRelease(argv: string[]): Promise<number> {
   }
   const { sandbox } = env;
   const token = zenodoToken(argv, sandbox);
+  // The CI token is optional: a journal without one deposits from the terminal, so its run ends
+  // with a notice saying how.
+  if (!token && inActions) {
+    process.stderr.write(annotate('notice', msg.workflow.releaseNoTokenInCi(tag, sandbox)) + '\n');
+    emit(argv, { status: 'ok', deposit: 'skipped', reason: msg.workflow.releaseNoTokenReason });
+    return 0;
+  }
   if (!token) {
     process.stderr.write(msg.workflow.noZenodoToken('release', sandbox) + '\n');
     return 2;
