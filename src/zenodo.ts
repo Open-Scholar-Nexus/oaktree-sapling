@@ -29,10 +29,12 @@ import {
   mkdirSync,
   rmSync,
   copyFileSync,
+  mkdtempSync,
   readdirSync,
   statSync,
 } from 'node:fs';
 import { join, resolve, basename, relative, isAbsolute } from 'node:path';
+import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
 import AdmZip from 'adm-zip';
 import {
@@ -770,7 +772,8 @@ export function assertBundlePreconditions(repoRoot: string, engineRoot: string):
  * PDF again, on linux x86_64. `journal.zip` is a `git archive` of `journal`, the journal commit
  * the build used, unless `source.zip` holds it ({@link prepareJournalArchive}). `template.zip` holds a template that is not
  * oak's own [R76]; see {@link templateArchiveDir}. `myst.oak.yml` records what the build
- * resolved; its paths are the build machine's.
+ * resolved; its paths are the build machine's. `engineZip` is an `engine.zip` that
+ * {@link prepareEngineArchive} already made; without it the engine is archived here.
  */
 export async function buildBundle(
   out: string,
@@ -780,6 +783,7 @@ export async function buildBundle(
   provenance: BundleProvenance,
   git: GitContext,
   journal: JournalArchive | null = null,
+  engineZip: string | null = null,
 ): Promise<string[]> {
   assertBundlePreconditions(repoRoot, engineRoot);
   const depositDir = join(repoRoot, 'deposit');
@@ -794,8 +798,8 @@ export async function buildBundle(
 
   copyFileSync(pdf, join(out, 'paper.pdf'));
   await git.gitArchive(repoRoot, resolve(join(out, 'source.zip')));
-  await git.gitArchive(engineRoot, resolve(join(out, 'engine.zip')));
-  assertEngineArchive(join(out, 'engine.zip'));
+  if (engineZip) copyFileSync(engineZip, join(out, 'engine.zip'));
+  else await prepareEngineArchive(engineRoot, git, resolve(join(out, 'engine.zip')));
   for (const name of ['myst.yml', DERIVED_CONFIG_FILE]) {
     const src = join(repoRoot, name);
     if (existsSync(src)) copyFileSync(src, join(out, name));
@@ -829,7 +833,17 @@ export class EngineArchiveError extends Error {}
  *  release tags, so any other ref archives a zip without them [R107]. */
 const ENGINE_ARCHIVE_REQUIRED = ['dist/cli.cjs', 'bin/typst'];
 
-/** Refuses an `engine.zip` that cannot render the PDF it is deposited beside [R107]. */
+/** Archives oak's checkout at `engineRoot` to `outZip` as `engine.zip`, refusing one that
+ *  cannot render the PDF it is deposited beside [R107]. */
+export async function prepareEngineArchive(
+  engineRoot: string,
+  git: GitContext,
+  outZip: string,
+): Promise<void> {
+  await git.gitArchive(engineRoot, outZip);
+  assertEngineArchive(outZip);
+}
+
 function assertEngineArchive(zipPath: string): void {
   let names: string[] = [];
   try {
@@ -1003,6 +1017,16 @@ function readTypstVersion(engineRoot: string): string | null {
  * follows the committed DOI's prefix, so a tag cannot reach the wrong one [R4]; `api` must agree.
  */
 export async function cmdUpload(input: UploadInput): Promise<Outcome> {
+  const work = mkdtempSync(join(tmpdir(), 'oak-engine-'));
+  try {
+    return await fillDraft(input, join(work, 'engine.zip'));
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
+}
+
+/** {@link cmdUpload}, with `engineZip` the path its `engine.zip` is made at. */
+async function fillDraft(input: UploadInput, engineZip: string): Promise<Outcome> {
   const { mystPath, pdf, tag, bundleOut, api, git, instanceRoot, engineRoot } = input;
   const sandbox = api.sandbox;
   const doc = readDoc(mystPath);
@@ -1036,11 +1060,13 @@ export async function cmdUpload(input: UploadInput): Promise<Outcome> {
   try {
     assertBundlePreconditions(repoRoot, engineRoot);
     journal = await prepareJournalArchive(repoRoot, instanceRoot, git, { repo, commit: sha });
+    await prepareEngineArchive(engineRoot, git, engineZip);
   } catch (e) {
     if (
       e instanceof BundleCollisionError ||
       e instanceof TemplateArchiveError ||
-      e instanceof JournalArchiveError
+      e instanceof JournalArchiveError ||
+      e instanceof EngineArchiveError
     ) {
       return err(2, e.message);
     }
@@ -1113,13 +1139,16 @@ export async function cmdUpload(input: UploadInput): Promise<Outcome> {
     typst_version:
       input.typstVersion !== undefined ? input.typstVersion : readTypstVersion(engineRoot),
   };
-  let files: string[];
-  try {
-    files = await buildBundle(bundleOut, pdf, repoRoot, engineRoot, provenance, git, journal);
-  } catch (e) {
-    if (e instanceof EngineArchiveError) return err(2, e.message);
-    throw e;
-  }
+  const files = await buildBundle(
+    bundleOut,
+    pdf,
+    repoRoot,
+    engineRoot,
+    provenance,
+    git,
+    journal,
+    engineZip,
+  );
 
   for (const p of files) {
     process.stderr.write(`[upload] upload ${basename(p)}\n`);

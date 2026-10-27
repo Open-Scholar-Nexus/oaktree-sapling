@@ -974,6 +974,34 @@ describe('deposit integrity ([R107])', () => {
     ).rejects.toThrow(EngineArchiveError);
   });
 
+  it('refuses an engine.zip that carries no engine before any Zenodo write', async () => {
+    const mystPath = paperRepo(
+      BARE_MYST + '  doi: 10.5072/zenodo.5\n  github: https://github.com/o/r\n',
+    );
+    writeFileSync(mystPath.replace('myst.yml', 'paper.pdf'), '%PDF');
+    withBuild(mystPath);
+    const hollow: GitContext = {
+      ...fakeGit,
+      async gitArchive(_r, outZip) {
+        new AdmZip().writeZip(outZip);
+      },
+    };
+    const { transport, calls } = fakeTransport(() => ({ json: [] }));
+    const out = await cmdUpload({
+      mystPath,
+      pdf: mystPath.replace('myst.yml', 'paper.pdf'),
+      tag: 'v1.0.0',
+      bundleOut: mystPath.replace('myst.yml', '_bundle'),
+      api: new ZenodoApi(transport, true, 't'),
+      git: hollow,
+      instanceRoot: null,
+      engineRoot: mystPath.replace('myst.yml', ''),
+    });
+    expect(out.exitCode).toBe(2);
+    expect(String(out.result.message)).toContain('dist/cli.cjs, bin/typst');
+    expect(calls).toEqual([]);
+  });
+
   it('encodes an author-controlled filename into the upload path', async () => {
     const seen: string[] = [];
     const { transport } = fakeTransport((r) => {
