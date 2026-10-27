@@ -457,6 +457,12 @@ describe('readStampedTemplate / resolveTemplateDir ([R76])', () => {
       expect(t('acme/mine')).toBe(join(paper, '_build/templates/typst/acme/mine'));
       expect(t('typst/acme/mine')).toBe(join(paper, '_build/templates/typst/acme/mine'));
     });
+    it('refuses a name that would leave _build/templates', () => {
+      // myst.oak.yml is written by the build, which runs paper code.
+      for (const n of ['../../../../.ssh', 'typst/../../x', 'a//b', 'a/', '/etc/ssh', '..']) {
+        expect(() => resolveTemplateDir(n, paper), n).toThrow(TemplateArchiveError);
+      }
+    });
   });
 
   describe('a build made in CI, deposited from a clone', () => {
