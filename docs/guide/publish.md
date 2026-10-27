@@ -53,6 +53,11 @@ A published paper keeps one DOI for all its versions, and each version gets a DO
 
 Once a paper is published, every pull request to it gets a comment reminding the editors to click [**New version**](#click-new-version) on Zenodo, and the `editor-action-needed` label.
 
+(local-build)=
+## Building on your computer
+
+`oak release --local-build` builds the paper on your computer and deposits that build. The build runs the paper's code: MyST loads the plugins the paper's `myst.yml` lists, as JavaScript with your permissions, while the Zenodo token is in the environment. `oak` warns first and lists the plugins the paper adds beyond the journal's and the engine's gallery plugin. Set up any environment `paper-environment.yml` describes yourself: `oak` does not install it, since installing runs package scripts.
+
 ## Leaving files out of the deposit
 
 `source.zip` holds what is committed at the tag. To leave a committed folder out, such as a large data set, mark it in `.gitattributes`:

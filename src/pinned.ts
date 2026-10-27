@@ -1,6 +1,6 @@
 /**
- * pinned.ts: hands `oak build`, `validate` and `start` to the oak version the paper pins, and
- * `oak bootstrap` to the one `--engine-version` names.
+ * pinned.ts: hands `oak build`, `validate`, `start`, `release` and `deposit` to the oak version
+ * the paper pins, and `oak bootstrap` to the one `--engine-version` names.
  *
  * The paper's `myst.yml` names the version and its `pins.yml` the repository, as in CI, so a
  * local run builds with the same oak. Side effects are injected so the tests stay offline.
@@ -12,7 +12,7 @@ import * as msg from './messages.js';
 import { UserError } from './messages.js';
 import { ENGINE_VERSION, GITHUB_REPO } from './schema.js';
 
-export type PaperVerb = 'build' | 'validate' | 'start';
+export type PaperVerb = 'build' | 'validate' | 'start' | 'release' | 'deposit';
 export type HandoffVerb = PaperVerb | 'bootstrap';
 
 /** Where the version came from: the paper's files, or `--engine-version` and `--engine-repo`. */
@@ -104,7 +104,13 @@ export interface HandoffContext {
   env: NodeJS.ProcessEnv;
   /** `<cacheRoot>/oak/<owner>/<name>/<tag>` holds each fetched version. */
   cacheRoot: string;
+  /** Whether this oak runs from a git checkout, which `engine.zip` is archived from. */
+  runningIsCheckout: boolean;
 }
+
+/** The verbs that archive oak's checkout into the deposit, so they never run from the npm
+ *  package, which has no git history. */
+const ARCHIVING_VERBS: HandoffVerb[] = ['release', 'deposit'];
 
 /**
  * Runs the verb with the oak the paper pins and returns its exit code, or null when this oak
@@ -134,7 +140,10 @@ export async function runVersion(
   deps: HandoffDeps,
 ): Promise<number | null> {
   const { verb } = ctx;
-  if (usesRunning(ctx) || pin.version === ctx.running) return null;
+  if (usesRunning(ctx)) return null;
+  if (pin.version === ctx.running && (ctx.runningIsCheckout || !ARCHIVING_VERBS.includes(verb))) {
+    return null;
+  }
 
   // Both reach `git clone` and the cache path, so they are checked before either.
   if (!ENGINE_VERSION.test(pin.version)) {

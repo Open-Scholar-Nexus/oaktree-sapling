@@ -2,7 +2,7 @@
  * The deposit logic, with a fake transport (no network) and a fake git context (no git or gh):
  * pagination past 100 [R20] [R35], finding a deposit by the paper's id first [R7], the
  * journal's metadata from journal.yml [R19], the `deposit/` folder and its reserved names
- * [R28], and prepare and publish, including moving from sandbox to production [R29].
+ * [R28], and prepare and upload, including moving from sandbox to production [R29].
  */
 import { describe, it, expect } from 'vitest';
 import { mkdtempSync, writeFileSync, mkdirSync, readFileSync } from 'node:fs';
@@ -17,7 +17,7 @@ import {
   buildBundle,
   paperUrn,
   cmdPrepare,
-  cmdPublish,
+  cmdUpload,
   defaultSiteUrl,
   BundleCollisionError,
   assertBundlePreconditions,
@@ -624,7 +624,7 @@ describe('the Project Website link', () => {
   });
 });
 
-describe('cmdPublish', () => {
+describe('cmdUpload', () => {
   it('populates the reserved draft: metadata overwrite + all bundle files uploaded', async () => {
     const mystPath = paperRepo(
       BARE_MYST + '  doi: 10.5072/zenodo.5\n  github: https://github.com/o/r\n',
@@ -646,7 +646,7 @@ describe('cmdPublish', () => {
       return { json: {} };
     });
     const api = new ZenodoApi(transport, true, 't');
-    const out = await cmdPublish({
+    const out = await cmdUpload({
       mystPath,
       pdf: mystPath.replace('myst.yml', 'paper.pdf'),
       tag: 'v1.0.0',
@@ -667,13 +667,122 @@ describe('cmdPublish', () => {
     ]);
   });
 
-  it('errors when --sandbox disagrees with the committed DOI prefix', async () => {
+  it('records the typst that exported the PDF, else the pinned one', async () => {
+    const mystPath = paperRepo(
+      BARE_MYST + '  doi: 10.5072/zenodo.5\n  github: https://github.com/o/r\n',
+    );
+    const root = mystPath.replace('myst.yml', '');
+    writeFileSync(join(root, 'paper.pdf'), '%PDF');
+    writeFileSync(join(root, 'typst.version'), '0.14.2\n');
+    withBuild(mystPath);
+    const recorded = async (over: { platform?: string; typstVersion?: string | null }) => {
+      const provenance: Array<Record<string, unknown>> = [];
+      const { transport } = fakeTransport((r) => {
+        if (r.method === 'GET' && r.url.includes('/deposit/depositions/')) {
+          return { json: dep({ id: 5, conceptrecid: 5, submitted: false }) };
+        }
+        if (r.method === 'GET') return { json: [dep({ id: 5, conceptrecid: 5 })] };
+        if (r.method === 'PUT' && r.url.endsWith('/publication-provenance.json')) {
+          provenance.push(JSON.parse(Buffer.from(r.opts.body!).toString('utf8')));
+        }
+        if (r.method === 'PUT' && !r.url.includes('/bucket/')) {
+          return { json: dep({ id: 5, conceptrecid: 5 }) };
+        }
+        return { json: {} };
+      });
+      const out = await cmdUpload({
+        mystPath,
+        pdf: join(root, 'paper.pdf'),
+        tag: 'v1.0.0',
+        bundleOut: join(root, '_bundle'),
+        api: new ZenodoApi(transport, true, 't'),
+        git: fakeGit,
+        instanceRoot: null,
+        engineRoot: root,
+        ...over,
+      });
+      expect(out.exitCode).toBe(0);
+      return provenance[0];
+    };
+    expect(await recorded({})).toMatchObject({
+      platform: 'linux-x86_64',
+      typst_version: '0.14.2',
+    });
+    expect(await recorded({ platform: 'darwin-arm64', typstVersion: '0.13.1' })).toMatchObject({
+      platform: 'darwin-arm64',
+      typst_version: '0.13.1',
+    });
+    expect(await recorded({ platform: 'darwin-arm64', typstVersion: null })).toMatchObject({
+      typst_version: null,
+    });
+  });
+
+  it('publishes the filled draft only when asked, after every file is up', async () => {
+    const mystPath = paperRepo(
+      BARE_MYST + '  doi: 10.5072/zenodo.5\n  github: https://github.com/o/r\n',
+    );
+    writeFileSync(mystPath.replace('myst.yml', 'paper.pdf'), '%PDF');
+    withBuild(mystPath);
+    const run = async (publish: boolean) => {
+      const { transport, calls } = fakeTransport((r) => {
+        if (r.method === 'POST' && r.url.endsWith('/actions/publish')) {
+          return {
+            json: dep({
+              id: 5,
+              conceptrecid: 5,
+              submitted: true,
+              doi: '10.5072/zenodo.5',
+              links: { record_html: 'https://sandbox.zenodo.org/records/5' },
+            }),
+          };
+        }
+        if (r.method === 'GET' && r.url.includes('/deposit/depositions/')) {
+          return { json: dep({ id: 5, conceptrecid: 5, submitted: false }) };
+        }
+        if (r.method === 'GET') return { json: [dep({ id: 5, conceptrecid: 5 })] };
+        if (r.method === 'PUT' && !r.url.includes('/bucket/'))
+          return { json: dep({ id: 5, conceptrecid: 5 }) };
+        return { json: {} };
+      });
+      const out = await cmdUpload({
+        mystPath,
+        pdf: mystPath.replace('myst.yml', 'paper.pdf'),
+        tag: 'v1.0.0',
+        bundleOut: mystPath.replace('myst.yml', '_bundle'),
+        api: new ZenodoApi(transport, true, 't'),
+        git: fakeGit,
+        instanceRoot: null,
+        engineRoot: mystPath.replace('myst.yml', ''),
+        publish,
+      });
+      return { out, calls };
+    };
+
+    const draft = await run(false);
+    expect(draft.calls.some((c) => c.url.endsWith('/actions/publish'))).toBe(false);
+    expect(draft.out.result.published).toBe(false);
+
+    const published = await run(true);
+    const publishAt = published.calls.findIndex((c) => c.url.endsWith('/actions/publish'));
+    expect(published.calls[publishAt]!.method).toBe('POST');
+    expect(published.calls[publishAt]!.url).toBe(
+      'https://sandbox.zenodo.org/api/deposit/depositions/5/actions/publish',
+    );
+    const lastUpload = published.calls.map((c) => c.url.includes('/bucket/')).lastIndexOf(true);
+    expect(publishAt).toBeGreaterThan(lastUpload);
+    expect(published.out.result).toMatchObject({
+      published: true,
+      record_url: 'https://sandbox.zenodo.org/records/5',
+    });
+  });
+
+  it('errors when the API environment disagrees with the committed DOI prefix', async () => {
     const mystPath = paperRepo(
       BARE_MYST + '  doi: 10.5072/zenodo.5\n  github: https://github.com/o/r\n',
     );
     writeFileSync(mystPath.replace('myst.yml', 'paper.pdf'), '%PDF');
     const noop = new ZenodoApi(fakeTransport(() => ({ json: {} })).transport, false, 't');
-    const out = await cmdPublish({
+    const out = await cmdUpload({
       mystPath,
       pdf: mystPath.replace('myst.yml', 'paper.pdf'),
       tag: 'v1.0.0',
@@ -692,7 +801,7 @@ describe('cmdPublish', () => {
     );
     writeFileSync(mystPath.replace('myst.yml', 'paper.pdf'), '%PDF');
     const { transport, calls } = fakeTransport(() => ({ json: {} }));
-    const out = await cmdPublish({
+    const out = await cmdUpload({
       mystPath,
       pdf: mystPath.replace('myst.yml', 'paper.pdf'),
       tag: 'v1.0.0',
@@ -713,7 +822,7 @@ describe('cmdPublish', () => {
     );
     writeFileSync(mystPath.replace('myst.yml', 'paper.pdf'), '%PDF');
     const { transport, calls } = fakeTransport(() => ({ json: {} }));
-    const out = await cmdPublish({
+    const out = await cmdUpload({
       mystPath,
       pdf: mystPath.replace('myst.yml', 'paper.pdf'),
       tag: 'v1.0.0',
@@ -764,7 +873,7 @@ describe('deposit integrity ([R107])', () => {
       }
       return { json: {} };
     });
-    const out = await cmdPublish({
+    const out = await cmdUpload({
       mystPath,
       pdf: mystPath.replace('myst.yml', 'paper.pdf'),
       tag: 'v1.2.3',
@@ -788,7 +897,7 @@ describe('deposit integrity ([R107])', () => {
     );
     writeFileSync(mystPath.replace('myst.yml', 'paper.pdf'), '%PDF');
     const { transport, calls } = fakeTransport(() => ({ json: [] }));
-    const out = await cmdPublish({
+    const out = await cmdUpload({
       mystPath,
       pdf: mystPath.replace('myst.yml', 'paper.pdf'),
       tag: 'v1.0.0',
@@ -881,7 +990,7 @@ describe('finding the deposit, and the checks before it [R100] [R101]', () => {
       'version: 1\nproject:\n  id: p\n  doi: 10.5072/zenodo.5\n  github: https://github.com/o/r\n',
     );
     const { transport, calls } = fakeTransport(() => ({ json: [] }));
-    const out = await cmdPublish({
+    const out = await cmdUpload({
       mystPath: join(root, 'myst.yml'),
       pdf: join(root, 'paper.pdf'),
       tag: 'v1.0.0',
@@ -970,7 +1079,7 @@ describe('journal.zip', () => {
   }
 
   function publish(root: string, git: GitContext, api: ZenodoApi, instanceRoot: string | null) {
-    return cmdPublish({
+    return cmdUpload({
       mystPath: join(root, 'myst.yml'),
       pdf: join(root, 'paper.pdf'),
       tag: 'v1.0.0',
