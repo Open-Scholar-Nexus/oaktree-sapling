@@ -1100,6 +1100,9 @@ async function fillDraft(input: UploadInput, engineZip: string): Promise<Outcome
   if (dep.submitted) {
     // An editor clicks "New version" on Zenodo to create the empty draft.
     const recordUrl = dep.links?.record_html ?? dep.links?.html;
+    if (msg.inCI()) {
+      process.stderr.write(msg.workflow.depositNeedsNewVersionAnnotation(recordUrl) + '\n');
+    }
     return err(5, msg.workflow.depositNeedsNewVersion(recordUrl ?? '(URL unavailable)'), {
       record_url: recordUrl,
     });
