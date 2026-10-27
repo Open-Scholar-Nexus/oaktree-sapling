@@ -31,9 +31,18 @@ A stable `vX.Y.Z` is `latest` as soon as it is released, and conformance runs af
 
 ## Conformance
 
-`conformance.yml` tests a release on the test paper repository named by the `CONFORMANCE_TEST_REPO` variable, with `oak conformance` ([what it runs](https://scholar.nexus/oaktree-sapling/reference/cli#conformance)), and uploads the result to the release as `conformance.json`. A run on a release the test repository already pins ends green with a `NOT RUN` warning and uploads nothing; to test again, cut a new tag. It starts on the newest release after every successful `cut-engine-release` run, and can be started by hand from Actions with a tag, or with no tag to only reset the test repository.
+`conformance.yml` tests a release on the test paper repository named by the `CONFORMANCE_TEST_REPO` variable, with `oak conformance` ([what it runs](https://scholar.nexus/oaktree-sapling/reference/cli#conformance)), and uploads the result to the release as `conformance.json`. A run on a release the test repository already pins ends green with a `NOT RUN` warning and uploads nothing; to test again, cut a new tag. It starts on the newest release after every successful `cut-engine-release` run from `main`, and can be started by hand from Actions with a tag, or with no tag to only reset the test repository.
 
-It reads two secrets from the `conformance` environment: `CONFORMANCE_PAT`, a fine-grained token for the test repository, and `CONFORMANCE_FORK_PAT`, for the account that owns the fork named by the `CONFORMANCE_FORK_REPO` variable. With that variable unset, the fork preview is not tested. The environment admits only `main` and `move`, with no required reviewer. The test repository keeps its own Cloudflare and Zenodo (sandbox only) secrets.
+It reads two secrets from the `conformance` environment: `CONFORMANCE_PAT`, a fine-grained token for the test repository, and `CONFORMANCE_FORK_PAT`, for the account that owns the fork named by the `CONFORMANCE_FORK_REPO` variable. With that variable unset, the fork preview is not tested. The environment admits only `main` and `staging`, with no required reviewer. The test repository keeps its own Cloudflare and Zenodo (sandbox only) secrets.
+
+To test a change to conformance before merging it, push its branch to `staging`, cut a dev release from `staging`, and start conformance on `staging` with that tag. A cut from `staging` starts no run on its own, since that run would use `main`'s code.
+
+```bash
+git push -f origin my-branch:staging
+gh workflow run cut-engine-release.yml --ref staging -f version=v0.3.0-dev.16
+# once the cut finishes
+gh workflow run conformance.yml --ref staging -f tag=v0.3.0-dev.16
+```
 
 ## Pruning dev releases
 

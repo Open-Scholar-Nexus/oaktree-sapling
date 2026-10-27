@@ -27,7 +27,8 @@ concurrency:
 jobs:
   run:
     runs-on: ubuntu-latest
-    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    # Expect manual runs for dev releases cut from branches other than main.
+    if: ${{ github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main') }}
     environment: conformance
     permissions:
       contents: write # upload conformance.json to the release
