@@ -533,7 +533,7 @@ async function cmdDeposit(argv: string[]): Promise<number> {
       pdf: resolve(pdf),
       tag,
       siteUrl,
-      bundleOut: resolve(flag(rest, 'bundle-out') ?? '_bundle'),
+      bundleOut: resolve(flag(rest, 'bundle-out') ?? join('_build', 'bundle')),
       api,
       git: gh.realGitContext,
       instanceRoot,
@@ -665,7 +665,7 @@ async function cmdRelease(argv: string[]): Promise<number> {
   }
 
   const api = new z.ZenodoApi(z.createFetchTransport(), sandbox, token);
-  const bundleOut = resolve(flag(argv, 'bundle-out') ?? '_bundle');
+  const bundleOut = resolve(flag(argv, 'bundle-out') ?? join('_build', 'bundle'));
   const publish = has(argv, 'publish-without-review');
   const out = await z.cmdUpload({
     mystPath,
