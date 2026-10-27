@@ -616,6 +616,40 @@ export function resolveTemplateDir(template: string, paperRoot: string): string 
 }
 
 /**
+ * Maps an absolute path from a build made on another machine, such as the CI build `oak release`
+ * downloads, onto this one. The first `extends:` entry is the build's `<engine>/paper-base.yml`
+ * ({@link extendsChainFor}), and CI checks the engine out at `<workspace>/.engine`, so a path
+ * under the build's engine maps to `engineRoot` and one under its workspace to this clone. A
+ * path that exists here is returned as it is.
+ */
+export function rebaseBuildPath(path: string, paperRoot: string, engineRoot: string): string {
+  if (!isAbsolute(path) || existsSync(path)) return path;
+  const derived = join(paperRoot, DERIVED_CONFIG_FILE);
+  if (!existsSync(derived)) return path;
+  const first = readDoc(derived).getIn(['extends', 0]);
+  if (typeof first !== 'string' || basename(first) !== 'paper-base.yml') return path;
+
+  const under = (root: string): string | null => {
+    const rel = relative(root, path);
+    return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel)) ? rel : null;
+  };
+  const buildEngine = resolve(first, '..');
+  const inEngine = under(buildEngine);
+  if (inEngine !== null) return join(engineRoot, inEngine);
+  if (basename(buildEngine) !== '.engine') return path;
+  const inWorkspace = under(resolve(buildEngine, '..'));
+  return inWorkspace === null ? path : join(repoRootOf(paperRoot), inWorkspace);
+}
+
+/** The nearest directory at or above `dir` holding `.git`, else `dir`. */
+function repoRootOf(dir: string): string {
+  for (let d = resolve(dir); ; d = resolve(d, '..')) {
+    if (existsSync(join(d, '.git'))) return d;
+    if (d === resolve(d, '..')) return resolve(dir);
+  }
+}
+
+/**
  * The template directory this deposit must archive, or null when nothing needs adding: when the
  * template is inside oak's checkout, already archived as `engine.zip`.
  *
@@ -623,8 +657,9 @@ export function resolveTemplateDir(template: string, paperRoot: string): string 
  * rendered again [design §7] [R66], so a template that cannot be found is an error.
  */
 export function templateArchiveDir(paperRoot: string, engineRoot: string): string | null {
-  const template = readStampedTemplate(paperRoot);
-  if (!template) return null;
+  const stamped = readStampedTemplate(paperRoot);
+  if (!stamped) return null;
+  const template = rebaseBuildPath(stamped, paperRoot, engineRoot);
 
   const dir = resolveTemplateDir(template, paperRoot);
   const rel = relative(resolve(engineRoot), resolve(dir));

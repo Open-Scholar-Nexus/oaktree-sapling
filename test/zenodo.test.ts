@@ -28,6 +28,8 @@ import {
   ZENODO_SANDBOX,
   readStampedTemplate,
   resolveTemplateDir,
+  rebaseBuildPath,
+  templateArchiveDir,
   type ZenodoTransport,
   type TransportResponse,
   type GitContext,
@@ -454,6 +456,46 @@ describe('readStampedTemplate / resolveTemplateDir ([R76])', () => {
       );
       expect(t('acme/mine')).toBe(join(paper, '_build/templates/typst/acme/mine'));
       expect(t('typst/acme/mine')).toBe(join(paper, '_build/templates/typst/acme/mine'));
+    });
+  });
+
+  describe('a build made in CI, deposited from a clone', () => {
+    const ws = '/home/runner/work/p/p';
+    const derived = (template: string) =>
+      `project:\n  exports:\n  - id: typst-pdf\n    format: typst\n    template: ${template}\n` +
+      `extends:\n- ${ws}/.engine/paper-base.yml\n- ${ws}/_build/journal/o/j/brand/brand.yml\n`;
+    const clone = () => {
+      const root = mkdtempSync(join(tmpdir(), 'oak-rebase-'));
+      mkdirSync(join(root, '.git'));
+      return root;
+    };
+
+    it("maps the build's engine template onto this engine, so engine.zip covers it", () => {
+      const root = clone();
+      writeFileSync(join(root, 'myst.oak.yml'), derived(`${ws}/.engine/templates/typst`));
+      const engine = mkdtempSync(join(tmpdir(), 'oak-engine-'));
+      mkdirSync(join(engine, 'templates/typst'), { recursive: true });
+      writeFileSync(join(engine, 'templates/typst/template.yml'), 'jtex: v1\n');
+      expect(rebaseBuildPath(`${ws}/.engine/templates/typst`, root, engine)).toBe(
+        join(engine, 'templates/typst'),
+      );
+      expect(templateArchiveDir(root, engine)).toBeNull();
+    });
+
+    it("maps a path in the build's workspace onto this clone", () => {
+      const root = clone();
+      writeFileSync(join(root, 'myst.oak.yml'), derived('x'));
+      const journal = `${ws}/_build/journal/o/j/typst`;
+      expect(rebaseBuildPath(journal, root, '/engine')).toBe(
+        join(root, '_build/journal/o/j/typst'),
+      );
+    });
+
+    it('keeps a path that exists here, and one outside the build', () => {
+      const root = clone();
+      writeFileSync(join(root, 'myst.oak.yml'), derived('x'));
+      expect(rebaseBuildPath(root, root, '/engine')).toBe(root);
+      expect(rebaseBuildPath('/elsewhere/typst', root, '/engine')).toBe('/elsewhere/typst');
     });
   });
 });
