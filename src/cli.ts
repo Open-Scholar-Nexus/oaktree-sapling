@@ -19,7 +19,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import type { ComposeInput } from './compose.js';
 import type { MaterializeInput, StartOpts } from './materialize.js';
 import type { JournalStamp } from './schema.js';
-import type { HandoffContext, HandoffDeps, HandoffVerb } from './pinned.js';
+import type { HandoffContext, HandoffDeps, HandoffVerb, PaperVerb } from './pinned.js';
 import * as msg from './messages.js';
 import { annotate, inCI, UserError } from './messages.js';
 import { readDoc } from './yaml-io.js';
@@ -437,11 +437,32 @@ function emit(
   for (const line of (human ?? summarize)(result)) process.stderr.write(line + '\n');
 }
 
-/** `oak deposit <prepare|publish|status>`, the Zenodo verbs. Documented at DOCS.deposit. */
+/** The Zenodo token for the sandbox or production: `--token`, else the environment's [R102]. A
+ *  sandbox run never uses the production one [R102]. */
+function zenodoToken(argv: string[], sandbox: boolean): string | undefined {
+  return (
+    flag(argv, 'token') ?? (sandbox ? process.env.ZENODO_TOKEN_SANDBOX : process.env.ZENODO_TOKEN)
+  );
+}
+
+/** Whether the committed DOI is a sandbox one, or the refusal for `oak <verb>`. The DOI picks
+ *  the environment, so a tag cannot reach the wrong one [R4]. */
+async function sandboxFromDoi(
+  mystPath: string,
+  verb: string,
+): Promise<{ sandbox: boolean } | { error: string }> {
+  const doi = readDoc(mystPath).getIn(['project', 'doi']);
+  if (typeof doi !== 'string' || !doi) return { error: msg.workflow.noDoi(verb) };
+  const parsed = (await import('./schema.js')).parseZenodoDoi(doi);
+  if (!parsed) return { error: msg.workflow.doiNotZenodo(verb, doi) };
+  return { sandbox: parsed.sandbox };
+}
+
+/** `oak deposit <prepare|upload|status>`, the Zenodo verbs. Documented at DOCS.deposit. */
 async function cmdDeposit(argv: string[]): Promise<number> {
   const sub = argv[0];
   const rest = argv.slice(1);
-  if (sub !== 'prepare' && sub !== 'publish' && sub !== 'status') {
+  if (sub !== 'prepare' && sub !== 'upload' && sub !== 'status') {
     process.stderr.write(msg.workflow.depositUsage + '\n');
     return 2;
   }
@@ -449,14 +470,19 @@ async function cmdDeposit(argv: string[]): Promise<number> {
   const gh = await import('./gh.js');
 
   const mystPath = mystPathOf(rest);
-  const sandbox = has(rest, 'sandbox');
   const siteUrl = flag(rest, 'site-url') ?? process.env.SITE_URL;
-  // The environment picks the token, as in `oak release` [R102]; a sandbox run never uses the
-  // production one [R102].
-  const token =
-    flag(rest, 'token') ?? (sandbox ? process.env.ZENODO_TOKEN_SANDBOX : process.env.ZENODO_TOKEN);
+  let sandbox = has(rest, 'sandbox');
+  if (sub === 'upload') {
+    const env = await sandboxFromDoi(mystPath, 'deposit upload');
+    if ('error' in env) {
+      process.stderr.write(env.error + '\n');
+      return 2;
+    }
+    sandbox = env.sandbox;
+  }
+  const token = zenodoToken(rest, sandbox);
   if (!token) {
-    process.stderr.write(msg.workflow.depositNoToken(sandbox) + '\n');
+    process.stderr.write(msg.workflow.noZenodoToken('deposit', sandbox) + '\n');
     return 2;
   }
   const api = new z.ZenodoApi(z.createFetchTransport(), sandbox, token);
@@ -468,15 +494,15 @@ async function cmdDeposit(argv: string[]): Promise<number> {
   const instanceRoot = instance.root;
 
   if (sub === 'prepare') {
-    const repo = gh.currentRepo(flag(rest, 'repo'));
+    const repo = gh.currentRepo(flag(rest, 'repo'), dirname(mystPath));
     if (!repo) {
       process.stderr.write(msg.workflow.depositNoRepo + '\n');
       return 2;
     }
     const out = await z.cmdPrepare({ mystPath, repo, siteUrl, api, instanceRoot });
-    // Open the DOI pull request for the myst.yml write [R3]. Without gh or a token (a local
-    // sandbox run) the write is left for a person to commit.
-    if (out.exitCode === 0 && !has(rest, 'no-pr') && process.env.GH_TOKEN) {
+    // Open the DOI pull request for the myst.yml write [R3]. Without a gh login the write is
+    // left for a person to commit.
+    if (out.exitCode === 0 && !has(rest, 'no-pr') && gh.ghLoggedIn()) {
       try {
         const url = gh.openDoiPr(resolve(mystPath, '..'), {
           conceptDoi: String(out.result.concept_doi),
@@ -492,14 +518,14 @@ async function cmdDeposit(argv: string[]): Promise<number> {
     return out.exitCode;
   }
 
-  if (sub === 'publish') {
+  if (sub === 'upload') {
     const pdf = flag(rest, 'pdf');
     const tag = flag(rest, 'tag');
     if (!pdf || !tag) {
-      process.stderr.write(msg.workflow.depositPublishArgs + '\n');
+      process.stderr.write(msg.workflow.depositUploadArgs + '\n');
       return 2;
     }
-    const out = await z.cmdPublish({
+    const out = await z.cmdUpload({
       mystPath,
       pdf: resolve(pdf),
       tag,
@@ -526,23 +552,65 @@ function findExportedPdf(paperRoot: string): string | null {
   return hit ? join(dir, String(hit)) : null;
 }
 
-/** `oak release --tag vX [--no-build]`: builds, publishes the deposit, attaches the bundle to the
- *  tag's release, and comments on the commit or opens a failure issue. The environment follows
- *  the committed DOI. Documented at DOCS.release. */
+/** The version of the `typst` on PATH, which a local build exports with; null when none runs. */
+async function typstOnPath(): Promise<string | null> {
+  const { parseTypstVersion } = await import('./release.js');
+  try {
+    return parseTypstVersion(execFileSync('typst', ['--version'], { encoding: 'utf8' }));
+  } catch {
+    return null;
+  }
+}
+
+/** `linux-x86_64` and the like, as the deposit provenance names a platform. */
+function platformName(): string {
+  const arch = process.arch === 'x64' ? 'x86_64' : process.arch;
+  return `${process.platform}-${arch}`;
+}
+
+/**
+ * `oak release --tag vX [--local-build | --no-build] [--publish-without-review]`: deposits the
+ * tag's build, attaches the bundle to the tag's release, and comments on the commit. Outside
+ * GitHub Actions the build is the tag's Deposit version artifact, unless a flag says otherwise,
+ * and the clone must be at the tag. The environment follows the committed DOI. Documented at
+ * DOCS.release.
+ */
 async function cmdRelease(argv: string[]): Promise<number> {
   const tag = flag(argv, 'tag');
   if (!tag) {
     process.stderr.write(msg.workflow.releaseNoTag + '\n');
     return 2;
   }
+  const { PAPER_VERSION_TAG } = await import('./schema.js');
+  // It reaches git as a ref, so it is checked first.
+  if (!PAPER_VERSION_TAG.test(tag)) {
+    process.stderr.write(msg.workflow.releaseBadTag(tag) + '\n');
+    return 2;
+  }
+  const localBuild = has(argv, 'local-build');
+  const noBuild = has(argv, 'no-build');
+  if (localBuild && noBuild) {
+    process.stderr.write(msg.workflow.releaseBuildFlags + '\n');
+    return 2;
+  }
+  const inActions = Boolean(process.env.GITHUB_ACTIONS);
   const z = await import('./zenodo.js');
   const gh = await import('./gh.js');
+  const release = await import('./release.js');
 
-  // Build in a child process: myst's HTML build calls process.exit(0) on success, which would end
-  // `release` before the deposit. The parent then reads the PDF (_build/exports) and abstract
-  // (_build/site/content) from the same tree; `oak build` ignores release's extra flags.
-  // `--no-build` deposits a build made elsewhere: CI builds in a job holding no token.
   const paperRoot = resolve(flag(argv, 'paper') ?? '.');
+  const mystPath = mystPathOf(argv);
+  const env = await sandboxFromDoi(mystPath, 'release');
+  if ('error' in env) {
+    process.stderr.write(env.error + '\n');
+    return 2;
+  }
+  const { sandbox } = env;
+  const token = zenodoToken(argv, sandbox);
+  if (!token) {
+    process.stderr.write(msg.workflow.noZenodoToken('release', sandbox) + '\n');
+    return 2;
+  }
   // Found once and handed to the build, so the deposit archives the journal the build used and
   // reads its `zenodo:`.
   const instance = await resolveInstanceRoot(argv, paperRoot, 'release');
@@ -550,36 +618,34 @@ async function cmdRelease(argv: string[]): Promise<number> {
     process.stderr.write(instance.error + '\n');
     return 2;
   }
-  // The child gets no OAK_RESULT_FILE: the result is release's.
-  if (!has(argv, 'no-build')) {
-    const { OAK_RESULT_FILE: _, ...env } = process.env;
+  // `source.zip` and the provenance are HEAD's, and the metadata the working tree's myst.yml.
+  const sha = inActions ? null : release.assertAtTag(paperRoot, tag, gh.realCiBuildSource);
+
+  if (sha && !localBuild && !noBuild) {
+    const run = release.fetchCiBuild(paperRoot, tag, sha, gh.realCiBuildSource);
+    process.stderr.write(msg.workflow.releaseFetched(run.url) + '\n');
+  } else if (!noBuild) {
+    if (!inActions) {
+      const { readPin } = await import('./pinned.js');
+      const pin = readPin(paperRoot, ENGINE_REPO_DEFAULT);
+      const plugins = release.addedPlugins(paperRoot, instance.root, pin);
+      const systemTypst = platformName() !== 'linux-x86_64';
+      process.stderr.write(
+        annotate('warning', msg.workflow.releaseLocalBuild(plugins, systemTypst)) + '\n',
+      );
+    }
+    // Build in a child process: myst's HTML build calls process.exit(0) on success, which would
+    // end `release` before the deposit. The parent then reads the PDF (_build/exports) and
+    // abstract (_build/site/content) from the same tree; `oak build` ignores release's extra
+    // flags. The child gets no OAK_RESULT_FILE: the result is release's.
+    const { OAK_RESULT_FILE: _, ...childEnv } = process.env;
     // The build must be this oak's, since this oak deposits it.
-    env[(await import('./pinned.js')).USE_RUNNING_ENV] = '1';
+    childEnv[(await import('./pinned.js')).USE_RUNNING_ENV] = '1';
     const journalArgs = instance.root === null ? ['--no-instance'] : ['--instance', instance.root];
     execFileSync(process.execPath, [process.argv[1]!, 'build', ...argv, ...journalArgs], {
       stdio: 'inherit',
-      env,
+      env: childEnv,
     });
-  }
-  const mystPath = mystPathOf(argv);
-
-  const doi = readDoc(mystPath).getIn(['project', 'doi']);
-  if (typeof doi !== 'string' || !doi) {
-    process.stderr.write(msg.workflow.releaseNoDoi + '\n');
-    return 2;
-  }
-  const { parseZenodoDoi } = await import('./schema.js');
-  const zenodoDoi = parseZenodoDoi(doi);
-  if (!zenodoDoi) {
-    process.stderr.write(msg.workflow.releaseNotZenodoDoi(doi) + '\n');
-    return 2;
-  }
-  const sandbox = zenodoDoi.sandbox;
-  const token =
-    flag(argv, 'token') ?? (sandbox ? process.env.ZENODO_TOKEN_SANDBOX : process.env.ZENODO_TOKEN);
-  if (!token) {
-    process.stderr.write(msg.workflow.releaseNoToken(sandbox) + '\n');
-    return 2;
   }
 
   const pdf = findExportedPdf(paperRoot);
@@ -590,7 +656,8 @@ async function cmdRelease(argv: string[]): Promise<number> {
 
   const api = new z.ZenodoApi(z.createFetchTransport(), sandbox, token);
   const bundleOut = resolve(flag(argv, 'bundle-out') ?? '_bundle');
-  const out = await z.cmdPublish({
+  const publish = has(argv, 'publish-without-review');
+  const out = await z.cmdUpload({
     mystPath,
     pdf,
     tag,
@@ -600,36 +667,42 @@ async function cmdRelease(argv: string[]): Promise<number> {
     git: gh.realGitContext,
     instanceRoot: instance.root,
     engineRoot: engineRoot(),
+    publish,
+    ...(localBuild ? { platform: platformName(), typstVersion: await typstOnPath() } : {}),
   });
   emit(argv, out.result);
-
-  if (out.exitCode === 0 && process.env.GH_TOKEN) {
-    try {
-      const files = readdirSync(bundleOut).map((f) => join(bundleOut, f));
-      gh.uploadReleaseAsset(paperRoot, tag, files);
-      const sha = await gh.realGitContext.headSha(paperRoot);
-      gh.postCommitComment(
-        paperRoot,
-        sha,
-        msg.workflow.releaseCommitComment(String(out.result.draft_url ?? out.result.version_doi)),
-      );
-    } catch (e) {
-      process.stderr.write(
-        annotate('warning', msg.workflow.releasePostStepsFailed((e as Error).message)) + '\n',
-      );
+  if (out.exitCode !== 0) {
+    // In CI nobody watches the run, so the editors get an issue.
+    if (inActions && gh.ghLoggedIn()) {
+      try {
+        gh.openFailureIssue(
+          paperRoot,
+          msg.workflow.releaseFailureIssue(tag),
+          String(out.result.message ?? 'unknown error'),
+        );
+      } catch {
+        /* best-effort */
+      }
     }
-  } else if (out.exitCode !== 0 && process.env.GH_TOKEN) {
-    try {
-      gh.openFailureIssue(
-        paperRoot,
-        msg.workflow.releaseFailureIssue(tag),
-        String(out.result.message ?? 'unknown error'),
-      );
-    } catch {
-      /* best-effort */
-    }
+    return out.exitCode;
   }
-  return out.exitCode;
+
+  if (!gh.ghLoggedIn()) {
+    process.stderr.write(annotate('warning', msg.workflow.releaseNoGh(tag, bundleOut)) + '\n');
+    return 0;
+  }
+  try {
+    const files = readdirSync(bundleOut).map((f) => join(bundleOut, f));
+    gh.uploadReleaseAsset(paperRoot, tag, files);
+    const head = sha ?? (await gh.realGitContext.headSha(paperRoot));
+    const url = String(out.result.record_url ?? out.result.draft_url ?? out.result.version_doi);
+    gh.postCommitComment(paperRoot, head, msg.workflow.releaseCommitComment(url, publish));
+  } catch (e) {
+    process.stderr.write(
+      annotate('warning', msg.workflow.releasePostStepsFailed((e as Error).message)) + '\n',
+    );
+  }
+  return 0;
 }
 
 /** `oak deploy-preview <site> [--verified-head <sha>]`: deploys the build artifact to
@@ -1304,6 +1377,7 @@ async function handoffContext(verb: HandoffVerb, argv: string[]): Promise<Handof
     defaultRepo: ENGINE_REPO_DEFAULT,
     env: process.env,
     cacheRoot: cacheHome(process.env, homedir()),
+    runningIsCheckout: existsSync(join(engineRoot(), '.git')),
   };
 }
 
@@ -1328,17 +1402,22 @@ async function handoffDeps(argv: string[]): Promise<HandoffDeps> {
 
 /** Hands a paper command to the oak version the paper pins ({@link handOff}), or returns null
  *  when this oak runs it. Documented at DOCS.pinnedVersion. */
-async function runPinned(
-  verb: 'build' | 'validate' | 'start',
-  argv: string[],
-): Promise<number | null> {
+async function runPinned(verb: PaperVerb, argv: string[]): Promise<number | null> {
   const { handOff } = await import('./pinned.js');
   const ctx = await handoffContext(verb, argv);
-  return handOff(
-    { ...ctx, paperRoot: resolve(flag(argv, 'paper') ?? '.') },
-    await handoffDeps(argv),
-  );
+  // `deposit` finds the paper from `--myst` too; its subcommand comes first in argv.
+  const paperRoot =
+    verb === 'deposit' ? dirname(mystPathOf(argv.slice(1))) : resolve(flag(argv, 'paper') ?? '.');
+  return handOff({ ...ctx, paperRoot }, await handoffDeps(argv));
 }
+
+const PAPER_VERBS: readonly string[] = [
+  'build',
+  'validate',
+  'start',
+  'release',
+  'deposit',
+] satisfies PaperVerb[];
 
 async function main(argv: string[]): Promise<number> {
   const verb = argv[0] as Verb | undefined;
@@ -1353,8 +1432,8 @@ async function main(argv: string[]): Promise<number> {
     process.stdout.write(msg.version(OAK_VERSION) + '\n');
     return 0;
   }
-  if (verb === 'build' || verb === 'validate' || verb === 'start') {
-    const code = await runPinned(verb, argv.slice(1));
+  if (verb && PAPER_VERBS.includes(verb)) {
+    const code = await runPinned(verb as PaperVerb, argv.slice(1));
     if (code !== null) return code;
   }
   if (verb === 'build') return cmdBuild(argv.slice(1));
