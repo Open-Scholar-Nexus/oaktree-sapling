@@ -1111,9 +1111,19 @@ export const realConformanceGh: ConformanceGh = {
       'api',
       `repos/${repo}/commits/${sha}/check-runs`,
       '--jq',
-      '[.check_runs[] | {name, conclusion}]',
+      '[.check_runs[] | {name, conclusion, title: .output.title, summary: .output.summary}]',
     ]);
     return out ? (JSON.parse(out) as import('./conformance.js').CheckRunRef[]) : [];
+  },
+  commitStatuses(repo, sha) {
+    // The combined status keeps the newest status per context.
+    const out = gh([
+      'api',
+      `repos/${repo}/commits/${sha}/status`,
+      '--jq',
+      '[.statuses[] | {context, state}]',
+    ]);
+    return out ? (JSON.parse(out) as import('./conformance.js').CommitStatusRef[]) : [];
   },
   openPreviewPr(repo, branch, marker) {
     // Branch off main, then append a MyST `%` comment to index.md through the Contents API: no
@@ -1182,6 +1192,71 @@ export const realConformanceGh: ConformanceGh = {
     const out = gh(['api', `repos/${repo}/issues/${prNumber}/comments`, '--jq', '[.[].body]']);
     return out ? (JSON.parse(out) as string[]) : [];
   },
+  prLabels(repo, prNumber) {
+    const out = gh(['api', `repos/${repo}/issues/${prNumber}/labels`, '--jq', '[.[].name]']);
+    return out ? (JSON.parse(out) as string[]) : [];
+  },
+  openFailingChecksPr(repo, branch, marker, id, edition) {
+    const mainSha = gh(['api', `repos/${repo}/git/ref/heads/main`, '--jq', '.object.sha']);
+    gh([
+      'api',
+      '-X',
+      'POST',
+      `repos/${repo}/git/refs`,
+      '-f',
+      `ref=refs/heads/${branch}`,
+      '-f',
+      `sha=${mainSha}`,
+    ]);
+
+    const meta = JSON.parse(
+      gh([
+        'api',
+        `repos/${repo}/contents/myst.yml?ref=${branch}`,
+        '--jq',
+        '{content: .content, sha: .sha}',
+      ]),
+    ) as { content: string; sha: string };
+    // GitHub wraps base64 in \n; Buffer ignores them.
+    const doc = parseYaml(
+      Buffer.from(meta.content, 'base64').toString('utf8'),
+      `${repo}:myst.yml@${branch}`,
+    );
+    doc.setIn(['project', 'id'], id);
+    doc.setIn(['project', 'options', 'oaktree-sapling', 'edition'], edition);
+    gh([
+      'api',
+      '-X',
+      'PUT',
+      `repos/${repo}/contents/myst.yml`,
+      '-f',
+      `message=conformance failing checks ${marker}`,
+      '-f',
+      `content=${Buffer.from(String(doc), 'utf8').toString('base64')}`,
+      '-f',
+      `sha=${meta.sha}`,
+      '-f',
+      `branch=${branch}`,
+    ]);
+
+    const url = gh([
+      'pr',
+      'create',
+      '--repo',
+      repo,
+      '--base',
+      'main',
+      '--head',
+      branch,
+      '--title',
+      `conformance failing checks ${marker}`,
+      '--body',
+      'Automated conformance probe whose journal checks fail; opened and closed by the harness.',
+    ]);
+    const number = Number(url.split('/').pop());
+    const headSha = gh(['api', `repos/${repo}/git/ref/heads/${branch}`, '--jq', '.object.sha']);
+    return { number, headSha };
+  },
   committedDoi(repo) {
     return committedYamlValue(repo, 'myst.yml', ['project', 'doi']);
   },
@@ -1195,6 +1270,10 @@ export const realConformanceGh: ConformanceGh = {
   },
   committedJournalRepo(repo) {
     return committedYamlValue(repo, '.github/actions/engine/pins.yml', ['instance_repo']);
+  },
+  commitComments(repo, sha) {
+    const out = gh(['api', `repos/${repo}/commits/${sha}/comments`, '--jq', '[.[].body]']);
+    return out ? (JSON.parse(out) as string[]) : [];
   },
   defaultBranchSha(repo) {
     return gh(['api', `repos/${repo}/git/ref/heads/main`, '--jq', '.object.sha']);
