@@ -458,12 +458,29 @@ describe('cmdDeployPreview', () => {
     const repoRoot = mkdtempSync(join(tmpdir(), 'oak-colo-'));
     mkdirSync(join(repoRoot, 'papers/one'), { recursive: true });
     writeFileSync(join(repoRoot, 'papers/one/myst.yml'), 'project:\n  doi: 10.5281/zenodo.55\n');
-    const { gh, stickies } = fakeGh({ versionTags: () => ['v1.0.0'] });
+    // A co-located paper's version tags are `<id>/vX.Y.Z`, and its comments carry its id.
+    const { gh, stickies } = fakeGh({ versionTags: () => ['v1.0.0', 'one/v1.0.0'] });
     const input = { ...baseInput(dir, { cf: {} }), repoRoot, mystPath: undefined };
     const out = await cmdDeployPreview(input, { deployer: okDeployer(), gh });
     expect(out.result.paper).toBe('papers/one');
-    expect(stickies.some((s) => s.header === STICKY_NEWVERSION)).toBe(true);
+    expect(stickies.map((s) => s.header)).toEqual([
+      `${STICKY_PREVIEW}:one`,
+      `${STICKY_NEWVERSION}:one`,
+    ]);
+    expect(stickies[0]!.body).toContain('paper-build-one');
     expect(existsSync(join(dir, '.paper'))).toBe(false);
+  });
+
+  it("skips the reminder for a co-located paper whose own tag is absent, whatever other papers' tags", async () => {
+    const dir = siteWithPr('7');
+    writeFileSync(join(dir, '.paper'), 'papers/one\n');
+    const repoRoot = mkdtempSync(join(tmpdir(), 'oak-colo-'));
+    mkdirSync(join(repoRoot, 'papers/one'), { recursive: true });
+    writeFileSync(join(repoRoot, 'papers/one/myst.yml'), 'project: {}\n');
+    const { gh } = fakeGh({ versionTags: () => ['v1.0.0', 'two/v1.0.0'] });
+    const input = { ...baseInput(dir, { cf: {} }), repoRoot, mystPath: undefined };
+    const out = await cmdDeployPreview(input, { deployer: okDeployer(), gh });
+    expect((out.result.notify as { reminder: string }).reminder).toBe('skipped');
   });
 
   it('no-ops when there is no .pr-number', async () => {

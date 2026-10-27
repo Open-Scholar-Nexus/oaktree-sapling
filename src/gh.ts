@@ -5,12 +5,8 @@
  */
 import * as msg from './messages.js';
 import { UserError } from './messages.js';
-import {
-  ENGINE_MANAGED_PATHS,
-  GITHUB_REPO,
-  PAPER_VERSION_TAG,
-  repoFromGithubUrl,
-} from './schema.js';
+import { ENGINE_MANAGED_PATHS, GITHUB_REPO, repoFromGithubUrl } from './schema.js';
+import { colocatedPaper, parsePaperTag } from './projects.js';
 import { execFileSync, spawnSync } from 'node:child_process';
 import {
   cpSync,
@@ -305,8 +301,10 @@ export function originRepo(repoRoot: string): string | null {
  */
 export function openDoiPr(repoRoot: string, opts: { conceptDoi: string }): string {
   // One branch name for every version: prepare reserves the concept DOI, and the version comes
-  // from the tag at publish. Preparing again force-pushes the same branch.
-  const branch = 'zenodo-doi';
+  // from the tag at publish. Preparing again force-pushes the same branch. Each co-located paper
+  // has its own concept record, so its own branch.
+  const paper = colocatedPaper(repoRoot);
+  const branch = paper ? `zenodo-doi-${paper.id}` : 'zenodo-doi';
   const repo = originRepo(repoRoot);
   const base = repo ? defaultBranch(repo) : 'main';
   // The branch starts at HEAD, so HEAD must be on the base, or the pull request would carry
@@ -319,7 +317,12 @@ export function openDoiPr(repoRoot: string, opts: { conceptDoi: string }): strin
   }
   git(repoRoot, ['checkout', '-B', branch]);
   git(repoRoot, ['add', 'myst.yml']);
-  git(repoRoot, [...BOT_ID, 'commit', '-m', `chore: reserve Zenodo DOI ${opts.conceptDoi}`]);
+  git(repoRoot, [
+    ...BOT_ID,
+    'commit',
+    '-m',
+    `chore: reserve Zenodo DOI ${opts.conceptDoi}${paper ? ` for ${paper.id}` : ''}`,
+  ]);
   git(repoRoot, ['push', '-u', 'origin', branch, '--force']);
   // `--repo`: the git calls use `-C repoRoot`, while `gh` would read the current directory's
   // repo. `realUpgradePr` uses `cwd` for the same.
@@ -331,9 +334,9 @@ export function openDoiPr(repoRoot: string, opts: { conceptDoi: string }): strin
     '--base',
     base,
     '--title',
-    msg.workflow.doiPrTitle,
+    msg.workflow.doiPrTitle(paper?.id),
     '--body',
-    msg.workflow.doiPrBody(opts.conceptDoi),
+    msg.workflow.doiPrBody(opts.conceptDoi, paper ? `${paper.dir}/myst.yml` : undefined),
     '--head',
     branch,
   ];
@@ -471,7 +474,7 @@ export const realGhPr: GhPr = {
     return out
       .split('\n')
       .map((t) => t.trim())
-      .filter((t) => PAPER_VERSION_TAG.test(t));
+      .filter((t) => parsePaperTag(t) !== null);
   },
 
   prHead(repo, pr) {

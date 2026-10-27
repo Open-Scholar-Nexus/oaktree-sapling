@@ -787,6 +787,11 @@ export const validate = {
   strayMystYml: (path: string): string =>
     `extra myst.yml at "${path}": a paper repo has one, at its root`,
   idMissing: 'project.id is missing',
+  idFolderMismatch: (dir: string, id: string): string =>
+    `${dir} holds project.id "${id}"; a paper's folder is named by its id, so rename the folder ` +
+    `or change the id to match`,
+  idFolderBadName: (dir: string): string =>
+    `${dir} is not a paper id: a paper folder's name is its id, made of letters, digits, - and _`,
 
   // ── brand ──────────────────────────────────────────────────────────────────────────────
   brandNoFavicon:
@@ -807,6 +812,9 @@ export const validate = {
     `brand typst watermark "${logo}" does not resolve to a file`,
 
   // ── how the run happened (notes: they explain, they never gate) ────────────────────────
+  noteDraft:
+    'this paper is not listed in registry/papers.yml yet, so the editorial checks report ' +
+    'warnings; they block once an editor lists it. The id checks block either way.',
   noteUncomposed:
     "checked the paper's own myst.yml ONLY: the journal's settings were not available to this " +
     'run, so whatever the journal, its edition or its branding add (the cover image, the PDF ' +
@@ -911,35 +919,37 @@ export function stickyMarker(header: string): string {
 }
 
 export const pr = {
-  previewDeployed: (url: string): string =>
+  previewDeployed: (url: string, paper?: string): string =>
     [
-      '**Preview deployed** 🚀',
+      paper ? `**Preview of \`${paper}\` deployed** 🚀` : '**Preview deployed** 🚀',
       '',
       `${url}`,
       '',
       '_Updated on every push to this pull request._',
     ].join('\n'),
 
-  previewArtifact: (runUrl: string, reason: string): string =>
+  previewArtifact: (runUrl: string, reason: string, paper?: string): string =>
     [
-      '**Preview build ready** 📦',
+      paper ? `**Preview build of \`${paper}\` ready** 📦` : '**Preview build ready** 📦',
       '',
       'No Cloudflare preview is configured, so the built site is attached to its "Build paper" run as',
-      `the **paper-build** artifact; open the run and scroll to **Artifacts**: ${runUrl}`,
+      `the **${paper ? `paper-build-${paper}` : 'paper-build'}** artifact; open the run and scroll to **Artifacts**: ${runUrl}`,
       '',
       `_(${reason}.)_`,
     ].join('\n'),
 
-  newVersionReminder: (doi: string, recordUrl: string): string =>
+  newVersionReminder: (doi: string, recordUrl: string, paper?: string): string =>
     [
-      '**Zenodo new-version reminder**',
+      paper
+        ? `**Zenodo new-version reminder for \`${paper}\`**`
+        : '**Zenodo new-version reminder**',
       '',
       'This paper is already published on Zenodo. Before tagging the next release, an editor must:',
       '',
       `1. Open the record: ${recordUrl}`,
       '2. Click **New version** to create an empty draft.',
       '',
-      'Pushing the new `v*` tag fills that draft. The editor then clicks **Publish** on Zenodo.',
+      `Pushing the new \`${paper ? `${paper}/v*` : 'v*'}\` tag fills that draft. The editor then clicks **Publish** on Zenodo.`,
       '',
       `Concept DOI: \`${doi}\``,
     ].join('\n'),
@@ -960,6 +970,34 @@ export const pr = {
     `| ${id} | ${status}${optional ? ' (optional)' : ''} | ${detail} |`,
   checkRunNote: (note: string): string => `> ⚠️ ${note}`,
   shimMore: (n: number): string => `, +${n} more`,
+
+  // ── several papers in one repository ───────────────────────────────────────────────────
+  /** The comment's line naming the papers a pull request changes. */
+  checksPapers: (ids: string[]): string =>
+    `Paper${ids.length === 1 ? '' : 's'} this pull request changes: ${ids.map((i) => `\`${i}\``).join(', ')}`,
+  checksNoPaper: 'This pull request changes no paper.',
+  /** A section of the combined Check Run for one paper. */
+  checksPaperSection: (id: string, title: string): string => `#### \`${id}\`: ${title}`,
+  checkRunTitlePapers: (titles: string[]): string => titles.join('; '),
+  checkRunTitleNoPaper: 'no paper changed',
+  forkRefusedTitle: 'refused: a pull request from a fork changes one paper',
+  forkUnlisted:
+    'GitHub did not list every file this pull request changes, so oak cannot tell that it ' +
+    'changes one paper only.',
+  forkOutsidePapers: (files: string[]): string =>
+    `A pull request from a fork changes files in one papers/<id>/ folder and nowhere else; ` +
+    `this one also changes ${files
+      .slice(0, 5)
+      .map((f) => `\`${f}\``)
+      .join(', ')}${files.length > 5 ? `, +${files.length - 5} more` : ''}.`,
+  forkNoPaper: 'A pull request from a fork changes one papers/<id>/ folder; this one changes none.',
+  forkSeveralPapers: (papers: string[]): string =>
+    `A pull request from a fork changes one paper; this one changes ` +
+    `${papers.map((p) => `\`${p}\``).join(', ')}. Open one pull request per paper.`,
+  forkWrongReport: (expected: string, got: string[]): string =>
+    `This pull request changes \`${expected}\`, but its checks report covers ` +
+    `${got.length ? got.map((p) => `\`${p}\``).join(', ') : 'no paper'}; the report was not ` +
+    `made for this change.`,
 
   /** A pull request that edits the files the checks run from. A warning, never a failure:
    *  upgrade pull requests edit them too. */
@@ -983,6 +1021,10 @@ export const pr = {
 export const workflow = {
   // deposit
   depositUsage: 'oak deposit: usage: oak deposit <prepare|publish|status> [...]',
+  depositUnknownPaper: (dir: string): string =>
+    `oak deposit: ${dir} is not one of this repository's papers (papers/<id>/myst.yml); name a paper by its folder.`,
+  badPaperId: (source: string, got: string): string =>
+    `${source} takes a paper id (letters, digits, - and _), not ${JSON.stringify(got.slice(0, 60))}.`,
   badRepoName: (source: string, got: string): string =>
     `${source} takes a GitHub repo as owner/name, not ${JSON.stringify(got.slice(0, 60))}.`,
 
@@ -991,10 +1033,15 @@ export const workflow = {
     `${why} Until then the preview falls back to an artifact link; nothing else in this run ` +
     `depends on it`,
 
+  postChecksPrsDiffer: (prs: string[]): string =>
+    `oak post-checks: the reports name different pull requests (${prs.join(', ')}). They come ` +
+    `from the pull_request job's artifacts, which are corrupt or hostile; nothing was posted.`,
   postChecksBadReport: (path: string): string =>
     `${path} is not a checks report (no checkRun.conclusion). It comes from the ` +
     `pull_request job's artifact, which is truncated, corrupt or hostile; nothing was posted.`,
 
+  previewNoSite: (dir: string): string =>
+    `oak deploy-preview: no built site in ${dir}; this pull request builds no paper, so there is no preview.`,
   previewBadPrNumber: (got: string): string =>
     `.pr-number is not a pull request number (${JSON.stringify(got.slice(0, 40))}). It ` +
     `comes from the build artifact, which is corrupt or hostile.`,
@@ -1051,10 +1098,11 @@ export const workflow = {
   /** The DOI pull request `gh.openDoiPr` opens. GitHub holds the checks on a pull request a
    *  workflow opens, and approving them does not run the preview, so the body says what the
    *  editor clicks. */
-  doiPrTitle: 'Reserve Zenodo DOI',
-  doiPrBody: (conceptDoi: string): string =>
+  doiPrTitle: (paper?: string): string =>
+    paper ? `Reserve Zenodo DOI for ${paper}` : 'Reserve Zenodo DOI',
+  doiPrBody: (conceptDoi: string, mystPath = 'myst.yml'): string =>
     [
-      `Writes the reserved concept DOI \`${conceptDoi}\` into \`myst.yml\`. Merge before tagging.`,
+      `Writes the reserved concept DOI \`${conceptDoi}\` into \`${mystPath}\`. Merge before tagging.`,
       '',
       '<details>',
       '<summary>Why are the checks waiting?</summary>',
@@ -1068,6 +1116,14 @@ export const workflow = {
 
   // release
   releaseNoTag: 'oak release: --tag vX.Y.Z is required',
+  releaseBadTag: (tag: string): string =>
+    `oak release: tag ${JSON.stringify(tag.slice(0, 80))} is not a version tag; tag vX.Y.Z in a ` +
+    `paper repository, or <paper id>/vX.Y.Z for papers/<paper id> in a co-located one.`,
+  releaseNoPaperFolder: (tag: string, dir: string): string =>
+    `oak release: tag ${tag} names ${dir}, which holds no paper (no myst.yml); delete the tag and ` +
+    `tag the paper by the name of its folder.`,
+  releaseTagOtherPaper: (tag: string, paper: string): string =>
+    `oak release: tag ${tag} names another paper than --paper ${paper}; a tag releases the paper it names.`,
   releaseNoDoi: 'oak release: project.doi missing; run prepare and merge that pull request first.',
   notZenodoDoi: (doi: string): string =>
     `project.doi ${doi} is not a Zenodo DOI; write it as 10.5281/zenodo.<id>, or ` +

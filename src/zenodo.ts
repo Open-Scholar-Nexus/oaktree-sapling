@@ -47,7 +47,7 @@ import {
   JournalConfig,
   locationRepo,
   pagesUrl,
-  PAPER_VERSION_TAG,
+  parseLocation,
   parseZenodoDoi,
   readRegistry,
   repoFromGithubUrl,
@@ -57,6 +57,7 @@ import {
 } from './schema.js';
 import * as msg from './messages.js';
 import { err, ok, type Outcome } from './result.js';
+import { colocatedPaper, parsePaperTag } from './projects.js';
 
 export const ZENODO_PROD = 'https://zenodo.org/api';
 export const ZENODO_SANDBOX = 'https://sandbox.zenodo.org/api';
@@ -281,8 +282,9 @@ export class ZenodoApi {
    * then a full scan when neither found the identifier. The scan depends on a match, not on rows
    * coming back, since `q` matches phrases and a near miss returns rows [R100].
    */
-  async findDeposit(opts: { paperId?: string; githubUrl: string }): Promise<Deposition | null> {
+  async findDeposit(opts: { paperId?: string; githubUrl?: string }): Promise<Deposition | null> {
     const urn = opts.paperId ? paperUrn(opts.paperId) : null;
+    const url = opts.githubUrl;
 
     if (urn) {
       const hit = matchRelated(
@@ -291,14 +293,16 @@ export class ZenodoApi {
       );
       if (hit) return hit;
     }
-    const byUrl = matchRelated(
-      await this.listMyDepositions({ q: `related.identifier:"${opts.githubUrl}"` }),
-      opts.githubUrl,
-    );
-    if (byUrl) return byUrl;
+    if (url) {
+      const byUrl = matchRelated(
+        await this.listMyDepositions({ q: `related.identifier:"${url}"` }),
+        url,
+      );
+      if (byUrl) return byUrl;
+    }
 
     const all = await this.listMyDepositions();
-    return (urn && matchRelated(all, urn)) || matchRelated(all, opts.githubUrl) || null;
+    return (urn && matchRelated(all, urn)) || (url && matchRelated(all, url)) || null;
   }
 
   /** The newest deposition for a concept DOI (paged, the third lookup [R35.1]). */
@@ -816,15 +820,28 @@ export function loadJournalZenodo(instanceRoot: string | null): ZenodoConfig {
 export function defaultSiteUrl(
   repo: string | null,
   instanceRoot: string | null,
+  paperRoot?: string,
 ): string | undefined {
   if (!repo) return undefined;
   const path = instanceRoot ? join(instanceRoot, 'registry', 'papers.yml') : null;
   const entries = path && existsSync(path) ? readRegistry(readDoc(path).toJS())?.entries : null;
+  // A co-located paper is found by its folder and published at `/<id>/` on the journal's site.
+  const folder = paperRoot ? colocatedPaper(paperRoot) : null;
   const own = (entries ?? []).find((e) => {
+    if (!e.site_url) return false;
+    if (folder) {
+      const location = parseLocation(e.location);
+      return (
+        !!instanceRoot &&
+        !!location &&
+        'path' in location &&
+        resolve(instanceRoot, location.path) === resolve(paperRoot!)
+      );
+    }
     const entryRepo = locationRepo(e.location);
-    return !!e.site_url && !!entryRepo && sameRepo(entryRepo, repo);
+    return !!entryRepo && sameRepo(entryRepo, repo);
   });
-  return own?.site_url ?? pagesUrl(repo);
+  return own?.site_url ?? `${pagesUrl(repo)}${folder ? `${folder.id}/` : ''}`;
 }
 
 function projectOf(doc: ReturnType<typeof readDoc>): any {
@@ -855,7 +872,7 @@ export interface PrepareInput {
  */
 export async function cmdPrepare(input: PrepareInput): Promise<Outcome> {
   const { mystPath, repo, api, instanceRoot } = input;
-  const siteUrl = input.siteUrl ?? defaultSiteUrl(repo, instanceRoot);
+  const siteUrl = input.siteUrl ?? defaultSiteUrl(repo, instanceRoot, resolve(mystPath, '..'));
   const sandbox = api.sandbox;
   const doc = readDoc(mystPath);
   const project = projectOf(doc);
@@ -890,9 +907,10 @@ export async function cmdPrepare(input: PrepareInput): Promise<Outcome> {
   });
   md.prereserve_doi = true;
 
+  // Co-located papers share the repository's URL, so only the id tells their deposits apart.
   const existing = await api.findDeposit({
     paperId: project.id ? String(project.id) : undefined,
-    githubUrl,
+    ...(colocatedPaper(repoRoot) ? {} : { githubUrl }),
   });
   let dep: Deposition;
   if (existing && existing.submitted === false) {
@@ -959,8 +977,14 @@ export async function cmdPublish(input: PublishInput): Promise<Outcome> {
   if (parsed.sandbox !== sandbox) {
     return err(2, `DOI prefix says sandbox=${parsed.sandbox} but --sandbox=${sandbox}.`);
   }
-  if (!PAPER_VERSION_TAG.test(tag)) return err(2, `tag must match vMAJOR.MINOR.PATCH (got ${tag})`);
-  const version = tag.slice(1);
+  const paperTag = parsePaperTag(tag);
+  if (!paperTag) {
+    return err(
+      2,
+      `tag must match vMAJOR.MINOR.PATCH or <paper id>/vMAJOR.MINOR.PATCH (got ${tag})`,
+    );
+  }
+  const version = paperTag.version.slice(1);
 
   if (!existsSync(pdf)) return err(2, `--pdf not found: ${pdf}`);
 
@@ -968,7 +992,7 @@ export async function cmdPublish(input: PublishInput): Promise<Outcome> {
   if (!githubUrl) return err(2, 'project.github missing; should have been set by prepare.');
   const repo = repoFromGithubUrl(githubUrl);
   if (!repo) return err(2, msg.workflow.depositBadGithubUrl(mystPath, githubUrl));
-  const siteUrl = input.siteUrl ?? defaultSiteUrl(repo, instanceRoot);
+  const siteUrl = input.siteUrl ?? defaultSiteUrl(repo, instanceRoot, resolve(mystPath, '..'));
 
   const repoRoot = resolve(mystPath, '..');
 

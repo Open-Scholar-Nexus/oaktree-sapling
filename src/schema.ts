@@ -87,13 +87,15 @@ export const COMMIT_ID = /^([0-9a-f]{40}|[0-9a-f]{64})$/;
 
 /**
  * The paths in a paper repo that need an editor's review to change [R92], written as in
- * `CODEOWNERS` without the leading `/`; a trailing `/` is a folder. `templates/paper/CODEOWNERS`
- * keeps a copy, held to this one by `editor paths parity` in `test/checks.test.ts`.
+ * `CODEOWNERS` without the leading `/`; a trailing `/` is a folder and a `*` one path segment,
+ * for each co-located paper's environment. `templates/paper/CODEOWNERS` keeps a copy, held to
+ * this one by `editor paths parity` in `test/checks.test.ts`.
  */
 export const GATED_PATHS = [
   '.github/',
   'CODEOWNERS',
   'paper-environment.yml',
+  'papers/*/paper-environment.yml',
   'node_modules/',
   '.engine/',
 ] as const;
@@ -102,10 +104,20 @@ export const GATED_PATHS = [
  *  author's. */
 export const ENGINE_MANAGED_PATHS = ['.github/', 'CODEOWNERS'] as const;
 
-/** Whether the repo-relative `path` is one of `paths`, or inside one of their folders. */
+/** Whether the repo-relative `path` is one of `paths`, or inside one of their folders. A `*`
+ *  in a path matches one segment. */
 export function underPaths(paths: readonly string[], path: string): boolean {
   const p = path.replace(/^(\.?\/)+/, '');
-  return paths.some((g) => (g.endsWith('/') ? p === g.slice(0, -1) || p.startsWith(g) : p === g));
+  return paths.some((g) => {
+    if (!g.includes('*')) {
+      return g.endsWith('/') ? p === g.slice(0, -1) || p.startsWith(g) : p === g;
+    }
+    const segment = g
+      .split('*')
+      .map((part) => part.replace(/[.+?^${}()|[\]\\]/g, '\\$&'))
+      .join('[^/]+');
+    return new RegExp(`^${segment}${g.endsWith('/') ? '' : '$'}`).test(p);
+  });
 }
 
 /** A Zenodo DOI as Zenodo mints it: `10.5281/zenodo.<id>`, or `10.5072/zenodo.<id>` on the
@@ -347,12 +359,13 @@ export function checkIdShape(
 
 /**
  * Check B: the id is unique in the registry. Fails when the registry is present, and only warns
- * without one, as in a bare local validate [R193]. `self` excludes the paper's own entry, by repo.
+ * without one, as in a bare local validate [R193]. `self` excludes the paper's own entries: those
+ * whose location is `self.repo`, and the entries in `self.own`.
  */
 export function checkIdUniqueness(
   id: string,
   registry: Registry | null,
-  self?: { repo: string },
+  self?: { repo?: string; own?: readonly RegistryEntry[] },
   opts: { selfIdentifiable?: boolean } = {},
 ): IdCheckResult {
   if (registry === null) {
@@ -363,8 +376,9 @@ export function checkIdUniqueness(
     };
   }
   const isSelf = (e: RegistryEntry) => {
+    if (self?.own?.includes(e)) return true;
     const repo = locationRepo(e.location);
-    return !!self && !!repo && sameRepo(repo, self.repo);
+    return !!self?.repo && !!repo && sameRepo(repo, self.repo);
   };
   const clash = registry.find((e) => e.id === id && !isSelf(e));
   if (clash) {
@@ -387,7 +401,7 @@ export function checkIdUniqueness(
 }
 
 /** Check C: the paper's own registry entries carry its id, so check B tests the id the paper
- *  has. `own` holds the entries whose location is the paper's repo. */
+ *  has. `own` holds the entries whose location is the paper's repo or folder. */
 export function checkOwnEntryId(id: string, own: RegistryEntry[]): IdCheckResult {
   const stale = own.find((e) => e.id !== id);
   if (!stale) return { ok: true };
