@@ -106,7 +106,7 @@ oak release --tag v1.0.0
 
 The engine's typst is built for Linux on x86_64. On another machine, such as a Mac or an arm64 computer, the PDF is exported with the typst on your `PATH`, so it can differ from the one the CI build makes. The deposit's provenance records the typst version that ran.
 
-`--no-build` deposits the build already in the clone's `_build/` as it is.
+`--no-build` deposits the build already in the clone's `_build/` as it is, after a warning: nothing checks that it is the tag's build, and the provenance records it as the CI's platform and typst.
 
 (publish-without-review)=
 ### Publishing without review

@@ -63,7 +63,7 @@ Outside GitHub Actions the clone has to be at the tag, with no changes to tracke
 : Builds on this computer and deposits that build, after a warning: the build runs the paper's code beside the Zenodo token ([building on your computer](#local-build)). The provenance records the platform and the typst that ran.
 
 `--no-build`
-: Deposits the build already under `_build/`.
+: Deposits the build already under `_build/`. Outside GitHub Actions it warns first: that build may be from another tag or build, and the provenance records it as built on Linux x86_64 with the engine's typst, as in CI.
 
 `--publish-without-review`
 : Publishes the draft once it is filled, with no check on Zenodo first.
