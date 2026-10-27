@@ -170,7 +170,11 @@ export const usage = (): string =>
   `  oak deposit prepare --repo <owner/repo> [--site-url <url>] [--sandbox] [--instance <dir> | --no-instance]\n` +
   `  oak deposit publish --pdf <path> --tag <vX.Y.Z> [--site-url <url>] [--sandbox] [--instance <dir> | --no-instance]\n` +
   `  oak deposit status  [--sandbox] [--instance <dir> | --no-instance]\n` +
-  `  oak release --tag <vX.Y.Z> [--no-build] [--paper <dir>] [--instance <dir> | --no-instance] [--site-url <url>]\n` +
+  `  oak release --tag <vX.Y.Z | <paper id>/vX.Y.Z> [--no-build] [--paper <dir>] [--instance <dir> | --no-instance]\n` +
+  `              [--site-url <url>]\n` +
+  `  oak assemble --builds <dir> [--base-url <path>]\n` +
+  `                    in a co-located repo: build the journal website and mount each listed\n` +
+  `                    paper's build at /<paper id>/\n` +
   `  oak conformance reset   --repo <owner/name>\n` +
   `  oak conformance run   --repo <owner/name> --tag <vX.Y.Z> [--fork-repo <owner/name>]\n` +
   `\n` +
@@ -905,6 +909,37 @@ export const validate = {
   editorialLoadFailed: (message: string): string =>
     `could not load the paper project for editorial checks: ${message}`,
   needsBuildArtifacts: 'requires build artifacts; run `oak build` first',
+};
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════
+ * `oak assemble`: the journal website of a co-located repository, with its papers mounted.
+ * ═════════════════════════════════════════════════════════════════════════════════════════ */
+
+export const assemble = {
+  usage: 'oak assemble: usage: oak assemble --builds <folder of paper builds> [--base-url <path>]',
+  badBuildFolder: (name: string): string =>
+    `oak assemble: ${JSON.stringify(name.slice(0, 80))} is not a paper build; each folder is ` +
+    `named paper-build-<paper id>, as the Build paper workflow uploads it.`,
+  registryNotList:
+    'oak assemble: registry/papers.yml is not a list of entries, so no paper could be mounted: ' +
+    docsUrl(DOCS.fileRegistry),
+  missingBuilds: (ids: string[]): string =>
+    `oak assemble: registry/papers.yml lists ${ids.join(', ')}, with no build; a listed paper ` +
+    `that does not build holds back the website, which keeps its last deployment.`,
+  unlisted: (id: string): string =>
+    `oak assemble: ${id} is built but not listed in registry/papers.yml, so it is left out.`,
+  noSite: (html: string): string =>
+    `oak assemble: the journal website built no ${html}/index.html; check pages/ and the toc in myst.yml.`,
+  clash: (id: string): string =>
+    `oak assemble: the journal website already serves /${id}/, so paper ${id} cannot be mounted ` +
+    `there; rename the website's page or folder.`,
+  mounted: (id: string, path: string): string => `oak assemble: ${id} at ${path}`,
+  stepFailed: (command: string, status: number | null): string =>
+    `oak assemble: ${command} failed (exit ${status ?? 'signal'}) building the journal website; its output is above.`,
+  galleryNotLoaded:
+    'oak assemble: the gallery plugin did not load: check the pinned plugin URL in myst.yml (a bad tag 404s silently).',
+  fileUnresolved:
+    'oak assemble: a file in the config did not resolve: paths in brand/brand.yml start at the repo root, as in brand/logo.svg.',
 };
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════

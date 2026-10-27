@@ -86,4 +86,20 @@ describe('ci/run.sh', () => {
         verb,
       ).not.toContain('--instance');
   });
+
+  it('serves a co-located paper from /<repo>/<id>, and the assembled site from /<repo>', () => {
+    const dir = engine({ status: 'ok' });
+    const env = { GITHUB_EVENT_NAME: 'push', GITHUB_REPOSITORY: 'acme/journal' };
+    const base = (args: string[], extra: Record<string, string>) => {
+      const argv = run(dir, args, { ...env, ...extra }).argv;
+      return argv[argv.indexOf('--base-url') + 1];
+    };
+    expect(base(['build'], { PAPER_DIR: 'papers/a-2026-one' })).toBe('/journal/a-2026-one');
+    expect(
+      base(['release', '--tag', 'a-2026-one/v1.0.0'], { PAPER_DIR: 'papers/a-2026-one' }),
+    ).toBe('/journal/a-2026-one');
+    expect(base(['build'], { PAPER_DIR: '.' })).toBe('/journal');
+    expect(base(['assemble', '--builds', 'b'], { PAPER_DIR: '.' })).toBe('/journal');
+    expect(base(['build'], { PAPER_DIR: 'papers/a', GITHUB_EVENT_NAME: 'pull_request' })).toBe('');
+  });
 });

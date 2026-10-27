@@ -39,6 +39,7 @@ type Verb =
   | 'notify'
   | 'bootstrap'
   | 'upgrade'
+  | 'assemble'
   | 'conformance';
 
 /** oak's root, the directory holding paper-base.yml: one up from the bundle, or two up from
@@ -1078,6 +1079,24 @@ async function cmdPostChecks(argv: string[]): Promise<number> {
   return out.checkRunPosted ? 0 : 1;
 }
 
+/** `oak assemble --builds <dir>`: builds the journal website of a co-located repository, in the
+ *  current directory, and mounts each listed paper's build at `/<id>/` ({@link assemble}). */
+async function cmdAssemble(argv: string[]): Promise<number> {
+  const builds = flag(argv, 'builds');
+  if (!builds) {
+    process.stderr.write(msg.assemble.usage + '\n');
+    return 2;
+  }
+  const { assemble, npmSiteBuild, readBuilds } = await import('./assemble.js');
+  const out = assemble(
+    readBuilds(resolve(builds)),
+    { siteRoot: resolve('.'), baseUrl: flag(argv, 'base-url') ?? '' },
+    { buildSite: npmSiteBuild, log: (line) => process.stderr.write(line + '\n') },
+  );
+  emit(argv, out.result);
+  return out.exitCode;
+}
+
 /** oak's own repo. */
 const ENGINE_REPO_DEFAULT = 'Open-Scholar-Nexus/oaktree-sapling';
 
@@ -1352,6 +1371,7 @@ async function cmdConformance(argv: string[]): Promise<number> {
 }
 
 const VERBS: Verb[] = [
+  'assemble',
   'build',
   'start',
   'validate',
@@ -1472,6 +1492,7 @@ async function main(argv: string[]): Promise<number> {
   if (verb === 'bootstrap') return cmdBootstrap(argv.slice(1));
   if (verb === 'upgrade') return cmdUpgrade(argv.slice(1));
   if (verb === 'conformance') return cmdConformance(argv.slice(1));
+  if (verb === 'assemble') return cmdAssemble(argv.slice(1));
   // An unknown command is an error with a suggestion: printing usage alone would make a typo
   // look like a bare `oak`, as if the command ran and did nothing.
   if (verb) {
