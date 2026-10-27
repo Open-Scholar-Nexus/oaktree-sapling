@@ -1217,6 +1217,70 @@ function matchingHeadRefs(out: string): string[] {
   return out ? out.split('\n').map((r) => r.replace(/^refs\/heads\//, '')) : [];
 }
 
+/** Opens a pull request on `repo` from a new `branch` off main, whose one commit rewrites `file`
+ *  with `edit`. Through the Contents API: no clone, so no git credentials needed in CI. Returns
+ *  the pull request's number and head commit. */
+function openProbePr(
+  repo: string,
+  branch: string,
+  file: string,
+  edit: (text: string) => string,
+  text: { commit: string; title: string; body: string },
+): { number: number; headSha: string } {
+  const mainSha = gh(['api', `repos/${repo}/git/ref/heads/main`, '--jq', '.object.sha']);
+  gh([
+    'api',
+    '-X',
+    'POST',
+    `repos/${repo}/git/refs`,
+    '-f',
+    `ref=refs/heads/${branch}`,
+    '-f',
+    `sha=${mainSha}`,
+  ]);
+  const meta = JSON.parse(
+    gh([
+      'api',
+      `repos/${repo}/contents/${file}?ref=${branch}`,
+      '--jq',
+      '{content: .content, sha: .sha}',
+    ]),
+  ) as { content: string; sha: string };
+  // GitHub wraps base64 in \n; Buffer ignores them.
+  const updated = edit(Buffer.from(meta.content, 'base64').toString('utf8'));
+  gh([
+    'api',
+    '-X',
+    'PUT',
+    `repos/${repo}/contents/${file}`,
+    '-f',
+    `message=${text.commit}`,
+    '-f',
+    `content=${Buffer.from(updated, 'utf8').toString('base64')}`,
+    '-f',
+    `sha=${meta.sha}`,
+    '-f',
+    `branch=${branch}`,
+  ]);
+  const url = gh([
+    'pr',
+    'create',
+    '--repo',
+    repo,
+    '--base',
+    'main',
+    '--head',
+    branch,
+    '--title',
+    text.title,
+    '--body',
+    text.body,
+  ]);
+  const number = Number(url.split('/').pop());
+  const headSha = gh(['api', `repos/${repo}/git/ref/heads/${branch}`, '--jq', '.object.sha']);
+  return { number, headSha };
+}
+
 /** The real GitHub calls for `oak conformance`, run with the test repo's token (gh reads
  *  GH_TOKEN). Deleting something already gone is fine. */
 export const realConformanceGh: ConformanceGh = {
@@ -1317,76 +1381,50 @@ export const realConformanceGh: ConformanceGh = {
       'api',
       `repos/${repo}/commits/${sha}/check-runs`,
       '--jq',
-      '[.check_runs[] | {name, conclusion}]',
+      '[.check_runs[] | {name, conclusion, title: .output.title, summary: .output.summary}]',
     ]);
     return out ? (JSON.parse(out) as import('./conformance.js').CheckRunRef[]) : [];
   },
+  commitStatuses(repo, sha) {
+    // The combined status keeps the newest status per context.
+    const out = gh([
+      'api',
+      `repos/${repo}/commits/${sha}/status`,
+      '--jq',
+      '[.statuses[] | {context, state}]',
+    ]);
+    return out ? (JSON.parse(out) as import('./conformance.js').CommitStatusRef[]) : [];
+  },
   openPreviewPr(repo, branch, marker) {
-    // Branch off main, then append a MyST `%` comment to index.md through the Contents API: no
-    // clone, so no git credentials needed in CI.
-    const mainSha = gh(['api', `repos/${repo}/git/ref/heads/main`, '--jq', '.object.sha']);
-    gh([
-      'api',
-      '-X',
-      'POST',
-      `repos/${repo}/git/refs`,
-      '-f',
-      `ref=refs/heads/${branch}`,
-      '-f',
-      `sha=${mainSha}`,
-    ]);
-
-    const meta = JSON.parse(
-      gh([
-        'api',
-        `repos/${repo}/contents/index.md?ref=${branch}`,
-        '--jq',
-        '{content: .content, sha: .sha}',
-      ]),
-    ) as {
-      content: string;
-      sha: string;
-    };
-    const current = Buffer.from(meta.content, 'base64').toString('utf8');
-    const updated = Buffer.from(`${current}\n% conformance ${marker}\n`, 'utf8').toString('base64');
-    gh([
-      'api',
-      '-X',
-      'PUT',
-      `repos/${repo}/contents/index.md`,
-      '-f',
-      `message=${msg.conformance.previewCommit(marker)}`,
-      '-f',
-      `content=${updated}`,
-      '-f',
-      `sha=${meta.sha}`,
-      '-f',
-      `branch=${branch}`,
-    ]);
-
-    const url = gh([
-      'pr',
-      'create',
-      '--repo',
-      repo,
-      '--base',
-      'main',
-      '--head',
-      branch,
-      '--title',
-      msg.conformance.previewPrTitle(marker),
-      '--body',
-      msg.conformance.previewPrBody,
-    ]);
-    const number = Number(url.split('/').pop());
-    const headSha = gh(['api', `repos/${repo}/git/ref/heads/${branch}`, '--jq', '.object.sha']);
-    return { number, headSha };
+    return openProbePr(repo, branch, 'index.md', (text) => `${text}\n% conformance ${marker}\n`, {
+      commit: msg.conformance.previewCommit(marker),
+      title: msg.conformance.previewPrTitle(marker),
+      body: msg.conformance.previewPrBody,
+    });
   },
   listIssueComments(repo, prNumber) {
     // These pull requests stay far below a page of comments; `--paginate` would join the pages'
     // JSON arrays into invalid JSON.
     const out = gh(['api', `repos/${repo}/issues/${prNumber}/comments`, '--jq', '[.[].body]']);
     return out ? (JSON.parse(out) as string[]) : [];
+  },
+  openFailingChecksPr(repo, branch, marker, id, edition) {
+    return openProbePr(
+      repo,
+      branch,
+      'myst.yml',
+      (text) => {
+        const doc = parseYaml(text, `${repo}:myst.yml@${branch}`);
+        doc.setIn(['project', 'id'], id);
+        doc.setIn(['project', 'options', 'oaktree-sapling', 'edition'], edition);
+        return String(doc);
+      },
+      {
+        commit: msg.conformance.failingChecksCommit(marker),
+        title: msg.conformance.failingChecksPrTitle(marker),
+        body: msg.conformance.failingChecksPrBody,
+      },
+    );
   },
   committedDoi(repo) {
     return committedYamlValue(repo, 'myst.yml', ['project', 'doi']);
@@ -1401,6 +1439,10 @@ export const realConformanceGh: ConformanceGh = {
   },
   committedJournalRepo(repo) {
     return committedYamlValue(repo, '.github/actions/engine/pins.yml', ['instance_repo']);
+  },
+  commitComments(repo, sha) {
+    const out = gh(['api', `repos/${repo}/commits/${sha}/comments`, '--jq', '[.[].body]']);
+    return out ? (JSON.parse(out) as string[]) : [];
   },
   defaultBranchSha(repo) {
     return gh(['api', `repos/${repo}/git/ref/heads/main`, '--jq', '.object.sha']);
