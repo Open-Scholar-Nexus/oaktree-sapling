@@ -14,7 +14,7 @@ import {
   depositRunFor,
   fetchCiBuild,
   parseTypstVersion,
-  DEPOSIT_WORKFLOW,
+  DEPOSIT_WORKFLOW_PATH,
   RELEASE_ARTIFACT,
   type CiBuildSource,
   type CiJob,
@@ -29,11 +29,20 @@ const tmp = (p: string) => mkdtempSync(join(tmpdir(), p));
 
 const run = (over: Partial<CiRun> = {}): CiRun => ({
   id: 7,
-  name: DEPOSIT_WORKFLOW,
+  path: DEPOSIT_WORKFLOW_PATH,
   event: 'push',
   headBranch: TAG,
   headSha: SHA,
   url: 'https://github.com/o/paper/actions/runs/7',
+  ...over,
+});
+
+const BUILT_AT = '2026-10-20T09:00:00Z';
+const job = (over: Partial<CiJob> = {}): CiJob => ({
+  name: 'build',
+  status: 'completed',
+  conclusion: 'success',
+  completedAt: BUILT_AT,
   ...over,
 });
 
@@ -49,7 +58,7 @@ function fakeSource(
     headSha: () => SHA,
     trackedChanges: () => false,
     pushRuns: () => over.runs ?? [run()],
-    jobs: () => over.jobList ?? [{ name: 'build', status: 'completed', conclusion: 'success' }],
+    jobs: () => over.jobList ?? [job()],
     download: (repo, id, name, dest) => {
       downloads.push([repo, id, name]);
       mkdirSync(join(dest, '_build', 'exports'), { recursive: true });
@@ -92,7 +101,7 @@ describe('the clone must be at the tag', () => {
 describe("the tag's Deposit version run", () => {
   it('is a push of that tag at that commit, the newest first', () => {
     const runs = [
-      run({ id: 1, name: 'Build paper' }),
+      run({ id: 1, path: '.github/workflows/build-paper.yml' }),
       run({ id: 2, event: 'workflow_dispatch' }),
       run({ id: 3, headBranch: 'v1.1.0' }),
       run({ id: 4, headSha: 'c'.repeat(40) }),
@@ -101,6 +110,12 @@ describe("the tag's Deposit version run", () => {
     ];
     expect(depositRunFor(runs, TAG, SHA)?.id).toBe(5);
     expect(depositRunFor(runs.slice(0, 4), TAG, SHA)).toBeNull();
+  });
+
+  it('is matched by workflow file, so a run of another file with the same name is not picked', () => {
+    const runs = [run({ id: 1, path: '.github/workflows/copy.yml' }), run({ id: 2 })];
+    expect(depositRunFor(runs, TAG, SHA)?.id).toBe(2);
+    expect(depositRunFor(runs.slice(0, 1), TAG, SHA)).toBeNull();
   });
 });
 
@@ -111,7 +126,8 @@ describe('fetchCiBuild', () => {
     writeFileSync(join(paper, '_build', 'exports', 'stale.pdf'), '%PDF local');
     const src = fakeSource();
     const got = fetchCiBuild(paper, TAG, SHA, src);
-    expect(got.id).toBe(7);
+    expect(got.run.id).toBe(7);
+    expect(got.builtAt).toBe(BUILT_AT);
     expect(src.downloads).toEqual([['o/paper', 7, RELEASE_ARTIFACT]]);
     expect(readFileSync(join(paper, '_build', 'exports', 'paper.pdf'), 'utf8')).toBe(
       '%PDF from CI',
@@ -123,21 +139,18 @@ describe('fetchCiBuild', () => {
 
   it('reads only the build job, so a paper still carrying a publish job beside it works', () => {
     const src = fakeSource({
-      jobList: [
-        { name: 'build', status: 'completed', conclusion: 'success' },
-        { name: 'publish', status: 'completed', conclusion: 'failure' },
-      ],
+      jobList: [job(), job({ name: 'publish', conclusion: 'failure' })],
     });
-    expect(fetchCiBuild(tmp('oak-release-'), TAG, SHA, src).id).toBe(7);
+    expect(fetchCiBuild(tmp('oak-release-'), TAG, SHA, src).run.id).toBe(7);
   });
 
   it('refuses while the build runs, after it failed, or with no run, downloading nothing', () => {
     const pending = fakeSource({
-      jobList: [{ name: 'build', status: 'in_progress', conclusion: null }],
+      jobList: [job({ status: 'in_progress', conclusion: null, completedAt: null })],
     });
     expect(refusal(() => fetchCiBuild('/p', TAG, SHA, pending))).toContain('still building');
     const failed = fakeSource({
-      jobList: [{ name: 'build', status: 'completed', conclusion: 'failure' }],
+      jobList: [job({ conclusion: 'failure' })],
     });
     expect(refusal(() => fetchCiBuild('/p', TAG, SHA, failed))).toContain('build failed');
     const none = fakeSource({ runs: [run({ headBranch: 'v9.9.9' })] });

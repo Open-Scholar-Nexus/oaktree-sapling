@@ -1000,6 +1000,8 @@ export interface UploadInput {
   /** The typst that exported the PDF, for a build that may not use the pinned one; the pinned
    *  `typst.version` by default. */
   typstVersion?: string | null;
+  /** When the deposited build ran, as ISO 8601, for a build made elsewhere; now by default. */
+  builtAt?: string;
 }
 
 /** oak's pinned typst version, for the provenance; null without the pin file. The provenance
@@ -1137,7 +1139,7 @@ async function fillDraft(input: UploadInput, engineZip: string): Promise<Outcome
     review_pr: await git.reviewPr(repoRoot, sha),
     journal_repo: journal?.repo ?? null,
     journal_commit: journal?.commit ?? null,
-    built_at: new Date().toISOString(),
+    built_at: input.builtAt ?? new Date().toISOString(),
     platform: input.platform ?? 'linux-x86_64',
     typst_version:
       input.typstVersion !== undefined ? input.typstVersion : readTypstVersion(engineRoot),

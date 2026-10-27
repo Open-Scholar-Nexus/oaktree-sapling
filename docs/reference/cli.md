@@ -57,7 +57,7 @@ The Zenodo verbs. The **Reserve DOI** workflow runs `oak deposit prepare`, and a
 
 In GitHub Actions, the **Deposit version** workflow runs it with `--no-build` on the build its first job made. When Zenodo refuses, it opens an issue labelled `zenodo-publish-failed`. With no token for the DOI's environment, it deposits nothing and ends successfully with a notice to run it from the terminal.
 
-Outside GitHub Actions the clone has to be at the tag, with no changes to tracked files. By default the build is the `release-build` artifact of the tag's **Deposit version** run, downloaded with gh once its build job has passed, whatever the deposit job did. The run has to be the push of that tag, at the tag's commit.
+Outside GitHub Actions the clone has to be at the tag, with no changes to tracked files. By default the build is the `release-build` artifact of the tag's **Deposit version** run, downloaded with gh once its build job has passed, whatever the deposit job did. The run has to be a run of `.github/workflows/deposit-version.yml` that the push of that tag started, at the tag's commit. The provenance records when its build job finished as the build time.
 
 `--local-build`
 : Builds on this computer and deposits that build, after a warning: the build runs the paper's code beside the Zenodo token ([building on your computer](#local-build)). The provenance records the platform and the typst that ran.
