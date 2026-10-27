@@ -860,3 +860,65 @@ describe.skipIf(bundleState() === 'absent')('oak release reads the DOI before an
     expect(stderr).toContain('oak release: project.doi https://doi.org/10.5072/zenodo.5 is not');
   });
 });
+
+describe.skipIf(bundleState() === 'absent')(
+  'oak release and oak deposit upload, before Zenodo',
+  () => {
+    beforeAll(assertBundleNotStale);
+
+    /** A paper with a committed sandbox DOI, outside any git repo. */
+    function sandboxPaper(): string {
+      const dir = mkdtempSync(join(tmpdir(), 'oak-release-'));
+      writeFileSync(
+        join(dir, 'myst.yml'),
+        'version: 1\nproject:\n  doi: 10.5072/zenodo.5\n' +
+          '  options:\n    oaktree-sapling:\n      version: v9.9.9\n      edition: e\n',
+      );
+      return dir;
+    }
+    const noTokens = {
+      OAK_USE_RUNNING: '1',
+      ZENODO_TOKEN: undefined,
+      ZENODO_TOKEN_SANDBOX: undefined,
+    };
+
+    it('refuses --local-build with --no-build, and a tag that is not a paper version', () => {
+      const dir = sandboxPaper();
+      const both = oak(
+        ['release', '--tag', 'v1.0.0', '--local-build', '--no-build', '--paper', dir],
+        noTokens,
+      );
+      expect(both.code).toBe(2);
+      expect(both.stderr).toContain('not both');
+      const bad = oak(['release', '--tag', 'v1.0.0;x', '--paper', dir], noTokens);
+      expect(bad.code).toBe(2);
+      expect(bad.stderr).toContain('--tag must be a paper version');
+    });
+
+    it('a local release needs the clone at the tag, checked before any build or download', () => {
+      const dir = sandboxPaper();
+      const r = oak(['release', '--tag', 'v1.0.0', '--paper', dir, '--no-instance'], {
+        ...noTokens,
+        ZENODO_TOKEN_SANDBOX: 'sandbox-token',
+      });
+      expect(r.code).toBe(2);
+      expect(r.stderr).toContain('this clone has no tag v1.0.0');
+    });
+
+    it('deposit upload takes the sandbox from the DOI, with no --sandbox', () => {
+      const r = oak(
+        ['deposit', 'upload', '--pdf', 'x.pdf', '--tag', 'v1.0.0', '--paper', sandboxPaper()],
+        { ...noTokens, ZENODO_TOKEN: 'production-secret' },
+      );
+      expect(r.code).toBe(2);
+      expect(r.stderr).toContain('ZENODO_TOKEN_SANDBOX');
+      expect(r.stdout + r.stderr).not.toContain('production-secret');
+    });
+
+    it('deposit publish is no verb: upload fills the draft', () => {
+      const r = oak(['deposit', 'publish', '--paper', sandboxPaper()], noTokens);
+      expect(r.code).toBe(2);
+      expect(r.stderr).toContain('<prepare|upload|status>');
+    });
+  },
+);

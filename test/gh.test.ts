@@ -208,6 +208,7 @@ describe('openDoiPr', () => {
     child.calls.length = 0;
     child.respond = answers(() => null);
   });
+  afterEach(() => vi.unstubAllEnvs());
 
   it('names the paper repo, since its git calls are -C and gh reads the cwd', () => {
     openDoiPr('/elsewhere/paper', { conceptDoi: '10.5072/zenodo.5' });
@@ -228,11 +229,20 @@ describe('openDoiPr', () => {
   });
 
   it('the body tells the editor how to run the checks GitHub does not start', () => {
+    vi.stubEnv('GITHUB_ACTIONS', 'true');
     openDoiPr('/paper', { conceptDoi: '10.5072/zenodo.5' });
     const body = argAfter(ghCall('pr', 'create')!.args, '--body')!;
     expect(body).toContain('10.5072/zenodo.5');
     expect(body).toContain('close and reopen');
     expect(body).toContain('<details>');
+  });
+
+  it('opened from an editor, whose pull request runs its checks, the body only names the DOI', () => {
+    vi.stubEnv('GITHUB_ACTIONS', '');
+    openDoiPr('/paper', { conceptDoi: '10.5072/zenodo.5' });
+    const body = argAfter(ghCall('pr', 'create')!.args, '--body')!;
+    expect(body).toContain('10.5072/zenodo.5');
+    expect(body).not.toContain('close and reopen');
   });
 
   it('a second prepare returns the pull request the first one opened', () => {

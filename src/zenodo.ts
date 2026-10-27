@@ -1,5 +1,5 @@
 /**
- * `oak deposit` (prepare, publish, status), and the core of `oak release`.
+ * `oak deposit` (prepare, upload, status), and the core of `oak release`.
  *
  *  - The journal's description paragraph and Zenodo community come from `journal.yml`
  *    `zenodo:`; both are optional [R19]. See `loadJournalZenodo`.
@@ -15,9 +15,8 @@
  *  - The Project Website link is the paper's registry `site_url`, else its GitHub Pages URL,
  *    unless `--site-url` names one. See `defaultSiteUrl`.
  *
- * Every command returns one JSON result with a `status` field, which the workflows read. A draft
- * is reused when one exists, `--sandbox` switches endpoints, and publish overwrites the metadata
- * [R22].
+ * Every command returns one JSON result with a `status` field. A draft is reused when one exists,
+ * the committed DOI picks the endpoint for an upload, and an upload overwrites the metadata [R22].
  *
  * The Zenodo HTTP transport and the git and gh side are injected, so tests need neither network
  * nor git; the real ones are `createFetchTransport()` and gh.ts. The abstract is read from the
@@ -261,6 +260,13 @@ export class ZenodoApi {
   ): Promise<Deposition> {
     return (
       await this.call('PUT', `/deposit/depositions/${depId}`, { json: { metadata } })
+    ).json() as Deposition;
+  }
+
+  /** Publishes the draft, which mints its version DOI; Zenodo allows no undo. */
+  async publish(depId: string | number): Promise<Deposition> {
+    return (
+      await this.call('POST', `/deposit/depositions/${depId}/actions/publish`)
     ).json() as Deposition;
   }
 
@@ -918,7 +924,7 @@ export async function cmdPrepare(input: PrepareInput): Promise<Outcome> {
   return ok({ concept_doi: cdoi, draft_url: draftUrl, deposition_id: dep.id, site_url: siteUrl });
 }
 
-export interface PublishInput {
+export interface UploadInput {
   mystPath: string;
   pdf: string;
   tag: string;
@@ -929,6 +935,13 @@ export interface PublishInput {
   instanceRoot: string | null;
   /** oak's checkout (holds paper-base.yml), archived as the deposit's engine.zip. */
   engineRoot: string;
+  /** Publishes the draft once filled (`--publish-without-review`). */
+  publish?: boolean;
+  /** Where the PDF was built, for the provenance; `linux-x86_64`, CI's, by default. */
+  platform?: string;
+  /** The typst that exported the PDF, for a build that may not use the pinned one; the pinned
+   *  `typst.version` by default. */
+  typstVersion?: string | null;
 }
 
 /** oak's pinned typst version, for the provenance; null without the pin file. The provenance
@@ -941,11 +954,11 @@ function readTypstVersion(engineRoot: string): string | null {
 }
 
 /**
- * `oak deposit publish`, also the core of `oak release`: fills the reserved draft with the final
- * metadata and files and leaves it unsubmitted. The environment follows the committed DOI's
- * prefix, so a tag cannot reach the wrong one [R4]; `--sandbox` must agree.
+ * `oak deposit upload`, also the core of `oak release`: fills the reserved draft with the final
+ * metadata and files and leaves it unsubmitted, or publishes it with `publish`. The environment
+ * follows the committed DOI's prefix, so a tag cannot reach the wrong one [R4]; `api` must agree.
  */
-export async function cmdPublish(input: PublishInput): Promise<Outcome> {
+export async function cmdUpload(input: UploadInput): Promise<Outcome> {
   const { mystPath, pdf, tag, bundleOut, api, git, instanceRoot, engineRoot } = input;
   const sandbox = api.sandbox;
   const doc = readDoc(mystPath);
@@ -957,7 +970,7 @@ export async function cmdPublish(input: PublishInput): Promise<Outcome> {
   const parsed = parseZenodoDoi(conceptDoi);
   if (!parsed) return err(2, msg.workflow.notZenodoDoi(conceptDoi));
   if (parsed.sandbox !== sandbox) {
-    return err(2, `DOI prefix says sandbox=${parsed.sandbox} but --sandbox=${sandbox}.`);
+    return err(2, `DOI prefix says sandbox=${parsed.sandbox} but the API is sandbox=${sandbox}.`);
   }
   if (!PAPER_VERSION_TAG.test(tag)) return err(2, `tag must match vMAJOR.MINOR.PATCH (got ${tag})`);
   const version = tag.slice(1);
@@ -990,7 +1003,7 @@ export async function cmdPublish(input: PublishInput): Promise<Outcome> {
     throw e;
   }
 
-  // publish overwrites the metadata [R22], so publishing from a tree with no HTML build would
+  // An upload overwrites the metadata [R22], so uploading from a tree with no HTML build would
   // replace a description that has the abstract with one that does not [R107].
   if (!hasBuildContent(repoRoot)) {
     return err(
@@ -1015,22 +1028,13 @@ export async function cmdPublish(input: PublishInput): Promise<Outcome> {
   }
 
   if (dep.submitted) {
-    // The CI token lacks `deposit:actions`, which a new version needs, so an editor clicks "New
-    // version" on Zenodo to create the empty draft.
+    // An editor clicks "New version" on Zenodo to create the empty draft.
     const recordUrl = dep.links?.record_html ?? dep.links?.html;
-    process.stderr.write(
-      `::error title=Zenodo: editor must click 'New version'::No unsubmitted draft for this concept. ` +
-        `Record: ${recordUrl ?? '(unavailable)'}\n`,
-    );
-    return err(
-      5,
-      `No unsubmitted Zenodo draft exists for this concept DOI.\n\n` +
-        `An editor must open the record and click **New version** to spawn an empty draft, then re-run failed jobs.\n\n` +
-        `Record: ${recordUrl ?? '(URL unavailable)'}`,
-      { record_url: recordUrl },
-    );
+    return err(5, msg.workflow.depositNeedsNewVersion(recordUrl ?? '(URL unavailable)'), {
+      record_url: recordUrl,
+    });
   }
-  process.stderr.write(`[publish] reusing existing draft ${dep.id}\n`);
+  process.stderr.write(`[upload] reusing existing draft ${dep.id}\n`);
 
   const md = buildMetadata({
     project,
@@ -1061,8 +1065,9 @@ export async function cmdPublish(input: PublishInput): Promise<Outcome> {
     journal_repo: journal?.repo ?? null,
     journal_commit: journal?.commit ?? null,
     built_at: new Date().toISOString(),
-    platform: 'linux-x86_64',
-    typst_version: readTypstVersion(engineRoot),
+    platform: input.platform ?? 'linux-x86_64',
+    typst_version:
+      input.typstVersion !== undefined ? input.typstVersion : readTypstVersion(engineRoot),
   };
   let files: string[];
   try {
@@ -1073,11 +1078,14 @@ export async function cmdPublish(input: PublishInput): Promise<Outcome> {
   }
 
   for (const p of files) {
-    process.stderr.write(`[publish] upload ${basename(p)}\n`);
+    process.stderr.write(`[upload] upload ${basename(p)}\n`);
     await api.uploadFile(bucket, basename(p), readFileSync(p));
   }
 
-  dep = await api.getDeposition(dep.id);
+  if (input.publish) {
+    process.stderr.write(`[upload] publish ${dep.id}\n`);
+    dep = await api.publish(dep.id);
+  } else dep = await api.getDeposition(dep.id);
   const versionDoi = dep.metadata?.doi ?? dep.doi ?? predictedVersionDoi;
   return ok({
     version_doi: versionDoi,
@@ -1085,6 +1093,8 @@ export async function cmdPublish(input: PublishInput): Promise<Outcome> {
     deposition_id: dep.id,
     bundle_dir: bundleOut,
     site_url: siteUrl,
+    published: Boolean(input.publish),
+    ...(input.publish ? { record_url: dep.links?.record_html ?? dep.links?.html } : {}),
   });
 }
 
@@ -1096,8 +1106,8 @@ export interface StatusInput {
 }
 
 /**
- * `oak deposit status`: the deposit's state for the committed concept DOI, and the metadata a
- * publish would send. Writes nothing.
+ * `oak deposit status`: the deposit's state for the committed concept DOI, and the metadata an
+ * upload would send. Writes nothing.
  */
 export async function cmdStatus(input: StatusInput): Promise<Outcome> {
   const { mystPath, api, instanceRoot } = input;
