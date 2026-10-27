@@ -1041,6 +1041,11 @@ export const workflow = {
   depositNeedsNewVersion: (recordUrl: string): string =>
     `no unsubmitted Zenodo draft for this concept DOI. Open the record, click New version, ` +
     `then re-run the failed Deposit version job or run oak release again: ${recordUrl}`,
+  depositTemplateBadName: (template: string): string =>
+    `the build's myst.oak.yml names the typst template "${template}", which is neither a ` +
+    `template directory nor a registry name (a name has no empty or ".." part and does not ` +
+    `start with /), so the deposit does not archive it. Name a template directory, a URL, or ` +
+    `a registry name in myst.yml and build again.`,
   depositNoTokenInCi: (sandbox: boolean): string =>
     `oak deposit: the zenodo-prepare environment has no ` +
     `${sandbox ? 'ZENODO_TOKEN_SANDBOX' : 'ZENODO_TOKEN'}. Set it there, or reserve the DOI from ` +
