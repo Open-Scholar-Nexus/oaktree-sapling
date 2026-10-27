@@ -3,6 +3,8 @@
 
 Each submission gets a repository of its own, created by an editor with `oak bootstrap paper`. The author works in that repository, and its workflows build, check and publish the paper with the journal's settings.
 
+In a journal that keeps its papers in its own repository, an author submits with `oak add-paper` instead: see [A journal with its papers in one repository](co-located.md).
+
 ## Create the repository
 
 For a new paper, starting from the starter manuscript:

@@ -30,6 +30,7 @@ project:
     - title: Guides
       children:
         - file: guide/add-paper.md
+        - file: guide/co-located.md
         - file: guide/publish.md
         - file: guide/journal-settings.md
         - file: guide/journal-yml.md

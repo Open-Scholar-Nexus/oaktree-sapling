@@ -493,7 +493,7 @@ export const bootstrap = {
   runbookAddPaper: (repo: string): string =>
     `An author adds a paper with oak add-paper --repo ${repo} --id <paper id>, which opens a pull ` +
     `request from their fork; merging it adds the paper as a draft, and listing it in ` +
-    `registry/papers.yml publishes it. See ${docsUrl(DOCS.journalStart)}`,
+    `registry/papers.yml publishes it. See ${docsUrl(DOCS.colocated)}`,
   runbookColocatedSite: (siteUrl: string): string =>
     `The website goes live at ${siteUrl} a few minutes after the first "Build paper" run on main ` +
     'finishes (Actions tab).',

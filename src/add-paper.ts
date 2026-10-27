@@ -93,7 +93,7 @@ export function seedPaper(
   return written.map((rel) => posix.join(dir, rel));
 }
 
-/** `oak add-paper --repo <owner/name> --id <id>`. */
+/** `oak add-paper --repo <owner/name> --id <id>`. Documented at DOCS.colocated. */
 export async function cmdAddPaper(input: AddPaperInput, deps: AddPaperDeps): Promise<Outcome> {
   const { repo, id } = input;
   if (!PAPER_ID.test(id)) return err(2, msg.addPaper.badId(id));
