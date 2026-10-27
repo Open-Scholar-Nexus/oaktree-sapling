@@ -716,6 +716,7 @@ describe('cmdBootstrapPaper', () => {
       environments: new Set(['me/paper/zenodo-prepare', 'me/paper/preview']),
       policies: new Set([
         'me/paper/zenodo-publish/v*',
+        'me/paper/zenodo-publish/*/v*',
         'me/paper/zenodo-prepare/main',
         'me/paper/preview/main',
       ]),
@@ -811,6 +812,34 @@ describe('cmdBootstrapPaper', () => {
       'preview/CLOUDFLARE_ACCOUNT_ID',
     ]);
     expect((out.result.runbook as string[]).join('\n')).not.toContain('settings/environments :');
+  });
+
+  it('zenodo-publish admits v* and */v* tags, and a rerun adds the one a repo lacks', async () => {
+    const fresh = fakeProv();
+    await cmdBootstrapPaper(paperInput(), deps(fresh.prov));
+    for (const n of ['v*', '*/v*'])
+      expect(fresh.calls.createBranchPolicy).toContainEqual({
+        r: 'me/paper',
+        e: 'zenodo-publish',
+        n,
+        t: 'tag',
+      });
+    const older = fakeProv({ policies: new Set(['me/paper/zenodo-publish/v*']) });
+    await cmdBootstrapPaper(paperInput(), deps(older.prov));
+    expect(
+      (older.calls.createBranchPolicy as Array<{ e: string; n: string }>)
+        .filter((c) => c.e === 'zenodo-publish')
+        .map((c) => c.n),
+    ).toEqual(['*/v*']);
+  });
+
+  it('the tag ruleset covers every tag, so editors alone create any version tag', async () => {
+    const { prov, calls } = fakeProv();
+    await cmdBootstrapPaper(paperInput(), deps(prov));
+    const body = (calls.createRuleset as Array<{ b: { name: string } }>)
+      .map((c) => c.b)
+      .find((b) => b.name === 'editors-only-v-tags');
+    expect(JSON.stringify(body)).toContain('"include":["~ALL"]');
   });
 
   it('creates zenodo-prepare and preview admitting main only', async () => {

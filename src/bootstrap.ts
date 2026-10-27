@@ -46,6 +46,9 @@ export interface TemplateAnswers {
   /** The journal website's URL, for the brand's `logo_url`, so each paper's header links back
    *  to it. Unset when there is no website. */
   siteUrl?: string;
+  /** A co-located repository's pins.yml `engine_version`: the engine its jobs with no paper of
+   *  their own run (the website, posting checks and previews). Unset for a paper repository. */
+  repoEngineVersion?: string;
 }
 
 /** The journal name the templates ship, replaced by `--name`. */
@@ -140,8 +143,24 @@ export function renderPins(templateRoot: string, answers: TemplateAnswers): stri
   const doc = readDoc(join(templateRoot, RENDER_PINS));
   doc.set('engine_repo', answers.engineRepo);
   doc.set('instance_repo', answers.instanceRepo);
+  if (answers.repoEngineVersion && doc.has(ENGINE_VERSION_KEY)) {
+    doc.set(ENGINE_VERSION_KEY, answers.repoEngineVersion);
+  } else if (answers.repoEngineVersion && isMap(doc.contents)) {
+    const pair = doc.createPair(ENGINE_VERSION_KEY, answers.repoEngineVersion);
+    if (isScalar(pair.key)) {
+      pair.key.commentBefore = ENGINE_VERSION_COMMENT;
+      pair.key.spaceBefore = true;
+    }
+    doc.contents.items.push(pair);
+  }
   return doc.toString();
 }
+
+/** The pins.yml key naming a co-located repository's own engine ({@link TemplateAnswers}). */
+export const ENGINE_VERSION_KEY = 'engine_version';
+const ENGINE_VERSION_COMMENT =
+  " The engine this repository's jobs with no paper of their own run (the website, posting\n" +
+  ' checks and previews); each paper pins its own in its myst.yml. oak upgrade moves both.';
 
 /** A gated CODEOWNERS line: indent, path and spacing (1), the path (2), the owner column (3). */
 const CODEOWNERS_LINE = /^(\s*(\S+)\s+)(\S.*)$/;
@@ -461,12 +480,14 @@ function protectMainBypass(team: string | null): unknown[] {
     : [{ actor_id: REPO_ROLE_ADMIN, actor_type: 'RepositoryRole', bypass_mode: 'pull_request' }];
 }
 
+/** Every tag, so the rule cannot disagree with the {@link ZENODO_TAG_POLICIES} or the
+ *  `deposit-version.yml` trigger. */
 function vTagsBody(bypass: unknown[]): unknown {
   return {
     name: RULESET_V_TAGS,
     target: 'tag',
     enforcement: 'active',
-    conditions: { ref_name: { include: ['refs/tags/v*'], exclude: [] } },
+    conditions: { ref_name: { include: ['~ALL'], exclude: [] } },
     rules: [{ type: 'creation' }, { type: 'update' }, { type: 'deletion' }],
     bypass_actors: bypass,
   };
@@ -490,6 +511,9 @@ export interface SecretInputs {
 
 /** The name of the environment gating the tag-push deposit. */
 export const ZENODO_ENV = 'zenodo-publish';
+/** The tags {@link ZENODO_ENV} admits: `vX.Y.Z`, and `<paper id>/vX.Y.Z` in a co-located
+ *  repository. `*` stops at `/`, as in the `deposit-version.yml` trigger. */
+export const ZENODO_TAG_POLICIES = ['v*', '*/v*'] as const;
 /** The environment of the DOI-reservation workflow: `main` only, no reviewer. */
 export const ZENODO_PREPARE_ENV = 'zenodo-prepare';
 /** The environment of the preview deploy: `main` only, no reviewer. */
@@ -828,13 +852,14 @@ function applyProvisioning(
   // and the Zenodo draft waits for an editor's Publish click.
   step('zenodo_env', () => {
     restrict(ZENODO_ENV);
-    if (prov.branchPolicyExists(repo, ZENODO_ENV, 'v*')) {
-      actions.zenodo_env = 'v* policy already exists';
-      log(msg.bootstrap.logZenodoEnvExists);
-    } else {
-      prov.createBranchPolicy(repo, ZENODO_ENV, 'v*', 'tag');
-      actions.zenodo_env = 'created with v* policy';
+    const added = ZENODO_TAG_POLICIES.filter((p) => !prov.branchPolicyExists(repo, ZENODO_ENV, p));
+    for (const p of added) prov.createBranchPolicy(repo, ZENODO_ENV, p, 'tag');
+    if (added.length) {
+      actions.zenodo_env = `created with ${added.join(', ')} policy`;
       log(msg.bootstrap.logZenodoEnvCreated);
+    } else {
+      actions.zenodo_env = `${ZENODO_TAG_POLICIES.join(', ')} policies already exist`;
+      log(msg.bootstrap.logZenodoEnvExists);
     }
   });
 

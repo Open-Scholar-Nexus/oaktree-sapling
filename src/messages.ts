@@ -417,7 +417,7 @@ export const bootstrap = {
     `  ✓ created branch rule '${name}': changes to main need a pull request approved by a code owner`,
   logTagRuleExists: (name: string): string => `  ✓ tag rule '${name}' already exists`,
   logTagRuleCreated: (name: string): string =>
-    `  ✓ created tag rule '${name}': only editors can create the v* tags that publish a version`,
+    `  ✓ created tag rule '${name}': only editors can create tags, which publish a version`,
   logPagesExists: '  ✓ GitHub Pages already enabled',
   logPagesEnabled: '  ✓ GitHub Pages enabled (published by a workflow)',
   logHomepageExists: (url: string): string => `  ✓ repo website link already set (${url})`,
@@ -427,9 +427,9 @@ export const bootstrap = {
   logActionsPrsAllowed:
     '  ✓ Actions allowed to open pull requests (the DOI write-back is one of them)',
   logZenodoEnvExists:
-    "  ✓ the 'zenodo-publish' environment already restricts its secrets to v* tags",
+    "  ✓ the 'zenodo-publish' environment already restricts its secrets to v* and */v* tags",
   logZenodoEnvCreated:
-    "  ✓ created the 'zenodo-publish' environment: only v* tags may use its secrets",
+    "  ✓ created the 'zenodo-publish' environment: only v* and */v* tags may use its secrets",
   logMainEnvExists: (env: string): string =>
     `  ✓ the '${env}' environment already restricts its secrets to main`,
   logMainEnvCreated: (env: string): string =>

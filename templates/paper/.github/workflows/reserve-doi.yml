@@ -1,11 +1,16 @@
 name: Reserve DOI
 
 # Editor-dispatched: reserves the concept DOI, opens the myst.yml PR. The version enters at publish.
+# Each paper of a co-located repository has its own concept record.
 # https://scholar.nexus/oaktree-sapling/reference/cli#deposit
 
 on:
   workflow_dispatch:
     inputs:
+      paper:
+        description: "The paper's id, the name of its folder in papers/; empty in a paper repository"
+        type: string
+        default: ""
       sandbox:
         description: "Use the Zenodo sandbox (rehearsal) instead of production"
         type: boolean
@@ -22,10 +27,25 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      # One of the papers in papers/, by id, or the paper at the root.
+      - id: paper
+        env:
+          PAPER: ${{ inputs.paper }}
+        run: |
+          if [ ! -d papers ] && [ -z "$PAPER" ]; then
+            echo "paper-dir=." >> "$GITHUB_OUTPUT"
+          elif [[ "$PAPER" =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$ ]] && [ -f "papers/$PAPER/myst.yml" ]; then
+            echo "paper-dir=papers/$PAPER" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::the paper input is not one of this repository's papers; give the id its folder in papers/ is named by"
+            exit 1
+          fi
+
       # A sandbox run with no ZENODO_TOKEN_SANDBOX is refused.
       - uses: ./.github/actions/engine
         with:
           args: deposit prepare ${{ inputs.sandbox && '--sandbox' || '' }}
+          paper-dir: ${{ steps.paper.outputs.paper-dir }}
         env:
           GH_TOKEN: ${{ github.token }}
           ZENODO_TOKEN: ${{ secrets.ZENODO_TOKEN }}
