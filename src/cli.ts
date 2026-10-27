@@ -636,6 +636,8 @@ async function cmdRelease(argv: string[]): Promise<number> {
     const ci = release.fetchCiBuild(paperRoot, tag, sha, gh.realCiBuildSource);
     builtAt = ci.builtAt ?? undefined;
     process.stderr.write(msg.workflow.releaseFetched(ci.run.url) + '\n');
+  } else if (noBuild && !inActions) {
+    process.stderr.write(annotate('warning', msg.workflow.releaseNoBuild) + '\n');
   } else if (!noBuild) {
     if (!inActions) {
       const { readPin } = await import('./pinned.js');
