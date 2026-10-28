@@ -94,10 +94,10 @@ type ResolvedInstance = { root: string | null; stamp: JournalStamp | undefined }
 
 /**
  * Where the journal repo is [R38]: none with `--no-instance`, else `--instance` (`.` is the
- * repository holding the paper), else a cached clone of pins.yml's `instance_repo`, else this
- * repository when `instance_repo` is `.` or absent and a `journal.yml` sits beside the paper or
- * at the repository root, as in a co-located repository. pins.yml is editor-gated and that
- * `journal.yml` is not, so the pin comes first. Every verb that reads journal settings finds it
+ * repository holding the paper), else a cached clone of pins.yml's `instance_repo`, else, when
+ * `instance_repo` is `.`, this repository's `journal.yml`, at the repository root of a
+ * co-located repository. Without `instance_repo` the journal is unknown. pins.yml is
+ * editor-gated, so it decides. Every verb that reads journal settings finds it
  * here, `deposit` and `deploy-preview` included, in CI too: `ci/run.sh` passes no `--instance`.
  *
  * Returns a root, with the {@link JournalStamp} the derived config records for it, or an error
@@ -126,7 +126,8 @@ async function resolveInstanceRoot(
     if (!(err instanceof UserError)) throw err;
     return { error: err.message };
   }
-  if (!journalRepo || journalRepo === '.') {
+  if (!journalRepo) return { error: msg.build.noInstance(verb, paperRoot) };
+  if (journalRepo === '.') {
     for (const root of [paperRoot, repoRoot]) {
       if (existsSync(join(root, 'journal.yml'))) return found(root);
     }

@@ -23,19 +23,18 @@ export const PAPERS_DIR = 'papers';
  *  `test/frozen-guards.test.ts`. */
 export const PAPER_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$/;
 
-/** The pins.yml key naming a co-located repository's own engine, and marking it co-located. */
+/** The pins.yml key naming the engine a co-located repository's jobs with no paper of their own
+ *  run. */
 export const ENGINE_VERSION_KEY = 'engine_version';
 
 const PINS_REL = join('.github', 'actions', 'engine', 'pins.yml');
 
-/** Whether `root` is a co-located repository: its `pins.yml`, which editors gate, names an
- *  `engine_version`, the engine its jobs with no paper of their own run. The engine action's
- *  `ref` step decides the same way. */
+/** Whether `root` is a co-located repository: its `pins.yml`, which editors gate, names `.` as
+ *  the journal repository, since it holds its own journal settings. The engine action's `ref`
+ *  step decides the same way. A missing key is a paper repository whose journal is unknown. */
 export function isColocated(root: string): boolean {
   const pins = join(root, PINS_REL);
-  if (!existsSync(pins)) return false;
-  const v = readDoc(pins).get(ENGINE_VERSION_KEY);
-  return typeof v === 'string' && v !== '';
+  return existsSync(pins) && readDoc(pins).get('instance_repo') === '.';
 }
 
 /**

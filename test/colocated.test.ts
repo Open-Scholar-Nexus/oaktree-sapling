@@ -103,6 +103,23 @@ describe('discoverProjects', () => {
     }
   });
 
+  it('a pins.yml with no instance_repo is a paper repository whose journal is unknown', () => {
+    const root = mkdtempSync(join(tmpdir(), 'oak-paper-'));
+    mkdirSync(join(root, '.github', 'actions', 'engine'), { recursive: true });
+    const pins = join(root, '.github', 'actions', 'engine', 'pins.yml');
+    for (const body of [
+      'engine_repo: me/engine\n',
+      'engine_repo: me/engine\nengine_version: v1.0.0\n',
+    ]) {
+      writeFileSync(pins, body);
+      expect(isColocated(root), body).toBe(false);
+    }
+    writeFileSync(pins, 'engine_repo: me/engine\ninstance_repo: acme/journal\n');
+    expect(isColocated(root)).toBe(false);
+    writeFileSync(pins, 'engine_repo: me/engine\ninstance_repo: .\n');
+    expect(isColocated(root)).toBe(true);
+  });
+
   it('ignores a folder without a myst.yml and a file', () => {
     const root = colocatedRepo(['a-2026-one']);
     mkdirSync(join(root, 'papers', '.notes'));

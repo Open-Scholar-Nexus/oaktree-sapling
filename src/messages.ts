@@ -140,8 +140,8 @@ export const usage = (): string =>
   `                        [--from <author-url> [--source-ref <ref>]]\n` +
   `                        [--engine-repo <owner/name>] [--engine-version <tag>] [--owner <@user|@org/team>]\n` +
   `                        [--private] [--no-require-checks] [--yes]\n` +
-  `      --instance    the journal repo this paper belongs to ('.' only if the journal\n` +
-  `                    settings live in this same repo); --edition names one of its editions\n` +
+  `      --instance    the journal repo this paper belongs to; --edition names one of its\n` +
+  `                    editions\n` +
   `  Both bootstrap verbs: --engine-version naming another oak version runs that version's\n` +
   `  bootstrap, fetched once into ~/.cache/oak.\n` +
   `  oak add-paper --repo <owner/journal> --id <paper id> [--edition <id>] [--yes]\n` +
@@ -309,9 +309,9 @@ export const bootstrap = {
     'journal this paper belongs to and is written into .github/actions/engine/pins.yml, ' +
     "where the paper's workflows read it to fetch the journal's branding, its edition " +
     'and the checks it wants run. Without it the repo bootstraps fine and then every CI ' +
-    'run fails with "no journal repo found". Pass `--instance .` only for a repo ' +
-    'that carries its own journal.yml (use `oak bootstrap journal --co-located` to stand ' +
-    'one up). What the paper gets out of that connection: ' +
+    'run fails with "no journal repo found". A journal with its papers in one repo is set ' +
+    'up with `oak bootstrap journal --co-located`. What the paper gets out of that ' +
+    'connection: ' +
     docsUrl(DOCS.paperJournalLink),
 
   editionRequired: (instance: string): string =>
@@ -643,12 +643,12 @@ export const build = {
   badEdition: (got: string, mystPath: string): string =>
     `project.options.oaktree-sapling.edition is ${JSON.stringify(got.slice(0, 40))} in ${mystPath}. ` +
     `It names a file (editions/<edition>.yml), so it must be a plain name: letters, digits, . _ -`,
-  /** No journal repo found: pins.yml names none (`instance_repo: .` or absent, which means the
-   *  same) and no journal.yml sits beside the paper. */
+  /** No journal repo found: pins.yml names none, or names this repo (`instance_repo: .`) and no
+   *  journal.yml sits there. */
   noInstance: (verb: JournalVerb, paperRoot: string): string =>
-    `oak ${verb}: no journal repo found. .github/actions/engine/pins.yml names none ` +
-    `(\`instance_repo: "."\` means the journal.yml sits in this repo), and there is no ` +
-    `journal.yml at ${paperRoot}.\n` +
+    `oak ${verb}: no journal repo found. .github/actions/engine/pins.yml names none, or ` +
+    `names this repo (\`instance_repo: "."\`) and there is no journal.yml at ${paperRoot} ` +
+    `or the repository root.\n` +
     `Set instance_repo in pins.yml to the journal's owner/repo (\`oak bootstrap paper ` +
     `--instance\` writes it), or pass --instance <path to a clone of the journal> or ` +
     `--no-instance for ` +

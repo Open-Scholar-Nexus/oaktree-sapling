@@ -312,8 +312,11 @@ export const Pins = z
   .object({
     /** owner/repo the engine is checked out from; only the *ref* floats. */
     engine_repo: z.string().min(1),
-    /** owner/repo of instance-config; '.' or omitted when co-located (repo=journal). */
-    instance_repo: z.string().default('.'),
+    /** owner/repo of the journal; '.' in a co-located repository, which holds its own. Absent,
+     *  the journal is unknown. */
+    instance_repo: z.string().optional(),
+    /** The engine a co-located repository's jobs with no paper of their own run. */
+    engine_version: z.string().optional(),
   })
   .loose();
 export type Pins = z.infer<typeof Pins>;

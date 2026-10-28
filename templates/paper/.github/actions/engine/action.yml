@@ -23,8 +23,8 @@ runs:
   using: composite
   steps:
     # The paper's own myst.yml, before extends. Key quoted: yq versions disagree on a bare hyphen.
-    # pins.yml names engine_version in a co-located repository only, and a job with no paper of
-    # its own (paper-dir .) runs it. https://scholar.nexus/oaktree-sapling/design/paper-ci#design-paper-ci-colocated
+    # In a co-located repository a job with no paper of its own (paper-dir .) runs pins.yml's
+    # engine_version. https://scholar.nexus/oaktree-sapling/design/paper-ci#design-paper-ci-colocated
     - id: ref
       shell: bash
       env:
@@ -35,11 +35,11 @@ runs:
           echo "::error::paper-dir must be . or papers/<paper id>"
           exit 1
         fi
+        # instance_repo: . marks a co-located repository, as isColocated in src/projects.ts.
         pins=.github/actions/engine/pins.yml
-        engine=$(yq '.engine_version // ""' "$pins")
-        if [ "${PAPER_DIR:-.}" = "." ] && [ -n "$engine" ] && [ "$engine" != "null" ]; then
+        if [ "${PAPER_DIR:-.}" = "." ] && [ "$(yq '.instance_repo // ""' "$pins")" = "." ]; then
           myst=$pins
-          ref=$engine
+          ref=$(yq '.engine_version // ""' "$pins")
           key=engine_version
         else
           myst="${PAPER_DIR:-.}/myst.yml"
@@ -83,7 +83,7 @@ runs:
           exit 1
         fi
         echo "engine=$engine" >> "$GITHUB_OUTPUT"
-        echo "instance=$(yq '.instance_repo // "."' "$pins")" >> "$GITHUB_OUTPUT"
+        echo "instance=$(yq '.instance_repo // ""' "$pins")" >> "$GITHUB_OUTPUT"
 
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:

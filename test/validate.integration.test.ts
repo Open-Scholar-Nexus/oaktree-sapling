@@ -279,12 +279,25 @@ describe.skipIf(bundleState() === 'absent')(
       expect(r.stderr).toContain('--no-instance');
     }, 60_000);
 
-    it('uses a journal.yml beside the paper as the journal repo [R38]', () => {
-      // What `instance_repo: .` means: the journal.yml sits beside the paper.
+    it('without instance_repo in pins.yml, a journal.yml beside the paper is not the journal', () => {
+      // A missing key is a paper repository whose journal is unknown, never this repo.
+      const dir = paperOnly();
+      cpSync(fixtureInstance, dir, { recursive: true });
+      mkdirSync(join(dir, '.github', 'actions', 'engine'), { recursive: true });
+      writeFileSync(join(dir, '.github', 'actions', 'engine', 'pins.yml'), 'engine_repo: a/b\n');
+      const r = spawnSync('node', [bundle, 'validate', '--paper', dir], { encoding: 'utf8' });
+      expect(r.status).toBe(2);
+      expect(r.stderr).toContain('no journal repo found');
+    }, 60_000);
+
+    it('uses a journal.yml in this repo as the journal repo with instance_repo: . [R38]', () => {
+      // What `instance_repo: .` means: the journal.yml sits in this repository.
       const dir = mkdtempSync(join(tmpdir(), 'oak-val-colo-'));
       for (const f of ['bib.bib', 'index.md', 'myst.yml'])
         copyFileSync(join(fixturePaper, f), join(dir, f));
       cpSync(fixtureInstance, dir, { recursive: true });
+      mkdirSync(join(dir, '.github', 'actions', 'engine'), { recursive: true });
+      writeFileSync(join(dir, '.github', 'actions', 'engine', 'pins.yml'), 'instance_repo: .\n');
       const report = join(dir, 'report.json');
       const r = spawnSync(
         'node',

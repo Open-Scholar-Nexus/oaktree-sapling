@@ -625,11 +625,12 @@ describe('cmdBootstrapPaper', () => {
     expect(same).not.toContain('running oak');
   });
 
-  it('--instance . names this repo as the journal, and still bootstraps', async () => {
+  it('--instance . is refused: it marks a co-located repository, set up by bootstrap journal', async () => {
     const { prov, calls } = fakeProv();
     const out = await cmdBootstrapPaper(paperInput({ instance: '.' }), deps(prov));
-    expect(out.exitCode).toBe(0);
-    expect(calls.seedBranch).toHaveLength(1);
+    expect(out.exitCode).toBe(2);
+    expect(String(out.result.error)).toContain('--co-located');
+    expect(calls.seedBranch).toHaveLength(0);
   });
 
   it('the instance lands in pins.yml as instance_repo', async () => {

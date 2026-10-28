@@ -79,7 +79,8 @@ export function readAnswers(repoRoot: string): TemplateAnswers {
   const pinsPath = join(repoRoot, PINS_REL);
   const pins = existsSync(pinsPath) ? readDoc(pinsPath) : null;
   const engineRepo = String(pins?.get('engine_repo') ?? '');
-  const instanceRepo = String(pins?.get('instance_repo') ?? '.');
+  // Absent stays absent: a paper repository whose journal is unknown.
+  const instanceRepo = String(pins?.get('instance_repo') ?? '');
   const coPath = join(repoRoot, CODEOWNERS_REL);
   const owner = existsSync(coPath) ? ownerFromCodeowners(readFileSync(coPath, 'utf8')) : '@owner';
   const myst = join(repoRoot, 'myst.yml');

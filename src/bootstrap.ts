@@ -32,8 +32,8 @@ export { ENGINE_VERSION_KEY };
 export interface TemplateAnswers {
   /** The repo oak is checked out from (pins.yml `engine_repo`). */
   engineRepo: string;
-  /** The journal repo, or '.' when this repo is the journal (pins.yml
-   *  `instance_repo`). */
+  /** The journal repo, or '.' when this repo is the journal (pins.yml `instance_repo`); empty
+   *  leaves the key out, a paper repository whose journal is unknown. */
   instanceRepo: string;
   /** The CODEOWNERS owner: `@user` or `@org/team`. */
   owner: string;
@@ -145,7 +145,8 @@ function writeRel(destRoot: string, rel: string, contents: string | Buffer): voi
 export function renderPins(templateRoot: string, answers: TemplateAnswers): string {
   const doc = readDoc(join(templateRoot, RENDER_PINS));
   doc.set('engine_repo', answers.engineRepo);
-  doc.set('instance_repo', answers.instanceRepo);
+  if (answers.instanceRepo) doc.set('instance_repo', answers.instanceRepo);
+  else doc.delete('instance_repo');
   if (answers.repoEngineVersion && doc.has(ENGINE_VERSION_KEY)) {
     doc.set(ENGINE_VERSION_KEY, answers.repoEngineVersion);
   } else if (answers.repoEngineVersion && isMap(doc.contents)) {
@@ -991,11 +992,9 @@ export async function cmdBootstrapPaper(
   const mode = input.from ? 'ingest' : 'bare';
 
   // `--instance` is required: `pins.yml`'s `instance_repo` is the only record of a paper's
-  // journal, and with `.` the engine action clones nothing, so `oak validate` and `oak build`
-  // would fail in CI with no journal. `--instance .` stays the explicit choice for a repo
-  // that is its own journal (`oak bootstrap journal --co-located` renders the paper template
-  // itself and does not come through here).
-  if (!input.instance) {
+  // journal. `.` marks a co-located repository, which `oak bootstrap journal --co-located` sets
+  // up, so a paper repository names another one.
+  if (!input.instance || input.instance === '.') {
     return {
       exitCode: 2,
       result: {

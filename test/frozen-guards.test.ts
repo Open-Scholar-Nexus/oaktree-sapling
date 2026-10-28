@@ -445,6 +445,7 @@ function withYq(script: string, dir: string, env: Record<string, string>) {
     [
       '#!/bin/sh',
       'case "$1" in',
+      '  *instance_repo*) printf "%s" "$YQ_JOURNAL" ;;',
       '  *engine_version*) case "$1" in *min_*) printf "%s" "$YQ_MIN" ;; *) printf "%s" "$YQ_ENGINE" ;; esac ;;',
       '  *) printf "%s" "$YQ_VALUE" ;;',
       'esac',
@@ -481,6 +482,7 @@ describe('the ref step in a co-located repository', () => {
   it("a job with no paper of its own runs pins.yml's engine_version", () => {
     const r = withYq(script, colocated(), {
       PAPER_DIR: '.',
+      YQ_JOURNAL: '.',
       YQ_ENGINE: 'v2.0.0',
       YQ_VALUE: 'v1.0.0',
     });
@@ -489,17 +491,36 @@ describe('the ref step in a co-located repository', () => {
   });
 
   it('a paper repository with a papers/ folder of its own still runs its myst.yml pin', () => {
-    // No engine_version in pins.yml: a paper repository, whatever folders an author adds.
-    const r = withYq(script, colocated(), { PAPER_DIR: '.', YQ_ENGINE: '', YQ_VALUE: 'v1.0.0' });
-    expect(r.code).toBe(0);
-    expect(r.output.trim()).toBe('ref=v1.0.0');
+    // pins.yml names another journal repository, or none: a paper repository, whatever folders
+    // an author adds.
+    for (const journal of ['acme/journal', '']) {
+      const r = withYq(script, colocated(), {
+        PAPER_DIR: '.',
+        YQ_JOURNAL: journal,
+        YQ_ENGINE: 'v2.0.0',
+        YQ_VALUE: 'v1.0.0',
+      });
+      expect(r.code, journal).toBe(0);
+      expect(r.output.trim(), journal).toBe('ref=v1.0.0');
+    }
+  });
+
+  it('a co-located repository without engine_version fails, naming it', () => {
+    const r = withYq(script, colocated(), { PAPER_DIR: '.', YQ_JOURNAL: '.', YQ_ENGINE: '' });
+    expect(r.code).toBe(1);
+    expect(r.out).toContain('engine_version missing from .github/actions/engine/pins.yml');
   });
 
   it('holds engine_version to the same rules as a paper pin', () => {
-    const branch = withYq(script, colocated(), { PAPER_DIR: '.', YQ_ENGINE: 'main' });
+    const branch = withYq(script, colocated(), {
+      PAPER_DIR: '.',
+      YQ_JOURNAL: '.',
+      YQ_ENGINE: 'main',
+    });
     expect(branch.code).toBe(1);
     const old = withYq(script, colocated(), {
       PAPER_DIR: '.',
+      YQ_JOURNAL: '.',
       YQ_ENGINE: 'v0.1.0',
       YQ_MIN: 'v0.4.0-dev.1',
     });
