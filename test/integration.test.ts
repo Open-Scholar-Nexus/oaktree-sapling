@@ -82,6 +82,7 @@ describe.skipIf(!runnable)('what oak build leaves for Stage 2', () => {
   beforeAll(assertBundleNotStale);
   it('drops symlinks, leaves the pull request number and paper, and records the placeholder', () => {
     const repo = mkdtempSync(join(tmpdir(), 'oak-int-repo-'));
+    mkdirSync(join(repo, '.git'));
     const paper = join(repo, 'papers', 'one');
     mkdirSync(paper, { recursive: true });
     for (const f of ['myst.yml', 'index.md', 'bib.bib']) {
@@ -126,5 +127,30 @@ describe.skipIf(!runnable)('what oak build leaves for Stage 2', () => {
     expect(readFileSync(join(html, '.paper'), 'utf8')).toBe('papers/one\n');
     expect(JSON.parse(readFileSync(result, 'utf8'))).toEqual({ status: 'ok', placeholder: true });
     expect(readFileSync(result, 'utf8')).not.toContain('\n');
+
+    // Run from inside the paper's folder, as myst leaves the build: the folder is still
+    // relative to the repo root.
+    execFileSync(
+      'node',
+      [
+        bundle,
+        'build',
+        '--paper',
+        '.',
+        '--journal',
+        join(engineDir, 'test', 'fixture-journal'),
+      ].concat(['--exports-only']),
+      {
+        stdio: 'pipe',
+        cwd: paper,
+        env: {
+          ...process.env,
+          GITHUB_EVENT_NAME: 'pull_request',
+          GITHUB_EVENT_PATH: event,
+          OAK_RESULT_FILE: result,
+        },
+      },
+    );
+    expect(readFileSync(join(html, '.paper'), 'utf8')).toBe('papers/one\n');
   }, 60_000);
 });

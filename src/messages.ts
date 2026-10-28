@@ -480,8 +480,9 @@ export const bootstrap = {
 
   runbookForkApproval:
     `The first time someone opens a pull request from their own fork, GitHub asks an editor to ` +
-    `approve the workflow run before it starts: one click in the repo's Actions tab, per new ` +
-    `contributor. There is no way to switch this off.`,
+    `approve the workflow run before it starts: one click in the repo's Actions tab, until ` +
+    `something of theirs has been merged here. Which contributors need it is set in the repo's ` +
+    `Settings > Actions > General.`,
 
   // oak has no invite command: authors work from a fork by default [R124].
   runbookAuthorAccess: (repo: string): string =>
@@ -1004,6 +1005,9 @@ export const assemble = {
   badBuildFolder: (name: string): string =>
     `oak assemble: ${JSON.stringify(name.slice(0, 80))} is not a paper build; each folder is ` +
     `named paper-build-<paper id>, as the Build paper workflow uploads it.`,
+  oneBuild: (listed: number): string =>
+    `oak assemble: the builds folder holds one paper's site, but registry/papers.yml lists ` +
+    `${listed} papers here, so it cannot tell which paper it is.`,
   registryNotList:
     'oak assemble: registry/papers.yml is not a list of entries, so no paper could be mounted: ' +
     docsUrl(DOCS.fileRegistry),
@@ -1093,25 +1097,26 @@ export const pr = {
   // ── several papers in one repository ───────────────────────────────────────────────────
   /** The comment's line naming the papers a pull request changes. */
   checksPapers: (ids: string[]): string =>
-    `Paper${ids.length === 1 ? '' : 's'} this pull request changes: ${ids.map((i) => `\`${i}\``).join(', ')}`,
+    `Paper${ids.length === 1 ? '' : 's'} checked: ${ids.map((i) => `\`${i}\``).join(', ')}`,
   checksNoPaper: 'This pull request changes no paper.',
   /** A section of the combined Check Run for one paper. */
   checksPaperSection: (id: string, title: string): string => `#### \`${id}\`: ${title}`,
   checkRunTitlePapers: (titles: string[]): string => titles.join('; '),
   checkRunTitleNoPaper: 'no paper changed',
-  forkRefusedTitle: 'refused: a pull request from a fork changes one paper',
+  forkRefusedTitle: 'refused: a pull request from a fork may change only one paper',
   forkUnlisted:
     'GitHub did not list every file this pull request changes, so oak cannot tell that it ' +
     'changes one paper only.',
   forkOutsidePapers: (files: string[]): string =>
-    `A pull request from a fork changes files in one papers/<id>/ folder and nowhere else; ` +
+    `A pull request from a fork may change files in one papers/<id>/ folder only; ` +
     `this one also changes ${files
       .slice(0, 5)
       .map((f) => `\`${f}\``)
       .join(', ')}${files.length > 5 ? `, +${files.length - 5} more` : ''}.`,
-  forkNoPaper: 'A pull request from a fork changes one papers/<id>/ folder; this one changes none.',
+  forkNoPaper:
+    'A pull request from a fork must change one papers/<id>/ folder; this one changes none.',
   forkSeveralPapers: (papers: string[]): string =>
-    `A pull request from a fork changes one paper; this one changes ` +
+    `A pull request from a fork may change only one paper; this one changes ` +
     `${papers.map((p) => `\`${p}\``).join(', ')}. Open one pull request per paper.`,
   forkWrongReport: (expected: string, got: string[]): string =>
     `This pull request changes \`${expected}\`, but its checks report covers ` +

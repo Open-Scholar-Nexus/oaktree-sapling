@@ -382,7 +382,7 @@ describe('several papers post one Journal checks result', () => {
 
   it('the comment names the papers the pull request changes', () => {
     expect(checksComment(report('success', 'ok'), [], ['a-2026-one'])).toContain(
-      'Paper this pull request changes: `a-2026-one`',
+      'Paper checked: `a-2026-one`',
     );
     expect(checksComment(report('success', 'ok'), [], [])).toContain('changes no paper');
     expect(checksComment(report('success', 'ok'), [])).not.toContain('changes');

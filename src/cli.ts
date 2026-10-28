@@ -23,6 +23,7 @@ import type { HandoffContext, HandoffDeps, HandoffVerb } from './pinned.js';
 import * as msg from './messages.js';
 import { annotate, inCI, UserError } from './messages.js';
 import { readDoc } from './yaml-io.js';
+import { findRepoRoot } from './projects.js';
 
 // oak only runs as the CJS bundle [R51] (ci/run.sh and local runs both call dist/cli.cjs), so
 // `__dirname` is the bundle's directory; @types/node declares it for tsc.
@@ -241,7 +242,9 @@ function finishSite(
     const html = join(paperRoot, '_build', 'html');
     if (existsSync(html)) {
       dropSymlinks(html);
-      artifact.writeStage1Files(html, artifact.SITE_FILES, paperRoot, process.cwd(), process.env);
+      // The build runs in the paper's folder, so the repo root is found, not taken from cwd.
+      const repoRoot = findRepoRoot(paperRoot) ?? process.cwd();
+      artifact.writeStage1Files(html, artifact.SITE_FILES, paperRoot, repoRoot, process.env);
     }
     recordResult({ status: 'ok', placeholder });
   } catch (e) {
@@ -795,7 +798,7 @@ async function writeReport(
     dirname(path),
     artifact.CHECKS_FILES,
     paperRoot,
-    process.cwd(),
+    findRepoRoot(paperRoot) ?? process.cwd(),
     process.env,
   );
   return true;
@@ -1090,9 +1093,9 @@ async function cmdAssemble(argv: string[]): Promise<number> {
     process.stderr.write(msg.assemble.usage + '\n');
     return 2;
   }
-  const { assemble, npmSiteBuild, readBuilds } = await import('./assemble.js');
+  const { assemble, listedFolderIds, npmSiteBuild, readBuilds } = await import('./assemble.js');
   const out = assemble(
-    readBuilds(resolve(builds)),
+    readBuilds(resolve(builds), listedFolderIds(resolve('.'))),
     { siteRoot: resolve('.'), baseUrl: flag(argv, 'base-url') ?? '' },
     { buildSite: npmSiteBuild, log: (line) => process.stderr.write(line + '\n') },
   );

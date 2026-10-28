@@ -1174,6 +1174,10 @@ describe('cmdBootstrapJournal', () => {
     );
     expect(calls.createRuleset).toHaveLength(2); // it builds papers
     expect(calls.setHomepage).toEqual([{ r: 'me/journal', u: 'https://me.github.io/journal/' }]);
+    // Authors of a co-located journal work from forks, so no push-access command is offered.
+    const steps = (out.result.runbook as string[]).join('\n');
+    expect(steps).toContain('approve the workflow run');
+    expect(steps).not.toContain('permission=push');
     const seed = seedDirs[0]!;
     // The journal's settings, its website and the paper launchers, with an empty papers/.
     for (const f of [

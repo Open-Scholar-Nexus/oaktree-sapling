@@ -979,8 +979,6 @@ function applySecrets(
     actions.repo_secrets = removed.length ? `deleted ${removed.join(', ')}` : 'none deleted';
   });
 
-  runbook.push(msg.bootstrap.runbookForkApproval);
-  runbook.push(msg.bootstrap.runbookAuthorAccess(repo));
   return { set, runbook, failed };
 }
 
@@ -1156,7 +1154,14 @@ export async function cmdBootstrapPaper(
   // The starter myst.yml holds placeholders; an ingested paper brings the author's own.
   const fill =
     mode === 'bare' && actions.main === 'seeded' ? [msg.bootstrap.runbookFillPaper(repo)] : [];
-  const runbook = [...fill, ...contentRunbook, ...prov_.runbook, ...secretRunbook];
+  const runbook = [
+    ...fill,
+    ...contentRunbook,
+    ...prov_.runbook,
+    ...secretRunbook,
+    msg.bootstrap.runbookForkApproval,
+    msg.bootstrap.runbookAuthorAccess(repo),
+  ];
   const failed = [...contentFailed, ...prov_.failed, ...secretFailed];
   for (const line of runbook) log(msg.bootstrap.logRunbookLine(line));
   if (failed.length) log(msg.bootstrap.logPartial(failed.map((f) => f.step).join(', ')));
@@ -1343,7 +1348,14 @@ export async function cmdBootstrapJournal(
       msg.bootstrap.runbookAddPaper(repo),
       msg.bootstrap.runbookColocatedSite(siteUrl),
     ];
-    const runbook = [...start, ...contentRunbook, ...settings.runbook, ...secrets.runbook];
+    // Authors of a co-located journal work from forks only.
+    const runbook = [
+      ...start,
+      ...contentRunbook,
+      ...settings.runbook,
+      ...secrets.runbook,
+      msg.bootstrap.runbookForkApproval,
+    ];
     const failed = [...contentFailed, ...settings.failed, ...secrets.failed];
     for (const line of runbook) log(msg.bootstrap.logRunbookLine(line));
     if (failed.length) log(msg.bootstrap.logPartial(failed.map((f) => f.step).join(', ')));

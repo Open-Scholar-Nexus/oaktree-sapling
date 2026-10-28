@@ -31,10 +31,16 @@ export const BUILD_ARTIFACT_PREFIX = 'paper-build-';
 /**
  * The paper builds Stage 1 left in `dir`, one folder per artifact named
  * `paper-build-<id>`. A folder by any other name, or whose id is not a {@link PAPER_ID}, is
- * refused.
+ * refused. When one artifact matches, the download puts its site in `dir` itself; it is then
+ * the build of the one paper in `listed`. The id never comes from the build's own files, which
+ * the paper's code wrote.
  */
-export function readBuilds(dir: string): PaperBuild[] {
+export function readBuilds(dir: string, listed: string[]): PaperBuild[] {
   if (!existsSync(dir)) return [];
+  if (existsSync(join(dir, 'index.html'))) {
+    if (listed.length !== 1) throw new UserError(msg.assemble.oneBuild(listed.length));
+    return [{ id: listed[0]!, dir }];
+  }
   return readdirSync(dir)
     .sort()
     .filter((name) => statSync(join(dir, name)).isDirectory())

@@ -56,7 +56,7 @@ describe('assemble', () => {
   it('builds the site and mounts each listed paper at /<id>/', () => {
     const { siteRoot, builds } = setup(twoListed, ['a-2026-one', 'b-2026-two']);
     const deps = fakeDeps();
-    const out = assemble(readBuilds(builds), { siteRoot, baseUrl: '/journal' }, deps);
+    const out = assemble(readBuilds(builds, []), { siteRoot, baseUrl: '/journal' }, deps);
     expect(out.exitCode).toBe(0);
     expect(out.result.papers).toEqual(['a-2026-one', 'b-2026-two']);
     expect(deps.baseUrls).toEqual(['/journal']);
@@ -68,7 +68,7 @@ describe('assemble', () => {
   it('refuses before building when a listed paper has no build', () => {
     const { siteRoot, builds } = setup(twoListed, ['a-2026-one']);
     const deps = fakeDeps();
-    const out = assemble(readBuilds(builds), { siteRoot, baseUrl: '' }, deps);
+    const out = assemble(readBuilds(builds, []), { siteRoot, baseUrl: '' }, deps);
     expect(out.exitCode).toBe(2);
     expect(String(out.result.message)).toContain('b-2026-two');
     expect(deps.baseUrls).toEqual([]);
@@ -77,14 +77,18 @@ describe('assemble', () => {
   it('leaves out a build the registry does not list (a draft)', () => {
     const { siteRoot, builds } = setup(twoListed, ['a-2026-one', 'b-2026-two', 'd-2026-draft']);
     const deps = fakeDeps();
-    assemble(readBuilds(builds), { siteRoot, baseUrl: '' }, deps);
+    assemble(readBuilds(builds, []), { siteRoot, baseUrl: '' }, deps);
     expect(existsSync(join(siteRoot, '_build', 'html', 'd-2026-draft'))).toBe(false);
     expect(deps.lines.join('\n')).toContain('d-2026-draft is built but not listed');
   });
 
   it('refuses a paper id the site already serves', () => {
     const { siteRoot, builds } = setup(twoListed, ['a-2026-one', 'b-2026-two']);
-    const out = assemble(readBuilds(builds), { siteRoot, baseUrl: '' }, fakeDeps(['a-2026-one']));
+    const out = assemble(
+      readBuilds(builds, []),
+      { siteRoot, baseUrl: '' },
+      fakeDeps(['a-2026-one']),
+    );
     expect(out.exitCode).toBe(2);
     expect(String(out.result.message)).toContain('already serves /a-2026-one/');
   });
@@ -94,7 +98,7 @@ describe('assemble', () => {
     const dir = join(builds, 'paper-build-a-2026-one');
     symlinkSync('/etc/passwd', join(dir, 'leak'));
     writeFileSync(join(dir, '.pr-number'), '7\n');
-    assemble(readBuilds(builds), { siteRoot, baseUrl: '' }, fakeDeps());
+    assemble(readBuilds(builds, []), { siteRoot, baseUrl: '' }, fakeDeps());
     const mounted = join(siteRoot, '_build', 'html', 'a-2026-one');
     expect(existsSync(join(mounted, 'leak'))).toBe(false);
     expect(existsSync(join(mounted, '.pr-number'))).toBe(false);
@@ -106,9 +110,17 @@ describe('readBuilds and listedFolderIds', () => {
     const builds = mkdtempSync(join(tmpdir(), 'oak-builds-'));
     for (const bad of ['paper-build-..x', 'site', 'paper-build-']) {
       mkdirSync(join(builds, bad), { recursive: true });
-      expect(() => readBuilds(builds), bad).toThrow(/is not a paper build/);
+      expect(() => readBuilds(builds, []), bad).toThrow(/is not a paper build/);
       rmSync(join(builds, bad), { recursive: true });
     }
+  });
+
+  it('takes a site downloaded straight into the folder as the one listed paper', () => {
+    const builds = mkdtempSync(join(tmpdir(), 'oak-builds-'));
+    mkdirSync(join(builds, 'build'));
+    writeFileSync(join(builds, 'index.html'), '<html></html>');
+    expect(readBuilds(builds, ['a-2026-one'])).toEqual([{ id: 'a-2026-one', dir: builds }]);
+    expect(() => readBuilds(builds, ['a-2026-one', 'b-2026-two'])).toThrow(/cannot tell which/);
   });
 
   it('reads only folder entries in this repository papers/ folder', () => {
