@@ -24,7 +24,7 @@ import {
 } from './schema.js';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { colocatedPaper, findRepoRoot, PAPER_ID } from './projects.js';
-import { resolveBrandAssetPath, isBrandAssetUrl, isInstanceRelativeTemplate } from './compose.js';
+import { resolveBrandAssetPath, isBrandAssetUrl, isJournalRelativeTemplate } from './compose.js';
 import {
   readBrandAssetOptions,
   readAuthorTypstTemplate,
@@ -105,10 +105,10 @@ export function checkLayout(
 /** Warns when the brand has no favicon that resolves [R61]: the site still renders, with a
  *  default icon. A URL resolves for HTML, so it passes. */
 export function checkBrandFavicon(
-  input: { instanceRoot: string | null; favicon?: string },
+  input: { journalRoot: string | null; favicon?: string },
   probes: FsProbes,
 ): IdCheckResult {
-  const { instanceRoot, favicon } = input;
+  const { journalRoot, favicon } = input;
   if (!favicon) {
     return {
       ok: false,
@@ -117,7 +117,7 @@ export function checkBrandFavicon(
     };
   }
   if (isBrandAssetUrl(favicon)) return { ok: true };
-  const resolved = instanceRoot ? resolveBrandAssetPath(instanceRoot, favicon) : favicon;
+  const resolved = journalRoot ? resolveBrandAssetPath(journalRoot, favicon) : favicon;
   return probes.existsProbe(resolved)
     ? { ok: true }
     : { ok: false, severity: 'warn', message: msg.validate.brandFaviconUnresolved(favicon) };
@@ -126,10 +126,10 @@ export function checkBrandFavicon(
 /** Warns when the brand's PDF watermark (`project.options.logo`) is absent, a URL (typst cannot
  *  fetch) or a local file that does not resolve [R62] [R68]. */
 export function checkBrandWatermark(
-  input: { instanceRoot: string | null; logo?: string },
+  input: { journalRoot: string | null; logo?: string },
   probes: FsProbes,
 ): IdCheckResult {
-  const { instanceRoot, logo } = input;
+  const { journalRoot, logo } = input;
   if (!logo) {
     return {
       ok: false,
@@ -144,7 +144,7 @@ export function checkBrandWatermark(
       message: msg.validate.brandWatermarkIsUrl(logo),
     };
   }
-  const resolved = instanceRoot ? resolveBrandAssetPath(instanceRoot, logo) : logo;
+  const resolved = journalRoot ? resolveBrandAssetPath(journalRoot, logo) : logo;
   return probes.existsProbe(resolved)
     ? { ok: true }
     : { ok: false, severity: 'warn', message: msg.validate.brandWatermarkUnresolved(logo) };
@@ -220,7 +220,7 @@ export function isFloatingTemplate(value: string): boolean {
     return false;
   }
   // A local path is committed and reviewed, so it does not float.
-  if (isAbsolute(value) || isInstanceRelativeTemplate(value)) return false;
+  if (isAbsolute(value) || isJournalRelativeTemplate(value)) return false;
   // A bare template name resolves against the live template API, so it floats [design §7].
   return true;
 }
@@ -235,10 +235,10 @@ export function isFloatingTemplate(value: string): boolean {
  * it is the journal's call.
  */
 export function checkTemplates(
-  input: { instanceRoot: string | null; authorTemplate?: string; journalTemplate?: string },
+  input: { journalRoot: string | null; authorTemplate?: string; journalTemplate?: string },
   probes: FsProbes,
 ): NamedFinding[] {
-  const { instanceRoot, authorTemplate, journalTemplate } = input;
+  const { journalRoot, authorTemplate, journalTemplate } = input;
   const out: NamedFinding[] = [];
   const warn = (check: string, message: string) =>
     out.push({ check, severity: 'warn', message, klass: 'config' });
@@ -258,9 +258,9 @@ export function checkTemplates(
   // Only `./` or `../` is a path, so a bare `templates/typst` goes to myst as a name and fails
   // later in a confusing way. Warn when a directory with that name exists: then a path was
   // meant.
-  if (journalTemplate && instanceRoot && !isBrandAssetUrl(journalTemplate)) {
-    const bare = !isAbsolute(journalTemplate) && !isInstanceRelativeTemplate(journalTemplate);
-    if (bare && probes.existsProbe(join(instanceRoot, journalTemplate))) {
+  if (journalTemplate && journalRoot && !isBrandAssetUrl(journalTemplate)) {
+    const bare = !isAbsolute(journalTemplate) && !isJournalRelativeTemplate(journalTemplate);
+    if (bare && probes.existsProbe(join(journalRoot, journalTemplate))) {
       warn('template-name-ambiguous', msg.validate.templateNameAmbiguous(journalTemplate));
     }
   }
@@ -276,12 +276,12 @@ function emptyJournal(): JournalConfig {
   return JournalConfig.parse({ name: 'unknown' });
 }
 
-/** null means the journal repo has no `journal.yml`: broken, unlike `--no-instance`
+/** null means the journal repo has no `journal.yml`: broken, unlike `--no-journal`
  *  [R116]. */
-function loadJournal(instanceRoot: string | null, probes: FsProbes): JournalConfig | null {
-  if (instanceRoot) {
-    if (!probes.existsProbe(join(instanceRoot, 'journal.yml'))) return null;
-    return readJournalConfig(instanceRoot);
+function loadJournal(journalRoot: string | null, probes: FsProbes): JournalConfig | null {
+  if (journalRoot) {
+    if (!probes.existsProbe(join(journalRoot, 'journal.yml'))) return null;
+    return readJournalConfig(journalRoot);
   }
   return emptyJournal();
 }
@@ -289,11 +289,11 @@ function loadJournal(instanceRoot: string | null, probes: FsProbes): JournalConf
 /** The registry's valid entries, or null when the journal repo has none, plus a warning for
  *  each entry skipped (see {@link readRegistry}). */
 function loadRegistry(
-  instanceRoot: string | null,
+  journalRoot: string | null,
   probes: FsProbes,
 ): { registry: Registry | null; warnings: string[] } {
-  if (!instanceRoot) return { registry: null, warnings: [] };
-  const p = join(instanceRoot, 'registry', 'papers.yml');
+  if (!journalRoot) return { registry: null, warnings: [] };
+  const p = join(journalRoot, 'registry', 'papers.yml');
   if (!probes.existsProbe(p)) return { registry: null, warnings: [] };
   const read = readRegistry(readDoc(p).toJS());
   if (!read) return { registry: [], warnings: [msg.validate.registryNotList] };
@@ -311,7 +311,7 @@ function loadRegistry(
 export function findSelf(
   registry: Registry | null,
   repo: string | null,
-  where: { instanceRoot: string | null; paperRoot: string },
+  where: { journalRoot: string | null; paperRoot: string },
 ): RegistryEntry[] {
   if (!registry) return [];
   const inFolder = colocatedPaper(where.paperRoot) !== null;
@@ -320,8 +320,8 @@ export function findSelf(
     if (!location) return false;
     if ('path' in location) {
       return (
-        !!where.instanceRoot &&
-        resolve(where.instanceRoot, location.path) === resolve(where.paperRoot)
+        !!where.journalRoot &&
+        resolve(where.journalRoot, location.path) === resolve(where.paperRoot)
       );
     }
     return !inFolder && !!repo && sameRepo(location.repo, repo);
@@ -434,7 +434,7 @@ export function expandLayers(
 export function runLayerA(
   input: {
     paperRoot: string;
-    instanceRoot: string | null;
+    journalRoot: string | null;
     /** The composed project from pass 1 [R82]: the author's config with the `extends:` chain,
      *  without compose's pass-2 additions (`output`, `template`, `site.template`, brand asset
      *  paths). Pass 1 is what `oak build` has when it runs these checks, between the passes
@@ -450,14 +450,14 @@ export function runLayerA(
   },
   probes: FsProbes = realFs,
 ): NamedFinding[] {
-  const { paperRoot, instanceRoot, project, repo, engineRoot, edition } = input;
+  const { paperRoot, journalRoot, project, repo, engineRoot, edition } = input;
   const findings: NamedFinding[] = [];
   const add = (check: string, klass: FindingKlass, r: IdCheckResult) => {
     if (!r.ok) findings.push({ check, severity: r.severity, message: r.message, klass });
   };
 
-  const loaded = loadJournal(instanceRoot, probes);
-  const { registry, warnings: registryWarnings } = loadRegistry(instanceRoot, probes);
+  const loaded = loadJournal(journalRoot, probes);
+  const { registry, warnings: registryWarnings } = loadRegistry(journalRoot, probes);
   for (const message of registryWarnings) {
     findings.push({ check: 'registry-entry', severity: 'warn', message, klass: 'config' });
   }
@@ -467,7 +467,7 @@ export function runLayerA(
     findings.push({
       check: 'journal-config',
       severity: 'error',
-      message: msg.validate.journalMissing(instanceRoot!),
+      message: msg.validate.journalMissing(journalRoot!),
       klass: 'config',
     });
   }
@@ -475,7 +475,7 @@ export function runLayerA(
 
   // Both id keys are optional. The placeholder id is oak's (ENGINE_ID_SENTINEL); the pattern is
   // the journal's, so a missing one is reported rather than filled in [R119].
-  if (instanceRoot && loaded && !loaded.id_pattern) {
+  if (journalRoot && loaded && !loaded.id_pattern) {
     findings.push({
       check: 'id-policy',
       severity: 'warn',
@@ -501,7 +501,7 @@ export function runLayerA(
       }),
     );
     const folder = colocatedPaper(paperRoot);
-    const own = findSelf(registry, repo, { instanceRoot, paperRoot });
+    const own = findSelf(registry, repo, { journalRoot, paperRoot });
     add(
       'id-uniqueness',
       'identity',
@@ -563,12 +563,12 @@ export function runLayerA(
   }
 
   // [R72]: the three extends layers must own disjoint keys, or precedence is a race.
-  if (engineRoot && instanceRoot && edition) {
+  if (engineRoot && journalRoot && edition) {
     const { layers, unreadable } = expandLayers(
       [
         { name: 'paper-base.yml', path: join(engineRoot, 'paper-base.yml') },
-        { name: `editions/${edition}.yml`, path: join(instanceRoot, 'editions', `${edition}.yml`) },
-        { name: 'brand/brand.yml', path: join(instanceRoot, 'brand', 'brand.yml') },
+        { name: `editions/${edition}.yml`, path: join(journalRoot, 'editions', `${edition}.yml`) },
+        { name: 'brand/brand.yml', path: join(journalRoot, 'brand', 'brand.yml') },
       ],
       probes,
     );
@@ -590,16 +590,16 @@ export function runLayerA(
     }
   }
 
-  const brand = instanceRoot ? readBrandAssetOptions(instanceRoot) : { site: {}, project: {} };
+  const brand = journalRoot ? readBrandAssetOptions(journalRoot) : { site: {}, project: {} };
   add(
     'brand-favicon',
     'brand',
-    checkBrandFavicon({ instanceRoot, favicon: brand.site.favicon }, probes),
+    checkBrandFavicon({ journalRoot, favicon: brand.site.favicon }, probes),
   );
   add(
     'brand-watermark',
     'brand',
-    checkBrandWatermark({ instanceRoot, logo: brand.project.logo }, probes),
+    checkBrandWatermark({ journalRoot, logo: brand.project.logo }, probes),
   );
 
   // The author's template is read from their own myst.yml, not `project` [R82]: the composed
@@ -609,7 +609,7 @@ export function runLayerA(
   findings.push(
     ...checkTemplates(
       {
-        instanceRoot,
+        journalRoot,
         authorTemplate: readAuthorTypstTemplate(paperRoot),
         journalTemplate: journal.typst_template,
       },
@@ -674,7 +674,7 @@ export interface ValidateResult {
 export async function runValidate(
   input: {
     paperRoot: string;
-    instanceRoot: string | null;
+    journalRoot: string | null;
     edge: MystEdge;
     /** oak's checkout and the edition, for the [R72] check and the composed view. */
     engineRoot?: string | null;
@@ -697,18 +697,18 @@ export async function runValidate(
   // Composed when there is something to compose [R82]: paper-base's thumbnail and typst export
   // exist only after the merge, so checking the author's file alone would pass them [R81].
   // Shared with `oak build` so the two read the same config [R71]. A bare local run or
-  // `--no-instance` has nothing to compose [R193]. Guarded: validate reports, and a crash tells
+  // `--no-journal` has nothing to compose [R193]. Guarded: validate reports, and a crash tells
   // the author less than a finding.
   let project: { id?: string; exports?: Array<Record<string, unknown>>; thumbnail?: string };
   let configFile: string | undefined;
   let composeFailure: string | undefined;
-  const composable = !!input.engineRoot && !!input.instanceRoot;
+  const composable = !!input.engineRoot && !!input.journalRoot;
   if (composable) {
     try {
       const materialized = await materializeDerived({
         paperRoot: input.paperRoot,
         engineRoot: input.engineRoot!,
-        instanceRoot: input.instanceRoot,
+        journalRoot: input.journalRoot,
         baseUrl: '', // no site is built here; compose only needs it for the build env
         assetOverrides: input.assetOverrides,
         edge: input.edge,
@@ -732,14 +732,14 @@ export async function runValidate(
   // until the editor's registry pull request lists it.
   const draft =
     colocatedPaper(input.paperRoot) !== null &&
-    findSelf(loadRegistry(input.instanceRoot, probes).registry, repo, input).length === 0;
+    findSelf(loadRegistry(input.journalRoot, probes).registry, repo, input).length === 0;
   if (draft) notes.push(msg.validate.noteDraft);
 
   // Layer A: engine invariants
   const layerA = runLayerA(
     {
       paperRoot: input.paperRoot,
-      instanceRoot: input.instanceRoot,
+      journalRoot: input.journalRoot,
       project,
       repo,
       engineRoot: input.engineRoot ?? null,
@@ -767,7 +767,7 @@ export async function runValidate(
   // project, so Layer B is skipped rather than crash the report; otherwise it is guarded, so a
   // myst or curvenote error becomes a check error.
   // Layer A already blocked on missing journal settings [R116]; the default keeps the shape.
-  const journal = loadJournal(input.instanceRoot, probes) ?? emptyJournal();
+  const journal = loadJournal(input.journalRoot, probes) ?? emptyJournal();
   let checks: EngineCheckResult[] = [];
   // Only structural errors stop myst processing. A bad id does not, so the editorial checks
   // still run and the author sees every finding at once.

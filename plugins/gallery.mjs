@@ -47,7 +47,7 @@ import { basename, dirname, relative, resolve } from 'node:path';
 import yaml from 'js-yaml';
 
 /** The registry, relative to the site build root. Fixed, not an option: [S8] fixed the repo
- *  layout (the site IS the instance-config repo), so a `:registry:` option would be
+ *  layout (the site IS the journal repo), so a `:registry:` option would be
  *  configurability for a layout that cannot occur. Adding one later stays compatible. */
 export const REGISTRY_PATH = 'registry/papers.yml';
 

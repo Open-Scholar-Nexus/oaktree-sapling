@@ -50,8 +50,8 @@ describe.skipIf(!runnable)('fixture build through the bundled CLI', () => {
         'build',
         '--paper',
         tmp,
-        '--instance',
-        join(engineDir, 'test', 'fixture-instance'),
+        '--journal',
+        join(engineDir, 'test', 'fixture-journal'),
         // Offline: the PDF and compose only. The HTML site needs the theme from the network,
         // so conformance tests it.
         '--exports-only',
@@ -106,8 +106,8 @@ describe.skipIf(!runnable)('what oak build leaves for Stage 2', () => {
         'build',
         '--paper',
         'papers/one',
-        '--instance',
-        join(engineDir, 'test', 'fixture-instance'),
+        '--journal',
+        join(engineDir, 'test', 'fixture-journal'),
       ].concat(['--exports-only']),
       {
         stdio: 'pipe',

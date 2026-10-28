@@ -63,17 +63,17 @@ export const LABEL_ZENODO_FAILED = 'zenodo-publish-failed';
  * journal.yml `preview:` settings [R27], read as loadJournalZenodo reads `zenodo:`
  * ------------------------------------------------------------------------ */
 
-/** Reads `preview:` from `<instanceRoot>/journal.yml`, with the schema defaults when absent. A
+/** Reads `preview:` from `<journalRoot>/journal.yml`, with the schema defaults when absent. A
  *  file that fails to parse is the journal's mistake, so it falls back and `problem` says why
  *  in the comment [R16] [R140]. */
-export function loadJournalPreview(instanceRoot: string | null): {
+export function loadJournalPreview(journalRoot: string | null): {
   preview: PreviewConfig;
   problem?: string;
 } {
   const empty = () => ({ preview: JournalConfig.parse({ name: 'x' }).preview });
-  if (!instanceRoot) return empty();
+  if (!journalRoot) return empty();
   try {
-    const journal = readJournalConfig(instanceRoot);
+    const journal = readJournalConfig(journalRoot);
     return journal ? { preview: journal.preview } : empty();
   } catch (e) {
     return { ...empty(), problem: msg.workflow.previewBadJournal(firstLine(e)) };
@@ -223,7 +223,7 @@ export interface DeployPreviewInput {
   repoRoot: string;
   /** The journal repo; null without one, or why it could not be found, and the preview then
    *  falls back as for a bad journal.yml. */
-  instanceRoot: string | null | { problem: string };
+  journalRoot: string | null | { problem: string };
   /** GITHUB_REPOSITORY and GITHUB_SERVER_URL, for the fallback link and labels. */
   repo: string | null;
   serverUrl: string;
@@ -252,7 +252,7 @@ export async function cmdDeployPreview(
   input: DeployPreviewInput,
   deps: PreviewDeps,
 ): Promise<Outcome> {
-  const { siteDir, repoRoot, instanceRoot, repo, serverUrl, cf } = input;
+  const { siteDir, repoRoot, journalRoot, repo, serverUrl, cf } = input;
   // Both files leave the site before anything else, so neither is served.
   const pr = takePrNumber(siteDir);
   const paper = resolvePaperDir(input.paper, takePaperDir(siteDir));
@@ -271,9 +271,9 @@ export async function cmdDeployPreview(
     process.stderr.write(annotate('warning', msg.workflow.previewStripped(stripped)) + '\n');
 
   const { preview, problem } =
-    typeof instanceRoot === 'object' && instanceRoot !== null
-      ? { ...loadJournalPreview(null), problem: instanceRoot.problem }
-      : loadJournalPreview(instanceRoot);
+    typeof journalRoot === 'object' && journalRoot !== null
+      ? { ...loadJournalPreview(null), problem: journalRoot.problem }
+      : loadJournalPreview(journalRoot);
   if (problem) process.stderr.write(annotate('warning', problem) + '\n');
   // Deep-link the Build paper run holding the artifact (workflow_run.id), else the Actions tab.
   const runUrl = input.artifactRunId

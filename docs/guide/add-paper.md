@@ -11,7 +11,7 @@ For a new paper, starting from the starter manuscript:
 
 ```bash
 oak bootstrap paper --repo <owner>/<paper-repo> \
-  --instance <owner>/<journal-repo> \
+  --journal <owner>/<journal-repo> \
   --edition 2026
 ```
 
@@ -19,12 +19,12 @@ For a paper the author already wrote in a repository of their own:
 
 ```bash
 oak bootstrap paper --repo <owner>/<paper-repo> \
-  --instance <owner>/<journal-repo> \
+  --journal <owner>/<journal-repo> \
   --edition 2026 \
   --from https://github.com/<author>/<their-repo>
 ```
 
-`--instance` names the journal repository and `--edition` one of its editions, as named by a file in its `editions/` folder. Both are required: they are written into the paper repository, and every build reads the journal's settings through them.
+`--journal` names the journal repository and `--edition` one of its editions, as named by a file in its `editions/` folder. Both are required: they are written into the paper repository, and every build reads the journal's settings through them.
 
 On an organisation, add `--owner @<org>/<team>` so the editors team owns the repository's workflows and settings (see [Create a journal](../start/setup.md)). On a personal account the owner is you.
 

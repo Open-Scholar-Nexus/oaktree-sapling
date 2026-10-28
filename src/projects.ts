@@ -34,7 +34,7 @@ const PINS_REL = join('.github', 'actions', 'engine', 'pins.yml');
  *  step decides the same way. A missing key is a paper repository whose journal is unknown. */
 export function isColocated(root: string): boolean {
   const pins = join(root, PINS_REL);
-  return existsSync(pins) && readDoc(pins).get('instance_repo') === '.';
+  return existsSync(pins) && readDoc(pins).get('journal_repo') === '.';
 }
 
 /**

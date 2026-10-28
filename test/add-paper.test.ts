@@ -10,7 +10,7 @@ import { parseDocument } from 'yaml';
 import { cmdAddPaper, defaultEdition, type AddPaperGh } from '../src/add-paper.js';
 import { renderColocatedTemplate } from '../src/bootstrap.js';
 
-const roots = { paper: 'templates/paper', instance: 'templates/instance', site: 'templates/site' };
+const roots = { paper: 'templates/paper', journal: 'templates/journal', site: 'templates/site' };
 
 /** A co-located journal's main, as bootstrap seeds it, with edition 2026 and `papers`. */
 function journal(papers: string[] = []): string {
@@ -20,7 +20,7 @@ function journal(papers: string[] = []): string {
     dir,
     {
       engineRepo: 'me/engine',
-      instanceRepo: '.',
+      journalRepo: '.',
       owner: '@ed',
       version: 'v1.2.3',
       edition: '2026',

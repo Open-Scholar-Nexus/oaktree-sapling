@@ -90,28 +90,28 @@ function assetOverridesFrom(argv: string[]): ComposeInput['assetOverrides'] {
 }
 
 /** The journal repo a verb composes from, and how the derived config records it. */
-type ResolvedInstance = { root: string | null; stamp: JournalStamp | undefined };
+type ResolvedJournal = { root: string | null; stamp: JournalStamp | undefined };
 
 /**
- * Where the journal repo is [R38]: none with `--no-instance`, else `--instance` (`.` is the
- * repository holding the paper), else a cached clone of pins.yml's `instance_repo`, else, when
- * `instance_repo` is `.`, this repository's `journal.yml`, at the repository root of a
- * co-located repository. Without `instance_repo` the journal is unknown. pins.yml is
+ * Where the journal repo is [R38]: none with `--no-journal`, else `--journal` (`.` is the
+ * repository holding the paper), else a cached clone of pins.yml's `journal_repo`, else, when
+ * `journal_repo` is `.`, this repository's `journal.yml`, at the repository root of a
+ * co-located repository. Without `journal_repo` the journal is unknown. pins.yml is
  * editor-gated, so it decides. Every verb that reads journal settings finds it
- * here, `deposit` and `deploy-preview` included, in CI too: `ci/run.sh` passes no `--instance`.
+ * here, `deposit` and `deploy-preview` included, in CI too: `ci/run.sh` passes no `--journal`.
  *
  * Returns a root, with the {@link JournalStamp} the derived config records for it, or an error
  * string, and never exits, so `oak validate` can report the error.
  */
-async function resolveInstanceRoot(
+async function resolveJournalRoot(
   argv: string[],
   paperRoot: string,
   verb: msg.JournalVerb,
-): Promise<ResolvedInstance | { error: string }> {
-  if (has(argv, 'no-instance')) return { root: null, stamp: undefined };
-  const explicit = flag(argv, 'instance');
+): Promise<ResolvedJournal | { error: string }> {
+  if (has(argv, 'no-journal')) return { root: null, stamp: undefined };
+  const explicit = flag(argv, 'journal');
   // Refused, since the error below would ask for the flag that was just passed.
-  if (explicit === '') throw new UserError(msg.flagNeedsValue('instance'));
+  if (explicit === '') throw new UserError(msg.flagNeedsValue('journal'));
   const { cachedJournal, journalStamp } = await import('./gh.js');
   const found = (root: string) => ({ root, stamp: journalStamp(root, paperRoot) });
   const { findRepoRoot } = await import('./projects.js');
@@ -119,19 +119,19 @@ async function resolveInstanceRoot(
   if (explicit) return found(explicit === '.' ? repoRoot : resolve(explicit));
   let journalRepo: string | undefined;
   try {
-    journalRepo = (await import('./pinned.js')).readPinsValue(paperRoot, 'instance_repo').value;
+    journalRepo = (await import('./pinned.js')).readPinsValue(paperRoot, 'journal_repo').value;
   } catch (err) {
     // A pins.yml with a YAML error (`readDoc`) is returned, so `oak validate` reports it and
     // deploy-preview falls back to the artifact link.
     if (!(err instanceof UserError)) throw err;
     return { error: err.message };
   }
-  if (!journalRepo) return { error: msg.build.noInstance(verb, paperRoot) };
+  if (!journalRepo) return { error: msg.build.noJournal(verb, paperRoot) };
   if (journalRepo === '.') {
     for (const root of [paperRoot, repoRoot]) {
       if (existsSync(join(root, 'journal.yml'))) return found(root);
     }
-    return { error: msg.build.noInstance(verb, paperRoot) };
+    return { error: msg.build.noJournal(verb, paperRoot) };
   }
   try {
     const cache = cachedJournal(journalRepo, paperRoot);
@@ -140,7 +140,7 @@ async function resolveInstanceRoot(
     return found(cache.root);
   } catch (err) {
     const why = err instanceof Error ? err.message : String(err);
-    return { error: msg.build.instanceCloneFailed(verb, journalRepo, why) };
+    return { error: msg.build.journalCloneFailed(verb, journalRepo, why) };
   }
 }
 
@@ -167,13 +167,13 @@ function isJournalRepo(root: string): boolean {
 function materializeInputFrom(
   argv: string[],
   paperRoot: string,
-  instance: ResolvedInstance,
+  journal: ResolvedJournal,
 ): Omit<MaterializeInput, 'edge'> {
   return {
     paperRoot,
     engineRoot: engineRoot(),
-    instanceRoot: instance.root,
-    journalStamp: instance.stamp,
+    journalRoot: journal.root,
+    journalStamp: journal.stamp,
     baseUrl: flag(argv, 'base-url') ?? '',
     assetOverrides: assetOverridesFrom(argv),
   };
@@ -187,7 +187,7 @@ async function buildPaper(argv: string[]): Promise<{ paperRoot: string; resolved
     process.stderr.write(annotate('error', msg.build.inJournalRepo(paperRoot)) + '\n');
     process.exit(2);
   }
-  const resolved = await resolveInstanceRoot(argv, paperRoot, 'build');
+  const resolved = await resolveJournalRoot(argv, paperRoot, 'build');
   if ('error' in resolved) {
     process.stderr.write(resolved.error + '\n');
     process.exit(2);
@@ -321,7 +321,7 @@ async function cmdStart(argv: string[]): Promise<number> {
     return await never();
   }
 
-  const resolved = await resolveInstanceRoot(argv, paperRoot, 'start');
+  const resolved = await resolveJournalRoot(argv, paperRoot, 'start');
   if ('error' in resolved) {
     process.stderr.write(resolved.error + '\n');
     return 2;
@@ -481,12 +481,12 @@ async function cmdDeposit(argv: string[]): Promise<number> {
     return 2;
   }
   const api = new z.ZenodoApi(z.createFetchTransport(), sandbox, token);
-  const instance = await resolveInstanceRoot(rest, dirname(mystPath), 'deposit');
-  if ('error' in instance) {
-    process.stderr.write(instance.error + '\n');
+  const journal = await resolveJournalRoot(rest, dirname(mystPath), 'deposit');
+  if ('error' in journal) {
+    process.stderr.write(journal.error + '\n');
     return 2;
   }
-  const instanceRoot = instance.root;
+  const journalRoot = journal.root;
 
   if (sub === 'prepare') {
     const repo = gh.currentRepo(flag(rest, 'repo'));
@@ -494,7 +494,7 @@ async function cmdDeposit(argv: string[]): Promise<number> {
       process.stderr.write(msg.workflow.depositNoRepo + '\n');
       return 2;
     }
-    const out = await z.cmdPrepare({ mystPath, repo, siteUrl, api, instanceRoot });
+    const out = await z.cmdPrepare({ mystPath, repo, siteUrl, api, journalRoot });
     // Open the DOI pull request for the myst.yml write [R3]. Without gh or a token (a local
     // sandbox run) the write is left for a person to commit.
     if (out.exitCode === 0 && !has(rest, 'no-pr') && process.env.GH_TOKEN) {
@@ -528,14 +528,14 @@ async function cmdDeposit(argv: string[]): Promise<number> {
       bundleOut: resolve(flag(rest, 'bundle-out') ?? '_bundle'),
       api,
       git: gh.realGitContext,
-      instanceRoot,
+      journalRoot,
       engineRoot: engineRoot(),
     });
     emit(rest, out.result);
     return out.exitCode;
   }
 
-  const out = await z.cmdStatus({ mystPath, siteUrl, api, instanceRoot });
+  const out = await z.cmdStatus({ mystPath, siteUrl, api, journalRoot });
   emit(rest, out.result);
   return out.exitCode;
 }
@@ -586,9 +586,9 @@ async function cmdRelease(argv: string[]): Promise<number> {
   if (!flagged) argv = [...argv, '--paper', paperRoot];
   // Found once and handed to the build, so the deposit archives the journal the build used and
   // reads its `zenodo:`.
-  const instance = await resolveInstanceRoot(argv, paperRoot, 'release');
-  if ('error' in instance) {
-    process.stderr.write(instance.error + '\n');
+  const journal = await resolveJournalRoot(argv, paperRoot, 'release');
+  if ('error' in journal) {
+    process.stderr.write(journal.error + '\n');
     return 2;
   }
   // The child gets no OAK_RESULT_FILE: the result is release's.
@@ -596,7 +596,7 @@ async function cmdRelease(argv: string[]): Promise<number> {
     const { OAK_RESULT_FILE: _, ...env } = process.env;
     // The build must be this oak's, since this oak deposits it.
     env[(await import('./pinned.js')).USE_RUNNING_ENV] = '1';
-    const journalArgs = instance.root === null ? ['--no-instance'] : ['--instance', instance.root];
+    const journalArgs = journal.root === null ? ['--no-journal'] : ['--journal', journal.root];
     execFileSync(process.execPath, [process.argv[1]!, 'build', ...argv, ...journalArgs], {
       stdio: 'inherit',
       env,
@@ -639,7 +639,7 @@ async function cmdRelease(argv: string[]): Promise<number> {
     bundleOut,
     api,
     git: gh.realGitContext,
-    instanceRoot: instance.root,
+    journalRoot: journal.root,
     engineRoot: engineRoot(),
   });
   emit(argv, out.result);
@@ -686,7 +686,7 @@ async function cmdDeployPreview(argv: string[]): Promise<number> {
   const sites = artifactDirs(siteArg, ['index.html', artifact.SITE_FILES.pr]);
   const myst = flag(argv, 'myst');
   const paper = flag(argv, 'paper');
-  const instance = await resolveInstanceRoot(argv, resolve(paper ?? '.'), 'deploy-preview');
+  const journal = await resolveJournalRoot(argv, resolve(paper ?? '.'), 'deploy-preview');
   if (!sites.length) {
     process.stderr.write(msg.workflow.previewNoSite(siteArg) + '\n');
     emit(argv, { status: 'ok', preview: 'skipped', reason: msg.workflow.previewNoSite(siteArg) });
@@ -699,7 +699,7 @@ async function cmdDeployPreview(argv: string[]): Promise<number> {
       {
         siteDir,
         repoRoot: resolve('.'),
-        instanceRoot: 'error' in instance ? { problem: instance.error } : instance.root,
+        journalRoot: 'error' in journal ? { problem: journal.error } : journal.root,
         repo: gh.currentRepo(flag(argv, 'repo')),
         serverUrl: process.env.GITHUB_SERVER_URL ?? 'https://github.com',
         artifactRunId: process.env.PAPER_BUILD_RUN_ID,
@@ -868,7 +868,7 @@ async function cmdValidate(argv: string[]): Promise<number> {
     process.stderr.write(annotate('error', text) + '\n');
     return writeFailureReport(reportPath, paperRoot, msg.workflow.validateCouldNotRun, text, 2);
   }
-  const resolved = await resolveInstanceRoot(argv, paperRoot, 'validate');
+  const resolved = await resolveJournalRoot(argv, paperRoot, 'validate');
   if ('error' in resolved) {
     process.stderr.write(annotate('error', resolved.error) + '\n');
     return writeFailureReport(
@@ -879,7 +879,7 @@ async function cmdValidate(argv: string[]): Promise<number> {
       2,
     );
   }
-  const instanceRoot = resolved.root;
+  const journalRoot = resolved.root;
   const strict = has(argv, 'strict');
 
   const gh = await import('./gh.js');
@@ -1212,7 +1212,7 @@ async function cmdBootstrap(argv: string[]): Promise<number> {
   const gh = await import('./gh.js');
   const bootstrap = await import('./bootstrap.js');
   const paperTemplateRoot = bootstrap.paperTemplateRoot(engineRoot());
-  const instanceTemplateRoot = bootstrap.instanceTemplateRoot(engineRoot());
+  const journalTemplateRoot = bootstrap.journalTemplateRoot(engineRoot());
   const siteTemplateRoot = bootstrap.siteTemplateRoot(engineRoot());
   const mystRange = bootstrap.engineMystRange(engineRoot());
 
@@ -1222,8 +1222,8 @@ async function cmdBootstrap(argv: string[]): Promise<number> {
     return 2;
   }
   gh.assertRepoName(repo, '--repo');
-  const instance = flag(rest, 'instance');
-  if (instance && instance !== '.') gh.assertRepoName(instance, '--instance');
+  const journal = flag(rest, 'journal');
+  if (journal && journal !== '.') gh.assertRepoName(journal, '--journal');
   // Malformed arguments are refused before any gh call [R127].
   const external = sub === 'journal' && !has(rest, 'co-located');
   if (sub === 'journal') {
@@ -1260,7 +1260,7 @@ async function cmdBootstrap(argv: string[]): Promise<number> {
   const deps = {
     prov: gh.realProvisioner,
     paperTemplateRoot,
-    instanceTemplateRoot,
+    journalTemplateRoot,
     siteTemplateRoot,
     mystRange,
     log: (m: string) => process.stderr.write(m + '\n'),
@@ -1274,7 +1274,7 @@ async function cmdBootstrap(argv: string[]): Promise<number> {
         repo,
         from: flag(rest, 'from'),
         sourceRef: flag(rest, 'source-ref'),
-        instance,
+        journal,
         // No default: the paper joins a journal that already has editions, and an invented
         // `edition` would match none of them, so the paper's CI would fail later on a missing
         // edition file.

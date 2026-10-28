@@ -62,7 +62,7 @@ export function readPin(
  *  undefined when the file or the key is absent. */
 export function readPinsValue(
   paperRoot: string,
-  key: 'engine_repo' | 'instance_repo',
+  key: 'engine_repo' | 'journal_repo',
 ): { value?: string; pinsPath?: string } {
   const pinsPath = findPins(paperRoot);
   const v = pinsPath ? readDoc(pinsPath).get(key) : undefined;

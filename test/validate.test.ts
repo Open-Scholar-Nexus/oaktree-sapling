@@ -22,7 +22,7 @@ import {
 import { CheckStatus, toCheckRun } from '../src/checks.js';
 import type { MystEdge } from '../src/build.js';
 
-const instanceRoot = fileURLToPath(new URL('./fixture-instance', import.meta.url));
+const journalRoot = fileURLToPath(new URL('./fixture-journal', import.meta.url));
 const allTrue: FsProbes = { existsProbe: () => true, listTree: () => [] };
 const allFalse: FsProbes = { existsProbe: () => false, listTree: () => [] };
 
@@ -76,36 +76,34 @@ describe('checkLayout', () => {
 
 describe('checkBrandFavicon [R61]', () => {
   it('warns when no favicon is declared', () => {
-    expect(checkBrandFavicon({ instanceRoot: '/i' }, allTrue).ok).toBe(false);
+    expect(checkBrandFavicon({ journalRoot: '/i' }, allTrue).ok).toBe(false);
   });
   it('passes a URL favicon (resolves for HTML)', () => {
-    expect(checkBrandFavicon({ instanceRoot: '/i', favicon: 'https://x/f.ico' }, allFalse).ok).toBe(
+    expect(checkBrandFavicon({ journalRoot: '/i', favicon: 'https://x/f.ico' }, allFalse).ok).toBe(
       true,
     );
   });
   it('warns an unresolvable local favicon', () => {
-    expect(checkBrandFavicon({ instanceRoot: '/i', favicon: 'brand/f.svg' }, allFalse).ok).toBe(
+    expect(checkBrandFavicon({ journalRoot: '/i', favicon: 'brand/f.svg' }, allFalse).ok).toBe(
       false,
     );
   });
   it('passes a resolvable local favicon', () => {
-    expect(checkBrandFavicon({ instanceRoot: '/i', favicon: 'brand/f.svg' }, allTrue).ok).toBe(
-      true,
-    );
+    expect(checkBrandFavicon({ journalRoot: '/i', favicon: 'brand/f.svg' }, allTrue).ok).toBe(true);
   });
 });
 
 describe('checkBrandWatermark [R62]', () => {
   it('warns a URL watermark (typst cannot fetch)', () => {
-    expect(checkBrandWatermark({ instanceRoot: '/i', logo: 'https://x/w.svg' }, allTrue).ok).toBe(
+    expect(checkBrandWatermark({ journalRoot: '/i', logo: 'https://x/w.svg' }, allTrue).ok).toBe(
       false,
     );
   });
   it('passes a resolvable local watermark', () => {
-    expect(checkBrandWatermark({ instanceRoot: '/i', logo: 'brand/w.svg' }, allTrue).ok).toBe(true);
+    expect(checkBrandWatermark({ journalRoot: '/i', logo: 'brand/w.svg' }, allTrue).ok).toBe(true);
   });
   it('warns when no watermark is declared', () => {
-    expect(checkBrandWatermark({ instanceRoot: '/i' }, allTrue).ok).toBe(false);
+    expect(checkBrandWatermark({ journalRoot: '/i' }, allTrue).ok).toBe(false);
   });
 });
 
@@ -217,7 +215,7 @@ describe('checkTemplates [R76]', () => {
 
   it("warns, without failing, when the author's template overrides the journal's", () => {
     const f = checkTemplates(
-      { instanceRoot: '/i', authorTemplate: './mine', journalTemplate: './journal' },
+      { journalRoot: '/i', authorTemplate: './mine', journalTemplate: './journal' },
       allFalse,
     );
     const override = f.find((x) => x.check === 'template-override')!;
@@ -226,7 +224,7 @@ describe('checkTemplates [R76]', () => {
   });
 
   it("warns when the author's template overrides oak's, with no journal template set", () => {
-    const f = checkTemplates({ instanceRoot: '/i', authorTemplate: './mine' }, allFalse);
+    const f = checkTemplates({ journalRoot: '/i', authorTemplate: './mine' }, allFalse);
     const override = f.find((x) => x.check === 'template-override')!;
     expect(override.severity).toBe('warn');
     expect(override.message).toMatch(/overriding oaktree-sapling's/);
@@ -234,12 +232,12 @@ describe('checkTemplates [R76]', () => {
 
   it('warns on an unpinned template from either the author or the journal', () => {
     const author = checkTemplates(
-      { instanceRoot: '/i', authorTemplate: 'https://github.com/o/r.git' },
+      { journalRoot: '/i', authorTemplate: 'https://github.com/o/r.git' },
       allFalse,
     );
     expect(author.find((x) => x.check === 'template-floating')!.message).toMatch(/author/);
     const journal = checkTemplates(
-      { instanceRoot: '/i', journalTemplate: 'https://github.com/o/r.git' },
+      { journalRoot: '/i', journalTemplate: 'https://github.com/o/r.git' },
       allFalse,
     );
     expect(journal.find((x) => x.check === 'template-floating')!.message).toMatch(/journal/);
@@ -248,7 +246,7 @@ describe('checkTemplates [R76]', () => {
   it("reports both findings for an unpinned author template that overrides the journal's", () => {
     const f = checkTemplates(
       {
-        instanceRoot: '/i',
+        journalRoot: '/i',
         authorTemplate: 'https://github.com/o/r.git',
         journalTemplate: './journal',
       },
@@ -259,13 +257,13 @@ describe('checkTemplates [R76]', () => {
   });
 
   it("warns when the journal's template name matches a directory in the journal repo", () => {
-    const f = checkTemplates({ instanceRoot: '/i', journalTemplate: 'typst-template' }, allTrue);
+    const f = checkTemplates({ journalRoot: '/i', journalTemplate: 'typst-template' }, allTrue);
     const amb = f.find((x) => x.check === 'template-name-ambiguous')!;
     expect(amb.message).toMatch(/write "\.\/typst-template"/);
   });
 
   it('does not warn when the value starts with ./', () => {
-    const f = checkTemplates({ instanceRoot: '/i', journalTemplate: './typst-template' }, allTrue);
+    const f = checkTemplates({ journalRoot: '/i', journalTemplate: './typst-template' }, allTrue);
     expect(ids(f)).not.toContain('template-name-ambiguous');
   });
 });
@@ -280,7 +278,7 @@ describe('runValidate: exit codes with the fixture journal', () => {
 
   it('passes a well-formed paper against the fixture journal (exit 0)', async () => {
     const out = await runValidate(
-      { paperRoot: '/paper', instanceRoot, edge: edgeReturning(goodProject) },
+      { paperRoot: '/paper', journalRoot, edge: edgeReturning(goodProject) },
       { repo: 'open-scholar-nexus/fixture-sample-paper' },
       allTrue,
     );
@@ -292,7 +290,7 @@ describe('runValidate: exit codes with the fixture journal', () => {
   it('fails on the placeholder id and missing editorial fields (exit 1)', async () => {
     const bad = { id: 'fixture-template-placeholder', authors: [], abstract: '', keywords: [] };
     const out = await runValidate(
-      { paperRoot: '/paper', instanceRoot, edge: edgeReturning(bad) },
+      { paperRoot: '/paper', journalRoot, edge: edgeReturning(bad) },
       { repo: 'open-scholar-nexus/fixture-sample-paper' },
       allTrue,
     );
@@ -308,7 +306,7 @@ describe('runValidate: exit codes with the fixture journal', () => {
     const out = await runValidate(
       {
         paperRoot: '/paper',
-        instanceRoot,
+        journalRoot,
         edge: edgeReturning(bad, [
           { id: 'abstract-exists', status: 'fail', message: 'no abstract' },
         ]),
@@ -328,7 +326,7 @@ describe('runValidate: exit codes with the fixture journal', () => {
     const out = await runValidate(
       {
         paperRoot: '/paper',
-        instanceRoot,
+        journalRoot,
         edge: edgeReturning(goodProject, [
           { id: 'abstract-exists', status: 'pass', message: 'ok' },
         ]),
@@ -348,7 +346,7 @@ describe('runValidate: exit codes with the fixture journal', () => {
     const out = await runValidate(
       {
         paperRoot: '/paper',
-        instanceRoot,
+        journalRoot,
         edge: edgeReturning(goodProject, [
           { id: 'authors-have-orcid', status: 'fail', message: 'no ORCID' },
         ]),
@@ -365,7 +363,7 @@ describe('runValidate: exit codes with the fixture journal', () => {
     const out = await runValidate(
       {
         paperRoot: '/paper',
-        instanceRoot,
+        journalRoot,
         edge: edgeReturning(goodProject, [
           { id: 'authors-have-orcid', status: 'fail', message: 'no ORCID', optional: true },
         ]),
@@ -397,7 +395,7 @@ describe('runValidate: exit codes with the fixture journal', () => {
       listTree: () => ['myst.yml'],
     };
     const out = await runValidate(
-      { paperRoot: '/paper', instanceRoot, edge: edgeThrowingInLayerB(goodProject) },
+      { paperRoot: '/paper', journalRoot, edge: edgeThrowingInLayerB(goodProject) },
       { repo: 'open-scholar-nexus/fixture-sample-paper' },
       probes,
     );
@@ -411,7 +409,7 @@ describe('runValidate: exit codes with the fixture journal', () => {
     // Layer A passes but loading the project throws: the editorial checks report an error, and
     // validate does not crash.
     const out = await runValidate(
-      { paperRoot: '/paper', instanceRoot, edge: edgeThrowingInLayerB(goodProject) },
+      { paperRoot: '/paper', journalRoot, edge: edgeThrowingInLayerB(goodProject) },
       { repo: 'open-scholar-nexus/fixture-sample-paper' },
       allTrue,
     );
@@ -420,8 +418,8 @@ describe('runValidate: exit codes with the fixture journal', () => {
     expect(out.checkRun.conclusion).toBe('failure');
   });
 
-  it('--no-instance warns without failing; --strict makes it fail', async () => {
-    const base = { paperRoot: '/paper', instanceRoot: null, edge: edgeReturning(goodProject) };
+  it('--no-journal warns without failing; --strict makes it fail', async () => {
+    const base = { paperRoot: '/paper', journalRoot: null, edge: edgeReturning(goodProject) };
     const lax = await runValidate(base, { repo: null }, allTrue);
     expect(lax.exitCode).toBe(0);
     expect(lax.warnings.length).toBeGreaterThan(0);
@@ -431,7 +429,7 @@ describe('runValidate: exit codes with the fixture journal', () => {
 
   it('--strict fails the status and Check Run too, not only the exit code [R119]', async () => {
     // A strict run that exits 1 also reports a failure in its status and Check Run.
-    const base = { paperRoot: '/paper', instanceRoot: null, edge: edgeReturning(goodProject) };
+    const base = { paperRoot: '/paper', journalRoot: null, edge: edgeReturning(goodProject) };
     const lax = await runValidate(base, { repo: null }, allTrue);
     expect(lax.status).toBe('ok');
     expect(lax.checkRun.conclusion).toBe('success');
@@ -524,24 +522,24 @@ describe('checkLayerDisjointness: extends layers must not share keys [R72]', () 
 describe("a layer's own extends: is followed [R119]", () => {
   const realProbes: FsProbes = { existsProbe: (p) => existsSync(p), listTree: () => [] };
 
-  /** An engine + instance pair on disk, with whatever extra layer files the case needs. */
-  function layout(files: Record<string, string>): { engineRoot: string; instanceRoot: string } {
+  /** An engine + journal pair on disk, with whatever extra layer files the case needs. */
+  function layout(files: Record<string, string>): { engineRoot: string; journalRoot: string } {
     const root = mkdtempSync(join(tmpdir(), 'oak-layers-'));
     const engineRoot = join(root, 'engine');
-    const instanceRoot = join(root, 'instance');
-    mkdirSync(join(instanceRoot, 'editions'), { recursive: true });
+    const journalRoot = join(root, 'journal');
+    mkdirSync(join(journalRoot, 'editions'), { recursive: true });
     mkdirSync(engineRoot, { recursive: true });
     writeFileSync(join(engineRoot, 'paper-base.yml'), 'project:\n  venue: from-paper-base\n');
     for (const [rel, body] of Object.entries(files)) {
-      writeFileSync(join(instanceRoot, rel), body);
+      writeFileSync(join(journalRoot, rel), body);
     }
-    return { engineRoot, instanceRoot };
+    return { engineRoot, journalRoot };
   }
-  const findings = (roots: { engineRoot: string; instanceRoot: string }) =>
+  const findings = (roots: { engineRoot: string; journalRoot: string }) =>
     runLayerA(
       {
         paperRoot: '/paper',
-        instanceRoot: roots.instanceRoot,
+        journalRoot: roots.journalRoot,
         project: { id: 'x' },
         repo: null,
         engineRoot: roots.engineRoot,
@@ -587,15 +585,15 @@ describe("a layer's own extends: is followed [R119]", () => {
   });
 
   it('expandLayers takes each root and its chain, in order', () => {
-    const { engineRoot, instanceRoot } = layout({
+    const { engineRoot, journalRoot } = layout({
       'editions/e.yml': 'extends: ./shared.yml\n',
       'editions/shared.yml': 'project:\n  venue: v\n',
     });
     const { layers, unreadable } = expandLayers(
       [
         { name: 'paper-base.yml', path: join(engineRoot, 'paper-base.yml') },
-        { name: 'editions/e.yml', path: join(instanceRoot, 'editions', 'e.yml') },
-        { name: 'brand/brand.yml', path: join(instanceRoot, 'brand', 'brand.yml') },
+        { name: 'editions/e.yml', path: join(journalRoot, 'editions', 'e.yml') },
+        { name: 'brand/brand.yml', path: join(journalRoot, 'brand', 'brand.yml') },
       ],
       realProbes,
     );
@@ -621,7 +619,7 @@ describe("the author's template is read from their myst.yml, not from the compos
     for (const [name, body] of Object.entries(files)) writeFileSync(join(dir, name), body);
     return dir;
   };
-  const journalInstance = () => {
+  const journalDir = () => {
     // `allTrue` says every path exists, so the journal repo must really hold the files
     // runLayerA reads (journal.yml and the registry), or the read throws first.
     const dir = tmpDir({ 'journal.yml': 'name: J\ntypst_template: ./journal-template\n' });
@@ -633,7 +631,7 @@ describe("the author's template is read from their myst.yml, not from the compos
   it('does not report template-override when the paper declares no template', () => {
     const paperRoot = tmpDir({ 'myst.yml': 'version: 1\nproject:\n  id: j-2026-x\n' });
     const findings = runLayerA(
-      { paperRoot, instanceRoot: journalInstance(), project: composedProject, repo: null },
+      { paperRoot, journalRoot: journalDir(), project: composedProject, repo: null },
       allTrue,
     );
     expect(findings.some((f) => f.check === 'template-override')).toBe(false);
@@ -645,7 +643,7 @@ describe("the author's template is read from their myst.yml, not from the compos
         'version: 1\nproject:\n  id: j-2026-x\n  exports:\n    - format: typst\n      id: typst-pdf\n      template: ./mine\n',
     });
     const findings = runLayerA(
-      { paperRoot, instanceRoot: journalInstance(), project: composedProject, repo: null },
+      { paperRoot, journalRoot: journalDir(), project: composedProject, repo: null },
       allTrue,
     );
     expect(findings.some((f) => f.check === 'template-override')).toBe(true);
@@ -657,7 +655,7 @@ describe("the author's template is read from their myst.yml, not from the compos
         'version: 1\nproject:\n  id: j-2026-x\n  options:\n    oaktree-sapling:\n      journal: { repo: "." }\n',
     });
     const findings = runLayerA(
-      { paperRoot, instanceRoot: journalInstance(), project: composedProject, repo: null },
+      { paperRoot, journalRoot: journalDir(), project: composedProject, repo: null },
       allTrue,
     );
     expect(findings.find((f) => f.check === 'journal-stamp')).toMatchObject({
@@ -699,7 +697,7 @@ describe('runValidate: when there is nothing to compose [R82]', () => {
     const out = await runValidate(
       {
         paperRoot: '/paper',
-        instanceRoot,
+        journalRoot,
         edge: edgeReturning({ id: 'fixture-2026-sample-paper' }),
       },
       { repo: 'open-scholar-nexus/fixture-sample-paper' },
@@ -711,7 +709,7 @@ describe('runValidate: when there is nothing to compose [R82]', () => {
     expect(out.checkRun).toBeDefined();
     // It reaches the pull request too, not just stdout.
     expect(out.checkRun.summary).toMatch(/⚠️ checked the paper's own myst\.yml ONLY/);
-    // Nothing to compose is the user's choice (--no-instance, or a local run), so the note
+    // Nothing to compose is the user's choice (--no-journal, or a local run), so the note
     // explains and does not block. A failed compose, below, does block.
     expect(out.errors.some((e) => e.check === 'compose')).toBe(false);
   });
@@ -738,7 +736,7 @@ describe('runValidate: when there is nothing to compose [R82]', () => {
       withProjectSession: async (_dir, fn) => fn({} as never),
     };
     const out = await runValidate(
-      { paperRoot, instanceRoot, edge, engineRoot: '/engine', edition: 'typo' },
+      { paperRoot, journalRoot, edge, engineRoot: '/engine', edition: 'typo' },
       { repo: 'open-scholar-nexus/fixture-sample-paper' },
       allTrue,
     );
@@ -761,11 +759,11 @@ describe('a journal.yml that cannot be read fails the run [R116]', () => {
     existsProbe: (p: string) => !p.endsWith('journal.yml') && !p.endsWith('papers.yml'),
     listTree: () => [],
   };
-  const layerA = (instanceRoot: string | null, probes: FsProbes) =>
+  const layerA = (journalRoot: string | null, probes: FsProbes) =>
     runLayerA(
       {
         paperRoot: '/paper',
-        instanceRoot,
+        journalRoot,
         project: { id: 'anything-at-all' },
         repo: null,
         engineRoot: null,
@@ -775,13 +773,13 @@ describe('a journal.yml that cannot be read fails the run [R116]', () => {
     );
 
   it('fails when the journal repo has no journal.yml', () => {
-    const f = layerA('/instance', noJournal).find((x) => x.check === 'journal-config');
+    const f = layerA('/journal', noJournal).find((x) => x.check === 'journal-config');
     expect(f, 'a missing journal.yml must be reported').toBeTruthy();
     expect(f!.severity).toBe('error');
   });
 
-  it('says nothing with --no-instance', () => {
-    // --no-instance is the user's choice, not a broken journal repo.
+  it('says nothing with --no-journal', () => {
+    // --no-journal is the user's choice, not a broken journal repo.
     expect(layerA(null, noJournal).some((x) => x.check === 'journal-config')).toBe(false);
   });
 });
@@ -795,7 +793,7 @@ describe('the id policy cannot be turned off by the journal [R119]', () => {
     } satisfies FsProbes;
   };
   const layerA = (id: string, root: string | null, probes: FsProbes) =>
-    runLayerA({ paperRoot: '/paper', instanceRoot: root, project: { id }, repo: null }, probes);
+    runLayerA({ paperRoot: '/paper', journalRoot: root, project: { id }, repo: null }, probes);
 
   it('warns when the journal declares no id_pattern', () => {
     const dir = mkdtempSync(join(tmpdir(), 'oak-idpolicy-'));
@@ -829,7 +827,7 @@ describe('the id policy cannot be turned off by the journal [R119]', () => {
 });
 
 describe("the registry in runLayerA: one bad entry warns, the paper's own entry must match", () => {
-  const instanceWith = (registry: string): string => {
+  const journalWith = (registry: string): string => {
     const dir = mkdtempSync(join(tmpdir(), 'oak-reg-'));
     writeFileSync(join(dir, 'journal.yml'), 'name: J\nid_pattern: "^j-"\n');
     mkdirSync(join(dir, 'registry'), { recursive: true });
@@ -840,7 +838,7 @@ describe("the registry in runLayerA: one bad entry warns, the paper's own entry 
     runLayerA(
       {
         paperRoot: mkdtempSync(join(tmpdir(), 'oak-paper-')),
-        instanceRoot: instanceWith(registry),
+        journalRoot: journalWith(registry),
         project: { id },
         repo: 'me/this-paper',
       },

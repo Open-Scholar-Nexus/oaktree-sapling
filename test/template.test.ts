@@ -1,10 +1,10 @@
 /**
  * The template trees that bootstrap writes into one repo share no path. `templates/paper/`,
- * `templates/instance/` and `templates/site/` are separate trees, and two pairs land in the
+ * `templates/journal/` and `templates/site/` are separate trees, and two pairs land in the
  * same repo:
  *
- *   site  + instance   `oak bootstrap journal`
- *   site  + instance + the paper template's launchers   `oak bootstrap journal --co-located`
+ *   site  + journal   `oak bootstrap journal`
+ *   site  + journal + the paper template's launchers   `oak bootstrap journal --co-located`
  *
  * The rest of the paper template (its starter paper) never lands beside the site: both have a
  * root `myst.yml` and `.gitignore`. A file that belongs in both trees of a checked pair fails
@@ -15,7 +15,7 @@ import { stampedFiles, listFiles, STAMP_RENAME } from '../src/bootstrap.js';
 import { ENGINE_MANAGED_PATHS, underPaths } from '../src/schema.js';
 
 const PAPER_ROOT = 'templates/paper';
-const INSTANCE_ROOT = 'templates/instance';
+const JOURNAL_ROOT = 'templates/journal';
 const SITE_ROOT = 'templates/site';
 const TYPST_ROOT = 'templates/typst';
 
@@ -27,12 +27,12 @@ const overlap = (a: string, b: string) => {
 describe('template disjointness invariant', () => {
   it('--co-located: the launchers, the website and the journal templates write different paths', () => {
     const launchers = stampedFiles(PAPER_ROOT).filter((r) => underPaths(ENGINE_MANAGED_PATHS, r));
-    const rest = new Set([...stampedFiles(SITE_ROOT), ...stampedFiles(INSTANCE_ROOT)]);
+    const rest = new Set([...stampedFiles(SITE_ROOT), ...stampedFiles(JOURNAL_ROOT)]);
     expect(launchers.filter((r) => rest.has(r))).toEqual([]);
   });
 
   it('external: the website and journal templates write different paths', () => {
-    expect(overlap(SITE_ROOT, INSTANCE_ROOT)).toEqual([]);
+    expect(overlap(SITE_ROOT, JOURNAL_ROOT)).toEqual([]);
   });
 });
 
@@ -45,7 +45,7 @@ describe('template disjointness invariant', () => {
 describe('templates survive npm packaging', () => {
   const STRIPPED = new Set(Object.values(STAMP_RENAME));
 
-  for (const root of [PAPER_ROOT, INSTANCE_ROOT, SITE_ROOT, TYPST_ROOT]) {
+  for (const root of [PAPER_ROOT, JOURNAL_ROOT, SITE_ROOT, TYPST_ROOT]) {
     it(`${root} ships no file npm would strip from the tarball`, () => {
       const offenders = listFiles(root).filter((rel) => STRIPPED.has(rel.split('/').pop()!));
       expect(offenders).toEqual([]);

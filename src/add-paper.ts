@@ -78,7 +78,7 @@ export function seedPaper(
     join(repoRoot, dir),
     {
       engineRepo: '',
-      instanceRepo: '.',
+      journalRepo: '.',
       owner: '',
       version: opts.version,
       edition: opts.edition,

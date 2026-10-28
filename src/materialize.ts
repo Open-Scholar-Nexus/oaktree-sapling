@@ -65,8 +65,8 @@ export interface MystEdge {
 export interface MaterializeInput {
   paperRoot: string;
   engineRoot: string;
-  instanceRoot: string | null;
-  /** Which journal checkout `instanceRoot` is, for the derived config ({@link JournalStamp}). */
+  journalRoot: string | null;
+  /** Which journal checkout `journalRoot` is, for the derived config ({@link JournalStamp}). */
   journalStamp?: JournalStamp;
   baseUrl: string;
   assetOverrides?: ComposeInput['assetOverrides'];
@@ -104,7 +104,7 @@ export async function materializeDerived(
   const {
     paperRoot,
     engineRoot,
-    instanceRoot,
+    journalRoot,
     journalStamp,
     baseUrl,
     assetOverrides,
@@ -128,7 +128,7 @@ export async function materializeDerived(
   // Pass 1. The author's config fills the derived file's base, where myst's merge is predictable,
   // and the engine layers stay `extends:`. Extending the author's myst.yml instead would make its
   // precedence over the edition unpredictable [R72].
-  const { extendsChain } = extendsChainFor({ engineRoot, instanceRoot, edition });
+  const { extendsChain } = extendsChainFor({ engineRoot, journalRoot, edition });
   setExtends(doc, extendsChain);
   // The journal stamp is oak's to write; `oak validate` warns about an author's.
   dropJournalStamp(doc);
@@ -140,16 +140,16 @@ export async function materializeDerived(
 
   // Read from brand.yml itself, so compose resolves only the brand's own assets against the
   // journal root [R62].
-  const brandAssets = instanceRoot ? readBrandAssetOptions(instanceRoot) : undefined;
+  const brandAssets = journalRoot ? readBrandAssetOptions(journalRoot) : undefined;
 
   // The journal's typst template, read the same way from journal.yml [R76].
-  const journalTypstTemplate = instanceRoot ? readJournalTypstTemplate(instanceRoot) : undefined;
+  const journalTypstTemplate = journalRoot ? readJournalTypstTemplate(journalRoot) : undefined;
 
   // compose, including the version cross-check [R36].
   const result = compose({
     paperRoot,
     engineRoot,
-    instanceRoot,
+    journalRoot,
     resolvedProject,
     engineVersion,
     edition,

@@ -18,7 +18,7 @@ import { bundleState, assertBundleNotStale } from './bundle-state.js';
 
 const engineDir = fileURLToPath(new URL('..', import.meta.url));
 const fixturePaper = join(engineDir, 'test', 'fixture-paper');
-const fixtureInstance = join(engineDir, 'test', 'fixture-instance');
+const fixtureJournal = join(engineDir, 'test', 'fixture-journal');
 
 /** Every ancestor of `dir`, innermost first: the directories node's resolver searches. */
 function ancestors(dir: string): string[] {
@@ -44,9 +44,9 @@ function stagePackage(): string {
     if (existsSync(from)) cpSync(from, join(dir, rel), { recursive: true });
   }
   cpSync(fixturePaper, join(dir, 'paper'), { recursive: true });
-  // The journal repo picks the Layer B checks; with `--no-instance` the list is empty, which
+  // The journal repo picks the Layer B checks; with `--no-journal` the list is empty, which
   // would pass without loading them.
-  cpSync(fixtureInstance, join(dir, 'instance'), { recursive: true });
+  cpSync(fixtureJournal, join(dir, 'journal'), { recursive: true });
   return dir;
 }
 
@@ -76,8 +76,8 @@ describe.skipIf(bundleState() === 'absent')('the bundle runs with no node_module
         'validate',
         '--paper',
         join(dir, 'paper'),
-        '--instance',
-        join(dir, 'instance'),
+        '--journal',
+        join(dir, 'journal'),
         '--repo',
         'open-scholar-nexus/fixture-sample-paper',
         '--json',

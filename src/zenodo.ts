@@ -658,40 +658,40 @@ export interface JournalArchive {
  * The journal commit this deposit records, read from the stamp the build left in
  * `myst.oak.yml`: the journal is fetched at its default branch on every run, so the deposit's
  * checkout can be at a later commit than the build's, and the commit is fetched into it. `paper`
- * when the paper repo is its own journal; null when built with `--no-instance`. Run before
+ * when the paper repo is its own journal; null when built with `--no-journal`. Run before
  * anything is written to Zenodo [R101].
  *
  * Throws {@link JournalArchiveError} when the build used a journal this deposit cannot archive.
  */
 export async function prepareJournalArchive(
   repoRoot: string,
-  instanceRoot: string | null,
+  journalRoot: string | null,
   git: GitContext,
   paper: { repo: string; commit: string },
 ): Promise<JournalArchive | null> {
   const stamp = readJournalStamp(repoRoot);
   if (stamp === undefined) {
-    if (instanceRoot === null) return null;
+    if (journalRoot === null) return null;
     throw new JournalArchiveError(msg.workflow.depositJournalUnstamped);
   }
   if (stamp === null) return null;
   if (!('commit' in stamp)) return { root: null, ...paper }; // repo: "."
   if (stamp.commit === null) throw new JournalArchiveError(msg.workflow.depositJournalUncommitted);
   const at = stamp.repo ? `${stamp.repo}@${stamp.commit}` : stamp.commit;
-  if (instanceRoot === null) {
+  if (journalRoot === null) {
     throw new JournalArchiveError(msg.workflow.depositJournalNotGiven(at));
   }
-  const origin = await git.originRepo(instanceRoot);
+  const origin = await git.originRepo(journalRoot);
   if (stamp.repo && origin && !sameRepo(stamp.repo, origin)) {
     throw new JournalArchiveError(msg.workflow.depositJournalOtherRepo(stamp.repo, origin));
   }
   try {
-    await git.fetchCommit(instanceRoot, stamp.commit);
+    await git.fetchCommit(journalRoot, stamp.commit);
   } catch (e) {
     const why = e instanceof Error ? e.message : String(e);
     throw new JournalArchiveError(msg.workflow.depositJournalUnfetchable(at, why));
   }
-  return { root: instanceRoot, repo: origin ?? stamp.repo, commit: stamp.commit };
+  return { root: journalRoot, repo: origin ?? stamp.repo, commit: stamp.commit };
 }
 
 /**
@@ -804,11 +804,11 @@ function assertEngineArchive(zipPath: string): void {
  * journal.yml `zenodo:` settings [R19]
  * ------------------------------------------------------------------------ */
 
-/** Reads the journal's `zenodo:` block from `<instanceRoot>/journal.yml`. A new journal, or a
+/** Reads the journal's `zenodo:` block from `<journalRoot>/journal.yml`. A new journal, or a
  *  build with no journal, gets empty defaults. A journal.yml oak cannot read throws, so a
  *  deposit never goes out without the journal's settings. */
-export function loadJournalZenodo(instanceRoot: string | null): ZenodoConfig {
-  const journal = instanceRoot ? readJournalConfig(instanceRoot) : null;
+export function loadJournalZenodo(journalRoot: string | null): ZenodoConfig {
+  const journal = journalRoot ? readJournalConfig(journalRoot) : null;
   return (journal ?? JournalConfig.parse({ name: 'x' })).zenodo;
 }
 
@@ -819,11 +819,11 @@ export function loadJournalZenodo(instanceRoot: string | null): ZenodoConfig {
  */
 export function defaultSiteUrl(
   repo: string | null,
-  instanceRoot: string | null,
+  journalRoot: string | null,
   paperRoot?: string,
 ): string | undefined {
   if (!repo) return undefined;
-  const path = instanceRoot ? join(instanceRoot, 'registry', 'papers.yml') : null;
+  const path = journalRoot ? join(journalRoot, 'registry', 'papers.yml') : null;
   const entries = path && existsSync(path) ? readRegistry(readDoc(path).toJS())?.entries : null;
   // A co-located paper is found by its folder and published at `/<id>/` on the journal's site.
   const folder = paperRoot ? colocatedPaper(paperRoot) : null;
@@ -832,10 +832,10 @@ export function defaultSiteUrl(
     if (folder) {
       const location = parseLocation(e.location);
       return (
-        !!instanceRoot &&
+        !!journalRoot &&
         !!location &&
         'path' in location &&
-        resolve(instanceRoot, location.path) === resolve(paperRoot!)
+        resolve(journalRoot, location.path) === resolve(paperRoot!)
       );
     }
     const entryRepo = locationRepo(e.location);
@@ -859,7 +859,7 @@ export interface PrepareInput {
   /** The Project Website link; {@link defaultSiteUrl} when absent, none when empty. */
   siteUrl?: string;
   api: ZenodoApi;
-  instanceRoot: string | null;
+  journalRoot: string | null;
 }
 
 /**
@@ -871,8 +871,8 @@ export interface PrepareInput {
  * [R29].
  */
 export async function cmdPrepare(input: PrepareInput): Promise<Outcome> {
-  const { mystPath, repo, api, instanceRoot } = input;
-  const siteUrl = input.siteUrl ?? defaultSiteUrl(repo, instanceRoot, resolve(mystPath, '..'));
+  const { mystPath, repo, api, journalRoot } = input;
+  const siteUrl = input.siteUrl ?? defaultSiteUrl(repo, journalRoot, resolve(mystPath, '..'));
   const sandbox = api.sandbox;
   const doc = readDoc(mystPath);
   const project = projectOf(doc);
@@ -901,7 +901,7 @@ export async function cmdPrepare(input: PrepareInput): Promise<Outcome> {
     paperId: project.id ? String(project.id) : undefined,
     githubUrl,
     siteUrl,
-    zenodo: loadJournalZenodo(instanceRoot),
+    zenodo: loadJournalZenodo(journalRoot),
     abstractParas: abstractParagraphs(repoRoot),
     extraDescParas: zenodoExtraParagraphs(repoRoot),
   });
@@ -944,7 +944,7 @@ export interface PublishInput {
   bundleOut: string;
   api: ZenodoApi;
   git: GitContext;
-  instanceRoot: string | null;
+  journalRoot: string | null;
   /** oak's checkout (holds paper-base.yml), archived as the deposit's engine.zip. */
   engineRoot: string;
 }
@@ -964,7 +964,7 @@ function readTypstVersion(engineRoot: string): string | null {
  * prefix, so a tag cannot reach the wrong one [R4]; `--sandbox` must agree.
  */
 export async function cmdPublish(input: PublishInput): Promise<Outcome> {
-  const { mystPath, pdf, tag, bundleOut, api, git, instanceRoot, engineRoot } = input;
+  const { mystPath, pdf, tag, bundleOut, api, git, journalRoot, engineRoot } = input;
   const sandbox = api.sandbox;
   const doc = readDoc(mystPath);
   const project = projectOf(doc);
@@ -992,7 +992,7 @@ export async function cmdPublish(input: PublishInput): Promise<Outcome> {
   if (!githubUrl) return err(2, 'project.github missing; should have been set by prepare.');
   const repo = repoFromGithubUrl(githubUrl);
   if (!repo) return err(2, msg.workflow.depositBadGithubUrl(mystPath, githubUrl));
-  const siteUrl = input.siteUrl ?? defaultSiteUrl(repo, instanceRoot, resolve(mystPath, '..'));
+  const siteUrl = input.siteUrl ?? defaultSiteUrl(repo, journalRoot, resolve(mystPath, '..'));
 
   const repoRoot = resolve(mystPath, '..');
 
@@ -1002,7 +1002,7 @@ export async function cmdPublish(input: PublishInput): Promise<Outcome> {
   let journal: JournalArchive | null;
   try {
     assertBundlePreconditions(repoRoot, engineRoot);
-    journal = await prepareJournalArchive(repoRoot, instanceRoot, git, { repo, commit: sha });
+    journal = await prepareJournalArchive(repoRoot, journalRoot, git, { repo, commit: sha });
   } catch (e) {
     if (
       e instanceof BundleCollisionError ||
@@ -1061,7 +1061,7 @@ export async function cmdPublish(input: PublishInput): Promise<Outcome> {
     paperId: project.id ? String(project.id) : undefined,
     githubUrl,
     siteUrl,
-    zenodo: loadJournalZenodo(instanceRoot),
+    zenodo: loadJournalZenodo(journalRoot),
     version,
     publicationDate: String(project.date ?? new Date().toISOString().slice(0, 10)),
     abstractParas: abstractParagraphs(repoRoot),
@@ -1116,7 +1116,7 @@ export interface StatusInput {
   mystPath: string;
   siteUrl?: string;
   api: ZenodoApi;
-  instanceRoot: string | null;
+  journalRoot: string | null;
 }
 
 /**
@@ -1124,7 +1124,7 @@ export interface StatusInput {
  * publish would send. Writes nothing.
  */
 export async function cmdStatus(input: StatusInput): Promise<Outcome> {
-  const { mystPath, api, instanceRoot } = input;
+  const { mystPath, api, journalRoot } = input;
   const sandbox = api.sandbox;
   const doc = readDoc(mystPath);
   const project = projectOf(doc);
@@ -1161,8 +1161,8 @@ export async function cmdStatus(input: StatusInput): Promise<Outcome> {
     project,
     paperId: project.id ? String(project.id) : undefined,
     githubUrl: project.github ?? '',
-    siteUrl: input.siteUrl ?? defaultSiteUrl(repoFromGithubUrl(project.github ?? ''), instanceRoot),
-    zenodo: loadJournalZenodo(instanceRoot),
+    siteUrl: input.siteUrl ?? defaultSiteUrl(repoFromGithubUrl(project.github ?? ''), journalRoot),
+    zenodo: loadJournalZenodo(journalRoot),
     abstractParas: abstractParagraphs(repoRoot),
     extraDescParas: zenodoExtraParagraphs(repoRoot),
   });

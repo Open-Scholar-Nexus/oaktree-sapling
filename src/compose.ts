@@ -29,7 +29,7 @@ export const TYPST_EXPORT_ID = 'typst-pdf';
 
 /** Brand fields holding a path. They are written from the journal repo root, which is where
  *  myst resolves them on the journal website, so compose makes them absolute against
- *  `<instanceRoot>` for a paper, whose root is elsewhere [R62]. By
+ *  `<journalRoot>` for a paper, whose root is elsewhere [R62]. By
  *  namespace: `site.options.*` for the HTML theme (logo, logo_dark, favicon, style), and
  *  `project.options.logo` for the PDF watermark, which oak's template has no default for. One
  *  definition, so yaml-io and compose agree. */
@@ -53,16 +53,16 @@ export function isBrandAssetUrl(value: string): boolean {
  * Checking the disk instead would turn a mistyped path into a name lookup. `oak validate` warns
  * when a bare value matches a directory in the journal repo.
  */
-export function isInstanceRelativeTemplate(value: string): boolean {
+export function isJournalRelativeTemplate(value: string): boolean {
   return /^\.\.?\//.test(value);
 }
 
 /** Makes a journal's template path absolute against the journal repo root, where
  *  `journal.yml` lives. Only `./` and `../` values change; see
- *  {@link isInstanceRelativeTemplate}. Exported so `oak validate` checks the path compose emits
+ *  {@link isJournalRelativeTemplate}. Exported so `oak validate` checks the path compose emits
  *  [R62]. */
-export function resolveJournalTemplate(instanceRoot: string, value: string): string {
-  return isInstanceRelativeTemplate(value) ? join(instanceRoot, value) : value;
+export function resolveJournalTemplate(journalRoot: string, value: string): string {
+  return isJournalRelativeTemplate(value) ? join(journalRoot, value) : value;
 }
 
 function needsAbsolutizing(value: string): boolean {
@@ -70,17 +70,17 @@ function needsAbsolutizing(value: string): boolean {
   return !isBrandAssetUrl(value);
 }
 
-/** Resolves one brand asset as compose does: a relative value against `<instanceRoot>`,
+/** Resolves one brand asset as compose does: a relative value against `<journalRoot>`,
  *  URLs and absolute paths as they are. Exported so `oak validate` checks the path compose emits
  *  [R62]. */
-export function resolveBrandAssetPath(instanceRoot: string, value: string): string {
-  return needsAbsolutizing(value) ? join(instanceRoot, value) : value;
+export function resolveBrandAssetPath(journalRoot: string, value: string): string {
+  return needsAbsolutizing(value) ? join(journalRoot, value) : value;
 }
 
 /** Makes the relative values in `raw` (one namespace of {@link BRAND_ASSET_KEYS}) absolute
- *  against `<instanceRoot>`. */
+ *  against `<journalRoot>`. */
 function absolutizeBrandAssets(
-  instanceRoot: string,
+  journalRoot: string,
   raw: Record<string, string> | undefined,
   keys: readonly string[],
 ): Record<string, string> {
@@ -89,7 +89,7 @@ function absolutizeBrandAssets(
   for (const key of keys) {
     const value = raw[key];
     if (typeof value !== 'string' || !value) continue;
-    out[key] = resolveBrandAssetPath(instanceRoot, value);
+    out[key] = resolveBrandAssetPath(journalRoot, value);
   }
   return out;
 }
@@ -110,8 +110,8 @@ export interface ComposeInput {
   paperRoot: string;
   /** Path to oak's checkout, which holds paper-base.yml and oak's typst template. */
   engineRoot: string;
-  /** Path to the journal repo; null with --no-instance. */
-  instanceRoot: string | null;
+  /** Path to the journal repo; null with --no-journal. */
+  journalRoot: string | null;
   /** The project as myst resolved it (`loadConfig().project`). Read only. */
   resolvedProject: ResolvedProject;
   /** oak's version, read before the merge. */
@@ -135,11 +135,11 @@ export interface ComposeInput {
   /** false leaves the PDF download out of the site, for `oak start` while there is no PDF. */
   pdfDownload?: boolean;
   /** The brand's asset fields ({@link BRAND_ASSET_KEYS}), read as written from
-   *  `brand/brand.yml`. compose makes relative values absolute against `<instanceRoot>`,
+   *  `brand/brand.yml`. compose makes relative values absolute against `<journalRoot>`,
    *  since myst resolves them against the paper root [R62]. Read from brand.yml itself so a
    *  paper's own relative asset is never taken for the brand's. */
   brandAssets?: { site?: Record<string, string>; project?: Record<string, string> };
-  /** The journal checkout `instanceRoot` is, recorded for the deposit; absent without one. */
+  /** The journal checkout `journalRoot` is, recorded for the deposit; absent without one. */
   journal?: JournalStamp;
 }
 
@@ -174,20 +174,20 @@ export interface ComposeResult {
  *  config, and oak never builds it [R80]. */
 export function extendsChainFor(input: {
   engineRoot: string;
-  instanceRoot: string | null;
+  journalRoot: string | null;
   edition: string;
 }): { extendsChain: string[]; warnings: string[] } {
-  const { engineRoot, instanceRoot, edition } = input;
+  const { engineRoot, journalRoot, edition } = input;
   const warnings: string[] = [];
   const extendsChain: string[] = [`${engineRoot}/paper-base.yml`];
-  if (instanceRoot === null) {
+  if (journalRoot === null) {
     warnings.push(
-      '--no-instance: building unbranded (no edition/brand). Not CI-faithful; ' +
+      '--no-journal: building unbranded (no edition/brand). Not CI-faithful; ' +
         'brand assets (logo, watermark) and edition frontmatter are absent.',
     );
   } else {
-    extendsChain.push(`${instanceRoot}/editions/${edition}.yml`);
-    extendsChain.push(`${instanceRoot}/brand/brand.yml`);
+    extendsChain.push(`${journalRoot}/editions/${edition}.yml`);
+    extendsChain.push(`${journalRoot}/brand/brand.yml`);
   }
   return { extendsChain, warnings };
 }
@@ -195,7 +195,7 @@ export function extendsChainFor(input: {
 export function compose(input: ComposeInput): ComposeResult {
   const {
     engineRoot,
-    instanceRoot,
+    journalRoot,
     resolvedProject,
     engineVersion,
     edition,
@@ -212,7 +212,7 @@ export function compose(input: ComposeInput): ComposeResult {
     );
   }
 
-  const { extendsChain, warnings } = extendsChainFor({ engineRoot, instanceRoot, edition });
+  const { extendsChain, warnings } = extendsChainFor({ engineRoot, journalRoot, edition });
 
   // ownOverride: oak's additions to the base config [R52].
   const ownOverride: OwnOverride = {};
@@ -234,8 +234,8 @@ export function compose(input: ComposeInput): ComposeResult {
         ? (typst['template'] as string)
         : undefined;
     const journalTemplate =
-      input.journalTypstTemplate && instanceRoot
-        ? resolveJournalTemplate(instanceRoot, input.journalTypstTemplate)
+      input.journalTypstTemplate && journalRoot
+        ? resolveJournalTemplate(journalRoot, input.journalTypstTemplate)
         : input.journalTypstTemplate;
     const engineTemplate = engineTypstTemplate(engineRoot);
     const template =
@@ -272,16 +272,16 @@ export function compose(input: ComposeInput): ComposeResult {
   // Brand assets [R62]: relative values made absolute against the journal root, since MyST
   // resolves them against the paper root, where the journal's files are not. HTML assets go in
   // site.options, the PDF watermark in project.options.logo.
-  if (instanceRoot && input.brandAssets) {
+  if (journalRoot && input.brandAssets) {
     const siteOptions = absolutizeBrandAssets(
-      instanceRoot,
+      journalRoot,
       input.brandAssets.site,
       BRAND_ASSET_KEYS.site,
     );
     if (Object.keys(siteOptions).length) site.options = siteOptions;
 
     const projectOptions = absolutizeBrandAssets(
-      instanceRoot,
+      journalRoot,
       input.brandAssets.project,
       BRAND_ASSET_KEYS.project,
     );

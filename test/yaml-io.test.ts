@@ -24,7 +24,7 @@ import { cmdPrepare, type ZenodoApi } from '../src/zenodo.js';
 import { loadJournalPreview, runNewVersionReminder, type GhPr } from '../src/preview.js';
 
 const fixturePaper = fileURLToPath(new URL('./fixture-paper/myst.yml', import.meta.url));
-const fixtureInstance = fileURLToPath(new URL('./fixture-instance', import.meta.url));
+const fixtureJournal = fileURLToPath(new URL('./fixture-journal', import.meta.url));
 
 describe('readEngineCoordinateRaw (local yq equivalent, §6a)', () => {
   it('reads version + edition from the raw doc, pre-extends', () => {
@@ -58,7 +58,7 @@ describe('readEngineCoordinateRaw (local yq equivalent, §6a)', () => {
 describe('working-tree injection preserves author content ([R3])', () => {
   it('sets extends + overrides without disturbing options.youtube or comments', () => {
     const doc = readDoc(fixturePaper);
-    setExtends(doc, ['.engine/paper-base.yml', '.instance/editions/fixture-edition.yml']);
+    setExtends(doc, ['.engine/paper-base.yml', '.journal/editions/fixture-edition.yml']);
     applyOwnOverride(doc, {
       project: {
         exports: [
@@ -93,21 +93,19 @@ describe('working-tree injection preserves author content ([R3])', () => {
   it('sets brand assets key by key under site and project options, keeping the others [R62]', () => {
     const doc = readDoc(fixturePaper);
     applyOwnOverride(doc, {
-      project: { options: { logo: '/abs/instance/brand/logo-watermark.svg' } },
+      project: { options: { logo: '/abs/journal/brand/logo-watermark.svg' } },
       site: {
         template: 'https://example.org/book-theme.zip',
-        options: { logo: '/abs/instance/brand/logo.svg', favicon: '/abs/instance/brand/f.svg' },
+        options: { logo: '/abs/journal/brand/logo.svg', favicon: '/abs/journal/brand/f.svg' },
       },
     });
 
     const out = parseDocument(doc.toString());
     expect(out.getIn(['site', 'template'])).toBe('https://example.org/book-theme.zip');
-    expect(out.getIn(['site', 'options', 'logo'])).toBe('/abs/instance/brand/logo.svg');
-    expect(out.getIn(['site', 'options', 'favicon'])).toBe('/abs/instance/brand/f.svg');
+    expect(out.getIn(['site', 'options', 'logo'])).toBe('/abs/journal/brand/logo.svg');
+    expect(out.getIn(['site', 'options', 'favicon'])).toBe('/abs/journal/brand/f.svg');
     // the typst watermark lands in project.options.logo
-    expect(out.getIn(['project', 'options', 'logo'])).toBe(
-      '/abs/instance/brand/logo-watermark.svg',
-    );
+    expect(out.getIn(['project', 'options', 'logo'])).toBe('/abs/journal/brand/logo-watermark.svg');
     // the author's other project options are kept
     expect(out.getIn(['project', 'options', 'youtube'])).toBe('https://youtu.be/dQw4w9WgXcQ');
     expect(out.getIn(['project', 'options', 'oaktree-sapling', 'version'])).toBe('v0.3.0');
@@ -117,38 +115,38 @@ describe('working-tree injection preserves author content ([R3])', () => {
 describe('readBrandAssetOptions ([R62])', () => {
   it("reads the asset fields from the journal's brand.yml, for site and project", () => {
     // the fixture brand has a relative site logo and favicon, and a typst watermark
-    expect(readBrandAssetOptions(fixtureInstance)).toEqual({
+    expect(readBrandAssetOptions(fixtureJournal)).toEqual({
       site: { logo: 'brand/logo.svg', favicon: 'brand/favicon.svg' },
       project: { logo: 'brand/logo-watermark.svg' },
     });
   });
 
   it('returns empty maps when the journal repo has no brand.yml', () => {
-    expect(readBrandAssetOptions('/no/such/instance')).toEqual({ site: {}, project: {} });
+    expect(readBrandAssetOptions('/no/such/journal')).toEqual({ site: {}, project: {} });
   });
 });
 
 describe('readJournalTypstTemplate ([R76])', () => {
   /** A temporary journal repo. The shared fixture sets no journal template, so the fixture
    *  builds use oak's. */
-  function instanceWithJournal(body: string): string {
+  function journalWithConfig(body: string): string {
     const root = mkdtempSync(join(tmpdir(), 'oak-journal-'));
     writeFileSync(join(root, 'journal.yml'), body);
     return root;
   }
 
   it('lifts the journal.yml value raw, never through the extends merge', () => {
-    const root = instanceWithJournal('name: J\ntypst_template: ./typst-template\n');
+    const root = journalWithConfig('name: J\ntypst_template: ./typst-template\n');
     expect(readJournalTypstTemplate(root)).toBe('./typst-template');
   });
 
   it('returns undefined when the journal declares none (the common case)', () => {
-    expect(readJournalTypstTemplate(instanceWithJournal('name: J\n'))).toBeUndefined();
-    expect(readJournalTypstTemplate(fixtureInstance)).toBeUndefined();
+    expect(readJournalTypstTemplate(journalWithConfig('name: J\n'))).toBeUndefined();
+    expect(readJournalTypstTemplate(fixtureJournal)).toBeUndefined();
   });
 
   it('returns undefined when there is no journal.yml at all', () => {
-    expect(readJournalTypstTemplate('/no/such/instance')).toBeUndefined();
+    expect(readJournalTypstTemplate('/no/such/journal')).toBeUndefined();
   });
 });
 
@@ -256,7 +254,7 @@ describe('a YAML error is refused the same way by every verb', () => {
     const why = refusal(myst);
     const paperRoot = join(myst, '..');
     await expect(
-      runValidate({ paperRoot, instanceRoot: null, edge: {} as MystEdge }),
+      runValidate({ paperRoot, journalRoot: null, edge: {} as MystEdge }),
     ).rejects.toThrow(why);
     // Refused before any Zenodo call: the stub has no methods to call.
     await expect(
@@ -264,7 +262,7 @@ describe('a YAML error is refused the same way by every verb', () => {
         mystPath: myst,
         repo: 'o/r',
         api: { sandbox: true } as ZenodoApi,
-        instanceRoot: null,
+        journalRoot: null,
       }),
     ).rejects.toThrow(why);
     const gh = { versionTags: () => ['v1.0.0'] } as unknown as GhPr;

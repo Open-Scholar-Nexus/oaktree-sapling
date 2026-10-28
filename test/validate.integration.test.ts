@@ -32,14 +32,14 @@ cpSync(join(engineDir, 'test', 'fixture-paper'), fixturePaper, {
   recursive: true,
   filter: (src) => !src.endsWith('myst.oak.yml'),
 });
-const fixtureInstance = join(engineDir, 'test', 'fixture-instance');
+const fixtureJournal = join(engineDir, 'test', 'fixture-journal');
 const repo = 'open-scholar-nexus/fixture-sample-paper';
 
 /** Runs `oak validate --json`, capturing stdout and stderr separately. */
 function spawnValidate(paper: string): { exitCode: number; stdout: string; stderr: string } {
   const r = spawnSync(
     'node',
-    [bundle, 'validate', '--paper', paper, '--instance', fixtureInstance, '--repo', repo, '--json'],
+    [bundle, 'validate', '--paper', paper, '--journal', fixtureJournal, '--repo', repo, '--json'],
     { encoding: 'utf8' },
   );
   return { exitCode: r.status ?? 1, stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
@@ -124,8 +124,8 @@ describe.skipIf(bundleState() === 'absent')(
           'validate',
           '--paper',
           fixturePaper,
-          '--instance',
-          fixtureInstance,
+          '--journal',
+          fixtureJournal,
           '--repo',
           repo,
           '--report',
@@ -147,7 +147,7 @@ describe.skipIf(bundleState() === 'absent')(
       const reportPath = join(tmp, 'report.json');
       const r = spawnSync(
         'node',
-        [bundle, 'validate', '--paper', failingPaper(), '--instance', fixtureInstance].concat([
+        [bundle, 'validate', '--paper', failingPaper(), '--journal', fixtureJournal].concat([
           '--repo',
           repo,
           '--report',
@@ -163,7 +163,7 @@ describe.skipIf(bundleState() === 'absent')(
       const reportPath = join(tmpdir(), 'oak-no-such-dir', 'nested', 'report.json');
       const r = spawnSync(
         'node',
-        [bundle, 'validate', '--paper', fixturePaper, '--instance', fixtureInstance].concat([
+        [bundle, 'validate', '--paper', fixturePaper, '--journal', fixtureJournal].concat([
           '--repo',
           repo,
           '--report',
@@ -181,7 +181,7 @@ describe.skipIf(bundleState() === 'absent')(
       writeFileSync(eventPath, JSON.stringify({ pull_request: { number: 42 } }));
       const r = spawnSync(
         'node',
-        [bundle, 'validate', '--paper', fixturePaper, '--instance', fixtureInstance].concat([
+        [bundle, 'validate', '--paper', fixturePaper, '--journal', fixtureJournal].concat([
           '--repo',
           repo,
           '--report',
@@ -237,11 +237,11 @@ describe.skipIf(bundleState() === 'absent')('the COMPOSED view reaches the check
 
 /* --------------------------------------------------------------------------
  * Finding the journal repo [R38], and the report written when validate cannot run. With
- * `instance_repo: .` the engine action passes no `--instance`, so validate looks for a
+ * `journal_repo: .` the engine action passes no `--journal`, so validate looks for a
  * journal.yml beside the paper; when it finds none, it still writes a report.
  * ------------------------------------------------------------------------ */
 describe.skipIf(bundleState() === 'absent')(
-  'oak validate, instance resolution + crash reporting',
+  'oak validate, journal resolution + crash reporting',
   () => {
     beforeAll(assertBundleNotStale);
 
@@ -270,19 +270,19 @@ describe.skipIf(bundleState() === 'absent')(
       expect(String(written.errors[0])).toContain('no journal repo found');
     }, 60_000);
 
-    it('the error names pins.yml and what `instance_repo: .` means', () => {
+    it('the error names pins.yml and what `journal_repo: .` means', () => {
       const r = spawnSync('node', [bundle, 'validate', '--paper', paperOnly()], {
         encoding: 'utf8',
       });
       expect(r.status).toBe(2);
-      expect(r.stderr).toContain('instance_repo');
-      expect(r.stderr).toContain('--no-instance');
+      expect(r.stderr).toContain('journal_repo');
+      expect(r.stderr).toContain('--no-journal');
     }, 60_000);
 
-    it('without instance_repo in pins.yml, a journal.yml beside the paper is not the journal', () => {
+    it('without journal_repo in pins.yml, a journal.yml beside the paper is not the journal', () => {
       // A missing key is a paper repository whose journal is unknown, never this repo.
       const dir = paperOnly();
-      cpSync(fixtureInstance, dir, { recursive: true });
+      cpSync(fixtureJournal, dir, { recursive: true });
       mkdirSync(join(dir, '.github', 'actions', 'engine'), { recursive: true });
       writeFileSync(join(dir, '.github', 'actions', 'engine', 'pins.yml'), 'engine_repo: a/b\n');
       const r = spawnSync('node', [bundle, 'validate', '--paper', dir], { encoding: 'utf8' });
@@ -290,14 +290,14 @@ describe.skipIf(bundleState() === 'absent')(
       expect(r.stderr).toContain('no journal repo found');
     }, 60_000);
 
-    it('uses a journal.yml in this repo as the journal repo with instance_repo: . [R38]', () => {
-      // What `instance_repo: .` means: the journal.yml sits in this repository.
+    it('uses a journal.yml in this repo as the journal repo with journal_repo: . [R38]', () => {
+      // What `journal_repo: .` means: the journal.yml sits in this repository.
       const dir = mkdtempSync(join(tmpdir(), 'oak-val-colo-'));
       for (const f of ['bib.bib', 'index.md', 'myst.yml'])
         copyFileSync(join(fixturePaper, f), join(dir, f));
-      cpSync(fixtureInstance, dir, { recursive: true });
+      cpSync(fixtureJournal, dir, { recursive: true });
       mkdirSync(join(dir, '.github', 'actions', 'engine'), { recursive: true });
-      writeFileSync(join(dir, '.github', 'actions', 'engine', 'pins.yml'), 'instance_repo: .\n');
+      writeFileSync(join(dir, '.github', 'actions', 'engine', 'pins.yml'), 'journal_repo: .\n');
       const report = join(dir, 'report.json');
       const r = spawnSync(
         'node',
@@ -314,10 +314,10 @@ describe.skipIf(bundleState() === 'absent')(
       expect((out.notes ?? []).join(' ')).not.toMatch(/uncomposed/i);
     }, 60_000);
 
-    it('--no-instance still checks the paper on its own', () => {
+    it('--no-journal still checks the paper on its own', () => {
       const r = spawnSync(
         'node',
-        [bundle, 'validate', '--paper', paperOnly(), '--no-instance', '--json'],
+        [bundle, 'validate', '--paper', paperOnly(), '--no-journal', '--json'],
         {
           encoding: 'utf8',
         },

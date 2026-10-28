@@ -366,7 +366,7 @@ describe('the templates declare the oldest engine they run with', () => {
     const repo = mkdtempSync(join(tmpdir(), 'oak-min-'));
     renderPaperTemplate(SHIM, repo, {
       engineRepo: 'me/engine',
-      instanceRepo: 'me/journal',
+      journalRepo: 'me/journal',
       owner: '@me',
       version: 'v9.9.9',
       edition: 'e',
@@ -445,7 +445,7 @@ function withYq(script: string, dir: string, env: Record<string, string>) {
     [
       '#!/bin/sh',
       'case "$1" in',
-      '  *instance_repo*) printf "%s" "$YQ_JOURNAL" ;;',
+      '  *journal_repo*) printf "%s" "$YQ_JOURNAL" ;;',
       '  *engine_version*) case "$1" in *min_*) printf "%s" "$YQ_MIN" ;; *) printf "%s" "$YQ_ENGINE" ;; esac ;;',
       '  *) printf "%s" "$YQ_VALUE" ;;',
       'esac',

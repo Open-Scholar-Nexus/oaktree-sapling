@@ -75,7 +75,8 @@ export interface ConformanceGh {
   committedDoi(repo: string): string | null;
   /** The oak version pinned in the test repo's `myst.yml`, or null. */
   committedEngineVersion(repo: string): string | null;
-  /** `instance_repo` from the test repo's `pins.yml`, or null. */
+  /** `journal_repo` from the test repo's `pins.yml`, or its old name `instance_repo` until that
+   *  repo is upgraded; null when neither is there. */
   committedJournalRepo(repo: string): string | null;
   /** The head commit of `main`, where the deposit tag goes. */
   defaultBranchSha(repo: string): string;

@@ -29,6 +29,7 @@ import { discoverProjects, isColocated } from './projects.js';
 import * as msg from './messages.js';
 import { err, type Outcome } from './result.js';
 import {
+  OLD_JOURNAL_KEY,
   compareEngineVersions,
   ENGINE_MANAGED_PATHS,
   ENGINE_VERSION,
@@ -80,7 +81,9 @@ export function readAnswers(repoRoot: string): TemplateAnswers {
   const pins = existsSync(pinsPath) ? readDoc(pinsPath) : null;
   const engineRepo = String(pins?.get('engine_repo') ?? '');
   // Absent stays absent: a paper repository whose journal is unknown.
-  const instanceRepo = String(pins?.get('instance_repo') ?? '');
+  // A repo bootstrapped before the key was renamed has `instance_repo`; its resync writes
+  // `journal_repo` ({@link renderPins}).
+  const journalRepo = String(pins?.get('journal_repo') ?? pins?.get(OLD_JOURNAL_KEY) ?? '');
   const coPath = join(repoRoot, CODEOWNERS_REL);
   const owner = existsSync(coPath) ? ownerFromCodeowners(readFileSync(coPath, 'utf8')) : '@owner';
   const myst = join(repoRoot, 'myst.yml');
@@ -94,7 +97,7 @@ export function readAnswers(repoRoot: string): TemplateAnswers {
   const repoEngineVersion = pins?.get(ENGINE_VERSION_KEY);
   return {
     engineRepo,
-    instanceRepo,
+    journalRepo,
     owner,
     version,
     edition,

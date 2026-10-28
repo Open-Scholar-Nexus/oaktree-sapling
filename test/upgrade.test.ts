@@ -39,7 +39,7 @@ const tmp = (p = 'oak-up-') => mkdtempSync(join(tmpdir(), p));
 
 const answers: TemplateAnswers = {
   engineRepo: 'me/engine',
-  instanceRepo: 'me/instance-config',
+  journalRepo: 'me/journal-repo',
   owner: '@alice',
   version: 'v1.0.0',
   edition: 'ed-2026',
@@ -453,7 +453,7 @@ describe('a co-located repository', () => {
     renderPaperTemplate(
       TEMPLATE_ROOT,
       repo,
-      { ...answers, instanceRepo: '.', repoEngineVersion: 'v1.0.0' },
+      { ...answers, journalRepo: '.', repoEngineVersion: 'v1.0.0' },
       (rel) => rel.startsWith('.github/') || rel === 'CODEOWNERS',
     );
     writeFileSync(join(repo, 'journal.yml'), 'name: J\n');
@@ -549,5 +549,26 @@ describe('a co-located repository', () => {
     );
     expect(out.exitCode).toBe(2);
     expect(String(out.result.message)).toContain('papers/a-1/myst.yml pins "main"');
+  });
+});
+
+describe('a repo bootstrapped before journal_repo was named so', () => {
+  it('keeps its journal under the new key, and drops the old one', async () => {
+    const repo = makeRepo();
+    const pinsFile = join(repo, '.github/actions/engine/pins.yml');
+    const doc = parseDocument(readFileSync(pinsFile, 'utf8'));
+    doc.delete('journal_repo');
+    doc.set('instance_repo', 'me/old-journal');
+    writeFileSync(pinsFile, doc.toString());
+    expect(readAnswers(repo).journalRepo).toBe('me/old-journal');
+    const { pr, opened } = fakePr();
+    await cmdUpgrade(
+      { repoRoot: repo, filesOnly: true },
+      deps(pr, 'v1.0.0', () => TEMPLATE_ROOT),
+    );
+    const after = parseDocument(readFileSync(pinsFile, 'utf8'));
+    expect(after.get('journal_repo')).toBe('me/old-journal');
+    expect(after.has('instance_repo')).toBe(false);
+    expect(opened[0]!.paths).toContain('.github/actions/engine/pins.yml');
   });
 });

@@ -138,7 +138,7 @@ export function parseZenodoDoi(doi: string): { sandbox: boolean; recordId: strin
 /**
  * The journal checkout a build composed from, which the deposit archives as `journal.zip`
  * [R66]. oak writes it into `myst.oak.yml`; a value in the author's `myst.yml` is dropped.
- * Absent for a `--no-instance` build. `repo: "."` is a paper repo that is its own journal, so
+ * Absent for a `--no-journal` build. `repo: "."` is a paper repo that is its own journal, so
  * `source.zip` holds it. `repo` is null for a clone with no GitHub origin, and `commit` is null
  * when the files are not a commit of their own repo (local changes, a folder inside a larger
  * repo, or not a git checkout).
@@ -184,7 +184,7 @@ export function readEngineOptions(
 }
 
 /* --------------------------------------------------------------------------
- * 2. journal.yml: the instance manifest (engine-owned, additive-only)
+ * 2. journal.yml: the journal's settings (engine-owned, additive-only)
  * ------------------------------------------------------------------------ */
 
 export const PreviewConfig = z
@@ -225,7 +225,7 @@ export const JournalConfig = z
   .object({
     name: z.string().min(1),
     url: z.string().optional(),
-    /** Only 'paper' is built. The field exists so a journal-level instance is detected, not
+    /** Only 'paper' is built. The field exists so a journal-level tier is detected, not
      *  assumed [design §9]. */
     tier: z.enum(['paper', 'edition', 'journal']).default('paper'),
     /** The template's placeholder `id:`, which `oak validate` rejects on a real paper. Set per
@@ -308,13 +308,17 @@ export type Registry = z.infer<typeof Registry>;
  * Read by both the engine action and local `oak`.
  * ------------------------------------------------------------------------ */
 
+/** The name `journal_repo` had before it was renamed: `oak upgrade` reads it and writes the new
+ *  one, and `oak conformance` reads it from a test repo not yet upgraded. */
+export const OLD_JOURNAL_KEY = 'instance_repo';
+
 export const Pins = z
   .object({
     /** owner/repo the engine is checked out from; only the *ref* floats. */
     engine_repo: z.string().min(1),
     /** owner/repo of the journal; '.' in a co-located repository, which holds its own. Absent,
      *  the journal is unknown. */
-    instance_repo: z.string().optional(),
+    journal_repo: z.string().optional(),
     /** The engine a co-located repository's jobs with no paper of their own run. */
     engine_version: z.string().optional(),
   })

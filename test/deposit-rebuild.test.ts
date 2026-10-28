@@ -70,7 +70,7 @@ function build(engine: string, paper: string, journal: string): void {
       'build',
       '--paper',
       paper,
-      '--instance',
+      '--journal',
       journal,
       '--exports-only',
     ],
@@ -128,7 +128,7 @@ describe.skipIf(!runnable)('rebuilding the PDF from a deposit', () => {
     const paper = join(tmp, 'paper');
     engineCheckout(engine);
     repoOf(journal);
-    cpSync(join(engineDir, 'test', 'fixture-instance'), journal, { recursive: true });
+    cpSync(join(engineDir, 'test', 'fixture-journal'), journal, { recursive: true });
     commitAll(journal, 'journal');
     repoOf(paper);
     for (const f of ['myst.yml', 'index.md', 'bib.bib']) {

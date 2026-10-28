@@ -42,7 +42,7 @@ function colocatedRepo(papers: string[], registry = '[]\n'): string {
   mkdirSync(join(root, '.github', 'actions', 'engine'), { recursive: true });
   writeFileSync(
     join(root, '.github', 'actions', 'engine', 'pins.yml'),
-    'engine_repo: me/engine\ninstance_repo: .\nengine_version: v1.0.0\n',
+    'engine_repo: me/engine\njournal_repo: .\nengine_version: v1.0.0\n',
   );
   writeFileSync(
     join(root, 'journal.yml'),
@@ -103,7 +103,7 @@ describe('discoverProjects', () => {
     }
   });
 
-  it('a pins.yml with no instance_repo is a paper repository whose journal is unknown', () => {
+  it('a pins.yml with no journal_repo is a paper repository whose journal is unknown', () => {
     const root = mkdtempSync(join(tmpdir(), 'oak-paper-'));
     mkdirSync(join(root, '.github', 'actions', 'engine'), { recursive: true });
     const pins = join(root, '.github', 'actions', 'engine', 'pins.yml');
@@ -114,9 +114,9 @@ describe('discoverProjects', () => {
       writeFileSync(pins, body);
       expect(isColocated(root), body).toBe(false);
     }
-    writeFileSync(pins, 'engine_repo: me/engine\ninstance_repo: acme/journal\n');
+    writeFileSync(pins, 'engine_repo: me/engine\njournal_repo: acme/journal\n');
     expect(isColocated(root)).toBe(false);
-    writeFileSync(pins, 'engine_repo: me/engine\ninstance_repo: .\n');
+    writeFileSync(pins, 'engine_repo: me/engine\njournal_repo: .\n');
     expect(isColocated(root)).toBe(true);
   });
 
@@ -238,7 +238,7 @@ describe('findSelf: the folder form of a registry location', () => {
       { id: 'c-2026-three', location: 'acme/journal' },
     ];
     const paperRoot = join(root, 'papers', 'a-2026-one');
-    expect(findSelf(entries, 'acme/journal', { instanceRoot: root, paperRoot })).toEqual([
+    expect(findSelf(entries, 'acme/journal', { journalRoot: root, paperRoot })).toEqual([
       entries[0],
     ]);
   });
@@ -250,7 +250,7 @@ describe('runLayerA on a co-located paper', () => {
     return runLayerA(
       {
         paperRoot: join(root, 'papers', folder),
-        instanceRoot: root,
+        journalRoot: root,
         project: { id },
         repo: 'acme/journal',
       },
@@ -308,7 +308,7 @@ describe('the draft checks: editorial checks warn until the paper is listed', ()
   async function validateIn(registry: string, id = 'a-2026-one') {
     const root = colocatedRepo(['a-2026-one'], registry);
     return runValidate(
-      { paperRoot: join(root, 'papers', 'a-2026-one'), instanceRoot: root, edge: edge(failing) },
+      { paperRoot: join(root, 'papers', 'a-2026-one'), journalRoot: root, edge: edge(failing) },
       { repo: 'acme/journal' },
       { existsProbe: (p) => !p.includes('_build'), listTree: () => [] },
     ).then((out) => ({ out, id }));
@@ -332,7 +332,7 @@ describe('the draft checks: editorial checks warn until the paper is listed', ()
     const out = await runValidate(
       {
         paperRoot: join(root, 'papers', 'a-2026-one'),
-        instanceRoot: root,
+        journalRoot: root,
         edge: {
           ...edge([]),
           async loadProject() {
