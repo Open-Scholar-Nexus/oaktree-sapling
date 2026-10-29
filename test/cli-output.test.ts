@@ -859,4 +859,41 @@ describe.skipIf(bundleState() === 'absent')('oak release reads the DOI before an
     expect(code).toBe(2);
     expect(stderr).toContain('oak release: project.doi https://doi.org/10.5072/zenodo.5 is not');
   });
+
+  it('opens a zenodo-publish-failed issue when the deposit fails', () => {
+    // No `project.github`, so `cmdPublish` fails before any Zenodo call.
+    const dir = mkdtempSync(join(tmpdir(), 'oak-release-issue-'));
+    writeFileSync(
+      join(dir, 'myst.yml'),
+      'version: 1\nproject:\n  doi: 10.5072/zenodo.5\n' +
+        '  options:\n    oaktree-sapling:\n      version: v9.9.9\n      edition: e\n',
+    );
+    mkdirSync(join(dir, '_build', 'exports'), { recursive: true });
+    writeFileSync(join(dir, '_build', 'exports', 'paper.pdf'), '%PDF-1.4\n');
+    const bin = mkdtempSync(join(tmpdir(), 'oak-gh-stub-'));
+    const ghLog = join(bin, 'gh.log');
+    writeFileSync(join(bin, 'gh'), `#!/bin/sh\nprintf '%s\\n' "$@" >> "${ghLog}"\n`, {
+      mode: 0o755,
+    });
+    const env = {
+      ...process.env,
+      PATH: `${bin}:${dirname(process.execPath)}`,
+      GH_TOKEN: 'x',
+      ZENODO_TOKEN_SANDBOX: 'sandbox-token',
+      OAK_USE_RUNNING: '1',
+    };
+    delete env.CI;
+    delete env.GITHUB_ACTIONS;
+    const r = spawnSync(
+      process.execPath,
+      [bundlePath, 'release', '--tag', 'v1.0.0', '--no-build', '--paper', dir, '--no-instance'],
+      { encoding: 'utf8', env },
+    );
+    expect(r.status).toBe(2);
+    const args = readFileSync(ghLog, 'utf8').split('\n');
+    expect(args.slice(0, 2)).toEqual(['issue', 'create']);
+    expect(args[args.indexOf('--title') + 1]).toBe('Zenodo publish failed for v1.0.0');
+    expect(args[args.indexOf('--body') + 1]).toContain('project.github missing');
+    expect(args[args.indexOf('--label') + 1]).toBe('zenodo-publish-failed');
+  });
 });
