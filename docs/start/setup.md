@@ -1,6 +1,8 @@
 (start-setup)=
 # Create a journal
 
+Besides GitHub, a journal uses Zenodo to publish papers and, optionally, Cloudflare for live previews. Their tokens are set on each paper repository and listed in [Secrets](../reference/secrets.md).
+
 ## Install
 
 `oak` needs Node 22 or later and the GitHub CLI, logged in to the account that will own the repositories:

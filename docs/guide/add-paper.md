@@ -1,7 +1,7 @@
 (add-paper)=
 # Add a paper
 
-Each submission gets a repository of its own, created by an editor with `oak bootstrap paper`. The author works in that repository, and its workflows build, check and publish the paper with the journal's settings.
+Each submission gets a repository of its own, created by an editor with `oak bootstrap paper`. The author works in that repository, and its workflows build, check and publish the paper with the journal's settings. Draft deposits on Zenodo and live previews of pull requests need tokens, set when the repository is created (see [Secrets](#paper-secrets)).
 
 ## Create the repository
 
@@ -39,13 +39,13 @@ As with the journal, `oak` prints a plan, including every default it took, and a
 (paper-secrets)=
 ## Secrets
 
-Two features need tokens, set on the paper repository's environments:
+Draft deposits on Zenodo and live previews of pull requests need tokens, set on the paper repository's environments:
 
 `ZENODO_TOKEN`, `ZENODO_TOKEN_SANDBOX`
-: Depositing the paper on Zenodo, or on the Zenodo sandbox for a test. Create each under **Applications** in the account settings on [Zenodo](https://zenodo.org/account/settings/applications/) or the [sandbox](https://sandbox.zenodo.org/account/settings/applications/), with the `deposit:write` scope only. Leave `deposit:actions` off: without it the workflows can create and fill drafts but not publish them or start a new version, so only an editor can, on Zenodo (see [Publish a paper](publish.md)).
+: Used to create the paper's draft on Zenodo. Create each under **Applications** in the account settings on [Zenodo](https://zenodo.org/account/settings/applications/) or the [sandbox](https://sandbox.zenodo.org/account/settings/applications/), with the `deposit:write` scope only (see [Publish a paper](publish.md)).
 
 `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`
-: A live preview link on each pull request, once the journal also [turns previews on](journal-yml.md#live-previews). Until then, a pull request gets a downloadable copy of the built site.
+: Each pull request gets a live preview link, once the journal also [turns previews on](journal-yml.md#live-previews). Until both are set, a pull request gets a downloadable copy of the built site.
 
 Pass them to `oak bootstrap paper` as `--zenodo-token`, `--zenodo-token-sandbox`, `--cf-token` and `--cf-account`, or set the environment variables of the same names before running it. `oak` lists any that are still missing when it finishes, with the page to set them on.
 
