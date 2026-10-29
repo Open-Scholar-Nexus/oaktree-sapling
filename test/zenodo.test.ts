@@ -1,10 +1,11 @@
 /**
- * The deposit logic, with a fake transport (no network) and a fake git context (no git or gh):
- * pagination past 100 [R20] [R35], finding a deposit by the paper's id first [R7], the
- * journal's metadata from journal.yml [R19], the `deposit/` folder and its reserved names
- * [R28], and prepare and publish, including moving from sandbox to production [R29].
+ * The deposit logic, with a fake transport (no network) answering as Zenodo's InvenioRDM API
+ * does, and a fake git context (no git or gh): pagination past 100 [R20] [R35], finding a
+ * deposit by the paper's id first [R7], the journal's metadata and community from journal.yml
+ * [R19], the authors, the `deposit/` folder and its reserved names [R28], and prepare and
+ * publish, including moving from sandbox to production [R29].
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { mkdtempSync, writeFileSync, mkdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -13,7 +14,7 @@ import AdmZip from 'adm-zip';
 import { parseDocument } from 'yaml';
 import {
   ZenodoApi,
-  buildMetadata,
+  buildDraft,
   buildBundle,
   paperUrn,
   cmdPrepare,
@@ -31,7 +32,7 @@ import {
   type ZenodoTransport,
   type TransportResponse,
   type GitContext,
-  type Deposition,
+  type ZenodoRecord,
 } from '../src/zenodo.js';
 
 /* --------------------------------------------------------------------------
@@ -82,36 +83,87 @@ const fakeGit: GitContext = {
   },
 };
 
-const dep = (over: Partial<Deposition> = {}): Deposition => ({
-  id: 1,
-  conceptrecid: 1,
-  submitted: false,
-  links: {
-    html: 'https://sandbox.zenodo.org/deposit/1',
-    bucket: 'https://sandbox.zenodo.org/bucket/1',
-  },
+/** A first-version draft as `/api/records/<id>/draft` returns it. */
+const rec = (over: Partial<ZenodoRecord> = {}): ZenodoRecord => ({
+  id: '1',
+  parent: { id: '1', communities: {} },
+  is_published: false,
+  is_draft: true,
+  versions: { index: 1 },
+  links: { self_html: 'https://sandbox.zenodo.org/uploads/1' },
   metadata: {},
   ...over,
 });
+
+/** A search page from `/api/user/records`. */
+const hits = (items: ZenodoRecord[]) => ({ hits: { hits: items, total: items.length } });
+
+const pathOf = (url: string) => new URL(url).pathname;
+
+/**
+ * A fake Zenodo holding `draft` (id 5 unless given), routed by method and path. Records every
+ * call, the draft bodies written, the files uploaded, and the provenance sent.
+ */
+function fakeZenodo(
+  draft: ZenodoRecord = rec({ id: '5', parent: { id: '5' } }),
+  files: string[] = [],
+) {
+  const id = String(draft.id);
+  const uploaded: string[] = [];
+  const deleted: string[] = [];
+  const bodies: Array<Record<string, any>> = [];
+  const provenance: Array<Record<string, unknown>> = [];
+  const { transport, calls } = fakeTransport((r) => {
+    const path = pathOf(r.url);
+    const file = /\/draft\/files\/([^/]+)(\/content|\/commit)?$/.exec(path);
+    if (r.method === 'GET' && path === '/api/user/records') return { json: hits([draft]) };
+    if (path.startsWith('/api/communities/')) return { json: { id: 'c0ffee' } };
+    if (r.method === 'GET' && path === `/api/records/${id}/draft/files`)
+      return { json: { entries: files.map((key) => ({ key })) } };
+    if (r.method === 'GET' && path.startsWith(`/api/records/${id}`)) return { json: draft };
+    if (r.method === 'PUT' && path === `/api/records/${id}/draft`) {
+      bodies.push(r.opts.json as Record<string, any>);
+      return { json: draft };
+    }
+    if (r.method === 'PUT' && file?.[2] === '/content') {
+      const name = decodeURIComponent(file[1]!);
+      uploaded.push(name);
+      if (name === 'publication-provenance.json') {
+        provenance.push(JSON.parse(Buffer.from(r.opts.body!).toString('utf8')));
+      }
+      return { json: {} };
+    }
+    if (r.method === 'DELETE' && file) {
+      deleted.push(decodeURIComponent(file[1]!));
+      return { status: 204, json: null };
+    }
+    return { json: {} };
+  });
+  const api = new ZenodoApi(transport, true, 't');
+  return { api, calls, uploaded, deleted, bodies, provenance };
+}
 
 /* --------------------------------------------------------------------------
  * Pagination: [R20]/[R35.1]
  * ------------------------------------------------------------------------ */
 
-describe('listMyDepositions pagination', () => {
+describe('searchMyRecords pagination', () => {
   it('walks pages until a short page (past the 100 cap)', async () => {
     // 250 records: full pages of 100, 100, then a short 50 → three requests.
-    const all = Array.from({ length: 250 }, (_, i) => dep({ id: i + 1 }));
+    const all = Array.from({ length: 250 }, (_, i) => rec({ id: String(i + 1) }));
     const { transport, calls } = fakeTransport(({ opts }) => {
       const page = Number(opts.params?.page);
       const size = Number(opts.params?.size);
-      return { json: all.slice((page - 1) * size, page * size) };
+      return { json: hits(all.slice((page - 1) * size, page * size)) };
     });
     const api = new ZenodoApi(transport, true, 't');
-    const got = await api.listMyDepositions();
+    const got = await api.searchMyRecords();
     expect(got.length).toBe(250);
     expect(calls.length).toBe(3);
+    expect(pathOf(calls[0]!.url)).toBe('/api/user/records');
     expect(calls[0]!.opts.params).toMatchObject({ size: 100, page: 1 });
+    // Zenodo answers in its legacy shape unless asked for the InvenioRDM one.
+    expect(calls[0]!.opts.headers?.Accept).toBe('application/vnd.inveniordm.v1+json');
   });
 });
 
@@ -122,49 +174,53 @@ describe('listMyDepositions pagination', () => {
 describe('findDeposit', () => {
   const id = 'fixture-2026-sample-paper';
   const gh = 'https://github.com/o/r';
-  const match = dep({
-    id: 7,
+  const match = rec({
+    id: '7',
     metadata: {
-      related_identifiers: [{ identifier: paperUrn(id), relation: 'isVersionOf', scheme: 'urn' }],
+      related_identifiers: [
+        { identifier: paperUrn(id), relation_type: { id: 'isversionof' }, scheme: 'urn' },
+      ],
     },
   });
 
   it('matches by id URN first (query keyed on the urn)', async () => {
     const { transport, calls } = fakeTransport(({ opts }) => {
       const q = String(opts.params?.q ?? '');
-      return { json: q.includes(paperUrn(id)) ? [match] : [] };
+      return { json: hits(q.includes(paperUrn(id)) ? [match] : []) };
     });
     const api = new ZenodoApi(transport, true, 't');
     const found = await api.findDeposit({ paperId: id, githubUrl: gh });
-    expect(found?.id).toBe(7);
+    expect(found?.id).toBe('7');
     // The first query is the id URN, before the GitHub one.
-    expect(String(calls[0]!.opts.params?.q)).toContain(paperUrn(id));
+    expect(calls[0]!.opts.params?.q).toBe(
+      `metadata.related_identifiers.identifier:"${paperUrn(id)}"`,
+    );
   });
 
   it('falls back to the GitHub URL when the id finds nothing', async () => {
-    const byUrl = dep({ id: 9, metadata: { related_identifiers: [{ identifier: gh }] } });
+    const byUrl = rec({ id: '9', metadata: { related_identifiers: [{ identifier: gh }] } });
     const { transport } = fakeTransport(({ opts }) => {
       const q = String(opts.params?.q ?? '');
-      return { json: q.includes(gh) ? [byUrl] : [] };
+      return { json: hits(q.includes(gh) ? [byUrl] : []) };
     });
     const api = new ZenodoApi(transport, true, 't');
     const found = await api.findDeposit({ paperId: id, githubUrl: gh });
-    expect(found?.id).toBe(9);
+    expect(found?.id).toBe('9');
   });
 
   it('does a full scan only when both targeted queries are empty', async () => {
-    const buried = dep({ id: 11, metadata: { related_identifiers: [{ identifier: gh }] } });
+    const buried = rec({ id: '11', metadata: { related_identifiers: [{ identifier: gh }] } });
     let unfilteredCalls = 0;
     const { transport } = fakeTransport(({ opts }) => {
       if (opts.params?.q === undefined) {
         unfilteredCalls++;
-        return { json: [buried] };
+        return { json: hits([buried]) };
       }
-      return { json: [] }; // targeted queries find nothing (e.g. the search index lags)
+      return { json: hits([]) }; // targeted queries find nothing (e.g. the search index lags)
     });
     const api = new ZenodoApi(transport, true, 't');
     const found = await api.findDeposit({ paperId: id, githubUrl: gh });
-    expect(found?.id).toBe(11);
+    expect(found?.id).toBe('11');
     expect(unfilteredCalls).toBe(1);
   });
 });
@@ -173,7 +229,7 @@ describe('findDeposit', () => {
  * Metadata: the journal's text from journal.yml [R19], and the id [R7]
  * ------------------------------------------------------------------------ */
 
-describe('buildMetadata', () => {
+describe('buildDraft', () => {
   const project = {
     id: 'fixture-2026-sample-paper',
     title: 'A Paper',
@@ -185,37 +241,119 @@ describe('buildMetadata', () => {
     ],
   };
 
-  it('leaves out community and blurb for a new journal, and keeps the GitHub and id related identifiers', () => {
-    const md = buildMetadata({
+  it('leaves out the blurb for a new journal, and keeps the GitHub and id related identifiers', () => {
+    const { metadata: md } = buildDraft({
       project,
       paperId: project.id,
       githubUrl: 'https://github.com/o/r',
       zenodo: {},
     });
-    expect(md.communities).toBeUndefined();
     // Without a journal blurb the description is only the repo and site lines.
     expect(md.description).not.toContain('Program');
-    const related = md.related_identifiers as Array<Record<string, string>>;
-    expect(related.map((r) => r.identifier)).toContain(paperUrn(project.id));
+    const related = md.related_identifiers as Array<Record<string, any>>;
+    expect(related).toContainEqual({
+      identifier: paperUrn(project.id),
+      relation_type: { id: 'isversionof' },
+      scheme: 'urn',
+    });
     expect(related.map((r) => r.identifier)).toContain('https://github.com/o/r');
   });
 
-  it("adds the journal's blurb and community when journal.yml sets them", () => {
-    const md = buildMetadata({
+  it("adds the journal's blurb when journal.yml sets it, and no community field", () => {
+    const draft = buildDraft({
       project,
       paperId: project.id,
       githubUrl: 'https://github.com/o/r',
       zenodo: { community: 'neuromatch', description_blurb: 'Made by the Fixture Journal.' },
     });
-    expect(md.communities).toEqual([{ identifier: 'neuromatch' }]);
-    expect(md.description).toContain('Made by the Fixture Journal.');
+    expect(draft.metadata.description).toContain('Made by the Fixture Journal.');
+    // The community is the draft's review, not a metadata field.
+    expect(JSON.stringify(draft)).not.toContain('neuromatch');
   });
 
-  it('drops placeholder or invalid ORCIDs and keeps valid ones', () => {
-    const md = buildMetadata({ project, githubUrl: 'https://github.com/o/r', zenodo: {} });
-    const creators = md.creators as Array<Record<string, string>>;
-    expect(creators[0]!.orcid).toBe('0000-0002-1825-0097');
-    expect(creators[1]!.orcid).toBeUndefined();
+  it('writes the InvenioRDM fields: type, rights, subjects, publisher, code repository', () => {
+    const draft = buildDraft({ project, githubUrl: 'https://github.com/o/r', zenodo: {} });
+    expect(draft.metadata).toMatchObject({
+      resource_type: { id: 'publication-article' },
+      rights: [{ id: 'cc-by-4.0' }],
+      subjects: [{ subject: 'a' }, { subject: 'b' }],
+      publisher: 'Zenodo',
+    });
+    expect(draft.custom_fields).toEqual({ 'code:codeRepository': 'https://github.com/o/r' });
+    expect(draft.access).toEqual({ record: 'public', files: 'public' });
+  });
+
+  it('drops placeholder or malformed ORCIDs with a warning, and keeps valid ones', () => {
+    const stderr = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
+    const authors = [...project.authors, { name: 'Bad Orcid', orcid: '1234' }];
+    const { metadata } = buildDraft({
+      project: { ...project, authors },
+      githubUrl: 'https://github.com/o/r',
+      zenodo: {},
+    });
+    const warnings = stderr.mock.calls.map((c) => String(c[0]));
+    stderr.mockRestore();
+    const creators = metadata.creators as Array<Record<string, any>>;
+    expect(creators[0]!.person_or_org.identifiers).toEqual([
+      { scheme: 'orcid', identifier: '0000-0002-1825-0097' },
+    ]);
+    expect(creators[1]!.person_or_org.identifiers).toBeUndefined();
+    expect(creators[2]!.person_or_org.identifiers).toBeUndefined();
+    expect(warnings).toEqual([
+      expect.stringMatching(/^\[warn\] skipping invalid ORCID: .*"1234".*authors\.2/),
+      '[warn] skipping placeholder ORCID for Placeholder: 0000-0000-0000-0000\n',
+    ]);
+  });
+
+  it('sends every affiliation, as a string, an object with a name, or a project affiliation id', () => {
+    const { metadata } = buildDraft({
+      project: {
+        title: 'T',
+        affiliations: [{ id: 'brown', name: 'Brown University' }],
+        authors: [
+          { name: 'Ada', affiliations: ['Inst A', { name: 'Inst B' }, 'brown'] },
+          { name: 'Bo', affiliation: 'Solo Inst' },
+          { name: 'Cy' },
+        ],
+      },
+      githubUrl: 'https://github.com/o/r',
+      zenodo: {},
+    });
+    const creators = metadata.creators as Array<Record<string, any>>;
+    expect(creators[0]!.affiliations).toEqual([
+      { name: 'Inst A' },
+      { name: 'Inst B' },
+      { name: 'Brown University' },
+    ]);
+    expect(creators[1]!.affiliations).toEqual([{ name: 'Solo Inst' }]);
+    expect(creators[2]!.affiliations).toBeUndefined();
+  });
+
+  it('sends the names as MyST parses them, aliases and particles included', () => {
+    const { metadata } = buildDraft({
+      project: {
+        title: 'T',
+        authors: [
+          { name: { given: 'Ada', family: 'Lovelace' } },
+          { name: { first: 'Vincent', particle: 'van', surname: 'Gogh' } },
+          { name: { forename: 'Ludwig', 'dropping-particle': 'van', last: 'Beethoven' } },
+          { name: 'Josiah Carberry' },
+          'Paolo Marzolo',
+          { name: 'Plato' },
+        ],
+      },
+      githubUrl: 'https://github.com/o/r',
+      zenodo: {},
+    });
+    const people = (metadata.creators as Array<Record<string, any>>).map((c) => c.person_or_org);
+    expect(people).toEqual([
+      { type: 'personal', given_name: 'Ada', family_name: 'Lovelace' },
+      { type: 'personal', given_name: 'Vincent', family_name: 'van Gogh' },
+      { type: 'personal', given_name: 'Ludwig van', family_name: 'Beethoven' },
+      { type: 'personal', given_name: 'Josiah', family_name: 'Carberry' },
+      { type: 'personal', given_name: 'Paolo', family_name: 'Marzolo' },
+      { type: 'personal', family_name: 'Plato' },
+    ]);
   });
 });
 
@@ -489,13 +627,36 @@ const BARE_MYST = `project:
   - name: Ada
 `;
 
+/**
+ * A Zenodo where the account holds `existing` (none by default): `POST /api/records` creates
+ * draft `id`, and reserving its DOI answers with it.
+ */
+function prepareZenodo(id: string, existing: ZenodoRecord[] = []) {
+  const created = rec({ id, parent: { id }, links: { self_html: `https://z/uploads/${id}` } });
+  const reserved = { ...created, pids: { doi: { identifier: `10.5072/zenodo.${id}` } } };
+  const { transport, calls } = fakeTransport((r) => {
+    const path = pathOf(r.url);
+    if (path === '/api/user/records') return { json: hits(existing) };
+    if (r.method === 'POST' && path === '/api/records') return { json: created };
+    if (r.method === 'PUT' && path.endsWith('/draft'))
+      return { json: { ...existing[0], pids: {} } };
+    if (path.endsWith('/draft/pids/doi')) return { json: reserved };
+    return { json: {} };
+  });
+  return { transport, calls };
+}
+
+/** A journal checkout whose journal.yml names `community`. */
+function journalWithCommunity(community: string): string {
+  const root = mkdtempSync(join(tmpdir(), 'oak-journal-'));
+  writeFileSync(join(root, 'journal.yml'), `name: J\nzenodo:\n  community: ${community}\n`);
+  return root;
+}
+
 describe('cmdPrepare', () => {
   it('creates a draft and stamps doi/github/date into the working-tree myst.yml ([R22])', async () => {
     const mystPath = paperRepo(BARE_MYST);
-    const { transport, calls } = fakeTransport(({ method }) => {
-      if (method === 'POST') return { json: dep({ id: 5, conceptrecid: 5 }) };
-      return { json: [] }; // no existing deposit
-    });
+    const { transport, calls } = prepareZenodo('5');
     const api = new ZenodoApi(transport, true, 't');
     const out = await cmdPrepare({ mystPath, repo: 'o/r', api, instanceRoot: null });
     expect(out.exitCode).toBe(0);
@@ -506,18 +667,50 @@ describe('cmdPrepare', () => {
     expect(doc.getIn(['project', 'doi'])).toBe('10.5072/zenodo.5');
     expect(doc.getIn(['project', 'github'])).toBe('https://github.com/o/r');
     expect(doc.getIn(['project', 'date'])).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-    // The POST reserves a DOI and carries the id URN.
-    const post = calls.find((c) => c.method === 'POST')!;
+    // The draft carries the id URN, and its DOI is reserved.
+    const post = calls.find((c) => c.method === 'POST' && pathOf(c.url) === '/api/records')!;
     const md = (post.opts.json as any).metadata;
-    expect(md.prereserve_doi).toBe(true);
     expect(md.related_identifiers.map((r: any) => r.identifier)).toContain(
       paperUrn('fixture-2026-sample-paper'),
     );
+    expect(calls.map((c) => `${c.method} ${pathOf(c.url)}`)).toContain(
+      'POST /api/records/5/draft/pids/doi',
+    );
+    expect(out.result.draft_url).toBe('https://z/uploads/5');
+    expect(out.result.deposition_id).toBe(5);
+  });
+
+  it("reuses the paper's unpublished draft, and refuses a published one", async () => {
+    const urn = { identifier: paperUrn('fixture-2026-sample-paper') };
+    const draft = rec({ id: '6', parent: { id: '6' }, metadata: { related_identifiers: [urn] } });
+    const { transport, calls } = prepareZenodo('6', [draft]);
+    const out = await cmdPrepare({
+      mystPath: paperRepo(BARE_MYST),
+      repo: 'o/r',
+      api: new ZenodoApi(transport, true, 't'),
+      instanceRoot: null,
+    });
+    expect(out.exitCode).toBe(0);
+    expect(out.result.concept_doi).toBe('10.5072/zenodo.6');
+    expect(calls.some((c) => c.method === 'POST' && pathOf(c.url) === '/api/records')).toBe(false);
+    expect(calls.some((c) => c.method === 'PUT' && pathOf(c.url) === '/api/records/6/draft')).toBe(
+      true,
+    );
+
+    const published = { ...draft, is_published: true, is_draft: false };
+    const refused = await cmdPrepare({
+      mystPath: paperRepo(BARE_MYST),
+      repo: 'o/r',
+      api: new ZenodoApi(prepareZenodo('6', [published]).transport, true, 't'),
+      instanceRoot: null,
+    });
+    expect(refused.exitCode).toBe(3);
+    expect(refused.result.message).toContain('(10.5072/zenodo.6)');
   });
 
   it('refuses a same-env re-prepare but allows sandbox→prod replacement ([R29])', async () => {
     const withSandboxDoi = paperRepo(BARE_MYST + '  doi: 10.5072/zenodo.5\n');
-    const noop = new ZenodoApi(fakeTransport(() => ({ json: [] })).transport, true, 't');
+    const noop = new ZenodoApi(fakeTransport(() => ({ json: hits([]) })).transport, true, 't');
 
     // A sandbox prepare over a committed sandbox DOI is refused (same environment).
     const same = await cmdPrepare({
@@ -530,9 +723,7 @@ describe('cmdPrepare', () => {
 
     // A production prepare over a committed sandbox DOI is allowed (a new production concept DOI).
     const prodPath = paperRepo(BARE_MYST + '  doi: 10.5072/zenodo.5\n');
-    const { transport } = fakeTransport(({ method }) =>
-      method === 'POST' ? { json: dep({ id: 8, conceptrecid: 8 }) } : { json: [] },
-    );
+    const { transport } = prepareZenodo('8');
     const prodApi = new ZenodoApi(transport, false, 't');
     const up = await cmdPrepare({
       mystPath: prodPath,
@@ -546,7 +737,7 @@ describe('cmdPrepare', () => {
 
   it('forbids prod→sandbox downgrade ([R29])', async () => {
     const prodDoi = paperRepo(BARE_MYST + '  doi: 10.5281/zenodo.5\n');
-    const noop = new ZenodoApi(fakeTransport(() => ({ json: [] })).transport, true, 't');
+    const noop = new ZenodoApi(fakeTransport(() => ({ json: hits([]) })).transport, true, 't');
     const out = await cmdPrepare({
       mystPath: prodDoi,
       repo: 'o/r',
@@ -589,9 +780,7 @@ describe('the Project Website link', () => {
 
   /** The metadata `cmdPrepare` sends, for a run given `siteUrl`. */
   async function preparedMetadata(siteUrl?: string): Promise<any> {
-    const { transport, calls } = fakeTransport(({ method }) =>
-      method === 'POST' ? { json: dep({ id: 5, conceptrecid: 5 }) } : { json: [] },
-    );
+    const { transport, calls } = prepareZenodo('5');
     const api = new ZenodoApi(transport, true, 't');
     const out = await cmdPrepare({
       mystPath: paperRepo(BARE_MYST),
@@ -611,7 +800,7 @@ describe('the Project Website link', () => {
     );
     expect(md.related_identifiers).toContainEqual({
       identifier: 'https://o.github.io/r/',
-      relation: 'isIdenticalTo',
+      relation_type: { id: 'isidenticalto' },
       scheme: 'url',
     });
   });
@@ -625,46 +814,152 @@ describe('the Project Website link', () => {
 });
 
 describe('cmdPublish', () => {
-  it('populates the reserved draft: metadata overwrite + all bundle files uploaded', async () => {
+  /** A paper tree ready to publish against concept DOI 10.5072/zenodo.5. */
+  function readyPaper(): string {
     const mystPath = paperRepo(
       BARE_MYST + '  doi: 10.5072/zenodo.5\n  github: https://github.com/o/r\n',
     );
     writeFileSync(mystPath.replace('myst.yml', 'paper.pdf'), '%PDF');
     withBuild(mystPath);
-    const uploaded: string[] = [];
-    const { transport } = fakeTransport((r) => {
-      if (r.method === 'GET' && r.url.includes('/deposit/depositions/')) {
-        return { json: dep({ id: 5, conceptrecid: 5, submitted: false }) };
-      }
-      if (r.method === 'GET')
-        return { json: [dep({ id: 5, conceptrecid: 5, created: '2026-01-01' })] }; // list
-      if (r.method === 'PUT' && r.url.includes('/bucket/')) {
-        uploaded.push(r.url.split('/').pop()!);
-        return { json: {} };
-      }
-      if (r.method === 'PUT') return { json: dep({ id: 5, conceptrecid: 5 }) }; // update metadata
-      return { json: {} };
-    });
-    const api = new ZenodoApi(transport, true, 't');
-    const out = await cmdPublish({
+    return mystPath;
+  }
+  function publish(
+    mystPath: string,
+    api: ZenodoApi,
+    instanceRoot: string | null = null,
+    git: GitContext = fakeGit,
+  ) {
+    return cmdPublish({
       mystPath,
       pdf: mystPath.replace('myst.yml', 'paper.pdf'),
       tag: 'v1.0.0',
       bundleOut: mystPath.replace('myst.yml', '_bundle'),
       api,
-      git: fakeGit,
-      instanceRoot: null,
+      git,
+      instanceRoot,
       engineRoot: mystPath.replace('myst.yml', ''),
     });
+  }
+
+  it('populates the reserved draft: metadata overwrite + all bundle files uploaded', async () => {
+    const z = fakeZenodo();
+    const out = await publish(readyPaper(), z.api);
     expect(out.exitCode).toBe(0);
     expect(out.result.version_doi).toBe('10.5072/zenodo.5');
-    expect(uploaded.sort()).toEqual([
+    expect(out.result.deposition_id).toBe(5);
+    expect(z.uploaded.sort()).toEqual([
       'engine.zip',
       'myst.yml',
       'paper.pdf',
       'publication-provenance.json',
       'source.zip',
     ]);
+    // Each file is declared, sent, then committed.
+    const steps = z.calls
+      .filter((c) => pathOf(c.url).includes('/draft/files/paper.pdf'))
+      .map((c) => `${c.method} ${pathOf(c.url)}`);
+    expect(steps).toEqual([
+      'PUT /api/records/5/draft/files/paper.pdf/content',
+      'POST /api/records/5/draft/files/paper.pdf/commit',
+    ]);
+    const content = z.calls.find((c) => pathOf(c.url).endsWith('paper.pdf/content'))!;
+    expect(content.opts.headers?.['Content-Type']).toBe('application/octet-stream');
+  });
+
+  it('removes every file the draft holds before uploading the bundle ([R28])', async () => {
+    const z = fakeZenodo(undefined, ['paper.pdf', 'template.zip']);
+    const out = await publish(readyPaper(), z.api);
+    expect(out.exitCode).toBe(0);
+    expect(z.deleted.sort()).toEqual(['paper.pdf', 'template.zip']);
+    expect(z.uploaded).toContain('paper.pdf');
+    expect(z.uploaded).not.toContain('template.zip');
+    const steps = z.calls.map((c) => c.method);
+    expect(steps.lastIndexOf('DELETE')).toBeLessThan(steps.indexOf('POST'));
+  });
+
+  it('fails before uploading when Zenodo lists validation errors on the saved draft', async () => {
+    const invalid = rec({
+      id: '5',
+      parent: { id: '5' },
+      errors: [
+        { field: 'files.enabled', messages: ['Missing uploaded files.'] },
+        { field: 'metadata.rights.0.id', messages: ['Unknown license.'] },
+      ],
+    });
+    const z = fakeZenodo(invalid);
+    await expect(publish(readyPaper(), z.api)).rejects.toThrow(
+      /invalid metadata: metadata\.rights\.0\.id: Unknown license\.$/,
+    );
+    expect(z.uploaded).toEqual([]);
+  });
+
+  it("asks an editor for a new version when the concept's newest version is published", async () => {
+    const published = rec({
+      id: '5',
+      parent: { id: '5' },
+      is_published: true,
+      is_draft: false,
+      links: { self_html: 'https://sandbox.zenodo.org/records/5' },
+    });
+    const z = fakeZenodo(published);
+    const out = await publish(readyPaper(), z.api);
+    expect(out.exitCode).toBe(5);
+    expect(out.result.record_url).toBe('https://sandbox.zenodo.org/records/5');
+    expect(z.calls.every((c) => c.method === 'GET')).toBe(true);
+  });
+
+  it('finds the newest version by its parent, and reads that draft', async () => {
+    const z = fakeZenodo();
+    await publish(readyPaper(), z.api);
+    const search = z.calls.find((c) => pathOf(c.url) === '/api/user/records')!;
+    expect(search.opts.params?.q).toBe('parent.id:5');
+    expect(
+      z.calls.some((c) => c.method === 'GET' && pathOf(c.url) === '/api/records/5/draft'),
+    ).toBe(true);
+  });
+
+  it('refuses a draft whose parent is another concept', async () => {
+    const z = fakeZenodo(rec({ id: '5', parent: { id: '4' } }));
+    const out = await publish(readyPaper(), z.api);
+    expect(out.exitCode).toBe(2);
+    expect(String(out.result.message)).toContain('sanity check');
+  });
+
+  it("requests the journal's community for a first version only ([R19])", async () => {
+    const reviewOf = (z: ReturnType<typeof fakeZenodo>) =>
+      z.calls.filter((c) => pathOf(c.url).endsWith('/draft/review'));
+    const journal = journalWithCommunity('fixture-community');
+    const git: GitContext = { ...fakeGit, originRepo: async () => 'o/journal' };
+    /** A paper built against `journal`, so the deposit reads its settings. */
+    const builtAgainstJournal = (): string => {
+      const mystPath = readyPaper();
+      const doc = parseDocument('version: 1\n');
+      doc.setIn(['project', 'options', 'oaktree-sapling'], {
+        version: 'v1.0.0',
+        edition: 'e',
+        journal: { repo: 'o/journal', commit: 'a'.repeat(40) },
+      });
+      writeFileSync(mystPath.replace('myst.yml', 'myst.oak.yml'), doc.toString());
+      return mystPath;
+    };
+
+    const first = fakeZenodo();
+    expect((await publish(builtAgainstJournal(), first.api, journal, git)).exitCode).toBe(0);
+    expect(reviewOf(first).map((c) => [c.method, c.opts.json])).toEqual([
+      ['PUT', { receiver: { community: 'c0ffee' }, type: 'community-submission' }],
+    ]);
+
+    // A draft already up for the community, as after the editor's Submit for review, is left be.
+    const submitted = fakeZenodo(
+      rec({ id: '5', parent: { id: '5', review: { receiver: { community: 'c0ffee' } } } }),
+    );
+    expect((await publish(builtAgainstJournal(), submitted.api, journal, git)).exitCode).toBe(0);
+    expect(reviewOf(submitted)).toHaveLength(0);
+
+    // Zenodo takes no review for a new version: it stays in its first version's communities.
+    const next = fakeZenodo(rec({ id: '9', parent: { id: '5' }, versions: { index: 2 } }));
+    expect((await publish(builtAgainstJournal(), next.api, journal, git)).exitCode).toBe(0);
+    expect(reviewOf(next)).toHaveLength(0);
   });
 
   it('errors when --sandbox disagrees with the committed DOI prefix', async () => {
@@ -751,35 +1046,24 @@ describe('deposit integrity ([R107])', () => {
     );
     writeFileSync(mystPath.replace('myst.yml', 'paper.pdf'), '%PDF');
     withBuild(mystPath, 'The abstract.');
-    const metaPuts: Array<Record<string, unknown>> = [];
-    const { transport } = fakeTransport((r) => {
-      if (r.method === 'GET' && r.url.includes('/deposit/depositions/')) {
-        return { json: dep({ id: 5, conceptrecid: 5, submitted: false }) };
-      }
-      if (r.method === 'GET') return { json: [dep({ id: 5, conceptrecid: 5 })] };
-      if (r.method === 'PUT' && r.url.includes('/bucket/')) return { json: {} };
-      if (r.method === 'PUT') {
-        metaPuts.push((r.opts.json as { metadata: Record<string, unknown> }).metadata);
-        return { json: dep({ id: 5, conceptrecid: 5 }) };
-      }
-      return { json: {} };
-    });
+    const z = fakeZenodo();
     const out = await cmdPublish({
       mystPath,
       pdf: mystPath.replace('myst.yml', 'paper.pdf'),
       tag: 'v1.2.3',
       bundleOut: mystPath.replace('myst.yml', '_bundle'),
-      api: new ZenodoApi(transport, true, 't'),
+      api: z.api,
       git: fakeGit,
       instanceRoot: null,
       engineRoot: mystPath.replace('myst.yml', ''),
     });
     expect(out.exitCode).toBe(0);
-    expect(metaPuts).toHaveLength(1);
-    expect(metaPuts[0]!.title).toBe('A Paper');
-    expect(metaPuts[0]!.version).toBe('1.2.3');
-    expect(metaPuts[0]!.publication_date).toBeTruthy();
-    expect(String(metaPuts[0]!.description)).toContain('The abstract.');
+    expect(z.bodies).toHaveLength(1);
+    const md = z.bodies[0]!.metadata;
+    expect(md.title).toBe('A Paper');
+    expect(md.version).toBe('1.2.3');
+    expect(md.publication_date).toBeTruthy();
+    expect(String(md.description)).toContain('The abstract.');
   });
 
   it('refuses to publish from a tree the build never ran in', async () => {
@@ -824,10 +1108,15 @@ describe('deposit integrity ([R107])', () => {
       return { json: {} };
     });
     const api = new ZenodoApi(transport, true, 't');
-    await api.uploadFile('https://sandbox.zenodo.org/bucket/1', 'data?v2.csv', new Uint8Array());
-    const url = new URL(seen[0]!);
-    expect(url.pathname).toBe('/bucket/1/data%3Fv2.csv');
-    expect(url.searchParams.size, 'nothing may ride into the token-bearing query string').toBe(0);
+    await api.uploadFile('1', 'data?v2.csv', new Uint8Array());
+    const content = new URL(seen.find((u) => u.endsWith('/content'))!);
+    expect(content.pathname).toBe('/api/records/1/draft/files/data%3Fv2.csv/content');
+    for (const u of seen) {
+      expect(
+        new URL(u).searchParams.size,
+        'nothing may ride into the token-bearing query string',
+      ).toBe(0);
+    }
   });
 
   it('derives the API host from sandbox, so the two cannot disagree', () => {
@@ -843,24 +1132,27 @@ describe('finding the deposit, and the checks before it [R100] [R101]', () => {
 
   it('scans when a targeted query returns rows that do not match', async () => {
     // A phrase match returns a LONGER urn for a query about a shorter one ([R100]).
-    const nearMiss = dep({
-      id: 1,
+    const nearMiss = rec({
+      id: '1',
       metadata: { related_identifiers: [{ identifier: paperUrn('foo-bar-baz') }] },
     });
-    const real = dep({ id: 2, metadata: { related_identifiers: [{ identifier: paperUrn(id) }] } });
+    const real = rec({
+      id: '2',
+      metadata: { related_identifiers: [{ identifier: paperUrn(id) }] },
+    });
     let unfiltered = 0;
     const { transport } = fakeTransport(({ opts }) => {
       const q = opts.params?.q;
       if (q === undefined) {
         unfiltered++;
-        return { json: [nearMiss, real] };
+        return { json: hits([nearMiss, real]) };
       }
-      // The URN query phrase-matches the near miss; the GitHub query misses (a renamed repo [R7]).
-      return { json: String(q).includes(id) ? [nearMiss] : [] };
+      // The URN query returns the near miss; the GitHub query misses (a renamed repo [R7]).
+      return { json: hits(String(q).includes(id) ? [nearMiss] : []) };
     });
     const api = new ZenodoApi(transport, true, 't');
     const found = await api.findDeposit({ paperId: id, githubUrl: gh });
-    expect(found?.id, 'a near miss must not suppress the scan').toBe(2);
+    expect(found?.id, 'a near miss must not suppress the scan').toBe('2');
     expect(unfiltered).toBe(1);
   });
 
@@ -947,27 +1239,7 @@ describe('journal.zip', () => {
   }
 
   /** A Zenodo fake that accepts the publish and records the uploads and every call. */
-  function zenodo() {
-    const uploaded: string[] = [];
-    const provenance: Array<Record<string, unknown>> = [];
-    const { transport, calls } = fakeTransport((r) => {
-      if (r.method === 'GET' && r.url.includes('/deposit/depositions/')) {
-        return { json: dep({ id: 5, conceptrecid: 5, submitted: false }) };
-      }
-      if (r.method === 'GET') return { json: [dep({ id: 5, conceptrecid: 5 })] };
-      if (r.method === 'PUT' && r.url.includes('/bucket/')) {
-        const name = decodeURIComponent(r.url.split('/').pop()!);
-        uploaded.push(name);
-        if (name === 'publication-provenance.json') {
-          provenance.push(JSON.parse(Buffer.from(r.opts.body!).toString('utf8')));
-        }
-        return { json: {} };
-      }
-      if (r.method === 'PUT') return { json: dep({ id: 5, conceptrecid: 5 }) };
-      return { json: {} };
-    });
-    return { api: new ZenodoApi(transport, true, 't'), uploaded, provenance, calls };
-  }
+  const zenodo = () => fakeZenodo();
 
   function publish(root: string, git: GitContext, api: ZenodoApi, instanceRoot: string | null) {
     return cmdPublish({
