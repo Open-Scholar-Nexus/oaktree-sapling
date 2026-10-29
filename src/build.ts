@@ -38,7 +38,7 @@ export interface RunBuildResult {
 export async function runBuild(input: RunBuildInput): Promise<RunBuildResult> {
   const {
     paperRoot,
-    instanceRoot,
+    journalRoot,
     engineRoot,
     baseUrl,
     buildOpts = { all: true, html: true },
@@ -53,7 +53,7 @@ export async function runBuild(input: RunBuildInput): Promise<RunBuildResult> {
       // request check's job.
       const layerA = runLayerA({
         paperRoot,
-        instanceRoot,
+        journalRoot,
         project,
         repo: currentRepo(undefined, paperRoot),
         engineRoot,

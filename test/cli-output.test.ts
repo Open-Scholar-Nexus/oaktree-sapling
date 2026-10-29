@@ -30,7 +30,7 @@ cpSync(join(engineDir, 'test', 'fixture-paper'), fixturePaper, {
   recursive: true,
   filter: (src) => !src.endsWith('myst.oak.yml'),
 });
-const fixtureInstance = join(engineDir, 'test', 'fixture-instance');
+const fixtureJournal = join(engineDir, 'test', 'fixture-journal');
 /** The repo the fixture paper is registered to; the id uniqueness check passes only with it. */
 const fixtureRepo = 'open-scholar-nexus/fixture-sample-paper';
 
@@ -111,7 +111,7 @@ describe.skipIf(bundleState() === 'absent')(
     it('explains the journal repo and --co-located in plain words', () => {
       const { stderr } = oak([]);
       expect(stderr).toMatch(/a public repo holding the journal's settings/);
-      expect(stderr).toMatch(/--co-located\s+not ready: one repo for the journal and its papers/);
+      expect(stderr).toMatch(/--co-located\s+one repo for the journal, its website and its papers/);
     });
 
     it('documents --json and --verbose', () => {
@@ -138,8 +138,8 @@ describe.skipIf(bundleState() === 'absent')('--json gates the machine envelope',
       'validate',
       '--paper',
       fixturePaper,
-      '--instance',
-      fixtureInstance,
+      '--journal',
+      fixtureJournal,
       '--repo',
       fixtureRepo,
     ]);
@@ -149,7 +149,7 @@ describe.skipIf(bundleState() === 'absent')('--json gates the machine envelope',
   }, 60_000);
 
   it('oak validate prints the same counts as the Check Run it reports', () => {
-    const args = ['validate', '--paper', fixturePaper, '--instance', fixtureInstance];
+    const args = ['validate', '--paper', fixturePaper, '--journal', fixtureJournal];
     const { stderr } = oak([...args, '--repo', fixtureRepo]);
     const { stdout } = oak([...args, '--repo', fixtureRepo, '--json']);
     const title = JSON.parse(stdout).checkRun.title as string;
@@ -162,8 +162,8 @@ describe.skipIf(bundleState() === 'absent')('--json gates the machine envelope',
       'validate',
       '--paper',
       fixturePaper,
-      '--instance',
-      fixtureInstance,
+      '--journal',
+      fixtureJournal,
       '--repo',
       fixtureRepo,
       '--json',
@@ -175,17 +175,17 @@ describe.skipIf(bundleState() === 'absent')('--json gates the machine envelope',
 
   it('the summary lists every finding', () => {
     // Every finding is printed.
-    const { stderr } = oak(['validate', '--paper', paperOnly(), '--no-instance']);
+    const { stderr } = oak(['validate', '--paper', paperOnly(), '--no-journal']);
     expect(stderr).toMatch(/oak validate: (PASS|FAIL)/);
     // The fixture has no thumbnail, and an uncomposed run adds a note; either way, one warning
     // shows that the JSON's findings reach the screen.
     expect(stderr).toMatch(/[✗!→]/);
   }, 60_000);
 
-  /** A paper whose pins.yml names `instanceRepo`, and an env that makes git fetch
+  /** A paper whose pins.yml names `journalRepo`, and an env that makes git fetch
    *  `https://github.com/<owner>/<name>.git` from `<mirrors>/<owner>/<name>.git`, so the clone
    *  runs offline. The fixture journal is committed at `me/journal`. */
-  function pinnedPaper(instanceRepo: string): {
+  function pinnedPaper(journalRepo: string): {
     dir: string;
     mirrors: string;
     env: Record<string, string>;
@@ -194,11 +194,11 @@ describe.skipIf(bundleState() === 'absent')('--json gates the machine envelope',
     mkdirSync(join(dir, '.github', 'actions', 'engine'), { recursive: true });
     writeFileSync(
       join(dir, '.github', 'actions', 'engine', 'pins.yml'),
-      `engine_repo: Open-Scholar-Nexus/oaktree-sapling\ninstance_repo: ${instanceRepo}\n`,
+      `engine_repo: Open-Scholar-Nexus/oaktree-sapling\njournal_repo: ${journalRepo}\n`,
     );
     const mirrors = mkdtempSync(join(tmpdir(), 'oak-mirrors-'));
     const journal = join(mirrors, 'me', 'journal.git');
-    cpSync(fixtureInstance, journal, { recursive: true });
+    cpSync(fixtureJournal, journal, { recursive: true });
     const git = (...args: string[]) => spawnSync('git', ['-C', journal, ...args]);
     git('init', '-q');
     git('add', '-A');
@@ -214,7 +214,7 @@ describe.skipIf(bundleState() === 'absent')('--json gates the machine envelope',
     };
   }
 
-  it('with no --instance, clones the journal pins.yml names into _build/journal', () => {
+  it('with no --journal, clones the journal pins.yml names into _build/journal', () => {
     const { dir, env } = pinnedPaper('me/journal');
     const { code, stderr } = oak(['validate', '--paper', dir, '--repo', fixtureRepo], env);
     expect(stderr).toContain('using the journal settings from me/journal');
@@ -256,11 +256,11 @@ describe.skipIf(bundleState() === 'absent')('--json gates the machine envelope',
     const { code, stderr } = oak(['validate', '--paper', dir], env);
     expect(code).toBe(2);
     expect(stderr).toContain('could not clone the journal me/missing');
-    expect(stderr).toContain('--instance <path');
-    expect(stderr).toContain('--no-instance');
+    expect(stderr).toContain('--journal <path');
+    expect(stderr).toContain('--no-journal');
   }, 60_000);
 
-  it('instance_repo: "." with no journal.yml beside the paper is refused', () => {
+  it('journal_repo: "." with no journal.yml beside the paper is refused', () => {
     const { dir } = pinnedPaper('"."');
     const { code, stderr } = oak(['validate', '--paper', dir]);
     expect(code).toBe(2);
@@ -333,7 +333,7 @@ describe.skipIf(bundleState() === 'absent')('a broken paper gets a sentence, nev
     const authorPath = join(dir, 'myst.yml');
     writeFileSync(authorPath, readFileSync(authorPath, 'utf8').replace(/\n\s*version: .*/, ''));
 
-    const { code, stderr } = oak(['build', '--paper', dir, '--no-instance']);
+    const { code, stderr } = oak(['build', '--paper', dir, '--no-journal']);
     expect(code).toBe(2);
     expect(stderr).toContain(authorPath);
     expect(stderr).toContain('project.options.oaktree-sapling');
@@ -381,7 +381,7 @@ describe.skipIf(bundleState() === 'absent')('bootstrap preflight ([R110], [R125]
       'paper',
       '--repo',
       'me/p',
-      '--instance',
+      '--journal',
       'me/i',
       '--edition',
       'e',
@@ -406,7 +406,7 @@ describe.skipIf(bundleState() === 'absent')('bootstrap preflight ([R110], [R125]
         'paper',
         '--repo',
         'me/p',
-        '--instance',
+        '--journal',
         'me/i',
         '--edition',
         'e',
@@ -491,7 +491,7 @@ describe.skipIf(bundleState() === 'absent')("an install missing oak's typst temp
     delete env.GITHUB_ACTIONS;
     const r = spawnSync(
       'node',
-      [join(install, 'dist', 'cli.cjs'), 'build', '--paper', fixturePaper, '--no-instance'],
+      [join(install, 'dist', 'cli.cjs'), 'build', '--paper', fixturePaper, '--no-journal'],
       { encoding: 'utf8', env },
     );
     rmSync(install, { recursive: true, force: true });
@@ -538,22 +538,22 @@ describe('a flag passed without a value is refused', () => {
 
   it('still accepts a value that merely looks unusual', () => {
     // One dash is a value, not a flag: only `--` is unambiguous enough to refuse.
-    const r = oak(['validate', '--paper', '-weird', '--no-instance']);
+    const r = oak(['validate', '--paper', '-weird', '--no-journal']);
     expect(r.stderr).not.toContain('needs a value');
   });
 
-  it('refuses an empty --instance', () => {
-    // `--instance "$VAR"` with VAR unset: the flag was passed, so "pass --instance" would not
+  it('refuses an empty --journal', () => {
+    // `--journal "$VAR"` with VAR unset: the flag was passed, so "pass --journal" would not
     // help.
-    const r = oak(['validate', '--paper', fixturePaper, '--instance', '']);
+    const r = oak(['validate', '--paper', fixturePaper, '--journal', '']);
     expect(r.code).toBe(2);
-    expect(r.stderr).toContain('--instance needs a value');
+    expect(r.stderr).toContain('--journal needs a value');
   });
 
   it('accepts an empty value where empty means something', () => {
     // `ci/run.sh` passes `--base-url ""` on every pull request build: empty means served at
     // the root.
-    const r = oak(['validate', '--paper', fixturePaper, '--no-instance', '--base-url', '']);
+    const r = oak(['validate', '--paper', fixturePaper, '--no-journal', '--base-url', '']);
     expect(r.stderr).not.toContain('--base-url needs a value');
   });
 
@@ -793,8 +793,8 @@ describe.skipIf(bundleState() === 'absent')('validate with a malformed --repo', 
       'validate',
       '--paper',
       fixturePaper,
-      '--instance',
-      fixtureInstance,
+      '--journal',
+      fixtureJournal,
       '--repo',
       '../..',
       '--report',
@@ -829,7 +829,7 @@ describe.skipIf(bundleState() === 'absent')("pins.yml's journal comes before a j
     mkdirSync(join(paper, '.github', 'actions', 'engine'), { recursive: true });
     writeFileSync(
       join(paper, '.github', 'actions', 'engine', 'pins.yml'),
-      'instance_repo: acme/journal\n',
+      'journal_repo: acme/journal\n',
     );
     // github.com points at an empty folder, so the pinned journal's clone fails offline.
     const r = oak(['deposit', 'status', '--sandbox', '--token', 'x', '--paper', paper], {
@@ -853,7 +853,7 @@ describe.skipIf(bundleState() === 'absent')('oak release reads the DOI before an
         '  options:\n    oaktree-sapling:\n      version: v9.9.9\n      edition: e\n',
     );
     const { code, stderr } = oak(
-      ['release', '--tag', 'v1.0.0', '--no-build', '--paper', dir, '--no-instance'],
+      ['release', '--tag', 'v1.0.0', '--no-build', '--paper', dir, '--no-journal'],
       { OAK_USE_RUNNING: '1', ZENODO_TOKEN: undefined, ZENODO_TOKEN_SANDBOX: undefined },
     );
     expect(code).toBe(2);

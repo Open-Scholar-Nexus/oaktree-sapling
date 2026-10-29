@@ -310,16 +310,16 @@ describe('a broken journal.yml [R140]', () => {
   });
 
   it('a valid one has no problem', () => {
-    expect(loadJournalPreview('test/fixture-instance').problem).toBeUndefined();
+    expect(loadJournalPreview('test/fixture-journal').problem).toBeUndefined();
   });
 });
 
 describe('loadJournalPreview', () => {
-  it('returns schema defaults with no instance', () => {
+  it('returns schema defaults with no journal', () => {
     expect(loadJournalPreview(null).preview.provider).toBe('artifact');
   });
-  it('reads the fixture-instance journal.yml (provider: artifact)', () => {
-    expect(loadJournalPreview('test/fixture-instance').preview.provider).toBe('artifact');
+  it('reads the fixture-journal journal.yml (provider: artifact)', () => {
+    expect(loadJournalPreview('test/fixture-journal').preview.provider).toBe('artifact');
   });
 });
 
@@ -330,7 +330,7 @@ describe('loadJournalPreview', () => {
 const baseInput = (siteDir: string, over: Record<string, unknown> = {}) => ({
   siteDir,
   repoRoot: '/repo',
-  instanceRoot: null,
+  journalRoot: null,
   repo: 'o/r',
   serverUrl: 'https://github.com',
   cf: { apiToken: 't', accountId: 'a' },
@@ -343,7 +343,7 @@ describe('cmdDeployPreview', () => {
   it('deploys to cloudflare and posts the preview comment (provider: cloudflare)', async () => {
     const dir = siteWithPr('7');
     const { gh, stickies } = fakeGh();
-    const out = await cmdDeployPreview(baseInput(dir, { instanceRoot: instanceCf(dir) }), {
+    const out = await cmdDeployPreview(baseInput(dir, { journalRoot: journalCf(dir) }), {
       deployer: okDeployer(),
       gh,
     });
@@ -358,7 +358,7 @@ describe('cmdDeployPreview', () => {
   it('falls back to an artifact comment when the Cloudflare deploy throws [R16]', async () => {
     const dir = siteWithPr('7');
     const { gh, stickies } = fakeGh();
-    const out = await cmdDeployPreview(baseInput(dir, { instanceRoot: instanceCf(dir) }), {
+    const out = await cmdDeployPreview(baseInput(dir, { journalRoot: journalCf(dir) }), {
       deployer: failDeployer('boom'),
       gh,
     });
@@ -373,7 +373,7 @@ describe('cmdDeployPreview', () => {
     const dir = siteWithPr('7');
     const { gh, stickies } = fakeGh();
     const out = await cmdDeployPreview(
-      baseInput(dir, { instanceRoot: { problem: 'no journal repo found' } }),
+      baseInput(dir, { journalRoot: { problem: 'no journal repo found' } }),
       { deployer: okDeployer(), gh },
     );
     expect(out.exitCode).toBe(0);
@@ -416,7 +416,7 @@ describe('cmdDeployPreview', () => {
       },
     };
     const { gh } = fakeGh();
-    await cmdDeployPreview(baseInput(dir, { instanceRoot: instanceCf(dir) }), {
+    await cmdDeployPreview(baseInput(dir, { journalRoot: journalCf(dir) }), {
       deployer: snoop,
       gh,
     });
@@ -436,7 +436,7 @@ describe('cmdDeployPreview', () => {
     };
     const { gh, stickies } = fakeGh({ prHead: () => 'b'.repeat(40) });
     await expect(
-      cmdDeployPreview(baseInput(dir, { instanceRoot: instanceCf(dir) }), { deployer: spy, gh }),
+      cmdDeployPreview(baseInput(dir, { journalRoot: journalCf(dir) }), { deployer: spy, gh }),
     ).rejects.toThrow(/heads at b{40}, not at a{40}/);
     expect(deployed).toBe(false);
     expect(stickies).toHaveLength(0);
@@ -458,12 +458,29 @@ describe('cmdDeployPreview', () => {
     const repoRoot = mkdtempSync(join(tmpdir(), 'oak-colo-'));
     mkdirSync(join(repoRoot, 'papers/one'), { recursive: true });
     writeFileSync(join(repoRoot, 'papers/one/myst.yml'), 'project:\n  doi: 10.5281/zenodo.55\n');
-    const { gh, stickies } = fakeGh({ versionTags: () => ['v1.0.0'] });
+    // A co-located paper's version tags are `<id>/vX.Y.Z`, and its comments carry its id.
+    const { gh, stickies } = fakeGh({ versionTags: () => ['v1.0.0', 'one/v1.0.0'] });
     const input = { ...baseInput(dir, { cf: {} }), repoRoot, mystPath: undefined };
     const out = await cmdDeployPreview(input, { deployer: okDeployer(), gh });
     expect(out.result.paper).toBe('papers/one');
-    expect(stickies.some((s) => s.header === STICKY_NEWVERSION)).toBe(true);
+    expect(stickies.map((s) => s.header)).toEqual([
+      `${STICKY_PREVIEW}:one`,
+      `${STICKY_NEWVERSION}:one`,
+    ]);
+    expect(stickies[0]!.body).toContain('paper-build-one');
     expect(existsSync(join(dir, '.paper'))).toBe(false);
+  });
+
+  it("skips the reminder for a co-located paper whose own tag is absent, whatever other papers' tags", async () => {
+    const dir = siteWithPr('7');
+    writeFileSync(join(dir, '.paper'), 'papers/one\n');
+    const repoRoot = mkdtempSync(join(tmpdir(), 'oak-colo-'));
+    mkdirSync(join(repoRoot, 'papers/one'), { recursive: true });
+    writeFileSync(join(repoRoot, 'papers/one/myst.yml'), 'project: {}\n');
+    const { gh } = fakeGh({ versionTags: () => ['v1.0.0', 'two/v1.0.0'] });
+    const input = { ...baseInput(dir, { cf: {} }), repoRoot, mystPath: undefined };
+    const out = await cmdDeployPreview(input, { deployer: okDeployer(), gh });
+    expect((out.result.notify as { reminder: string }).reminder).toBe('skipped');
   });
 
   it('no-ops when there is no .pr-number', async () => {
@@ -503,8 +520,8 @@ describe('cmdDeployPreview', () => {
   });
 });
 
-// A minimal instance dir with a cloudflare-provider journal.yml.
-function instanceCf(near: string): string {
+// A minimal journal dir with a cloudflare-provider journal.yml.
+function journalCf(near: string): string {
   const dir = mkdtempSync(join(near, '..', 'oak-inst-'));
   writeFileSync(
     join(dir, 'journal.yml'),

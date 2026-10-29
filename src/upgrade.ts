@@ -6,6 +6,9 @@
  * files are never edited by hand, so any difference is reset to the template; a deliberate edit
  * still shows in the pull request. Nothing records a template version.
  *
+ * In a co-located repository the version is each paper's `papers/<id>/myst.yml` and pins.yml's
+ * `engine_version`, which move together.
+ *
  * A repo that is up to date gets no pull request. Without `--to`, the target is the newest stable
  * release, and a pin already past it stays. Each target gets a branch of its own, and running
  * again updates its open pull request. Finding the target, getting the template and opening the
@@ -19,11 +22,14 @@ import {
   renderPins,
   renderCodeowners,
   codeownersColumns,
+  ENGINE_VERSION_KEY,
   type TemplateAnswers,
 } from './bootstrap.js';
+import { discoverProjects, isColocated } from './projects.js';
 import * as msg from './messages.js';
 import { err, type Outcome } from './result.js';
 import {
+  OLD_JOURNAL_KEY,
   compareEngineVersions,
   ENGINE_MANAGED_PATHS,
   ENGINE_VERSION,
@@ -74,7 +80,10 @@ export function readAnswers(repoRoot: string): TemplateAnswers {
   const pinsPath = join(repoRoot, PINS_REL);
   const pins = existsSync(pinsPath) ? readDoc(pinsPath) : null;
   const engineRepo = String(pins?.get('engine_repo') ?? '');
-  const instanceRepo = String(pins?.get('instance_repo') ?? '.');
+  // Absent stays absent: a paper repository whose journal is unknown.
+  // A repo bootstrapped before the key was renamed has `instance_repo`; its resync writes
+  // `journal_repo` ({@link renderPins}).
+  const journalRepo = String(pins?.get('journal_repo') ?? pins?.get(OLD_JOURNAL_KEY) ?? '');
   const coPath = join(repoRoot, CODEOWNERS_REL);
   const owner = existsSync(coPath) ? ownerFromCodeowners(readFileSync(coPath, 'utf8')) : '@owner';
   const myst = join(repoRoot, 'myst.yml');
@@ -85,7 +94,38 @@ export function readAnswers(repoRoot: string): TemplateAnswers {
     version = String(doc.getIn(['project', 'options', 'oaktree-sapling', 'version']) ?? '');
     edition = String(doc.getIn(['project', 'options', 'oaktree-sapling', 'edition']) ?? '');
   }
-  return { engineRepo, instanceRepo, owner, version, edition };
+  const repoEngineVersion = pins?.get(ENGINE_VERSION_KEY);
+  return {
+    engineRepo,
+    journalRepo,
+    owner,
+    version,
+    edition,
+    ...(typeof repoEngineVersion === 'string' ? { repoEngineVersion } : {}),
+  };
+}
+
+/** One engine pin: the file it is in, relative to the repo, and the version it names. */
+interface EnginePin {
+  file: string;
+  version: string;
+}
+
+/** Every engine pin in the repo: its `myst.yml`, or in a co-located repository each paper's and
+ *  pins.yml's `engine_version`. */
+function enginePins(repoRoot: string, answers: TemplateAnswers): EnginePin[] {
+  if (!isColocated(repoRoot)) return [{ file: 'myst.yml', version: answers.version }];
+  const papers = discoverProjects(repoRoot).map((dir) => {
+    const file = posix.join(dir, 'myst.yml');
+    const v = readDoc(join(repoRoot, file)).getIn([
+      'project',
+      'options',
+      'oaktree-sapling',
+      'version',
+    ]);
+    return { file, version: typeof v === 'string' ? v : '' };
+  });
+  return [...papers, { file: PINS_REL, version: answers.repoEngineVersion ?? '' }];
 }
 
 /* --------------------------------------------------------------------------
@@ -198,9 +238,9 @@ export interface UpgradeInput {
   filesOnly?: boolean; // leave the version in myst.yml as it is
 }
 
-/** Writes the target version into `myst.yml`. */
-function bumpVersion(repoRoot: string, target: string): void {
-  const myst = join(repoRoot, 'myst.yml');
+/** Writes the target version into the `myst.yml` at `file`. */
+function bumpVersion(repoRoot: string, target: string, file: string): void {
+  const myst = join(repoRoot, file);
   const doc = readDoc(myst);
   doc.setIn(['project', 'options', 'oaktree-sapling', 'version'], target);
   writeDoc(myst, doc);
@@ -236,39 +276,48 @@ export async function cmdUpgrade(input: UpgradeInput, deps: UpgradeDeps): Promis
   if (!ENGINE_VERSION.test(target)) {
     return err(2, msg.upgrade.badTarget(target, answers.engineRepo, targetGiven));
   }
-  if (filesOnly && !ENGINE_VERSION.test(answers.version)) {
-    return err(2, msg.upgrade.badPin(answers.version));
-  }
+  const pins = enginePins(repoRoot, answers);
+  const badPin = filesOnly ? pins.find((p) => !ENGINE_VERSION.test(p.version)) : undefined;
+  if (badPin) return err(2, msg.upgrade.badPin(badPin.version, badPin.file));
+  // In a co-located repository the repository's own engine stands for the pins it moves with.
+  const current = pins.at(-1)!.version;
 
   // The newest release never moves a pin back from a newer one. A pin that is not an engine
   // version runs nowhere, so it moves.
-  if (!targetGiven && (compareEngineVersions(answers.version, target) ?? 0) > 0) {
-    deps.log(msg.upgrade.pinAhead(answers.version, target, answers.engineRepo));
+  if (!targetGiven && (compareEngineVersions(current, target) ?? 0) > 0) {
+    deps.log(msg.upgrade.pinAhead(current, target, answers.engineRepo));
     return {
       exitCode: 0,
-      result: { status: 'ok', target, pin: answers.version, pr: null, pin_ahead: true },
+      result: { status: 'ok', target, pin: current, pr: null, pin_ahead: true },
     };
   }
-  const versionChanged = !filesOnly && answers.version !== target;
+  const bumped = filesOnly ? [] : pins.filter((p) => p.version !== target);
+  const versionChanged = bumped.length > 0;
 
   const templateAtTarget = deps.materializeTemplate(answers.engineRepo, target);
-  const drift = computeDrift(repoRoot, templateAtTarget, answers);
+  const rendered: TemplateAnswers =
+    answers.repoEngineVersion !== undefined && !filesOnly
+      ? { ...answers, repoEngineVersion: target }
+      : answers;
+  const drift = computeDrift(repoRoot, templateAtTarget, rendered);
   const extra = extraFrozenFiles(repoRoot, templateAtTarget);
   const filesChanged = drift.length > 0;
 
-  // The pin and the workflows this run leaves must agree: workflows above the pin call verbs it
-  // lacks, and on GitHub that fails quietly.
-  const pinAfter = filesOnly ? answers.version : target;
+  // The pins and the workflows this run leaves must agree: workflows above a pin call verbs it
+  // lacks, and on GitHub that fails quietly. In a co-located repository every paper is checked.
   const minEngine = readMinEngine(templateAtTarget);
   if (minEngine) {
-    const order = compareEngineVersions(pinAfter, minEngine);
-    const why =
-      order === null
-        ? msg.upgrade.badMinimum(minEngine, target)
-        : order < 0
-          ? msg.upgrade.belowMinimum(pinAfter, minEngine, filesOnly)
-          : null;
-    if (why) return err(2, why, { target, pin: pinAfter, min_engine_version: minEngine });
+    for (const pin of pins) {
+      const pinAfter = filesOnly ? pin.version : target;
+      const order = compareEngineVersions(pinAfter, minEngine);
+      const why =
+        order === null
+          ? msg.upgrade.badMinimum(minEngine, target)
+          : order < 0
+            ? msg.upgrade.belowMinimum(pinAfter, minEngine, filesOnly, pin.file)
+            : null;
+      if (why) return err(2, why, { target, pin: pinAfter, min_engine_version: minEngine });
+    }
   }
 
   if (!versionChanged && !filesChanged) {
@@ -285,7 +334,7 @@ export async function cmdUpgrade(input: UpgradeInput, deps: UpgradeDeps): Promis
   const plan = [
     msg.upgrade.planHeader(repoRoot, target),
     msg.upgrade.planTarget(target, answers.engineRepo, targetGiven),
-    ...(versionChanged ? [msg.upgrade.planBumpVersion(answers.version, target)] : []),
+    ...bumped.map((p) => msg.upgrade.planBumpVersion(p.version, target, p.file)),
     filesChanged
       ? msg.upgrade.planResync(drift.length, target, drift.join(', '))
       : msg.upgrade.planFilesMatch(target),
@@ -303,19 +352,25 @@ export async function cmdUpgrade(input: UpgradeInput, deps: UpgradeDeps): Promis
     };
 
   const paths: string[] = [];
-  if (versionChanged) {
-    bumpVersion(repoRoot, target);
-    paths.push('myst.yml');
+  // pins.yml's engine_version moves with the resync of pins.yml.
+  for (const p of bumped.filter((b) => b.file !== PINS_REL)) {
+    bumpVersion(repoRoot, target, p.file);
+    paths.push(p.file);
   }
   if (filesChanged) {
-    resyncFiles(repoRoot, templateAtTarget, answers, drift);
+    resyncFiles(repoRoot, templateAtTarget, rendered, drift);
     paths.push(...drift);
   }
 
   const { url, action } = deps.pr.open(repoRoot, {
     branch: `${UPGRADE_BRANCH_PREFIX}${target}`,
     title: msg.upgrade.prTitle(target),
-    body: upgradeBody(target, versionChanged, drift, extra),
+    body: upgradeBody(
+      target,
+      bumped.map((b) => b.file),
+      drift,
+      extra,
+    ),
     paths,
   });
   const logs = {
@@ -339,14 +394,9 @@ export async function cmdUpgrade(input: UpgradeInput, deps: UpgradeDeps): Promis
   };
 }
 
-function upgradeBody(
-  target: string,
-  versionChanged: boolean,
-  drift: string[],
-  extra: string[],
-): string {
+function upgradeBody(target: string, bumped: string[], drift: string[], extra: string[]): string {
   const lines = [msg.upgrade.prBodyHeader(target), ''];
-  if (versionChanged) lines.push(msg.upgrade.prBodyVersion(target));
+  if (bumped.length) lines.push(msg.upgrade.prBodyVersion(target, bumped));
   if (drift.length) {
     lines.push(msg.upgrade.prBodyFiles(target));
     for (const d of drift) lines.push(`  - \`${d}\``);

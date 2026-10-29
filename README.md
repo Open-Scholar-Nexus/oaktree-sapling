@@ -62,4 +62,6 @@ npm run typecheck
 
 BSD 3-Clause, copyright Neuromatch, Inc. See `LICENSE`.
 
+The co-located layout, one folder per paper in the journal's repository and one pull request per paper, comes from the [SciPy Proceedings](https://github.com/scipy-conference/scipy_proceedings) (MIT licence); no code of theirs is copied.
+
 One subtree is not covered by it: `templates/typst/` is the [LaPreprint](https://github.com/curvenote/lapreprint) typst template, MIT-licensed and copyright Rowan Cockett. It keeps its own `LICENSE` alongside it, which ships with the package and with every release tag.

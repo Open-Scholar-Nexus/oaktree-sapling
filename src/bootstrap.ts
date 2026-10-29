@@ -20,7 +20,10 @@ import { readDoc } from './yaml-io.js';
 import { themeZipUrl } from './assets.js';
 import { LABEL_EDITOR_ACTION, LABEL_ZENODO_FAILED } from './preview.js';
 import type { Outcome } from './result.js';
-import { pagesUrl } from './schema.js';
+import { ENGINE_MANAGED_PATHS, OLD_JOURNAL_KEY, pagesUrl, underPaths } from './schema.js';
+import { ENGINE_VERSION_KEY, PAPERS_DIR } from './projects.js';
+
+export { ENGINE_VERSION_KEY };
 
 /* --------------------------------------------------------------------------
  * Settings and template rendering (pure)
@@ -29,9 +32,9 @@ import { pagesUrl } from './schema.js';
 export interface TemplateAnswers {
   /** The repo oak is checked out from (pins.yml `engine_repo`). */
   engineRepo: string;
-  /** The journal repo, or '.' when this repo is the journal (pins.yml
-   *  `instance_repo`). */
-  instanceRepo: string;
+  /** The journal repo, or '.' when this repo is the journal (pins.yml `journal_repo`); empty
+   *  leaves the key out, a paper repository whose journal is unknown. */
+  journalRepo: string;
   /** The CODEOWNERS owner: `@user` or `@org/team`. */
   owner: string;
   /** The oak release written into the starter myst.yml. */
@@ -46,6 +49,9 @@ export interface TemplateAnswers {
   /** The journal website's URL, for the brand's `logo_url`, so each paper's header links back
    *  to it. Unset when there is no website. */
   siteUrl?: string;
+  /** A co-located repository's pins.yml `engine_version`: the engine its jobs with no paper of
+   *  their own run (the website, posting checks and previews). Unset for a paper repository. */
+  repoEngineVersion?: string;
 }
 
 /** The journal name the templates ship, replaced by `--name`. */
@@ -65,8 +71,8 @@ const EXCLUDE_FROM_STAMP = new Set(['README.md']);
 export function paperTemplateRoot(engineRoot: string): string {
   return join(engineRoot, 'templates', 'paper');
 }
-export function instanceTemplateRoot(engineRoot: string): string {
-  return join(engineRoot, 'templates', 'instance');
+export function journalTemplateRoot(engineRoot: string): string {
+  return join(engineRoot, 'templates', 'journal');
 }
 export function siteTemplateRoot(engineRoot: string): string {
   return join(engineRoot, 'templates', 'site');
@@ -134,14 +140,30 @@ function writeRel(destRoot: string, rel: string, contents: string | Buffer): voi
   writeFileSync(abs, contents);
 }
 
-/** pins.yml with `engine_repo` and `instance_repo` set through the YAML Document API, keeping
+/** pins.yml with `engine_repo` and `journal_repo` set through the YAML Document API, keeping
  *  comments. */
 export function renderPins(templateRoot: string, answers: TemplateAnswers): string {
   const doc = readDoc(join(templateRoot, RENDER_PINS));
   doc.set('engine_repo', answers.engineRepo);
-  doc.set('instance_repo', answers.instanceRepo);
+  if (answers.journalRepo) doc.set('journal_repo', answers.journalRepo);
+  else doc.delete('journal_repo');
+  doc.delete(OLD_JOURNAL_KEY);
+  if (answers.repoEngineVersion && doc.has(ENGINE_VERSION_KEY)) {
+    doc.set(ENGINE_VERSION_KEY, answers.repoEngineVersion);
+  } else if (answers.repoEngineVersion && isMap(doc.contents)) {
+    const pair = doc.createPair(ENGINE_VERSION_KEY, answers.repoEngineVersion);
+    if (isScalar(pair.key)) {
+      pair.key.commentBefore = ENGINE_VERSION_COMMENT;
+      pair.key.spaceBefore = true;
+    }
+    doc.contents.items.push(pair);
+  }
   return doc.toString();
 }
+
+const ENGINE_VERSION_COMMENT =
+  " The engine this repository's jobs with no paper of their own run (the website, posting\n" +
+  ' checks and previews); each paper pins its own in its myst.yml. oak upgrade moves both.';
 
 /** A gated CODEOWNERS line: indent, path and spacing (1), the path (2), the owner column (3). */
 const CODEOWNERS_LINE = /^(\s*(\S+)\s+)(\S.*)$/;
@@ -207,10 +229,11 @@ export function renderPaperTemplate(
   paperRoot: string,
   destRoot: string,
   answers: TemplateAnswers,
+  keep: (rel: string) => boolean = () => true,
 ): string[] {
   const written: string[] = [];
   for (const rel of listFiles(paperRoot)) {
-    if (EXCLUDE_FROM_STAMP.has(rel.split('/')[0]!)) continue;
+    if (EXCLUDE_FROM_STAMP.has(rel.split('/')[0]!) || !keep(rel)) continue;
     if (rel === RENDER_PINS) writeRel(destRoot, rel, renderPins(paperRoot, answers));
     else if (rel === RENDER_CODEOWNERS)
       writeRel(
@@ -232,17 +255,17 @@ export function renderPaperTemplate(
  * into the brand's `logo_url`; the edition file renamed, the rest copied, the README left out.
  * Returns the written paths.
  */
-export function renderInstanceTemplate(
-  instanceRoot: string,
+export function renderJournalTemplate(
+  journalRoot: string,
   destRoot: string,
   answers: TemplateAnswers,
 ): string[] {
   const name = answers.journalName;
   const written: string[] = [];
-  for (const rel of listFiles(instanceRoot)) {
+  for (const rel of listFiles(journalRoot)) {
     if (EXCLUDE_FROM_STAMP.has(rel.split('/')[0]!)) continue;
     if (rel === 'journal.yml') {
-      const doc = readDoc(join(instanceRoot, rel));
+      const doc = readDoc(join(journalRoot, rel));
       if (name) doc.set('name', name);
       // What is left of the placeholder is in comments (the Zenodo blurb), so it is replaced as
       // text, on one line.
@@ -253,21 +276,21 @@ export function renderInstanceTemplate(
         name ? out.replaceAll(JOURNAL_NAME_PLACEHOLDER, name.replace(/\s+/g, ' ')) : out,
       );
     } else if (rel === posix.join('brand', 'brand.yml') && (name || answers.siteUrl)) {
-      const doc = readDoc(join(instanceRoot, rel));
+      const doc = readDoc(join(journalRoot, rel));
       if (name) doc.setIn(['site', 'options', 'logo_text'], name);
       if (answers.siteUrl) doc.setIn(['site', 'options', 'logo_url'], answers.siteUrl);
       writeRel(destRoot, rel, doc.toString());
     } else if (rel === posix.join('editions', 'edition.yml')) {
       const dest = posix.join('editions', `${answers.edition}.yml`);
       if (name) {
-        const doc = readDoc(join(instanceRoot, rel));
+        const doc = readDoc(join(journalRoot, rel));
         doc.setIn(['project', 'venue'], name);
         writeRel(destRoot, dest, doc.toString());
-      } else copyFileBytes(join(instanceRoot, rel), join(destRoot, dest));
+      } else copyFileBytes(join(journalRoot, rel), join(destRoot, dest));
       written.push(dest);
       continue;
     } else {
-      copyFileBytes(join(instanceRoot, rel), join(destRoot, rel));
+      copyFileBytes(join(journalRoot, rel), join(destRoot, rel));
     }
     written.push(stampRel(rel));
   }
@@ -302,11 +325,12 @@ export function renderSiteTemplate(
   destRoot: string,
   answers: TemplateAnswers,
   mystRange: string,
+  keep: (rel: string) => boolean = () => true,
 ): string[] {
   const journalName = answers.journalName ?? JOURNAL_NAME_PLACEHOLDER;
   const written: string[] = [];
   for (const rel of listFiles(siteRoot)) {
-    if (EXCLUDE_FROM_STAMP.has(rel.split('/')[0]!)) continue;
+    if (EXCLUDE_FROM_STAMP.has(rel.split('/')[0]!) || !keep(rel)) continue;
     if (rel === RENDER_MYST) {
       const doc = readDoc(join(siteRoot, rel));
       doc.setIn(['project', 'title'], journalName);
@@ -327,6 +351,38 @@ export function renderSiteTemplate(
     written.push(stampRel(rel));
   }
   return written.sort();
+}
+
+/** The folder that holds a co-located repository's papers, kept in git while it is empty. */
+export const PAPERS_KEEP = posix.join(PAPERS_DIR, '.gitkeep');
+
+/**
+ * Renders a co-located repository into `destRoot`: the journal's settings, its website, the
+ * paper launchers and `CODEOWNERS` from the paper template, and an empty `papers/`. The website
+ * is built and deployed by the launchers (`oak assemble`), so the site template's own workflow
+ * is left out, as is the paper template's starter paper, which `oak add-paper` seeds per paper.
+ */
+export function renderColocatedTemplate(
+  roots: { paper: string; journal: string; site: string },
+  destRoot: string,
+  answers: TemplateAnswers,
+  mystRange: string,
+): string[] {
+  const written = [
+    ...renderJournalTemplate(roots.journal, destRoot, answers),
+    ...renderSiteTemplate(
+      roots.site,
+      destRoot,
+      answers,
+      mystRange,
+      (rel) => !rel.startsWith('.github/'),
+    ),
+    ...renderPaperTemplate(roots.paper, destRoot, answers, (rel) =>
+      underPaths(ENGINE_MANAGED_PATHS, rel),
+    ),
+  ];
+  writeRel(destRoot, PAPERS_KEEP, '');
+  return [...written, PAPERS_KEEP].sort();
 }
 
 function copyRel(srcRoot: string, destRoot: string, rel: string): void {
@@ -461,12 +517,14 @@ function protectMainBypass(team: string | null): unknown[] {
     : [{ actor_id: REPO_ROLE_ADMIN, actor_type: 'RepositoryRole', bypass_mode: 'pull_request' }];
 }
 
+/** Every tag, so the rule cannot disagree with the {@link ZENODO_TAG_POLICIES} or the
+ *  `deposit-version.yml` trigger. */
 function vTagsBody(bypass: unknown[]): unknown {
   return {
     name: RULESET_V_TAGS,
     target: 'tag',
     enforcement: 'active',
-    conditions: { ref_name: { include: ['refs/tags/v*'], exclude: [] } },
+    conditions: { ref_name: { include: ['~ALL'], exclude: [] } },
     rules: [{ type: 'creation' }, { type: 'update' }, { type: 'deletion' }],
     bypass_actors: bypass,
   };
@@ -490,6 +548,9 @@ export interface SecretInputs {
 
 /** The name of the environment gating the tag-push deposit. */
 export const ZENODO_ENV = 'zenodo-publish';
+/** The tags {@link ZENODO_ENV} admits: `vX.Y.Z`, and `<paper id>/vX.Y.Z` in a co-located
+ *  repository. `*` stops at `/`, as in the `deposit-version.yml` trigger. */
+export const ZENODO_TAG_POLICIES = ['v*', '*/v*'] as const;
 /** The environment of the DOI-reservation workflow: `main` only, no reviewer. */
 export const ZENODO_PREPARE_ENV = 'zenodo-prepare';
 /** The environment of the preview deploy: `main` only, no reviewer. */
@@ -518,8 +579,8 @@ export interface BootstrapDeps {
   prov: Provisioner;
   /** `templates/paper/` in oak's checkout. */
   paperTemplateRoot: string;
-  /** `templates/instance/` in oak's checkout. */
-  instanceTemplateRoot: string;
+  /** `templates/journal/` in oak's checkout. */
+  journalTemplateRoot: string;
   /** `templates/site/` in oak's checkout, the journal website [R80]. */
   siteTemplateRoot: string;
   /** oak's own `myst-cli` range, for the site ({@link engineMystRange}). */
@@ -563,16 +624,16 @@ function declaredValues(v: {
   /** The journal's name: a string when given, `null` on a journal run without one, `undefined`
    *  for a paper. */
   journalName?: string | null;
-  instanceRepo?: string;
+  journalRepo?: string;
   resolved?: ResolvedFlags;
 }): string[] {
   const rows: Array<[string, string]> = [];
-  if (v.instanceRepo) {
+  if (v.journalRepo) {
     rows.push([
       msg.declared.labels.journalRepo,
-      v.instanceRepo === '.'
+      v.journalRepo === '.'
         ? msg.declared.journalRepoCoLocated
-        : msg.declared.journalRepo(v.instanceRepo),
+        : msg.declared.journalRepo(v.journalRepo),
     ]);
   }
   if (v.journalName !== undefined) {
@@ -620,7 +681,7 @@ export interface BootstrapPaperInput {
   repo: string; // owner/name
   from?: string; // author url (ingest mode); bare when absent
   sourceRef?: string;
-  instance?: string; // owner/instance-config; '.' co-located
+  journal?: string; // owner/journal-repo; '.' co-located
   /** The paper's edition in its journal. Required (see cmdBootstrapPaper). */
   edition?: string;
   engineVersion: string;
@@ -828,13 +889,14 @@ function applyProvisioning(
   // and the Zenodo draft waits for an editor's Publish click.
   step('zenodo_env', () => {
     restrict(ZENODO_ENV);
-    if (prov.branchPolicyExists(repo, ZENODO_ENV, 'v*')) {
-      actions.zenodo_env = 'v* policy already exists';
-      log(msg.bootstrap.logZenodoEnvExists);
-    } else {
-      prov.createBranchPolicy(repo, ZENODO_ENV, 'v*', 'tag');
-      actions.zenodo_env = 'created with v* policy';
+    const added = ZENODO_TAG_POLICIES.filter((p) => !prov.branchPolicyExists(repo, ZENODO_ENV, p));
+    for (const p of added) prov.createBranchPolicy(repo, ZENODO_ENV, p, 'tag');
+    if (added.length) {
+      actions.zenodo_env = `created with ${added.join(', ')} policy`;
       log(msg.bootstrap.logZenodoEnvCreated);
+    } else {
+      actions.zenodo_env = `${ZENODO_TAG_POLICIES.join(', ')} policies already exist`;
+      log(msg.bootstrap.logZenodoEnvExists);
     }
   });
 
@@ -917,8 +979,6 @@ function applySecrets(
     actions.repo_secrets = removed.length ? `deleted ${removed.join(', ')}` : 'none deleted';
   });
 
-  runbook.push(msg.bootstrap.runbookForkApproval);
-  runbook.push(msg.bootstrap.runbookAuthorAccess(repo));
   return { set, runbook, failed };
 }
 
@@ -930,18 +990,16 @@ export async function cmdBootstrapPaper(
   const { repo } = input;
   const mode = input.from ? 'ingest' : 'bare';
 
-  // `--instance` is required: `pins.yml`'s `instance_repo` is the only record of a paper's
-  // journal, and with `.` the engine action clones nothing, so `oak validate` and `oak build`
-  // would fail in CI with no journal. `--instance .` stays the explicit choice for a repo
-  // that is its own journal (`oak bootstrap journal --co-located` renders the paper template
-  // itself and does not come through here).
-  if (!input.instance) {
+  // `--journal` is required: `pins.yml`'s `journal_repo` is the only record of a paper's
+  // journal. `.` marks a co-located repository, which `oak bootstrap journal --co-located` sets
+  // up, so a paper repository names another one.
+  if (!input.journal || input.journal === '.') {
     return {
       exitCode: 2,
       result: {
         status: 'error',
         repo,
-        error: msg.bootstrap.instanceRequired,
+        error: msg.bootstrap.journalRequired,
       },
     };
   }
@@ -955,16 +1013,16 @@ export async function cmdBootstrapPaper(
       result: {
         status: 'error',
         repo,
-        error: msg.bootstrap.editionRequired(input.instance),
+        error: msg.bootstrap.editionRequired(input.journal),
       },
     };
   }
   const owner = resolveOwner(input, prov);
 
-  const instanceRepo = input.instance;
+  const journalRepo = input.journal;
   const answers: TemplateAnswers = {
     engineRepo: input.engineRepo,
-    instanceRepo,
+    journalRepo,
     owner: owner.ownerToken,
     version: input.engineVersion,
     edition: input.edition,
@@ -987,7 +1045,7 @@ export async function cmdBootstrapPaper(
       ownerUsed: true,
       edition: input.edition,
       editionGiven: true, // required for papers, never defaulted
-      instanceRepo,
+      journalRepo,
       resolved: input.resolved,
     }),
     '',
@@ -995,9 +1053,9 @@ export async function cmdBootstrapPaper(
     // The last point to say so before content exists [R127].
     ...(input.private ? [msg.bootstrap.planPrivate] : []),
     mainThere ? msg.bootstrap.planMainSeeded : msg.bootstrap.planSeedPaper,
-    // A rerun does not seed again, so rerunning with a different answer (`--instance`,
+    // A rerun does not seed again, so rerunning with a different answer (`--journal`,
     // `--engine-version`) keeps the earlier pins.yml and changes nothing.
-    ...(mainThere ? [msg.bootstrap.planAlreadySeededPaper(instanceRepo)] : []),
+    ...(mainThere ? [msg.bootstrap.planAlreadySeededPaper(journalRepo)] : []),
     ...(mode === 'ingest'
       ? [
           reviewThere
@@ -1096,7 +1154,14 @@ export async function cmdBootstrapPaper(
   // The starter myst.yml holds placeholders; an ingested paper brings the author's own.
   const fill =
     mode === 'bare' && actions.main === 'seeded' ? [msg.bootstrap.runbookFillPaper(repo)] : [];
-  const runbook = [...fill, ...contentRunbook, ...prov_.runbook, ...secretRunbook];
+  const runbook = [
+    ...fill,
+    ...contentRunbook,
+    ...prov_.runbook,
+    ...secretRunbook,
+    msg.bootstrap.runbookForkApproval,
+    msg.bootstrap.runbookAuthorAccess(repo),
+  ];
   const failed = [...contentFailed, ...prov_.failed, ...secretFailed];
   for (const line of runbook) log(msg.bootstrap.logRunbookLine(line));
   if (failed.length) log(msg.bootstrap.logPartial(failed.map((f) => f.step).join(', ')));
@@ -1133,7 +1198,7 @@ export interface BootstrapJournalInput {
   requireChecks: boolean; // add "Journal checks" to protect-main required checks (default true)
   /** External journal only: also write the journal website and turn on Pages. Default true; `--no-site`
    *  gives a settings repo with no website [design §2]. `site: false` with `--co-located`
-   *  is a usage error: that kind never gets a site, so the flag would do nothing. */
+   *  is a usage error: the website is where a co-located journal publishes its papers. */
   site?: boolean;
   secrets: SecretInputs;
   /** Where the defaulted values came from, for the plan. */
@@ -1157,19 +1222,20 @@ export async function cmdBootstrapJournal(
       },
     };
   }
-  const withSite = external && input.site !== false;
+  const withSite = input.site !== false;
   const owner = resolveOwner(input, prov);
   const edition = input.edition ?? DEFAULT_EDITION;
 
   const answers: TemplateAnswers = {
     engineRepo: input.engineRepo,
-    instanceRepo: '.', // co-located: this repo IS the instance; external: unused
+    journalRepo: '.', // co-located: this repo holds the journal; external: unused
     owner: owner.ownerToken,
     version: input.engineVersion,
     edition,
     journalName: input.name,
     repo,
     ...(withSite ? { siteUrl: pagesUrl(repo) } : {}),
+    ...(external ? {} : { repoEngineVersion: input.engineVersion }),
   };
 
   const repoThere = prov.repoExists(repo);
@@ -1197,11 +1263,8 @@ export async function cmdBootstrapJournal(
       : external
         ? msg.bootstrap.planSeedJournal(withSite)
         : msg.bootstrap.planSeedCoLocated,
-    external
-      ? withSite
-        ? msg.bootstrap.planPages(pagesUrl(repo))
-        : msg.bootstrap.planNoSite
-      : msg.bootstrap.planProvisioning,
+    withSite ? msg.bootstrap.planPages(pagesUrl(repo)) : msg.bootstrap.planNoSite,
+    ...(external ? [] : [msg.bootstrap.planProvisioning]),
     // As for papers, a rerun does not seed again, so a changed `--name`, `--edition` or
     // `--engine-version` does not reach a seeded main.
     ...(mainThere ? [msg.bootstrap.planAlreadySeededJournal] : []),
@@ -1250,14 +1313,22 @@ export async function cmdBootstrapJournal(
 
   const seedDir = deps.workdir();
   if (external) {
-    renderInstanceTemplate(deps.instanceTemplateRoot, seedDir, answers);
+    renderJournalTemplate(deps.journalTemplateRoot, seedDir, answers);
     // The website shares the repo with the journal's settings. The two templates write
     // different paths (`template disjointness invariant` in test/template.test.ts), so they are
     // rendered one after the other.
     if (withSite) renderSiteTemplate(deps.siteTemplateRoot, seedDir, answers, deps.mystRange);
   } else {
-    renderPaperTemplate(deps.paperTemplateRoot, seedDir, answers); // the paper, `instance_repo: .`
-    renderInstanceTemplate(deps.instanceTemplateRoot, seedDir, answers); // its journal settings
+    renderColocatedTemplate(
+      {
+        paper: deps.paperTemplateRoot,
+        journal: deps.journalTemplateRoot,
+        site: deps.siteTemplateRoot,
+      },
+      seedDir,
+      answers,
+      deps.mystRange,
+    );
   }
 
   if (!mainThere) {
@@ -1271,8 +1342,20 @@ export async function cmdBootstrapJournal(
   if (!external) {
     const settings = applyProvisioning(repo, owner, deps, actions, input.requireChecks);
     const secrets = applySecrets(repo, input.secrets, deps, actions);
-    const fill = actions.main === 'seeded' ? [msg.bootstrap.runbookFillPaper(repo)] : [];
-    const runbook = [...fill, ...contentRunbook, ...settings.runbook, ...secrets.runbook];
+    const siteUrl = pagesUrl(repo);
+    const start = [
+      msg.bootstrap.runbookStartHere,
+      msg.bootstrap.runbookAddPaper(repo),
+      msg.bootstrap.runbookColocatedSite(siteUrl),
+    ];
+    // Authors of a co-located journal work from forks only.
+    const runbook = [
+      ...start,
+      ...contentRunbook,
+      ...settings.runbook,
+      ...secrets.runbook,
+      msg.bootstrap.runbookForkApproval,
+    ];
     const failed = [...contentFailed, ...settings.failed, ...secrets.failed];
     for (const line of runbook) log(msg.bootstrap.logRunbookLine(line));
     if (failed.length) log(msg.bootstrap.logPartial(failed.map((f) => f.step).join(', ')));
@@ -1284,6 +1367,7 @@ export async function cmdBootstrapJournal(
         tier: input.tier,
         actions,
         secrets_set: secrets.set,
+        site_url: siteUrl,
         runbook,
         ...(failed.length ? { failed: failed.map((f) => `${f.step}: ${f.why}`) } : {}),
       },

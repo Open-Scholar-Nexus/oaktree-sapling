@@ -3,7 +3,7 @@
  * and myst.yml, the rest copied as is; `--from` restoring the editor's `.github/`; reruns that
  * read before they change; secrets set when given, otherwise listed in the runbook; the bypass
  * for an org team or a personal account; and the two journal setups, external (settings
- * and website, public) and `--co-located` (the paper workflows and a starter paper, no website).
+ * and website, public) and `--co-located` (settings, website and the paper launchers).
  */
 import { describe, it, expect } from 'vitest';
 import { mkdtempSync, readFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
@@ -14,7 +14,7 @@ import { parseDocument } from 'yaml';
 import { themeZipUrl } from '../src/assets.js';
 import {
   renderPaperTemplate,
-  renderInstanceTemplate,
+  renderJournalTemplate,
   renderSiteTemplate,
   galleryPluginUrl,
   engineMystRange,
@@ -31,14 +31,14 @@ import { LABEL_EDITOR_ACTION, LABEL_ZENODO_FAILED } from '../src/preview.js';
 import { takeEngineManagedPaths } from '../src/gh.js';
 
 const PAPER_ROOT = 'templates/paper';
-const INSTANCE_ROOT = 'templates/instance';
+const JOURNAL_ROOT = 'templates/journal';
 const SITE_ROOT = 'templates/site';
 const MYST_RANGE = '^9.9.9';
 const tmp = (p = 'oak-bs-') => mkdtempSync(join(tmpdir(), p));
 
 const answers = (over: Partial<TemplateAnswers> = {}): TemplateAnswers => ({
   engineRepo: 'me/engine',
-  instanceRepo: 'me/instance-config',
+  journalRepo: 'me/journal-repo',
   owner: '@alice',
   version: 'v1.2.3',
   edition: 'ed-2026',
@@ -47,7 +47,7 @@ const answers = (over: Partial<TemplateAnswers> = {}): TemplateAnswers => ({
 });
 
 /* --------------------------------------------------------------------------
- * renderPaperTemplate / renderInstanceTemplate
+ * renderPaperTemplate / renderJournalTemplate
  * ------------------------------------------------------------------------ */
 
 describe('renderPaperTemplate', () => {
@@ -57,7 +57,7 @@ describe('renderPaperTemplate', () => {
 
     const pins = parseDocument(readFileSync(join(dest, '.github/actions/engine/pins.yml'), 'utf8'));
     expect(pins.get('engine_repo')).toBe('me/engine');
-    expect(pins.get('instance_repo')).toBe('me/instance-config');
+    expect(pins.get('journal_repo')).toBe('me/journal-repo');
 
     const co = readFileSync(join(dest, 'CODEOWNERS'), 'utf8');
     expect(co).toMatch(/\/\.github\/\s+@alice/);
@@ -84,9 +84,7 @@ describe('renderPaperTemplate', () => {
     expect(written).toContain('LICENSE');
     // The seeded edition states a licence to readers and to Zenodo, so the paper repo carries
     // the matching text.
-    const edition = parseDocument(
-      readFileSync(join(INSTANCE_ROOT, 'editions/edition.yml'), 'utf8'),
-    );
+    const edition = parseDocument(readFileSync(join(JOURNAL_ROOT, 'editions/edition.yml'), 'utf8'));
     expect(edition.getIn(['project', 'license'])).toBe('CC-BY-4.0');
     expect(readFileSync(join(dest, 'LICENSE'), 'utf8')).toContain(
       'Creative Commons Attribution 4.0 International Public License',
@@ -112,18 +110,18 @@ describe('renderPaperTemplate', () => {
     expect(Object.keys(keys).slice(0, 3)).toEqual(['id', 'title', 'github']);
   });
 
-  it('co-located writes instance_repo: .', () => {
+  it('co-located writes journal_repo: .', () => {
     const dest = tmp();
-    renderPaperTemplate(PAPER_ROOT, dest, answers({ instanceRepo: '.' }));
+    renderPaperTemplate(PAPER_ROOT, dest, answers({ journalRepo: '.' }));
     const pins = parseDocument(readFileSync(join(dest, '.github/actions/engine/pins.yml'), 'utf8'));
-    expect(pins.get('instance_repo')).toBe('.');
+    expect(pins.get('journal_repo')).toBe('.');
   });
 });
 
-describe('renderInstanceTemplate', () => {
+describe('renderJournalTemplate', () => {
   it('sets journal name and renames the edition file to <edition>.yml', () => {
     const dest = tmp();
-    renderInstanceTemplate(INSTANCE_ROOT, dest, answers({ edition: 'ed-2026' }));
+    renderJournalTemplate(JOURNAL_ROOT, dest, answers({ edition: 'ed-2026' }));
     const journal = parseDocument(readFileSync(join(dest, 'journal.yml'), 'utf8'));
     expect(journal.get('name')).toBe('Test Journal');
     expect(existsSync(join(dest, 'editions/ed-2026.yml'))).toBe(true);
@@ -134,7 +132,7 @@ describe('renderInstanceTemplate', () => {
 
   it('--name reaches the brand, the edition venue and the Zenodo blurb, not only journal.yml', () => {
     const dest = tmp();
-    renderInstanceTemplate(INSTANCE_ROOT, dest, answers({ journalName: 'Acta: Tests #1' }));
+    renderJournalTemplate(JOURNAL_ROOT, dest, answers({ journalName: 'Acta: Tests #1' }));
     const brand = parseDocument(readFileSync(join(dest, 'brand/brand.yml'), 'utf8'));
     expect(brand.getIn(['site', 'options', 'logo_text'])).toBe('Acta: Tests #1');
     const edition = parseDocument(readFileSync(join(dest, 'editions/ed-2026.yml'), 'utf8'));
@@ -148,12 +146,12 @@ describe('renderInstanceTemplate', () => {
 
   it('without --name the files keep their placeholder as shipped', () => {
     const dest = tmp();
-    renderInstanceTemplate(INSTANCE_ROOT, dest, answers({ journalName: undefined }));
+    renderJournalTemplate(JOURNAL_ROOT, dest, answers({ journalName: undefined }));
     expect(readFileSync(join(dest, 'brand/brand.yml'), 'utf8')).toBe(
-      readFileSync(join(INSTANCE_ROOT, 'brand/brand.yml'), 'utf8'),
+      readFileSync(join(JOURNAL_ROOT, 'brand/brand.yml'), 'utf8'),
     );
     expect(readFileSync(join(dest, 'editions/ed-2026.yml'), 'utf8')).toBe(
-      readFileSync(join(INSTANCE_ROOT, 'editions/edition.yml'), 'utf8'),
+      readFileSync(join(JOURNAL_ROOT, 'editions/edition.yml'), 'utf8'),
     );
   });
 });
@@ -405,7 +403,7 @@ function deps(prov: Provisioner): BootstrapDeps {
   return {
     prov,
     paperTemplateRoot: PAPER_ROOT,
-    instanceTemplateRoot: INSTANCE_ROOT,
+    journalTemplateRoot: JOURNAL_ROOT,
     siteTemplateRoot: SITE_ROOT,
     mystRange: MYST_RANGE,
     log: () => {},
@@ -418,7 +416,7 @@ const paperInput = (over: Record<string, unknown> = {}) => ({
   repo: 'me/paper',
   // A paper names its journal, or its pins.yml would point at a journal.yml beside it that
   // the render never writes.
-  instance: 'me/instance-config',
+  journal: 'me/journal-repo',
   edition: 'ed-2026',
   engineVersion: 'v1.2.3',
   engineRepo: 'me/engine',
@@ -484,14 +482,14 @@ describe('cmdBootstrapPaper', () => {
     expect((rerun.result.runbook as string[]).join('\n')).not.toContain('Next: ');
   });
 
-  it('refuses a paper without --instance before doing anything', async () => {
-    // Without --instance, pins.yml would say `instance_repo: .` and point at a journal.yml
+  it('refuses a paper without --journal before doing anything', async () => {
+    // Without --journal, pins.yml would say `journal_repo: .` and point at a journal.yml
     // this render never writes, so the first CI run would fail. It fails here instead.
     const { prov, calls } = fakeProv();
-    const out = await cmdBootstrapPaper(paperInput({ instance: undefined }), deps(prov));
+    const out = await cmdBootstrapPaper(paperInput({ journal: undefined }), deps(prov));
     expect(out.exitCode).toBe(2);
     expect(out.result.status).toBe('error');
-    expect(String(out.result.error)).toContain('--instance');
+    expect(String(out.result.error)).toContain('--journal');
     expect(String(out.result.error)).toContain('pins.yml');
     // Nothing was touched: the check precedes every effect.
     expect(calls.createRepo).toHaveLength(0);
@@ -499,7 +497,7 @@ describe('cmdBootstrapPaper', () => {
   });
 
   it('refuses a paper with no --edition instead of inventing one', async () => {
-    // As with --instance: `edition` goes into the paper's myst.yml and must match an
+    // As with --journal: `edition` goes into the paper's myst.yml and must match an
     // editions/<id>.yml the journal already has, so a default would fail in CI.
     const { prov, calls } = fakeProv();
     const out = await cmdBootstrapPaper(paperInput({ edition: undefined }), deps(prov));
@@ -508,7 +506,7 @@ describe('cmdBootstrapPaper', () => {
     expect(String(out.result.error)).toContain('--edition');
     expect(String(out.result.error)).toContain('editions/');
     // The message names the journal, so the reader knows where to look.
-    expect(String(out.result.error)).toContain('me/instance-config');
+    expect(String(out.result.error)).toContain('me/journal-repo');
     expect(calls.createRepo).toHaveLength(0);
     expect(calls.seedBranch).toHaveLength(0);
   });
@@ -533,7 +531,7 @@ describe('cmdBootstrapPaper', () => {
     );
     const plan = plans[0]!.join('\n');
     // One row per flag; a resolved value is marked as a default.
-    expect(plan).toMatch(/--instance +me\/instance-config/);
+    expect(plan).toMatch(/--journal +me\/journal-repo/);
     expect(plan).toMatch(/--edition +ed-2026/);
     expect(plan).toMatch(/--engine-version +v1\.2\.3 \(default\): the version of the running oak/);
     expect(plan).not.toContain('newest release');
@@ -625,14 +623,15 @@ describe('cmdBootstrapPaper', () => {
     expect(same).not.toContain('running oak');
   });
 
-  it('--instance . names this repo as the journal, and still bootstraps', async () => {
+  it('--journal . is refused: it marks a co-located repository, set up by bootstrap journal', async () => {
     const { prov, calls } = fakeProv();
-    const out = await cmdBootstrapPaper(paperInput({ instance: '.' }), deps(prov));
-    expect(out.exitCode).toBe(0);
-    expect(calls.seedBranch).toHaveLength(1);
+    const out = await cmdBootstrapPaper(paperInput({ journal: '.' }), deps(prov));
+    expect(out.exitCode).toBe(2);
+    expect(String(out.result.error)).toContain('--co-located');
+    expect(calls.seedBranch).toHaveLength(0);
   });
 
-  it('the instance lands in pins.yml as instance_repo', async () => {
+  it('the journal lands in pins.yml as journal_repo', async () => {
     const { prov, calls } = fakeProv();
     const seedDirs: string[] = [];
     const d = deps(prov);
@@ -641,12 +640,12 @@ describe('cmdBootstrapPaper', () => {
       seedDirs.push(dir);
       return dir;
     };
-    await cmdBootstrapPaper(paperInput({ instance: 'me/journal' }), d);
+    await cmdBootstrapPaper(paperInput({ journal: 'me/journal' }), d);
     expect(calls.seedBranch).toHaveLength(1);
     const pins = parseDocument(
       readFileSync(join(seedDirs[0]!, '.github/actions/engine/pins.yml'), 'utf8'),
     );
-    expect(pins.get('instance_repo')).toBe('me/journal');
+    expect(pins.get('journal_repo')).toBe('me/journal');
   });
 
   it('an aborted run says why, and a rerun warns that main will not be rewritten', async () => {
@@ -716,6 +715,7 @@ describe('cmdBootstrapPaper', () => {
       environments: new Set(['me/paper/zenodo-prepare', 'me/paper/preview']),
       policies: new Set([
         'me/paper/zenodo-publish/v*',
+        'me/paper/zenodo-publish/*/v*',
         'me/paper/zenodo-prepare/main',
         'me/paper/preview/main',
       ]),
@@ -811,6 +811,34 @@ describe('cmdBootstrapPaper', () => {
       'preview/CLOUDFLARE_ACCOUNT_ID',
     ]);
     expect((out.result.runbook as string[]).join('\n')).not.toContain('settings/environments :');
+  });
+
+  it('zenodo-publish admits v* and */v* tags, and a rerun adds the one a repo lacks', async () => {
+    const fresh = fakeProv();
+    await cmdBootstrapPaper(paperInput(), deps(fresh.prov));
+    for (const n of ['v*', '*/v*'])
+      expect(fresh.calls.createBranchPolicy).toContainEqual({
+        r: 'me/paper',
+        e: 'zenodo-publish',
+        n,
+        t: 'tag',
+      });
+    const older = fakeProv({ policies: new Set(['me/paper/zenodo-publish/v*']) });
+    await cmdBootstrapPaper(paperInput(), deps(older.prov));
+    expect(
+      (older.calls.createBranchPolicy as Array<{ e: string; n: string }>)
+        .filter((c) => c.e === 'zenodo-publish')
+        .map((c) => c.n),
+    ).toEqual(['*/v*']);
+  });
+
+  it('the tag ruleset covers every tag, so editors alone create any version tag', async () => {
+    const { prov, calls } = fakeProv();
+    await cmdBootstrapPaper(paperInput(), deps(prov));
+    const body = (calls.createRuleset as Array<{ b: { name: string } }>)
+      .map((c) => c.b)
+      .find((b) => b.name === 'editors-only-v-tags');
+    expect(JSON.stringify(body)).toContain('"include":["~ALL"]');
   });
 
   it('creates zenodo-prepare and preview admitting main only', async () => {
@@ -1121,7 +1149,7 @@ describe('cmdBootstrapJournal', () => {
     expect(calls.setRepoPublic).toHaveLength(1);
   });
 
-  it("--co-located: seeds the paper workflows, a starter paper and the journal's settings, and sets them up", async () => {
+  it("--co-located: seeds the journal's settings, its website and the paper launchers, and sets them up", async () => {
     const { prov, calls } = fakeProv();
     const seedDirs: string[] = [];
     const d = deps(prov);
@@ -1144,27 +1172,44 @@ describe('cmdBootstrapJournal', () => {
       },
       d,
     );
-    expect(calls.createRuleset).toHaveLength(2); // it builds a paper
+    expect(calls.createRuleset).toHaveLength(2); // it builds papers
     expect(calls.setHomepage).toEqual([{ r: 'me/journal', u: 'https://me.github.io/journal/' }]);
-    // The seed holds both the paper workflows and the journal's settings, with
-    // `instance_repo: .` in pins.yml.
+    // Authors of a co-located journal work from forks, so no push-access command is offered.
+    const steps = (out.result.runbook as string[]).join('\n');
+    expect(steps).toContain('approve the workflow run');
+    expect(steps).not.toContain('permission=push');
     const seed = seedDirs[0]!;
-    expect(existsSync(join(seed, '.github/workflows/build-paper.yml'))).toBe(true);
-    expect(existsSync(join(seed, 'myst.yml'))).toBe(true);
-    expect(existsSync(join(seed, 'journal.yml'))).toBe(true);
-    const pins = parseDocument(readFileSync(join(seed, '.github/actions/engine/pins.yml'), 'utf8'));
-    expect(pins.get('instance_repo')).toBe('.');
-    // No website: an index over papers in one repo is not built yet.
-    expect(existsSync(join(seed, 'pages/index.md'))).toBe(false);
+    // The journal's settings, its website and the paper launchers, with an empty papers/.
+    for (const f of [
+      'journal.yml',
+      'registry/papers.yml',
+      'myst.yml',
+      'pages/index.md',
+      'package.json',
+      '.github/workflows/build-paper.yml',
+      '.github/actions/engine/action.yml',
+      'CODEOWNERS',
+      'papers/.gitkeep',
+    ])
+      expect(existsSync(join(seed, f)), f).toBe(true);
+    // The launchers deploy the website, so the external journal's site workflow is left out, and
+    // papers come one by one through oak add-paper, so there is no starter paper at the root.
     expect(existsSync(join(seed, '.github/workflows/site.yml'))).toBe(false);
-    expect(existsSync(join(seed, 'package.json'))).toBe(false);
-    const myst = parseDocument(readFileSync(join(seed, 'myst.yml'), 'utf8'));
-    expect(myst.getIn(['project', 'options', 'oaktree-sapling', 'version'])).toBe('v9'); // the starter paper's
-    expect(myst.getIn(['project', 'github'])).toBe('https://github.com/me/journal');
+    expect(existsSync(join(seed, 'index.md'))).toBe(false);
+    expect(existsSync(join(seed, 'bib.bib'))).toBe(false);
+    const pins = parseDocument(readFileSync(join(seed, '.github/actions/engine/pins.yml'), 'utf8'));
+    expect(pins.get('journal_repo')).toBe('.');
+    expect(pins.get('engine_version')).toBe('v9');
+    const site = parseDocument(readFileSync(join(seed, 'myst.yml'), 'utf8'));
+    expect(site.getIn(['project', 'title'])).toBe('J');
+    expect(site.getIn(['project', 'options', 'oaktree-sapling'])).toBeUndefined();
     const brand = parseDocument(readFileSync(join(seed, 'brand/brand.yml'), 'utf8'));
     expect(brand.getIn(['site', 'options', 'logo_text'])).toBe('J');
-    expect(brand.getIn(['site', 'options', 'logo_url'])).toBeUndefined(); // no website
+    expect(brand.getIn(['site', 'options', 'logo_url'])).toBe('https://me.github.io/journal/');
+    expect(out.result.site_url).toBe('https://me.github.io/journal/');
+    const runbook = (out.result.runbook as string[]).join('\n');
     expect((out.result.runbook as string[])[0]).toMatch(/^Next: /);
+    expect(runbook).toContain('oak add-paper --repo me/journal');
   });
 
   it('a default --edition is shown, with the file it will write', async () => {
@@ -1264,7 +1309,7 @@ describe('cmdBootstrapJournal', () => {
       },
       journalDeps(prov, []),
     );
-    // A co-located journal has no website, so --no-site is refused with the reason.
+    // A co-located journal publishes its papers on its website, so --no-site is refused.
     expect(out.exitCode).toBe(2);
     expect(out.result.status).toBe('error');
     expect(String(out.result.error)).toContain('--co-located');

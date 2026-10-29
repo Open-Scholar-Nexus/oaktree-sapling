@@ -31,7 +31,7 @@ function run(dir: string, args: string[], env: Record<string, string> = {}) {
   writeFileSync(output, '');
   const r = spawnSync('bash', [join(dir, 'ci', 'run.sh'), ...args], {
     encoding: 'utf8',
-    env: { ...process.env, GITHUB_OUTPUT: output, INSTANCE_REPO: '.', ...env },
+    env: { ...process.env, GITHUB_OUTPUT: output, JOURNAL_REPO: '.', ...env },
   });
   return {
     code: r.status,
@@ -78,12 +78,28 @@ describe('ci/run.sh', () => {
     ]);
   });
 
-  it('leaves the journal repo to oak, so it passes no --instance', () => {
+  it('leaves the journal repo to oak, so it passes no --journal', () => {
     const dir = engine({ status: 'ok' });
     for (const verb of ['build', 'validate', 'release', 'deploy-preview', 'deposit'])
       expect(
-        run(dir, [verb], { INSTANCE_REPO: 'acme/journal', GITHUB_REPOSITORY: 'acme/paper' }).argv,
+        run(dir, [verb], { JOURNAL_REPO: 'acme/journal', GITHUB_REPOSITORY: 'acme/paper' }).argv,
         verb,
-      ).not.toContain('--instance');
+      ).not.toContain('--journal');
+  });
+
+  it('serves a co-located paper from /<repo>/<id>, and the assembled site from /<repo>', () => {
+    const dir = engine({ status: 'ok' });
+    const env = { GITHUB_EVENT_NAME: 'push', GITHUB_REPOSITORY: 'acme/journal' };
+    const base = (args: string[], extra: Record<string, string>) => {
+      const argv = run(dir, args, { ...env, ...extra }).argv;
+      return argv[argv.indexOf('--base-url') + 1];
+    };
+    expect(base(['build'], { PAPER_DIR: 'papers/a-2026-one' })).toBe('/journal/a-2026-one');
+    expect(
+      base(['release', '--tag', 'a-2026-one/v1.0.0'], { PAPER_DIR: 'papers/a-2026-one' }),
+    ).toBe('/journal/a-2026-one');
+    expect(base(['build'], { PAPER_DIR: '.' })).toBe('/journal');
+    expect(base(['assemble', '--builds', 'b'], { PAPER_DIR: '.' })).toBe('/journal');
+    expect(base(['build'], { PAPER_DIR: 'papers/a', GITHUB_EVENT_NAME: 'pull_request' })).toBe('');
   });
 });

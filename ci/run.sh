@@ -24,12 +24,16 @@ export OAK_USE_RUNNING=1
 
 extra=()
 
-if [ "$verb" = "build" ] || [ "$verb" = "release" ]; then
-  # Previews are served from the domain root, GitHub Pages from /<repo>.
+if [ "$verb" = "build" ] || [ "$verb" = "release" ] || [ "$verb" = "assemble" ]; then
+  # Previews are served from the domain root, GitHub Pages from /<repo>, and a co-located paper
+  # from /<repo>/<id>, where oak assemble mounts it. Its folder is named by its id.
   if [ "${GITHUB_EVENT_NAME:-}" = "pull_request" ]; then
     base_url=""
   else
     base_url="/${GITHUB_REPOSITORY##*/}"
+    if [ "$verb" != "assemble" ] && [ -n "${PAPER_DIR:-}" ] && [ "$PAPER_DIR" != "." ]; then
+      base_url="$base_url/${PAPER_DIR##*/}"
+    fi
   fi
   extra+=(--base-url "$base_url")
 fi

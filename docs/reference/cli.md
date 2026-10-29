@@ -42,6 +42,9 @@ Takes `--typst-template <dir>`, as [`oak build`](#build) does.
 (release)=
 ## release
 
+`--tag <tag>`
+: The version tag the deposit is for: `vX.Y.Z`, or `<paper id>/vX.Y.Z` for the paper in `papers/<paper id>/` of a [co-located journal](../guide/co-located.md). A tag naming a folder that holds no paper is refused.
+
 (notify)=
 ## notify
 
@@ -53,3 +56,13 @@ Takes `--typst-template <dir>`, as [`oak build`](#build) does.
 
 (conformance)=
 ## conformance
+
+(add-paper-cli)=
+## add-paper
+
+`oak add-paper --repo <owner/journal> --id <paper id> [--edition <id>]` submits a paper to a [co-located journal](../guide/co-located.md#co-located-submit): it forks the repository with your `gh` login, commits the starter manuscript as `papers/<paper id>/` on a branch of the fork, and opens the pull request. `--edition` defaults to the year in the id.
+
+(assemble)=
+## assemble
+
+`oak assemble --builds <dir>` builds a co-located journal's website in the current directory and puts each paper `registry/papers.yml` lists at `/<paper id>/`, from its build in `<dir>/paper-build-<paper id>/`. The **Build paper** workflow runs it on every push to `main`.

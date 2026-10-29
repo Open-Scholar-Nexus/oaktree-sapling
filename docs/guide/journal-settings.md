@@ -1,10 +1,10 @@
 (guide-journal-settings)=
 # Journal settings in a paper
 
-A paper repository names its journal on the [`instance_repo:` line](src:templates/paper/.github/actions/engine/pins.yml#L7) of `.github/actions/engine/pins.yml`, which `oak bootstrap paper --instance` writes:
+A paper repository names its journal on the [`journal_repo:` line](src:templates/paper/.github/actions/engine/pins.yml#L7) of `.github/actions/engine/pins.yml`, which `oak bootstrap paper --journal` writes:
 
 ```yaml
-instance_repo: <owner>/<journal-repo>
+journal_repo: <owner>/<journal-repo>
 ```
 
 Every build of the paper reads the journal's settings from that repository.
@@ -32,10 +32,10 @@ On your machine, `oak` keeps a cached clone of the journal in the paper's `_buil
 
 ## Previewing with other settings
 
-`--instance <path>`
-: Builds with the journal repository at `<path>`, for example a clone you are editing: `oak start --instance ../<journal-repo>`.
+`--journal <path>`
+: Builds with the journal repository at `<path>`, for example a clone you are editing: `oak start --journal ../<journal-repo>`.
 
-`--no-instance`
+`--no-journal`
 : Builds without the journal's settings: no logo, no edition frontmatter, and only oak's own checks.
 
 Both work with every command that reads the journal's settings, such as `oak start` and `oak build`.

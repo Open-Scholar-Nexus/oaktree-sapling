@@ -44,10 +44,10 @@ The release script downloads typst at the version in `typst.version` and runs th
 A deposit holds the PDF and what it was rendered from. To render the PDF again with nothing fetched from GitHub, unzip `engine.zip`, `journal.zip` and `source.zip` into three folders, and from the paper's folder run:
 
 ```sh
-node <engine>/dist/cli.cjs build --instance <journal> --exports-only
+node <engine>/dist/cli.cjs build --journal <journal> --exports-only
 ```
 
-When the deposit has a `template.zip`, unzip it too and add `--typst-template <template>`. [`--exports-only`](#build) builds the PDF without the website, whose theme is downloaded. For a paper that is its own journal[^own-journal], leave out `--instance`: oak finds `journal.yml` beside the paper.
+When the deposit has a `template.zip`, unzip it too and add `--typst-template <template>`. [`--exports-only`](#build) builds the PDF without the website, whose theme is downloaded. For a paper in a [co-located](../guide/co-located.md) journal, `source.zip` holds the paper's folder and `journal.zip` the whole repository at the commit the build used.
 
 | file | holds |
 |---|---|
@@ -64,9 +64,7 @@ The files in the paper's `deposit/` folder are added beside them, and these name
 
 `journal.zip` holds the journal commit the build used, which the build records in `myst.oak.yml` under `project.options.oaktree-sapling.journal`. The deposit runs in a job of its own and fetches that commit, so the archive matches the PDF even when the journal has changed since the build, as when a failed deposit job is re-run days later. The record's Zenodo metadata follows the journal's `zenodo:` settings as they are when the deposit runs. A build from journal files that are not a commit of their own repository, such as local changes, cannot be deposited.
 
-A paper repository that is its own journal (`instance_repo: "."` in `pins.yml`)[^own-journal] gets no `journal.zip`, because its journal files are in `source.zip` at the same commit; the provenance names the paper's repository and commit as the journal's. A paper built with `--no-instance` has no journal to archive.
-
-[^own-journal]: Planned, in development.
+A paper built with `--no-journal` has no journal to archive.
 
 (r114)=
 

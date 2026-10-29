@@ -64,7 +64,7 @@ function refStep(value: string, min = '') {
   writeFileSync(join(dir, 'myst.yml'), 'project: {}');
   writeFileSync(
     join(bin, 'yq'),
-    `#!/bin/sh\ncase "$2" in *pins.yml) printf '%s' "$YQ_MIN" ;; *) printf '%s' "$YQ_VALUE" ;; esac\n`,
+    `#!/bin/sh\ncase "$1" in *min_engine*) printf '%s' "$YQ_MIN" ;; *engine_version*) ;; *) printf '%s' "$YQ_VALUE" ;; esac\n`,
   );
   chmodSync(join(bin, 'yq'), 0o755);
   const outFile = join(dir, 'gh_output');
@@ -265,7 +265,7 @@ describe('workflow expressions', () => {
     const files = readdirSync(join(SHIM, '.github/workflows'));
     const bare = files.flatMap((f) =>
       [...readFileSync(join(SHIM, '.github/workflows', f), 'utf8').matchAll(/fromJSON\(([^)]*)\)/g)]
-        .filter((m) => !m[1]!.includes("|| '{}'"))
+        .filter((m) => m[1]!.includes('outputs.result') && !m[1]!.includes("|| '{}'"))
         .map((m) => `${f}: ${m[0]}`),
     );
     expect(bare).toEqual([]);
@@ -366,7 +366,7 @@ describe('the templates declare the oldest engine they run with', () => {
     const repo = mkdtempSync(join(tmpdir(), 'oak-min-'));
     renderPaperTemplate(SHIM, repo, {
       engineRepo: 'me/engine',
-      instanceRepo: 'me/journal',
+      journalRepo: 'me/journal',
       owner: '@me',
       version: 'v9.9.9',
       edition: 'e',
@@ -431,5 +431,148 @@ describe('version rule parity', () => {
   it('orders nothing but engine versions', () => {
     expect(compareEngineVersions('main', 'v1.0.0')).toBeNull();
     expect(refStep('v1.0.0', 'v0.3.0-0').code).toBe(1);
+  });
+});
+
+/* ---- the co-located tier ------------------------------------------------- */
+
+/** Runs `script` in `dir` with a `yq` stub: the query `.engine_version` prints YQ_ENGINE, a
+ *  myst.yml query YQ_VALUE, `.min_engine_version` YQ_MIN. */
+function withYq(script: string, dir: string, env: Record<string, string>) {
+  const bin = mkdtempSync(join(tmpdir(), 'oak-bin-'));
+  writeFileSync(
+    join(bin, 'yq'),
+    [
+      '#!/bin/sh',
+      'case "$1" in',
+      '  *journal_repo*) printf "%s" "$YQ_JOURNAL" ;;',
+      '  *engine_version*) case "$1" in *min_*) printf "%s" "$YQ_MIN" ;; *) printf "%s" "$YQ_ENGINE" ;; esac ;;',
+      '  *) printf "%s" "$YQ_VALUE" ;;',
+      'esac',
+    ].join('\n') + '\n',
+  );
+  chmodSync(join(bin, 'yq'), 0o755);
+  const outFile = join(dir, 'gh_output');
+  writeFileSync(outFile, '');
+  const r = run(
+    script,
+    { PATH: `${bin}:${process.env.PATH}`, GITHUB_OUTPUT: outFile, ...env },
+    dir,
+  );
+  return { ...r, output: readFileSync(outFile, 'utf8') };
+}
+
+describe('the ref step in a co-located repository', () => {
+  const script = stepScript('.github/actions/engine/action.yml', 'ref');
+  const colocated = () => {
+    const dir = mkdtempSync(join(tmpdir(), 'oak-colo-ref-'));
+    mkdirSync(join(dir, 'papers', 'a-1'), { recursive: true });
+    return dir;
+  };
+
+  it('refuses a paper-dir that is not . or papers/<id>, before reading any file', () => {
+    for (const d of ['../x', 'papers/../x', 'papers/a/b', 'other/a', 'papers/.x', 'papers/a\nb']) {
+      const r = withYq(script, colocated(), { PAPER_DIR: d, YQ_VALUE: 'v1.0.0' });
+      expect(r.code, d).toBe(1);
+      expect(r.out, d).toContain('paper-dir must be');
+      expect(r.output, d).toBe('');
+    }
+  });
+
+  it("a job with no paper of its own runs pins.yml's engine_version", () => {
+    const r = withYq(script, colocated(), {
+      PAPER_DIR: '.',
+      YQ_JOURNAL: '.',
+      YQ_ENGINE: 'v2.0.0',
+      YQ_VALUE: 'v1.0.0',
+    });
+    expect(r.code).toBe(0);
+    expect(r.output.trim()).toBe('ref=v2.0.0');
+  });
+
+  it('a paper repository with a papers/ folder of its own still runs its myst.yml pin', () => {
+    // pins.yml names another journal repository, or none: a paper repository, whatever folders
+    // an author adds.
+    for (const journal of ['acme/journal', '']) {
+      const r = withYq(script, colocated(), {
+        PAPER_DIR: '.',
+        YQ_JOURNAL: journal,
+        YQ_ENGINE: 'v2.0.0',
+        YQ_VALUE: 'v1.0.0',
+      });
+      expect(r.code, journal).toBe(0);
+      expect(r.output.trim(), journal).toBe('ref=v1.0.0');
+    }
+  });
+
+  it('a co-located repository without engine_version fails, naming it', () => {
+    const r = withYq(script, colocated(), { PAPER_DIR: '.', YQ_JOURNAL: '.', YQ_ENGINE: '' });
+    expect(r.code).toBe(1);
+    expect(r.out).toContain('engine_version missing from .github/actions/engine/pins.yml');
+  });
+
+  it('holds engine_version to the same rules as a paper pin', () => {
+    const branch = withYq(script, colocated(), {
+      PAPER_DIR: '.',
+      YQ_JOURNAL: '.',
+      YQ_ENGINE: 'main',
+    });
+    expect(branch.code).toBe(1);
+    const old = withYq(script, colocated(), {
+      PAPER_DIR: '.',
+      YQ_JOURNAL: '.',
+      YQ_ENGINE: 'v0.1.0',
+      YQ_MIN: 'v0.4.0-dev.1',
+    });
+    expect(old.code).toBe(1);
+  });
+
+  it("a paper's job runs its own pin", () => {
+    const r = withYq(script, colocated(), {
+      PAPER_DIR: 'papers/a-1',
+      YQ_ENGINE: 'v2.0.0',
+      YQ_VALUE: 'v1.0.0',
+    });
+    expect(r.output.trim()).toBe('ref=v1.0.0');
+  });
+});
+
+describe('paper id rule parity', () => {
+  // The engine action checks paper-dir before oak runs, so it keeps a copy of PAPER_ID in
+  // src/projects.ts.
+  it("the ref step's copy is PAPER_ID", async () => {
+    const { PAPER_ID } = await import('../src/projects.js');
+    const action = readFileSync(join(SHIM, '.github/actions/engine/action.yml'), 'utf8');
+    const m = /papers\/(\[A-Za-z0-9\]\[A-Za-z0-9_-\]\{0,99\})/.exec(action);
+    expect(m).not.toBeNull();
+    expect(`^${m![1]}$`).toBe(PAPER_ID.source);
+  });
+});
+
+describe('the launchers carry the paper folder through every workflow', () => {
+  it('each engine call that works on one paper passes paper-dir', () => {
+    const calls: Array<[string, string, string | undefined]> = [];
+    for (const f of readdirSync(join(SHIM, '.github/workflows'))) {
+      for (const [name, job] of Object.entries(workflow(f).jobs as Record<string, any>))
+        for (const s of job.steps ?? [])
+          if (s.uses === './.github/actions/engine')
+            calls.push([`${f}: ${name}`, s.with.args, s.with['paper-dir']]);
+    }
+    // The selection, Stage 2 and the website are the repository's own: the engine reads their
+    // papers from the repository or the artifacts.
+    const repoLevel = ['papers', 'deploy-preview', 'post-checks', 'assemble'];
+    const fromPapersJob =
+      /^\$\{\{ fromJSON\(needs\.paper\.outputs\.result \|\| '\{\}'\)\.paper_dir \}\}$/;
+    for (const [where, args, dir] of calls) {
+      if (repoLevel.some((v) => args.startsWith(v))) expect(dir, where).toBeUndefined();
+      else if (dir !== '${{ matrix.paper.dir }}') expect(dir, where).toMatch(fromPapersJob);
+    }
+  });
+
+  it('no workflow picks papers itself: they come from the papers job result', () => {
+    for (const f of readdirSync(join(SHIM, '.github/workflows'))) {
+      const text = readFileSync(join(SHIM, '.github/workflows', f), 'utf8');
+      expect(text, f).not.toMatch(/papers\/\*|BASH_REMATCH|-d papers/);
+    }
   });
 });

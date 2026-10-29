@@ -36,8 +36,8 @@ execFileSync(
     'build',
     '--paper',
     tmp,
-    '--instance',
-    join(engineDir, 'test', 'fixture-instance'),
+    '--journal',
+    join(engineDir, 'test', 'fixture-journal'),
     '--exports-only', // offline PDF canary via the in-engine template (HTML needs a network theme zip)
   ],
   // The fixture pins another version, so this oak builds it itself (handOff in src/pinned.ts).

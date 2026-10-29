@@ -6,11 +6,12 @@
  *
  * `runChecks` runs them; `toCheckRun` turns the results into a GitHub Check Run.
  */
-import { basename, isAbsolute, relative } from 'node:path';
+import { basename, isAbsolute, relative, resolve } from 'node:path';
 import { DERIVED_CONFIG_FILE } from './yaml-io.js';
 import * as messages from './messages.js';
 import { annotate } from './messages.js';
 import { GATED_PATHS, underPaths } from './schema.js';
+import { folderId } from './projects.js';
 import type { ISession } from 'myst-cli';
 import {
   checks as CURVENOTE_DEFINITIONS,
@@ -107,8 +108,9 @@ const GITHUB_MAX_ANNOTATIONS = 50;
  * and blocks the merge; an optional check's findings are warnings. A result with a file and a
  * position becomes an inline annotation, up to 50.
  *
- * GitHub rejects an annotation batch with a path it cannot resolve, so absolute paths are made
- * relative to `pathBase` (`GITHUB_WORKSPACE`, else the paper root). A finding in the derived
+ * GitHub rejects an annotation batch with a path it cannot resolve, so paths are made relative
+ * to `pathBase` (`GITHUB_WORKSPACE`, else the repository root), a relative one read from
+ * `fileBase`, the paper root. A finding in the derived
  * `myst.oak.yml` gets no annotation, since that file is gitignored and its lines are not the
  * author's [R82]; it still shows in the summary.
  */
@@ -116,6 +118,7 @@ export function toCheckRun(
   results: EngineCheckResult[],
   pathBase?: string,
   notes: string[] = [],
+  fileBase?: string,
 ): CheckRun {
   const failed = results.filter(
     (r) => r.status === CheckStatus.fail || r.status === CheckStatus.error,
@@ -148,7 +151,7 @@ export function toCheckRun(
     .filter((r) => r.file && r.position && basename(r.file) !== DERIVED_CONFIG_FILE)
     .slice(0, GITHUB_MAX_ANNOTATIONS)
     .map((r) => ({
-      path: pathBase && isAbsolute(r.file!) ? relative(pathBase, r.file!) : r.file!,
+      path: annotationPath(r.file!, pathBase, fileBase),
       start_line: r.position!.start.line,
       end_line: (r.position!.end ?? r.position!.start).line,
       annotation_level: (r.optional ? 'warning' : 'failure') as 'warning' | 'failure',
@@ -156,6 +159,14 @@ export function toCheckRun(
     }));
 
   return { conclusion, title, summary, annotations };
+}
+
+/** `file` relative to `pathBase`; a relative `file` is first read from `fileBase` (the paper
+ *  root), so a co-located paper's annotation names `papers/<id>/<file>`. */
+function annotationPath(file: string, pathBase?: string, fileBase?: string): string {
+  if (!pathBase) return file;
+  if (isAbsolute(file)) return relative(pathBase, file);
+  return fileBase ? relative(pathBase, resolve(fileBase, file)) : file;
 }
 
 /* --------------------------------------------------------------------------
@@ -178,18 +189,91 @@ export interface ChecksReport {
   [k: string]: unknown;
 }
 
+/** One paper's report, with the paper folder its artifact names (`.` or `papers/<id>`). */
+export interface PaperReport {
+  paper: string;
+  report: ChecksReport;
+}
+
+/**
+ * The reports of one pull request's papers as the one `Journal checks` result the merge rule
+ * reads: failing when any paper's does. One paper's report is returned as it is; none is a pass,
+ * since nothing a check reads changed.
+ */
+export function combineReports(reports: PaperReport[]): ChecksReport {
+  if (reports.length === 1) return reports[0]!.report;
+  if (reports.length === 0) {
+    return {
+      status: 'ok',
+      checkRun: {
+        conclusion: 'success',
+        title: messages.pr.checkRunTitleNoPaper,
+        summary: messages.pr.checksNoPaper,
+        annotations: [],
+      },
+    };
+  }
+  const label = (p: string) => folderId(p) ?? p;
+  const failed = reports.some((r) => r.report.checkRun.conclusion !== 'success');
+  return {
+    status: failed ? 'error' : 'ok',
+    checkRun: {
+      conclusion: failed ? 'failure' : 'success',
+      title: messages.pr.checkRunTitlePapers(
+        reports.map((r) => `${label(r.paper)}: ${r.report.checkRun.title}`),
+      ),
+      summary: reports
+        .map((r) =>
+          [
+            messages.pr.checksPaperSection(label(r.paper), r.report.checkRun.title),
+            '',
+            r.report.checkRun.summary,
+          ].join('\n'),
+        )
+        .join('\n\n'),
+      annotations: reports
+        .flatMap((r) => r.report.checkRun.annotations ?? [])
+        .slice(0, GITHUB_MAX_ANNOTATIONS),
+    },
+  };
+}
+
+/** `report` failed with `reason` above its own summary: what post-checks posts for a fork pull
+ *  request that breaks the one-paper rule ({@link forkPaper}). */
+export function refusedReport(report: ChecksReport, reason: string): ChecksReport {
+  return {
+    ...report,
+    status: 'error',
+    checkRun: {
+      ...report.checkRun,
+      conclusion: 'failure',
+      title: messages.pr.forkRefusedTitle,
+      summary: `> ❌ ${reason}\n\n${report.checkRun.summary}`,
+    },
+  };
+}
+
 /**
  * The sticky comment for a report: the sticky marker, a headline from the Check Run's
- * conclusion and title, the same table, and a footer.
+ * conclusion and title, in a co-located repository the papers the pull request changes
+ * (`papers`, their ids), the same table, and a footer.
  */
-export function checksComment(report: ChecksReport, shimTouched: string[] | null = []): string {
+export function checksComment(
+  report: ChecksReport,
+  shimTouched: string[] | null = [],
+  papers?: string[],
+): string {
   const { conclusion, title, summary } = report.checkRun;
   const banner = shimFlagged(shimTouched) ? [shimWarning(shimTouched), ''] : [];
+  const named = papers
+    ? [papers.length ? messages.pr.checksPapers(papers) : messages.pr.checksNoPaper, '']
+    : [];
   return [
     messages.stickyMarker(STICKY_CHECKS),
     ...banner,
     messages.pr.checksHeadline(conclusion === 'success', title),
     '',
+    ...named,
     summary,
     '',
     messages.pr.checksFooter,
@@ -247,10 +331,12 @@ export function cmdPostChecks(
     sha: string;
     pr?: string;
     shimTouched?: string[] | null;
+    /** A co-located repository's paper ids the pull request changes, named in the comment. */
+    papers?: string[];
   },
   deps: PostChecksDeps,
 ): PostChecksOutcome {
-  const { report, repo, sha, pr } = input;
+  const { report, repo, sha, pr, papers } = input;
   const shimTouched = input.shimTouched === undefined ? [] : input.shimTouched;
   const warnings: string[] = [];
   let checkRunPosted = false;
@@ -280,7 +366,7 @@ export function cmdPostChecks(
 
   if (pr) {
     try {
-      deps.sticky('.', pr, STICKY_CHECKS, checksComment(report, shimTouched));
+      deps.sticky('.', pr, STICKY_CHECKS, checksComment(report, shimTouched, papers));
       commentPosted = true;
     } catch (e) {
       const msg = messages.workflow.postChecksCommentFailed((e as Error).message);

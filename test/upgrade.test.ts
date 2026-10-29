@@ -12,6 +12,7 @@ import {
   appendFileSync,
   cpSync,
   existsSync,
+  mkdirSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -38,7 +39,7 @@ const tmp = (p = 'oak-up-') => mkdtempSync(join(tmpdir(), p));
 
 const answers: TemplateAnswers = {
   engineRepo: 'me/engine',
-  instanceRepo: 'me/instance-config',
+  journalRepo: 'me/journal-repo',
   owner: '@alice',
   version: 'v1.0.0',
   edition: 'ed-2026',
@@ -442,5 +443,132 @@ describe('the minimum engine version the workflows declare', () => {
     expect(out.exitCode).toBe(2);
     expect(String(out.result.message)).toContain('without --files-only');
     expect(opened).toHaveLength(0);
+  });
+});
+
+describe('a co-located repository', () => {
+  /** The launchers at v1.0.0 with engine_version v1.0.0, and papers pinned at `pins`. */
+  function colocated(pins: Record<string, string>): string {
+    const repo = tmp('oak-colo-up-');
+    renderPaperTemplate(
+      TEMPLATE_ROOT,
+      repo,
+      { ...answers, journalRepo: '.', repoEngineVersion: 'v1.0.0' },
+      (rel) => rel.startsWith('.github/') || rel === 'CODEOWNERS',
+    );
+    writeFileSync(join(repo, 'journal.yml'), 'name: J\n');
+    writeFileSync(join(repo, 'myst.yml'), 'version: 1\nproject:\n  title: The website\n');
+    for (const [id, v] of Object.entries(pins)) {
+      mkdirSync(join(repo, 'papers', id), { recursive: true });
+      writeFileSync(
+        join(repo, 'papers', id, 'myst.yml'),
+        `version: 1\nproject:\n  id: ${id}\n  options:\n    oaktree-sapling:\n      version: ${v}\n      edition: e\n`,
+      );
+    }
+    return repo;
+  }
+  const pin = (repo: string, id: string) =>
+    parseDocument(readFileSync(join(repo, 'papers', id, 'myst.yml'), 'utf8')).getIn([
+      'project',
+      'options',
+      'oaktree-sapling',
+      'version',
+    ]);
+
+  it('moves every paper and engine_version in one pull request', async () => {
+    const repo = colocated({ 'a-1': 'v1.0.0', 'b-2': 'v1.0.0' });
+    const { pr, opened } = fakePr();
+    const out = await cmdUpgrade(
+      { repoRoot: repo, to: 'v2.0.0' },
+      deps(pr, 'v2.0.0', () => TEMPLATE_ROOT),
+    );
+    expect(out.exitCode).toBe(0);
+    expect(pin(repo, 'a-1')).toBe('v2.0.0');
+    expect(pin(repo, 'b-2')).toBe('v2.0.0');
+    const pins = parseDocument(readFileSync(join(repo, '.github/actions/engine/pins.yml'), 'utf8'));
+    expect(pins.get('engine_version')).toBe('v2.0.0');
+    expect(opened[0]!.paths).toEqual(
+      expect.arrayContaining([
+        'papers/a-1/myst.yml',
+        'papers/b-2/myst.yml',
+        '.github/actions/engine/pins.yml',
+      ]),
+    );
+    // The website's myst.yml has no engine pin and is left alone.
+    expect(readFileSync(join(repo, 'myst.yml'), 'utf8')).not.toContain('oaktree-sapling');
+  });
+
+  it('--files-only resets the launchers and leaves every pin', async () => {
+    const repo = colocated({ 'a-1': 'v1.0.0' });
+    const target = tmp('oak-tmpl-');
+    cpSync(TEMPLATE_ROOT, target, { recursive: true });
+    appendFileSync(join(target, '.github/workflows/build-paper.yml'), '\n# upgraded\n');
+    const { pr, opened } = fakePr();
+    const out = await cmdUpgrade(
+      { repoRoot: repo, to: 'v2.0.0', filesOnly: true },
+      deps(pr, 'v2.0.0', () => target),
+    );
+    expect(out.exitCode).toBe(0);
+    expect(opened[0]!.paths).toEqual(['.github/workflows/build-paper.yml']);
+    expect(pin(repo, 'a-1')).toBe('v1.0.0');
+  });
+
+  it('--files-only checks every paper against the minimum the workflows need', async () => {
+    const repo = colocated({ 'a-1': 'v3.0.0', 'b-2': 'v1.0.0' });
+    const target = tmp('oak-tmpl-');
+    cpSync(TEMPLATE_ROOT, target, { recursive: true });
+    const pinsFile = join(target, '.github/actions/engine/pins.yml');
+    const doc = parseDocument(readFileSync(pinsFile, 'utf8'));
+    doc.set(MIN_ENGINE_KEY, 'v1.0.0');
+    writeFileSync(pinsFile, doc.toString());
+    expect(
+      (
+        await cmdUpgrade(
+          { repoRoot: repo, to: 'v3.0.0', filesOnly: true },
+          deps(fakePr().pr, 'v3.0.0', () => target),
+        )
+      ).exitCode,
+    ).toBe(0);
+    doc.set(MIN_ENGINE_KEY, 'v2.0.0');
+    writeFileSync(pinsFile, doc.toString());
+    const { pr, opened } = fakePr();
+    const out = await cmdUpgrade(
+      { repoRoot: repo, to: 'v3.0.0', filesOnly: true },
+      deps(pr, 'v3.0.0', () => target),
+    );
+    expect(out.exitCode).toBe(2);
+    expect(String(out.result.message)).toContain('papers/b-2/myst.yml at v1.0.0');
+    expect(opened).toHaveLength(0);
+  });
+
+  it('--files-only refuses a paper whose pin is not a release tag', async () => {
+    const repo = colocated({ 'a-1': 'main' });
+    const out = await cmdUpgrade(
+      { repoRoot: repo, to: 'v2.0.0', filesOnly: true },
+      deps(fakePr().pr, 'v2.0.0', () => TEMPLATE_ROOT),
+    );
+    expect(out.exitCode).toBe(2);
+    expect(String(out.result.message)).toContain('papers/a-1/myst.yml pins "main"');
+  });
+});
+
+describe('a repo bootstrapped before journal_repo was named so', () => {
+  it('keeps its journal under the new key, and drops the old one', async () => {
+    const repo = makeRepo();
+    const pinsFile = join(repo, '.github/actions/engine/pins.yml');
+    const doc = parseDocument(readFileSync(pinsFile, 'utf8'));
+    doc.delete('journal_repo');
+    doc.set('instance_repo', 'me/old-journal');
+    writeFileSync(pinsFile, doc.toString());
+    expect(readAnswers(repo).journalRepo).toBe('me/old-journal');
+    const { pr, opened } = fakePr();
+    await cmdUpgrade(
+      { repoRoot: repo, filesOnly: true },
+      deps(pr, 'v1.0.0', () => TEMPLATE_ROOT),
+    );
+    const after = parseDocument(readFileSync(pinsFile, 'utf8'));
+    expect(after.get('journal_repo')).toBe('me/old-journal');
+    expect(after.has('instance_repo')).toBe(false);
+    expect(opened[0]!.paths).toContain('.github/actions/engine/pins.yml');
   });
 });

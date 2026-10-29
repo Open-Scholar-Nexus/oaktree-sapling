@@ -11,7 +11,8 @@ import { createHash } from 'node:crypto';
 import { readDoc, readJournalConfig } from './yaml-io.js';
 import * as msg from './messages.js';
 import { annotate, firstLine, stickyMarker } from './messages.js';
-import { JournalConfig, PAPER_VERSION_TAG, parseZenodoDoi, type PreviewConfig } from './schema.js';
+import { JournalConfig, parseZenodoDoi, type PreviewConfig } from './schema.js';
+import { folderId, parsePaperTag } from './projects.js';
 import { resolvePaperDir, takePaperDir, takePrNumber, verifyPrHead } from './artifact.js';
 import { err, ok, type Outcome } from './result.js';
 
@@ -40,8 +41,8 @@ export interface GhPr {
     label: string,
     opts?: { color?: string; description?: string },
   ): void;
-  /** The {@link PAPER_VERSION_TAG} tags through `gh api` [R23], since this job's checkout is
-   *  shallow. `repo` null means no tags. */
+  /** The version tags ({@link parsePaperTag}) through `gh api` [R23], since this job's checkout
+   *  is shallow. `repo` null means no tags. */
   versionTags(repoRoot: string, repo: string | null): string[];
   /** The head commit of pull request `pr`, for {@link verifyPrHead}. */
   prHead(repo: string, pr: string): string;
@@ -62,17 +63,17 @@ export const LABEL_ZENODO_FAILED = 'zenodo-publish-failed';
  * journal.yml `preview:` settings [R27], read as loadJournalZenodo reads `zenodo:`
  * ------------------------------------------------------------------------ */
 
-/** Reads `preview:` from `<instanceRoot>/journal.yml`, with the schema defaults when absent. A
+/** Reads `preview:` from `<journalRoot>/journal.yml`, with the schema defaults when absent. A
  *  file that fails to parse is the journal's mistake, so it falls back and `problem` says why
  *  in the comment [R16] [R140]. */
-export function loadJournalPreview(instanceRoot: string | null): {
+export function loadJournalPreview(journalRoot: string | null): {
   preview: PreviewConfig;
   problem?: string;
 } {
   const empty = () => ({ preview: JournalConfig.parse({ name: 'x' }).preview });
-  if (!instanceRoot) return empty();
+  if (!journalRoot) return empty();
   try {
-    const journal = readJournalConfig(instanceRoot);
+    const journal = readJournalConfig(journalRoot);
     return journal ? { preview: journal.preview } : empty();
   } catch (e) {
     return { ...empty(), problem: msg.workflow.previewBadJournal(firstLine(e)) };
@@ -117,12 +118,13 @@ const slug = (x: string): string =>
 
 /** `{repo}`/`{pr}` → a Cloudflare-Pages branch alias (lowercase `[a-z0-9-]`, ≤28 chars).
  *  Spend the budget on `{repo}` last so a long name cannot truncate away `{pr}`, and hash a
- *  truncated name so two papers sharing one Pages project stay distinct ([R139]). */
-export function previewBranch(pattern: string, repo: string, pr: string): string {
+ *  truncated name so two papers sharing one Pages project stay distinct ([R139]). A co-located
+ *  paper's id joins the repo name in `{repo}`, so each paper of a pull request gets its own. */
+export function previewBranch(pattern: string, repo: string, pr: string, paper?: string): string {
   const shortRepo = repo.includes('/') ? repo.slice(repo.indexOf('/') + 1) : repo;
   const withPr = pattern.replaceAll('{pr}', pr);
   const fixed = slug(withPr.replaceAll('{repo}', ''));
-  const full = slug(shortRepo);
+  const full = slug(paper ? `${shortRepo}-${paper}` : shortRepo);
   let name = full;
   if (fixed.length + full.length > BRANCH_MAX) {
     const digest = createHash('sha256').update(full).digest('hex').slice(0, 4);
@@ -143,8 +145,10 @@ export function planPreview(input: {
   cf: { apiToken?: string; accountId?: string };
   repo: string;
   pr: string;
+  /** A co-located paper's id; absent for the paper at a repository root. */
+  paper?: string;
 }): PreviewPlan {
-  const { preview, cf, repo, pr } = input;
+  const { preview, cf, repo, pr, paper } = input;
   if (preview.provider !== 'cloudflare') {
     return { mode: 'artifact', reason: msg.workflow.previewProviderIsNot(preview.provider) };
   }
@@ -159,16 +163,28 @@ export function planPreview(input: {
     accountId: cf.accountId,
     apiToken: cf.apiToken,
     projectName: preview.cf_project_name,
-    branch: previewBranch(preview.branch_pattern, repo, pr),
+    branch: previewBranch(preview.branch_pattern, repo, pr, paper),
   };
 }
 
-export function previewComment(url: string): string {
-  return [stickyMarker(STICKY_PREVIEW), msg.pr.previewDeployed(url)].join('\n');
+/** A sticky header for one paper: `header` itself for the paper at a repository root, which
+ *  keeps the comments posted before co-located papers existed, else `header:<id>`. */
+export function paperSticky(header: string, paper?: string): string {
+  return paper ? `${header}:${paper}` : header;
 }
 
-export function artifactComment(runUrl: string, reason: string): string {
-  return [stickyMarker(STICKY_PREVIEW), msg.pr.previewArtifact(runUrl, reason)].join('\n');
+export function previewComment(url: string, paper?: string): string {
+  return [
+    stickyMarker(paperSticky(STICKY_PREVIEW, paper)),
+    msg.pr.previewDeployed(url, paper),
+  ].join('\n');
+}
+
+export function artifactComment(runUrl: string, reason: string, paper?: string): string {
+  return [
+    stickyMarker(paperSticky(STICKY_PREVIEW, paper)),
+    msg.pr.previewArtifact(runUrl, reason, paper),
+  ].join('\n');
 }
 
 /** The Zenodo record URL of a {@link parseZenodoDoi} DOI, on the sandbox or not; any other DOI
@@ -184,14 +200,17 @@ export function recordUrlForDoi(
   return { doi, recordUrl: `${base}${parsed.recordId}` };
 }
 
-/** Whether the paper already has a version tag `oak release` publishes (⇒ a new-version
- *  reminder is due). */
-export function hasVersionTag(tags: string[]): boolean {
-  return tags.some((t) => PAPER_VERSION_TAG.test(t.trim()));
+/** Whether the paper in `paperDir` already has a version tag `oak release` publishes (⇒ a
+ *  new-version reminder is due): `vX.Y.Z` for `.`, `<id>/vX.Y.Z` for `papers/<id>`. */
+export function hasVersionTag(tags: string[], paperDir = '.'): boolean {
+  return tags.some((t) => parsePaperTag(t.trim())?.paperDir === paperDir);
 }
 
-export function newVersionComment(doi: string, recordUrl: string): string {
-  return [stickyMarker(STICKY_NEWVERSION), msg.pr.newVersionReminder(doi, recordUrl)].join('\n');
+export function newVersionComment(doi: string, recordUrl: string, paper?: string): string {
+  return [
+    stickyMarker(paperSticky(STICKY_NEWVERSION, paper)),
+    msg.pr.newVersionReminder(doi, recordUrl, paper),
+  ].join('\n');
 }
 
 /* --------------------------------------------------------------------------
@@ -204,7 +223,7 @@ export interface DeployPreviewInput {
   repoRoot: string;
   /** The journal repo; null without one, or why it could not be found, and the preview then
    *  falls back as for a bad journal.yml. */
-  instanceRoot: string | null | { problem: string };
+  journalRoot: string | null | { problem: string };
   /** GITHUB_REPOSITORY and GITHUB_SERVER_URL, for the fallback link and labels. */
   repo: string | null;
   serverUrl: string;
@@ -233,7 +252,7 @@ export async function cmdDeployPreview(
   input: DeployPreviewInput,
   deps: PreviewDeps,
 ): Promise<Outcome> {
-  const { siteDir, repoRoot, instanceRoot, repo, serverUrl, cf } = input;
+  const { siteDir, repoRoot, journalRoot, repo, serverUrl, cf } = input;
   // Both files leave the site before anything else, so neither is served.
   const pr = takePrNumber(siteDir);
   const paper = resolvePaperDir(input.paper, takePaperDir(siteDir));
@@ -243,6 +262,8 @@ export async function cmdDeployPreview(
   }
   verifyPrHead(repo, pr, input.verifiedHead, (r, n) => deps.gh.prHead(r, n));
   const mystPath = input.mystPath ?? join(repoRoot, paper, 'myst.yml');
+  const id = folderId(paper) ?? undefined;
+  const header = paperSticky(STICKY_PREVIEW, id);
 
   // Strip fork-controlled Pages control files before any deploy path ([R154]).
   const stripped = stripPagesControlFiles(siteDir);
@@ -250,9 +271,9 @@ export async function cmdDeployPreview(
     process.stderr.write(annotate('warning', msg.workflow.previewStripped(stripped)) + '\n');
 
   const { preview, problem } =
-    typeof instanceRoot === 'object' && instanceRoot !== null
-      ? { ...loadJournalPreview(null), problem: instanceRoot.problem }
-      : loadJournalPreview(instanceRoot);
+    typeof journalRoot === 'object' && journalRoot !== null
+      ? { ...loadJournalPreview(null), problem: journalRoot.problem }
+      : loadJournalPreview(journalRoot);
   if (problem) process.stderr.write(annotate('warning', problem) + '\n');
   // Deep-link the Build paper run holding the artifact (workflow_run.id), else the Actions tab.
   const runUrl = input.artifactRunId
@@ -260,7 +281,7 @@ export async function cmdDeployPreview(
     : `${serverUrl}/${repo ?? ''}/actions`;
   const plan = problem
     ? ({ mode: 'artifact', reason: problem } as PreviewPlan)
-    : planPreview({ preview, cf, repo: repo ?? 'paper', pr });
+    : planPreview({ preview, cf, repo: repo ?? 'paper', pr, paper: id });
 
   let outcome: Record<string, unknown>;
   if (plan.mode === 'cloudflare') {
@@ -272,7 +293,7 @@ export async function cmdDeployPreview(
         projectName: plan.projectName,
         branch: plan.branch,
       });
-      deps.gh.sticky(repoRoot, pr, STICKY_PREVIEW, previewComment(url));
+      deps.gh.sticky(repoRoot, pr, header, previewComment(url, id));
       outcome = { preview: 'cloudflare', url, branch: plan.branch };
     } catch (e) {
       // The one fallback [R16]: a Cloudflare failure still gives the reviewer the artifact link.
@@ -282,8 +303,8 @@ export async function cmdDeployPreview(
       deps.gh.sticky(
         repoRoot,
         pr,
-        STICKY_PREVIEW,
-        artifactComment(runUrl, msg.workflow.cloudflareDegradedReason(failure)),
+        header,
+        artifactComment(runUrl, msg.workflow.cloudflareDegradedReason(failure), id),
       );
       outcome = {
         preview: 'artifact',
@@ -291,13 +312,13 @@ export async function cmdDeployPreview(
       };
     }
   } else {
-    deps.gh.sticky(repoRoot, pr, STICKY_PREVIEW, artifactComment(runUrl, plan.reason));
+    deps.gh.sticky(repoRoot, pr, header, artifactComment(runUrl, plan.reason, id));
     outcome = { preview: 'artifact', reason: plan.reason };
   }
 
   // The new-version reminder runs here, where the job can write to the pull request [R16]; its
   // failure propagates.
-  const notify = runNewVersionReminder({ repoRoot, mystPath, repo, pr }, deps.gh);
+  const notify = runNewVersionReminder({ repoRoot, mystPath, repo, pr, paper }, deps.gh);
   return {
     exitCode: notify.exitCode,
     result: { status: notify.result.status, pr, paper, ...outcome, notify: notify.result },
@@ -310,13 +331,16 @@ export interface NotifyInput {
   repo: string | null;
   /** The PR to comment on. deploy-preview passes the number it already read+stripped. */
   pr: string;
+  /** The paper folder, `.` (the default) or `papers/<id>`, whose version tags count. */
+  paper?: string;
 }
 
 /** The new-version reminder [R16] [R23]: on a paper already published, posts a sticky reminder
  *  and a label. Before the first deposit (no version tag) it does nothing. A version tag with no
  *  readable DOI means published but unlinked, and fails (exit 1). */
 export function runNewVersionReminder(input: NotifyInput, gh: GhPr): Outcome {
-  const { repoRoot, mystPath, repo, pr } = input;
+  const { repoRoot, mystPath, repo, pr, paper = '.' } = input;
+  const id = folderId(paper) ?? undefined;
   let tags: string[];
   try {
     tags = gh.versionTags(repoRoot, repo);
@@ -326,7 +350,7 @@ export function runNewVersionReminder(input: NotifyInput, gh: GhPr): Outcome {
     process.stderr.write(annotate('error', msg.workflow.notifyTagsFailed(why)) + '\n');
     return err(1, why, { reminder: 'error' });
   }
-  if (!hasVersionTag(tags)) {
+  if (!hasVersionTag(tags, paper)) {
     return ok({ reminder: 'skipped', reason: msg.workflow.notifyFirstDeposit });
   }
 
@@ -351,7 +375,12 @@ export function runNewVersionReminder(input: NotifyInput, gh: GhPr): Outcome {
     return err(1, parsed.error, { reminder: 'error' });
   }
 
-  gh.sticky(repoRoot, pr, STICKY_NEWVERSION, newVersionComment(parsed.doi, parsed.recordUrl));
+  gh.sticky(
+    repoRoot,
+    pr,
+    paperSticky(STICKY_NEWVERSION, id),
+    newVersionComment(parsed.doi, parsed.recordUrl, id),
+  );
   gh.addLabel(repoRoot, pr, LABEL_EDITOR_ACTION, {
     color: 'b60205',
     description: msg.bootstrap.labelEditorAction,
