@@ -18,6 +18,7 @@ import {
   dropJournalStamp,
 } from './yaml-io.js';
 import { ENGINE_VERSION, type JournalStamp } from './schema.js';
+import type { Paper } from './journal-checks.js';
 import * as msg from './messages.js';
 import { UserError } from './messages.js';
 
@@ -60,6 +61,9 @@ export interface MystEdge {
     fn: (session: ISession) => Promise<T>,
     configFile?: string,
   ): Promise<T>;
+  /** The {@link Paper} a check file reads, from a session `withProjectSession` processed for
+   *  the paper at `root` [R208]. */
+  paperForChecks(session: ISession, root: string): Paper;
 }
 
 export interface MaterializeInput {

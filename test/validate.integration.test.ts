@@ -16,7 +16,7 @@ import {
   cpSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { bundleState, assertBundleNotStale } from './bundle-state.js';
 
@@ -314,3 +314,143 @@ describe.skipIf(bundleState() === 'absent')(
     }, 60_000);
   },
 );
+
+/* --------------------------------------------------------------------------
+ * The journal's check files [R208], through the bundle: the two worked examples from
+ * `test/journal-checks/`, listed beside the catalog checks in a copy of the fixture journal.
+ * ------------------------------------------------------------------------ */
+describe.skipIf(bundleState() === 'absent')("oak validate, the journal's check files", () => {
+  beforeAll(assertBundleNotStale);
+
+  const checkFiles = ['./checks/pseudo-headings.mjs', './checks/duplicate-abstract.mjs'];
+
+  /** A copy of the fixture journal that also lists the two check files. */
+  function journalWithCheckFiles(optional: boolean): string {
+    const dir = mkdtempSync(join(tmpdir(), 'oak-val-checkfiles-'));
+    cpSync(fixtureInstance, dir, { recursive: true });
+    mkdirSync(join(dir, 'checks'));
+    for (const id of checkFiles) {
+      copyFileSync(join(engineDir, 'test', 'journal-checks', basename(id)), join(dir, id));
+    }
+    const entries = checkFiles
+      .map((id) => `  - id: ${id}\n${optional ? '    optional: true\n' : ''}`)
+      .join('');
+    const journalYml = readFileSync(join(dir, 'journal.yml'), 'utf8').replace(
+      '  - id: keywords-defined\n',
+      `  - id: keywords-defined\n${entries}`,
+    );
+    writeFileSync(join(dir, 'journal.yml'), journalYml);
+    return dir;
+  }
+
+  /** Annotation paths are relative to `workspace`, which in paper CI is the paper. */
+  function validateWith(
+    paper: string,
+    journal: string,
+    workspace = paper,
+  ): { exitCode: number; out: any } {
+    const r = spawnSync(
+      'node',
+      [bundle, 'validate', '--paper', paper, '--instance', journal, '--repo', repo, '--json'],
+      { encoding: 'utf8', env: { ...process.env, GITHUB_WORKSPACE: workspace } },
+    );
+    return { exitCode: r.status ?? 1, out: JSON.parse(r.stdout) };
+  }
+
+  /** The fixture paper with a bold line used as a heading and an Abstract section, which
+   *  duplicates the abstract its myst.yml and part block already set. */
+  const failingIndex =
+    readFileSync(join(fixturePaper, 'index.md'), 'utf8') +
+    '\n## Abstract\n\nThe abstract again.\n\n**Methods**\n\nWhat was done.\n';
+  function failingPaper(): string {
+    const dir = join(mkdtempSync(join(tmpdir(), 'oak-val-checkfiles-')), 'paper');
+    mkdirSync(dir);
+    for (const f of ['bib.bib', 'myst.yml']) copyFileSync(join(fixturePaper, f), join(dir, f));
+    writeFileSync(join(dir, 'index.md'), failingIndex);
+    return dir;
+  }
+  const lineOf = (text: string): number => failingIndex.split('\n').indexOf(text) + 1;
+
+  it('the fixture paper passes both', () => {
+    const { exitCode, out } = validateWith(fixturePaper, journalWithCheckFiles(false));
+    expect(exitCode).toBe(0);
+    expect(out.checkRun.conclusion).toBe('success');
+    for (const id of checkFiles) {
+      expect(out.checks.filter((c: any) => c.id === id)).toMatchObject([{ status: 'pass' }]);
+    }
+  }, 60_000);
+
+  it('a bold line and an Abstract section fail both, annotated on their lines', () => {
+    // The paper in a subfolder of the workspace, so a page path relative to the paper would
+    // put the annotations on the wrong file.
+    const paper = failingPaper();
+    const { exitCode, out } = validateWith(paper, journalWithCheckFiles(false), dirname(paper));
+    expect(exitCode).toBe(1);
+    expect(out.checkRun.conclusion).toBe('failure');
+    const rows = out.checks.filter((c: any) => checkFiles.includes(c.id));
+    expect(rows).toMatchObject([
+      { id: checkFiles[0], status: 'fail', message: '"Methods" is styled as a heading' },
+      { id: checkFiles[1], status: 'fail' },
+    ]);
+    expect(
+      out.checkRun.annotations.map((a: any) => [a.path, a.start_line, a.annotation_level]),
+    ).toEqual(
+      expect.arrayContaining([
+        ['paper/index.md', lineOf('**Methods**'), 'failure'],
+        ['paper/index.md', lineOf('## Abstract'), 'failure'],
+      ]),
+    );
+  }, 60_000);
+
+  it('marked optional, the same paper passes with both as warnings', () => {
+    const { exitCode, out } = validateWith(failingPaper(), journalWithCheckFiles(true));
+    expect(exitCode).toBe(0);
+    expect(out.checkRun.conclusion).toBe('success');
+    const rows = out.checks.filter((c: any) => checkFiles.includes(c.id));
+    expect(rows).toMatchObject([
+      { status: 'fail', optional: true },
+      { status: 'fail', optional: true },
+    ]);
+    expect(out.checkRun.summary).toContain(`| ${checkFiles[0]} | fail (optional) |`);
+  }, 60_000);
+});
+
+describe.skipIf(bundleState() === 'absent')("oak validate, a catalog check's options", () => {
+  beforeAll(assertBundleNotStale);
+
+  it("get Curvenote's defaults and types, and a wrong one is an error row", () => {
+    const journal = mkdtempSync(join(tmpdir(), 'oak-val-options-'));
+    cpSync(fixtureInstance, journal, { recursive: true });
+    const journalYml = readFileSync(join(journal, 'journal.yml'), 'utf8').replace(
+      '  - id: keywords-defined\n',
+      '  - id: keywords-defined\n' +
+        '  - id: keywords-length\n' +
+        '  - id: keywords-length\n    max: "1"\n' +
+        '  - id: keywords-length\n    max: lots\n',
+    );
+    writeFileSync(join(journal, 'journal.yml'), journalYml);
+    const r = spawnSync(
+      'node',
+      [
+        bundle,
+        'validate',
+        '--paper',
+        fixturePaper,
+        '--instance',
+        journal,
+        '--repo',
+        repo,
+        '--json',
+      ],
+      { encoding: 'utf8' },
+    );
+    const rows = JSON.parse(r.stdout).checks.filter((c: any) => c.id === 'keywords-length');
+    // The fixture paper has two keywords; `max` defaults to 5.
+    expect(rows).toMatchObject([
+      { status: 'pass', message: 'Correct number of keywords (2/5)' },
+      { status: 'fail', message: 'Too many keywords (2/1)' },
+      { status: 'error' },
+    ]);
+    expect(rows[2].message).toContain("'max' must be a number: lots");
+  }, 60_000);
+});

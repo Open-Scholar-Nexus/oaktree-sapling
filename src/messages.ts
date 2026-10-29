@@ -44,7 +44,8 @@
  *                        error bodies, echoed as they are. The one line for authors there is the
  *                        skipped-ORCID warning.
  *
- * The editorial checks' own messages come from `@curvenote/check-implementations`.
+ * The editorial checks' own messages come from `@curvenote/check-implementations`, and those of
+ * a journal's check files from the files.
  */
 
 import { DOCS, docsUrl } from './docs-links.js';
@@ -953,8 +954,40 @@ export const pr = {
   checkRunTitleShimTouched: (title: string): string => `⚠️ CI workflows modified: ${title}`,
   checkRunTitleShimUnlisted: (title: string): string => `⚠️ CI workflows may be modified: ${title}`,
   unknownCheckId: (id: string): string =>
-    `unknown check id "${id}"; the ids the journal can ask for, and how to change the set: ` +
+    id.endsWith('.mjs')
+      ? `unknown check id "${id}"; a check file's path starts with ./, as in "./${id}": ` +
+        `${docsUrl(DOCS.checksJournal)}`
+      : `unknown check id "${id}"; the ids the journal can ask for, and how to change the set: ` +
+        `${docsUrl(DOCS.checksChanging)}`,
+  checkThrew: (message: string): string =>
+    `the check stopped with an error: ${message.replace(/\.$/, '')}. To show this as a ` +
+    `warning, mark the check optional: ${docsUrl(DOCS.checksChanging)}`,
+  checkOptionsInvalid: (problems: string[]): string =>
+    `the check's options are wrong: ${problems.join('; ')}. Fix them in journal.yml: ` +
     `${docsUrl(DOCS.checksChanging)}`,
+
+  // ── the journal's check files; the row already names the file ─────────────────────────────
+  checkFileOutside:
+    `the check file is outside the journal repository; write a path that starts with ./ and ` +
+    `stays inside it: ${docsUrl(DOCS.checksJournal)}`,
+  checkFileNotMjs:
+    `a check file ends in .mjs; rename it and its entry in journal.yml: ` +
+    `${docsUrl(DOCS.checksJournal)}`,
+  checkFileMissing: (path: string): string =>
+    `no check file at ${path}; add it to the journal repository or fix the path in journal.yml: ` +
+    `${docsUrl(DOCS.checksJournal)}`,
+  checkFileImportFailed: (message: string): string =>
+    `the check file did not load: ${message.replace(/\.$/, '')}. See ${docsUrl(DOCS.checksJournal)}`,
+  checkFileNoValidate:
+    `the check file has no default export with a validate function; export ` +
+    `\`default { validate(paper, options) { ... } }\`: ${docsUrl(DOCS.checksJournal)}`,
+  checkFileThrew: (message: string): string =>
+    `the check stopped with an error: ${message.replace(/\.$/, '')}. See ` +
+    `${docsUrl(DOCS.checksJournal)}`,
+  checkFileBadResult: (field: string, problem: string): string =>
+    `the check returned a result oak cannot read${field ? ` (at ${field})` : ''}: ` +
+    `${problem.replace(/\.$/, '')}. ` +
+    `See ${docsUrl(DOCS.checksJournal)}`,
   checkTableHeader: '| Check | Status | Detail |\n| --- | --- | --- |',
   checkTableRow: (id: string, status: string, optional: boolean, detail: string): string =>
     `| ${id} | ${status}${optional ? ' (optional)' : ''} | ${detail} |`,

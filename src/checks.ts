@@ -4,12 +4,15 @@
  * The journal picks the set and an author cannot weaken it, which is why MyST's `error_rules`,
  * which the author controls, cannot be the gate.
  *
+ * A journal's own check files run beside them (journal-checks.ts) [R208].
+ *
  * `runChecks` runs them; `toCheckRun` turns the results into a GitHub Check Run.
  */
 import { basename, isAbsolute, relative } from 'node:path';
 import { DERIVED_CONFIG_FILE } from './yaml-io.js';
 import * as messages from './messages.js';
-import { annotate } from './messages.js';
+import { annotate, firstLine, UserError } from './messages.js';
+import { isCheckFile, runCheckFile, type Paper } from './journal-checks.js';
 import { GATED_PATHS, underPaths } from './schema.js';
 import type { ISession } from 'myst-cli';
 import {
@@ -29,9 +32,11 @@ type CheckInterface = CheckDefinition & {
     options: Check,
   ) => Promise<CheckResult | CheckResult[]> | CheckResult | CheckResult[];
 };
-async function curvenoteChecks(): Promise<CheckInterface[]> {
+/** A problem Curvenote's `validateCheck` reports, as `simple-validators` shapes it. */
+type ValidationMessage = { property: string; message: string };
+async function curvenoteChecks() {
   const mod = await import('@curvenote/check-implementations');
-  return mod.checks as CheckInterface[];
+  return { catalog: mod.checks as CheckInterface[], validateCheck: mod.validateCheck };
 }
 
 // One import site for curvenote's types.
@@ -52,30 +57,47 @@ export interface JournalCheck {
 
 /**
  * Runs the journal's checks against a processed myst session (`MystEdge.withProjectSession`).
- * Each result gets the check's id, and `optional` when the journal set it. An unknown id becomes
- * an error result, so a misconfigured journal shows up in the report.
+ * Each result gets the check's id, and `optional` when the journal set it. A catalog check's
+ * options get Curvenote's defaults and types, as Curvenote's own runner gives them. An unknown
+ * id, an option Curvenote rejects, a check that throws and a broken check file each become one
+ * error result, so a misconfigured journal shows up in the report and the remaining checks still
+ * run. A `./` id runs a check file from `journalRoot` on `readPaper()`'s data [R208].
  */
 export async function runChecks(
   session: ISession,
   journalChecks: JournalCheck[],
+  journalRoot: string | null,
+  readPaper: () => Paper,
 ): Promise<EngineCheckResult[]> {
-  const catalog = await curvenoteChecks();
+  // Both load on first use: the catalog loads myst-cli, so a run listing only check files does
+  // not import it [R51].
+  let curvenote: ReturnType<typeof curvenoteChecks> | undefined;
+  let paper: Paper | undefined;
   const out: EngineCheckResult[] = [];
-  for (const jc of journalChecks) {
-    const impl = catalog.find((c) => c.id === jc.id);
-    if (!impl) {
-      out.push({
-        id: jc.id,
-        status: CheckStatus.error,
-        message: messages.pr.unknownCheckId(jc.id),
-      });
+  for (const { optional, ...check } of journalChecks) {
+    const flag = optional ? { optional: true } : {};
+    let results: CheckResult[];
+    try {
+      if (isCheckFile(check.id)) {
+        results = await runCheckFile(journalRoot, check.id, check, (paper ??= readPaper()));
+      } else {
+        const { catalog, validateCheck } = await (curvenote ??= curvenoteChecks());
+        const impl = catalog.find((c) => c.id === check.id);
+        if (!impl) throw new UserError(messages.pr.unknownCheckId(check.id));
+        const opts = { property: check.id, messages: {} as { errors?: ValidationMessage[] } };
+        const options = validateCheck(session, check, [impl], opts);
+        const problems = opts.messages.errors ?? [];
+        if (!options || problems.length) {
+          throw new UserError(messages.pr.checkOptionsInvalid(problems.map((e) => e.message)));
+        }
+        results = [await impl.validate(session, options)].flat();
+      }
+    } catch (e) {
+      const message = e instanceof UserError ? e.message : messages.pr.checkThrew(firstLine(e));
+      out.push({ id: check.id, status: CheckStatus.error, message, ...flag });
       continue;
     }
-    const { optional, ...check } = jc;
-    const res = await impl.validate(session, check as Check);
-    for (const r of Array.isArray(res) ? res : [res]) {
-      out.push({ ...r, id: jc.id, ...(optional ? { optional: true } : {}) });
-    }
+    for (const r of results) out.push({ ...r, id: check.id, ...flag });
   }
   return out;
 }
