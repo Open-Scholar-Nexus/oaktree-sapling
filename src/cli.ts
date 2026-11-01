@@ -575,8 +575,9 @@ function platformName(): string {
 /**
  * `oak release --tag vX [--no-build] [--publish-without-review]`: deposits the tag's build,
  * attaches the bundle to the tag's release, and comments on the commit. The environment follows
- * the committed DOI. Run locally, it expects the clone at the tag and deposits the build of the
- * tag's Deposit version run. Documented at DOCS.release.
+ * the committed DOI. In Actions it deposits `_build`. Run locally, it expects the clone at the
+ * tag and deposits the build of the tag's Deposit version run, or `_build` with --no-build.
+ * Documented at DOCS.release.
  */
 async function cmdRelease(argv: string[]): Promise<number> {
   const tag = flag(argv, 'tag');
@@ -616,8 +617,7 @@ async function cmdRelease(argv: string[]): Promise<number> {
     process.stderr.write(msg.workflow.noZenodoToken('release', sandbox) + '\n');
     return 2;
   }
-  // Found once and handed to the build, so the deposit archives the journal the build used and
-  // reads its `zenodo:`.
+  // The deposit archives this journal and reads its `zenodo:`.
   const instance = await resolveInstanceRoot(argv, paperRoot, 'release');
   if ('error' in instance) {
     process.stderr.write(instance.error + '\n');
@@ -626,32 +626,15 @@ async function cmdRelease(argv: string[]): Promise<number> {
   // `source.zip` and the provenance are HEAD's, and the metadata the working tree's myst.yml.
   const sha = inActions ? null : release.assertAtTag(paperRoot, tag, gh.realCiBuildSource);
 
+  // In Actions, `_build` holds the build job's artifact. `release` never builds, so the token
+  // never sits beside the paper's code.
   let builtAt: string | undefined;
   let builtHere: { platform: string; typstVersion: string | null } | undefined;
-  if (useBuildDir) {
-    // `_build` as it is: in CI the build job's artifact; locally, the editor's own `oak build`,
-    // run apart from the token since it runs the paper's code.
-    if (!inActions) {
-      process.stderr.write(annotate('warning', msg.workflow.releaseNoBuild) + '\n');
-      builtHere = { platform: platformName(), typstVersion: await typstOnPath() };
-    }
-  } else if (inActions) {
-    // Builds in this job. The paper workflow passes --no-build instead, so the token never
-    // sits beside the paper's code.
-    //
-    // A child process: myst's HTML build calls process.exit(0) on success, which would end
-    // `release` before the deposit. The parent then reads the PDF (_build/exports) and abstract
-    // (_build/site/content) from the same tree; `oak build` ignores release's extra flags. The
-    // child gets no OAK_RESULT_FILE: the result is release's.
-    const { OAK_RESULT_FILE: _, ...childEnv } = process.env;
-    // The build must be this oak's, since this oak deposits it.
-    childEnv[(await import('./pinned.js')).USE_RUNNING_ENV] = '1';
-    const journalArgs = instance.root === null ? ['--no-instance'] : ['--instance', instance.root];
-    execFileSync(process.execPath, [process.argv[1]!, 'build', ...argv, ...journalArgs], {
-      stdio: 'inherit',
-      env: childEnv,
-    });
-  } else {
+  if (!inActions && useBuildDir) {
+    // Locally with --no-build: the editor's own `oak build`, run apart from the token.
+    process.stderr.write(annotate('warning', msg.workflow.releaseNoBuild) + '\n');
+    builtHere = { platform: platformName(), typstVersion: await typstOnPath() };
+  } else if (!inActions) {
     // Locally: the build of the tag's Deposit version run, checked against the clone.
     const ci = release.fetchCiBuild(paperRoot, tag, sha!, gh.realCiBuildSource);
     builtAt = ci.builtAt ?? undefined;

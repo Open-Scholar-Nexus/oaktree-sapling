@@ -912,6 +912,16 @@ describe.skipIf(bundleState() === 'absent')(
       expect(r.stdout + r.stderr).not.toContain('production-secret');
     });
 
+    it('in Actions it deposits _build and never builds, even without --no-build', () => {
+      const r = oak(
+        ['release', '--tag', 'v1.0.0', '--paper', sandboxPaper(), '--no-instance'],
+        { ...noTokens, ZENODO_TOKEN_SANDBOX: 'sandbox-token' },
+        true,
+      );
+      expect(r.code).toBe(2);
+      expect(r.stderr).toContain('no PDF under _build/exports');
+    });
+
     // An unset secret reaches the workflow step as an empty string.
     const emptySecrets = { OAK_USE_RUNNING: '1', ZENODO_TOKEN: '', ZENODO_TOKEN_SANDBOX: '' };
 
