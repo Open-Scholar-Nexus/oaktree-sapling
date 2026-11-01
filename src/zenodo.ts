@@ -564,22 +564,15 @@ export function readStampedTemplate(paperRoot: string): string | null {
 }
 
 /**
- * Where myst put a template on disk, restating myst-templates' `resolveInputs` (a short,
- * documented mapping) so this module needs no myst dependency. A local path is used in place; a
- * URL goes to `_build/templates/<kind>/<sha256(url)>`; a bare name to
- * `_build/templates/<kind>/<namespace>/<name>`. Every form ends up as a directory, so one
- * bundling rule covers all three [R76].
+ * Where myst put a template on disk, as myst-templates' `resolveInputs` does [R76]: a local path
+ * in place, a URL at `_build/templates/<kind>/<sha256(url)>`, a name at
+ * `_build/templates/<kind>/<namespace>/<name>`.
  */
 export function resolveTemplateDir(template: string, paperRoot: string): string {
   const buildTemplates = join(paperRoot, '_build', 'templates');
 
-  // Local: a directory with a `template.yml`, or a path to one inside such a directory. myst
-  // requires `template.yml` too [R107]; without it a directory sharing a registry template's
-  // name would be archived in place of what was rendered.
-  //
-  // Resolved against the paper root, where myst resolved it during the build (myst.ts changes
-  // into the paper root). The deposit may run from anywhere, and resolving against its cwd would
-  // miss a valid local template and refuse the deposit.
+  // Local: a directory with a `template.yml`, as myst requires [R107], or a file inside one.
+  // Relative to the paper root, where myst resolved it.
   const local = isAbsolute(template) ? template : join(paperRoot, template);
   if (existsSync(local)) {
     const dir = statSync(local).isDirectory() ? local : resolve(local, '..');
@@ -607,11 +600,13 @@ export function resolveTemplateDir(template: string, paperRoot: string): string 
 }
 
 /**
- * Maps an absolute path from a build made on another machine, such as the CI build `oak release`
- * downloads, onto this one. The first `extends:` entry is the build's `<engine>/paper-base.yml`
- * ({@link extendsChainFor}), and CI checks the engine out at `<workspace>/.engine`, so a path
- * under the build's engine maps to `engineRoot` and one under its workspace to this clone. A
- * path that exists here is returned as it is.
+ * Maps an absolute path that a build on another machine wrote into `myst.oak.yml`, such as the CI
+ * build `oak release` downloads, onto this one. That file's first `extends:` entry is the build's
+ * `<engine>/paper-base.yml` ({@link extendsChainFor}), which gives the build's engine folder. In
+ * CI that is `<workspace>/.engine`, so:
+ *  - `<workspace>/.engine/x` maps to `<engineRoot>/x`;
+ *  - `<workspace>/x` maps to `x` in this clone.
+ * A path that exists here, or that this cannot place, is returned as it is.
  */
 export function rebaseBuildPath(path: string, paperRoot: string, engineRoot: string): string {
   if (!isAbsolute(path) || existsSync(path)) return path;
@@ -986,8 +981,8 @@ function readTypstVersion(engineRoot: string): string | null {
 
 /**
  * `oak deposit upload`, also the core of `oak release`: fills the reserved draft with the final
- * metadata and files and leaves it unsubmitted, or publishes it with `publish`. The environment
- * follows the committed DOI's prefix [R4]; `api` must agree.
+ * metadata and files and leaves it unsubmitted, or publishes it with `publish`. The committed
+ * DOI's prefix picks sandbox or production [R4], and an `api` for the other one is refused.
  */
 export async function cmdUpload(input: UploadInput): Promise<Outcome> {
   const work = mkdtempSync(join(tmpdir(), 'oak-engine-'));
@@ -1044,8 +1039,8 @@ async function fillDraft(input: UploadInput, engineZip: string): Promise<Outcome
     throw e;
   }
 
-  // An upload overwrites the metadata [R22], so uploading from a tree with no HTML build would
-  // replace a description that has the abstract with one that does not [R107].
+  // An upload overwrites the metadata [R22], including the abstract the HTML build supplies
+  // [R107].
   if (!hasBuildContent(repoRoot)) {
     return err(2, msg.workflow.uploadNoBuildContent);
   }
@@ -1126,6 +1121,7 @@ async function fillDraft(input: UploadInput, engineZip: string): Promise<Outcome
     process.stderr.write(`[upload] publish ${dep.id}\n`);
     dep = await api.publish(dep.id);
   } else dep = await api.getDeposition(dep.id);
+  // A draft has no DOI until it is published.
   const versionDoi = dep.metadata?.doi ?? dep.doi ?? predictedVersionDoi;
   return ok({
     version_doi: versionDoi,
