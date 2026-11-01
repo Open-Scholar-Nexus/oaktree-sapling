@@ -39,13 +39,7 @@ As with the journal, `oak` prints a plan, including every default it took, and a
 (paper-secrets)=
 ## Secrets
 
-Two features use tokens, set on the paper repository's environments. Both are optional:
-
-`ZENODO_TOKEN`, `ZENODO_TOKEN_SANDBOX`
-: Depositing the paper on Zenodo from the workflows, or on the Zenodo sandbox for a test. Create each under **Applications** in the account settings on [Zenodo](https://zenodo.org/account/settings/applications/) or the [sandbox](https://sandbox.zenodo.org/account/settings/applications/). Zenodo gives a personal token its owner's full rights whatever scopes it lists, so a token set here lets the workflows that hold it publish and edit every record of the account. Without them, an editor deposits [from the terminal](publish.md#from-terminal), with the token on their own computer.
-
-`CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`
-: Each pull request gets a live preview link, once the journal also [turns previews on](journal-yml.md#live-previews). Until both are set, a pull request gets a downloadable copy of the built site.
+Two features use tokens, set on the paper repository's environments, and both are optional: depositing on Zenodo from the workflows (`ZENODO_TOKEN`, `ZENODO_TOKEN_SANDBOX`), and a live preview link on each pull request (`CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`). [Secrets](../reference/secrets.md) says what each one allows and where to create it.
 
 Pass them to `oak bootstrap paper` as `--zenodo-token`, `--zenodo-token-sandbox`, `--cf-token` and `--cf-account`, or set the environment variables of the same names before running it. `oak` lists any that are still missing when it finishes, with the page to set them on.
 

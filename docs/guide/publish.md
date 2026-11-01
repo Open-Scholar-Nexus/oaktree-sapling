@@ -75,7 +75,7 @@ The run opens an issue titled **Zenodo publish failed for** the tag, labelled `z
 
 The Zenodo tokens are optional on GitHub. Zenodo gives a personal token its owner's full rights whatever scopes it lists, so a token stored on GitHub lets the workflows that hold it publish and edit every record of the account. A journal that does not want that leaves the tokens unset, and an editor runs the Zenodo steps from a clone of the paper repository instead. Without a token, **Deposit version** still builds the tag and ends with a notice saying to deposit from the terminal, and **Reserve DOI** fails, pointing at `oak deposit prepare`.
 
-This needs `oak`, [gh](https://cli.github.com) logged in (`gh auth login`) as an editor of the paper repository, and a Zenodo token in `ZENODO_TOKEN`, or in `ZENODO_TOKEN_SANDBOX` for the [sandbox](#sandbox). Create it under **Applications** in the account settings on [Zenodo](https://zenodo.org/account/settings/applications/) or the [sandbox](https://sandbox.zenodo.org/account/settings/applications/). `oak deposit` and `oak release` run the `oak` version the paper's `myst.yml` names, as [`oak build` does](pins.md#pins-local).
+This needs `oak`, [gh](https://cli.github.com) logged in (`gh auth login`) as an editor of the paper repository, and a Zenodo token in `ZENODO_TOKEN`, or in `ZENODO_TOKEN_SANDBOX` for the [sandbox](#sandbox). Create it under **Applications** in the account settings on [Zenodo](https://zenodo.org/account/settings/applications/) or the [sandbox](https://sandbox.zenodo.org/account/settings/applications/). `oak deposit` and `oak release` run the `oak` version the paper's `myst.yml` names, as [`oak build` does](pins.md#pins-local). When that version is too old to deposit from the terminal, they say so: [upgrade the paper](pins.md) and tag again.
 
 To reserve the DOI, in the clone, on an up-to-date `main`:
 
@@ -95,18 +95,24 @@ git checkout v1.0.0
 oak release --tag v1.0.0
 ```
 
-`oak release` downloads the build of that run, after checking that the run is the push of that tag at the tag's commit. It uploads the same files the workflow does, attaches them to the tag's GitHub release, and comments the draft's address on the tagged commit. The clone has to be at the tag, with no changes to tracked files, since the deposit archives the commit checked out and reads `myst.yml` from the working tree. Then [publish on Zenodo](#publish-on-zenodo) as usual. For a [new version](#new-version), run `oak release` for its tag after pushing it.
+`oak release` downloads the build of that run, after checking that the run is the push of that tag at the tag's commit. It uploads the same files the workflow does, also left in `_build/bundle`, attaches them to the tag's GitHub release, and comments the draft's address on the tagged commit. The clone has to be at the tag, with no changes to tracked files, since the deposit archives the commit checked out and reads `myst.yml` from the working tree. Then [publish on Zenodo](#publish-on-zenodo) as usual. For a [new version](#new-version), run `oak release` for its tag after pushing it.
 
-`oak release` refuses while the run is still building, and when the build failed, with a link to the run. When Zenodo refuses, it prints the reason.
+`oak release` refuses while the run is still building, when the build failed, and when the run has no build job or its build lacks a file the deposit needs, with a link to the run. When Zenodo refuses, it prints the reason.
 
 (local-build)=
 ### Building on your computer
 
-`oak release --local-build` builds the paper on your computer and deposits that build. The build runs the paper's code: MyST loads the plugins the paper's `myst.yml` lists, as JavaScript with your permissions, while the Zenodo token is in the environment. `oak` warns first and lists the plugins the paper adds beyond the journal's and the engine's gallery plugin; [read them](checks.md#validate-runs-paper-code) before going on. Set up any environment `paper-environment.yml` describes yourself: `oak` does not install it, since installing runs package scripts.
+To deposit a build made on your computer, build at the tag in a shell without the Zenodo token, then deposit it with `--use-local-build`:
 
-The engine's typst is built for Linux on x86_64. On another machine, such as a Mac or an arm64 computer, the PDF is exported with the typst on your `PATH`, so it can differ from the one the CI build makes. The deposit's provenance records the typst version that ran.
+```bash
+git checkout v1.0.0
+oak build
+oak release --tag v1.0.0 --use-local-build
+```
 
-`--no-build` deposits the build already in the clone's `_build/` as it is, after a warning: nothing checks that it is the tag's build, and the provenance records it as the CI's platform and typst.
+The build runs the paper's code with your permissions: MyST loads the plugins the paper's `myst.yml` lists, as JavaScript. [Read them](checks.md#validate-runs-paper-code) before building. Set up any environment `paper-environment.yml` describes yourself, since installing it runs package scripts. Building in a shell without the token keeps the token out of the environment the paper's code runs in.
+
+`oak release` refuses a build whose PDF or pages are older than the tag's commit, as a build left from an earlier tag is. Delete `_build` and build again. The deposit's provenance records your computer's platform and the typst on your `PATH`. The engine's typst is built for Linux on x86_64, so on another machine, such as a Mac or an arm64 computer, the PDF comes from your own typst and can differ from the CI build.
 
 (publish-without-review)=
 ### Publishing without review
