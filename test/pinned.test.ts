@@ -15,11 +15,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   cacheHome,
+  DEPOSIT_MIN_VERSION,
   handOff,
   readPin,
   runVersion,
   USE_RUNNING_ENV,
   type HandoffDeps,
+  type PaperVerb,
 } from '../src/pinned.js';
 
 const DEFAULT_REPO = 'Open-Scholar-Nexus/oaktree-sapling';
@@ -71,15 +73,21 @@ function fakes(opts: { withBuild?: boolean; confirm?: boolean; typst?: boolean }
   return { deps, calls };
 }
 
-function ctx(paperRoot: string, argv: string[] = [], env: NodeJS.ProcessEnv = {}) {
+function ctx(
+  paperRoot: string,
+  argv: string[] = [],
+  env: NodeJS.ProcessEnv = {},
+  verb: PaperVerb = 'build',
+) {
   return {
-    verb: 'build' as const,
+    verb,
     argv: ['--paper', paperRoot, ...argv],
     paperRoot,
     running: 'v1.0.0',
     defaultRepo: DEFAULT_REPO,
     env,
     cacheRoot: mkdtempSync(join(tmpdir(), 'oak-pinned-cache-')),
+    runningIsCheckout: false,
   };
 }
 
@@ -88,6 +96,35 @@ describe('handOff', () => {
     const { deps, calls } = fakes();
     expect(await handOff(ctx(paper('v1.0.0')), deps)).toBeNull();
     expect(calls.clones).toEqual([]);
+  });
+
+  it('runs release and deposit from a clone of the pinned tag, even at this version', async () => {
+    // engine.zip is a `git archive` of oak, and the npm package has no git history.
+    for (const verb of ['release', 'deposit'] as const) {
+      const { deps, calls } = fakes();
+      const dir = paper('v1.0.0');
+      expect(await handOff(ctx(dir, [], {}, verb), deps), verb).toBe(7);
+      expect(calls.clones, verb).toEqual([[DEFAULT_REPO, 'v1.0.0']]);
+      expect(calls.spawns[0]!.argv[0], verb).toBe(verb);
+
+      const checkout = fakes();
+      expect(
+        await handOff({ ...ctx(dir, [], {}, verb), runningIsCheckout: true }, checkout.deps),
+      ).toBeNull();
+      expect(checkout.calls.clones).toEqual([]);
+    }
+  });
+
+  it("refuses release and deposit below DEPOSIT_MIN_VERSION, since myst.yml is the author's", async () => {
+    for (const verb of ['release', 'deposit'] as const) {
+      const { deps, calls } = fakes();
+      await expect(handOff(ctx(paper('v0.2.0'), [], {}, verb), deps)).rejects.toThrow(
+        DEPOSIT_MIN_VERSION,
+      );
+      expect(calls.clones).toEqual([]);
+    }
+    const { deps } = fakes();
+    expect(await handOff(ctx(paper('v0.2.0')), deps)).toBe(7);
   });
 
   it('runs this oak when there is no readable pin', async () => {

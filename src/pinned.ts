@@ -1,6 +1,6 @@
 /**
- * pinned.ts: hands `oak build`, `validate` and `start` to the oak version the paper pins, and
- * `oak bootstrap` to the one `--engine-version` names.
+ * pinned.ts: hands `oak build`, `validate`, `start`, `release` and `deposit` to the oak version
+ * the paper pins, and `oak bootstrap` to the one `--engine-version` names.
  *
  * The paper's `myst.yml` names the version and its `pins.yml` the repository, as in CI, so a
  * local run builds with the same oak. Side effects are injected so the tests stay offline.
@@ -10,9 +10,9 @@ import { delimiter, dirname, isAbsolute, join, resolve } from 'node:path';
 import { readDoc, readEngineCoordinateRaw } from './yaml-io.js';
 import * as msg from './messages.js';
 import { UserError } from './messages.js';
-import { ENGINE_VERSION, GITHUB_REPO } from './schema.js';
+import { compareEngineVersions, ENGINE_VERSION, GITHUB_REPO } from './schema.js';
 
-export type PaperVerb = 'build' | 'validate' | 'start';
+export type PaperVerb = 'build' | 'validate' | 'start' | 'release' | 'deposit';
 export type HandoffVerb = PaperVerb | 'bootstrap';
 
 /** Where the version came from: the paper's files, or `--engine-version` and `--engine-repo`. */
@@ -104,7 +104,17 @@ export interface HandoffContext {
   env: NodeJS.ProcessEnv;
   /** `<cacheRoot>/oak/<owner>/<name>/<tag>` holds each fetched version. */
   cacheRoot: string;
+  /** Whether this oak runs from a git checkout, which `engine.zip` is archived from. */
+  runningIsCheckout: boolean;
 }
+
+/** The verbs that hold the Zenodo token. They archive oak's checkout into the deposit, so they
+ *  never run from the npm package, which has no git history. */
+const DEPOSIT_VERBS: HandoffVerb[] = ['release', 'deposit'];
+
+/** The first oak whose `release` never builds beside the token outside Actions. myst.yml, where
+ *  the pin lives, is the author's file, so a pin below it is refused for {@link DEPOSIT_VERBS}. */
+export const DEPOSIT_MIN_VERSION = 'v0.4.0-dev.1';
 
 /**
  * Runs the verb with the oak the paper pins and returns its exit code, or null when this oak
@@ -134,12 +144,21 @@ export async function runVersion(
   deps: HandoffDeps,
 ): Promise<number | null> {
   const { verb } = ctx;
-  if (usesRunning(ctx) || pin.version === ctx.running) return null;
+  if (usesRunning(ctx)) return null;
+  if (pin.version === ctx.running && (ctx.runningIsCheckout || !DEPOSIT_VERBS.includes(verb))) {
+    return null;
+  }
 
   // Both reach `git clone` and the cache path, so they are checked before either.
   if (!ENGINE_VERSION.test(pin.version)) {
     const where = source.kind === 'paper' ? source.mystPath : '--engine-version';
     throw new UserError(msg.pinned.badVersion(verb, pin.version, where));
+  }
+  if (
+    DEPOSIT_VERBS.includes(verb) &&
+    (compareEngineVersions(pin.version, DEPOSIT_MIN_VERSION) ?? -1) < 0
+  ) {
+    throw new UserError(msg.pinned.belowDepositMin(verb, pin.version, DEPOSIT_MIN_VERSION));
   }
   if (!GITHUB_REPO.test(pin.engineRepo)) {
     throw new UserError(msg.pinned.badRepo(verb, pin.engineRepo, source));

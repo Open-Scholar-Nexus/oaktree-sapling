@@ -7,4 +7,4 @@ engine_repo: Open-Scholar-Nexus/oaktree-sapling
 instance_repo: pollomarzo/CHANGE-ME-instance-config
 
 # The oldest engine these workflows run with; the engine action refuses an older one in myst.yml
-min_engine_version: v0.3.0-dev.1
+min_engine_version: v0.4.0-dev.1

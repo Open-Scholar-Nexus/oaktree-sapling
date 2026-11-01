@@ -24,7 +24,7 @@ export OAK_USE_RUNNING=1
 
 extra=()
 
-if [ "$verb" = "build" ] || [ "$verb" = "release" ]; then
+if [ "$verb" = "build" ]; then
   # Previews are served from the domain root, GitHub Pages from /<repo>.
   if [ "${GITHUB_EVENT_NAME:-}" = "pull_request" ]; then
     base_url=""

@@ -1,27 +1,11 @@
 /**
- * `oak deposit` (prepare, publish, status), and the core of `oak release`.
+ * `oak deposit` (prepare, upload, status), and the core of `oak release`. Each command returns one
+ * JSON result with a `status` field. A draft is reused when one exists, the committed DOI picks
+ * the endpoint for an upload, and an upload overwrites the metadata [R22].
  *
- *  - The journal's description paragraph and Zenodo community come from `journal.yml`
- *    `zenodo:`; both are optional [R19]. See `loadJournalZenodo`.
- *  - Every lookup pages through all depositions [R20] [R35.1]: an account can hold more than a
- *    page, and a missed match makes `prepare` mint a second concept DOI.
- *  - A deposit is identified by the paper's `project.id`, stored as a URN
- *    (`urn:oaktree-sapling:<id>`) beside the GitHub URL and looked up first, so it survives the
- *    repo moving [R7] [design §9].
- *  - Extra files come from the paper's `deposit/` folder and upload as they are, beside oak's
- *    fixed files; a name clash with those is an error [R28].
- *  - The review pull request in the provenance comes from `gh api` (`GitContext.reviewPr`)
- *    [R35.2].
- *  - The Project Website link is the paper's registry `site_url`, else its GitHub Pages URL,
- *    unless `--site-url` names one. See `defaultSiteUrl`.
- *
- * Every command returns one JSON result with a `status` field, which the workflows read. A draft
- * is reused when one exists, `--sandbox` switches endpoints, and publish overwrites the metadata
- * [R22].
- *
- * The Zenodo HTTP transport and the git and gh side are injected, so tests need neither network
- * nor git; the real ones are `createFetchTransport()` and gh.ts. The abstract is read from the
- * HTML build's JSON on disk, so this module needs no myst-cli.
+ * The Zenodo transport and the git and gh side are injected; the real ones are
+ * `createFetchTransport()` and gh.ts. The abstract comes from the HTML build's JSON, so this
+ * module needs no myst-cli.
  */
 import {
   readFileSync,
@@ -30,10 +14,12 @@ import {
   mkdirSync,
   rmSync,
   copyFileSync,
+  mkdtempSync,
   readdirSync,
   statSync,
 } from 'node:fs';
 import { join, resolve, basename, relative, isAbsolute } from 'node:path';
+import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
 import AdmZip from 'adm-zip';
 import {
@@ -106,8 +92,8 @@ function isSandboxDoi(doi: string): boolean {
   return doi.startsWith(zenodoDoiPrefix(true));
 }
 
-/** The paper's identity on Zenodo [R7]: a URN independent of where the paper lives, stored as a
- *  related identifier so it survives the GitHub URL changing. */
+/** The paper's identity on Zenodo [R7] [design §9]: a URN independent of where the paper lives,
+ *  stored as a related identifier so it survives the GitHub URL changing. */
 export function paperUrn(id: string): string {
   return `urn:oaktree-sapling:${id}`;
 }
@@ -261,6 +247,13 @@ export class ZenodoApi {
   ): Promise<Deposition> {
     return (
       await this.call('PUT', `/deposit/depositions/${depId}`, { json: { metadata } })
+    ).json() as Deposition;
+  }
+
+  /** Publishes the draft, which mints its version DOI; Zenodo allows no undo. */
+  async publish(depId: string | number): Promise<Deposition> {
+    return (
+      await this.call('POST', `/deposit/depositions/${depId}/actions/publish`)
     ).json() as Deposition;
   }
 
@@ -531,7 +524,7 @@ export interface BundleProvenance {
    *  commit when it is its own journal, null without one. */
   journal_repo: string | null;
   journal_commit: string | null;
-  built_at: string;
+  built_at: string | null;
   // What it takes to render the deposit again [R66]: engine.zip carries everything but
   // node, so this platform and node.
   platform: string;
@@ -571,22 +564,15 @@ export function readStampedTemplate(paperRoot: string): string | null {
 }
 
 /**
- * Where myst put a template on disk, restating myst-templates' `resolveInputs` (a short,
- * documented mapping) so this module needs no myst dependency. A local path is used in place; a
- * URL goes to `_build/templates/<kind>/<sha256(url)>`; a bare name to
- * `_build/templates/<kind>/<namespace>/<name>`. Every form ends up as a directory, so one
- * bundling rule covers all three [R76].
+ * Where myst put a template on disk, as myst-templates' `resolveInputs` does [R76]: a local path
+ * in place, a URL at `_build/templates/<kind>/<sha256(url)>`, a name at
+ * `_build/templates/<kind>/<namespace>/<name>`.
  */
 export function resolveTemplateDir(template: string, paperRoot: string): string {
   const buildTemplates = join(paperRoot, '_build', 'templates');
 
-  // Local: a directory with a `template.yml`, or a path to one inside such a directory. myst
-  // requires `template.yml` too [R107]; without it a directory sharing a registry template's
-  // name would be archived in place of what was rendered.
-  //
-  // Resolved against the paper root, where myst resolved it during the build (myst.ts changes
-  // into the paper root). The deposit may run from anywhere, and resolving against its cwd would
-  // miss a valid local template and refuse the deposit.
+  // Local: a directory with a `template.yml`, as myst requires [R107], or a file inside one.
+  // Relative to the paper root, where myst resolved it.
   const local = isAbsolute(template) ? template : join(paperRoot, template);
   if (existsSync(local)) {
     const dir = statSync(local).isDirectory() ? local : resolve(local, '..');
@@ -598,8 +584,12 @@ export function resolveTemplateDir(template: string, paperRoot: string): string 
   }
 
   // A name, in one of myst's three shapes: `x` → typst/myst/x, `a/b` → typst/a/b,
-  // `typst/a/b` → itself.
+  // `typst/a/b` → itself. The stamped value is written by the build, which runs paper code, so
+  // a name has to stay under `_build/templates`.
   const parts = template.split('/');
+  if (parts.some((p) => p === '' || p === '..')) {
+    throw new TemplateArchiveError(msg.workflow.depositTemplateBadName(template));
+  }
   const normalized =
     parts.length === 1
       ? ['typst', 'myst', ...parts]
@@ -610,6 +600,43 @@ export function resolveTemplateDir(template: string, paperRoot: string): string 
 }
 
 /**
+ * Maps an absolute path that a build on another machine wrote into `myst.oak.yml`, such as the CI
+ * build `oak release` downloads, onto this one. That file's first `extends:` entry is the build's
+ * `<engine>/paper-base.yml` ({@link extendsChainFor}), which gives the build's engine folder. In
+ * CI that is `<workspace>/.engine`, so:
+ *  - `<workspace>/.engine/x` maps to `<engineRoot>/x`;
+ *  - `<workspace>/x` maps to `x` in this clone.
+ * A relative path, or one that exists here, is returned as it is. Any other path throws a
+ * {@link TemplateArchiveError}, since nothing here holds what it named.
+ */
+export function rebaseBuildPath(path: string, paperRoot: string, engineRoot: string): string {
+  if (!isAbsolute(path) || existsSync(path)) return path;
+  const derived = join(paperRoot, DERIVED_CONFIG_FILE);
+  const first = existsSync(derived) ? readDoc(derived).getIn(['extends', 0]) : undefined;
+  if (typeof first === 'string' && basename(first) === 'paper-base.yml') {
+    const under = (root: string): string | null => {
+      const rel = relative(root, path);
+      return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel)) ? rel : null;
+    };
+    const buildEngine = resolve(first, '..');
+    const inEngine = under(buildEngine);
+    if (inEngine !== null) return join(engineRoot, inEngine);
+    const inWorkspace =
+      basename(buildEngine) === '.engine' ? under(resolve(buildEngine, '..')) : null;
+    if (inWorkspace !== null) return join(repoRootOf(paperRoot), inWorkspace);
+  }
+  throw new TemplateArchiveError(msg.workflow.depositTemplateElsewhere(path));
+}
+
+/** The nearest directory at or above `dir` holding `.git`, else `dir`. */
+function repoRootOf(dir: string): string {
+  for (let d = resolve(dir); ; d = resolve(d, '..')) {
+    if (existsSync(join(d, '.git'))) return d;
+    if (d === resolve(d, '..')) return resolve(dir);
+  }
+}
+
+/**
  * The template directory this deposit must archive, or null when nothing needs adding: when the
  * template is inside oak's checkout, already archived as `engine.zip`.
  *
@@ -617,8 +644,9 @@ export function resolveTemplateDir(template: string, paperRoot: string): string 
  * rendered again [design §7] [R66], so a template that cannot be found is an error.
  */
 export function templateArchiveDir(paperRoot: string, engineRoot: string): string | null {
-  const template = readStampedTemplate(paperRoot);
-  if (!template) return null;
+  const stamped = readStampedTemplate(paperRoot);
+  if (!stamped) return null;
+  const template = rebaseBuildPath(stamped, paperRoot, engineRoot);
 
   const dir = resolveTemplateDir(template, paperRoot);
   const rel = relative(resolve(engineRoot), resolve(dir));
@@ -626,12 +654,7 @@ export function templateArchiveDir(paperRoot: string, engineRoot: string): strin
   if (insideEngine) return null;
 
   if (!existsSync(dir)) {
-    throw new TemplateArchiveError(
-      `typst template "${template}" resolves to "${dir}", which does not exist, so the ` +
-        `deposit cannot archive the template it rendered with. A non-engine template rides ` +
-        `in no other deposit artifact; publishing without it would give a DOI'd PDF that ` +
-        `cannot be reproduced. Run the build in this working tree before depositing.`,
-    );
+    throw new TemplateArchiveError(msg.workflow.depositTemplateMissing(template, dir));
   }
   return dir;
 }
@@ -704,8 +727,7 @@ export function assertBundlePreconditions(repoRoot: string, engineRoot: string):
   const collisions = depositCollisions(extras);
   if (collisions.length) {
     throw new BundleCollisionError(
-      `deposit/ file(s) collide with engine-reserved names: ${collisions.join(', ')}. ` +
-        `Rename them: ${RESERVED_DEPOSIT_NAMES.join(', ')} are added by the engine.`,
+      msg.workflow.depositNameCollision(collisions, RESERVED_DEPOSIT_NAMES),
     );
   }
   templateArchiveDir(repoRoot, engineRoot);
@@ -720,7 +742,8 @@ export function assertBundlePreconditions(repoRoot: string, engineRoot: string):
  * PDF again, on linux x86_64. `journal.zip` is a `git archive` of `journal`, the journal commit
  * the build used, unless `source.zip` holds it ({@link prepareJournalArchive}). `template.zip` holds a template that is not
  * oak's own [R76]; see {@link templateArchiveDir}. `myst.oak.yml` records what the build
- * resolved; its paths are the build machine's.
+ * resolved; its paths are the build machine's. `engineZip` is an `engine.zip` that
+ * {@link prepareEngineArchive} already made; without it the engine is archived here.
  */
 export async function buildBundle(
   out: string,
@@ -730,6 +753,7 @@ export async function buildBundle(
   provenance: BundleProvenance,
   git: GitContext,
   journal: JournalArchive | null = null,
+  engineZip: string | null = null,
 ): Promise<string[]> {
   assertBundlePreconditions(repoRoot, engineRoot);
   const depositDir = join(repoRoot, 'deposit');
@@ -744,8 +768,8 @@ export async function buildBundle(
 
   copyFileSync(pdf, join(out, 'paper.pdf'));
   await git.gitArchive(repoRoot, resolve(join(out, 'source.zip')));
-  await git.gitArchive(engineRoot, resolve(join(out, 'engine.zip')));
-  assertEngineArchive(join(out, 'engine.zip'));
+  if (engineZip) copyFileSync(engineZip, join(out, 'engine.zip'));
+  else await prepareEngineArchive(engineRoot, git, resolve(join(out, 'engine.zip')));
   for (const name of ['myst.yml', DERIVED_CONFIG_FILE]) {
     const src = join(repoRoot, name);
     if (existsSync(src)) copyFileSync(src, join(out, name));
@@ -779,7 +803,17 @@ export class EngineArchiveError extends Error {}
  *  release tags, so any other ref archives a zip without them [R107]. */
 const ENGINE_ARCHIVE_REQUIRED = ['dist/cli.cjs', 'bin/typst'];
 
-/** Refuses an `engine.zip` that cannot render the PDF it is deposited beside [R107]. */
+/** Archives oak's checkout at `engineRoot` to `outZip` as `engine.zip`, refusing one that
+ *  cannot render the PDF it is deposited beside [R107]. */
+export async function prepareEngineArchive(
+  engineRoot: string,
+  git: GitContext,
+  outZip: string,
+): Promise<void> {
+  await git.gitArchive(engineRoot, outZip);
+  assertEngineArchive(outZip);
+}
+
 function assertEngineArchive(zipPath: string): void {
   let names: string[] = [];
   try {
@@ -789,10 +823,7 @@ function assertEngineArchive(zipPath: string): void {
   }
   const missing = ENGINE_ARCHIVE_REQUIRED.filter((n) => !names.includes(n));
   if (missing.length) {
-    throw new EngineArchiveError(
-      `engine.zip carries no ${missing.join(', ')}, so the deposit could not re-render its own ` +
-        `PDF. The engine checkout is not a release ref: deposit from a released engine tag.`,
-    );
+    throw new EngineArchiveError(msg.workflow.depositEngineNotReleased(missing));
   }
 }
 
@@ -864,10 +895,10 @@ export async function cmdPrepare(input: PrepareInput): Promise<Outcome> {
   if (existingDoi) {
     const existingSandbox = isSandboxDoi(existingDoi);
     if (existingSandbox === sandbox) {
-      return err(2, `project.doi already set (${existingDoi}); prepare is for first deposit.`);
+      return err(2, msg.workflow.prepareDoiSet(existingDoi));
     }
     if (!existingSandbox && sandbox) {
-      return err(2, `refusing to downgrade a production DOI (${existingDoi}) to sandbox.`);
+      return err(2, msg.workflow.prepareNoDowngrade(existingDoi));
     }
     // A sandbox DOI and a production prepare: replacing it is allowed [R29].
   }
@@ -918,7 +949,7 @@ export async function cmdPrepare(input: PrepareInput): Promise<Outcome> {
   return ok({ concept_doi: cdoi, draft_url: draftUrl, deposition_id: dep.id, site_url: siteUrl });
 }
 
-export interface PublishInput {
+export interface UploadInput {
   mystPath: string;
   pdf: string;
   tag: string;
@@ -929,6 +960,16 @@ export interface PublishInput {
   instanceRoot: string | null;
   /** oak's checkout (holds paper-base.yml), archived as the deposit's engine.zip. */
   engineRoot: string;
+  /** Publishes the draft once filled (`--publish-without-review`). */
+  publish?: boolean;
+  /** Where the PDF was built, for the provenance; `linux-x86_64`, CI's, by default. */
+  platform?: string;
+  /** The typst that exported the PDF, for a build that may not use the pinned one; the pinned
+   *  `typst.version` by default. */
+  typstVersion?: string | null;
+  /** When the deposited build ran, as ISO 8601, for a build made elsewhere, or null when that
+   *  is unknown; now by default. */
+  builtAt?: string | null;
 }
 
 /** oak's pinned typst version, for the provenance; null without the pin file. The provenance
@@ -941,31 +982,39 @@ function readTypstVersion(engineRoot: string): string | null {
 }
 
 /**
- * `oak deposit publish`, also the core of `oak release`: fills the reserved draft with the final
- * metadata and files and leaves it unsubmitted. The environment follows the committed DOI's
- * prefix, so a tag cannot reach the wrong one [R4]; `--sandbox` must agree.
+ * `oak deposit upload`, also the core of `oak release`: fills the reserved draft with the final
+ * metadata and files and leaves it unsubmitted, or publishes it with `publish`. The committed
+ * DOI's prefix picks sandbox or production [R4], and an `api` for the other one is refused.
  */
-export async function cmdPublish(input: PublishInput): Promise<Outcome> {
+export async function cmdUpload(input: UploadInput): Promise<Outcome> {
+  const work = mkdtempSync(join(tmpdir(), 'oak-engine-'));
+  try {
+    return await fillDraft(input, join(work, 'engine.zip'));
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
+}
+
+/** {@link cmdUpload}, with `engineZip` the path its `engine.zip` is made at. */
+async function fillDraft(input: UploadInput, engineZip: string): Promise<Outcome> {
   const { mystPath, pdf, tag, bundleOut, api, git, instanceRoot, engineRoot } = input;
   const sandbox = api.sandbox;
   const doc = readDoc(mystPath);
   const project = projectOf(doc);
 
   const conceptDoi: string | undefined = project.doi;
-  if (!conceptDoi)
-    return err(2, 'project.doi missing; run prepare and merge that PR before tagging.');
+  if (!conceptDoi) return err(2, msg.workflow.uploadNoDoi);
   const parsed = parseZenodoDoi(conceptDoi);
   if (!parsed) return err(2, msg.workflow.notZenodoDoi(conceptDoi));
-  if (parsed.sandbox !== sandbox) {
-    return err(2, `DOI prefix says sandbox=${parsed.sandbox} but --sandbox=${sandbox}.`);
-  }
-  if (!PAPER_VERSION_TAG.test(tag)) return err(2, `tag must match vMAJOR.MINOR.PATCH (got ${tag})`);
+  if (parsed.sandbox !== sandbox)
+    return err(2, msg.workflow.uploadWrongEnvironment(parsed.sandbox));
+  if (!PAPER_VERSION_TAG.test(tag)) return err(2, msg.workflow.uploadBadTag(tag));
   const version = tag.slice(1);
 
-  if (!existsSync(pdf)) return err(2, `--pdf not found: ${pdf}`);
+  if (!existsSync(pdf)) return err(2, msg.workflow.uploadNoPdf(pdf));
 
   const githubUrl: string | undefined = project.github;
-  if (!githubUrl) return err(2, 'project.github missing; should have been set by prepare.');
+  if (!githubUrl) return err(2, msg.workflow.uploadNoGithub);
   const repo = repoFromGithubUrl(githubUrl);
   if (!repo) return err(2, msg.workflow.depositBadGithubUrl(mystPath, githubUrl));
   const siteUrl = input.siteUrl ?? defaultSiteUrl(repo, instanceRoot);
@@ -979,58 +1028,47 @@ export async function cmdPublish(input: PublishInput): Promise<Outcome> {
   try {
     assertBundlePreconditions(repoRoot, engineRoot);
     journal = await prepareJournalArchive(repoRoot, instanceRoot, git, { repo, commit: sha });
+    await prepareEngineArchive(engineRoot, git, engineZip);
   } catch (e) {
     if (
       e instanceof BundleCollisionError ||
       e instanceof TemplateArchiveError ||
-      e instanceof JournalArchiveError
+      e instanceof JournalArchiveError ||
+      e instanceof EngineArchiveError
     ) {
       return err(2, e.message);
     }
     throw e;
   }
 
-  // publish overwrites the metadata [R22], so publishing from a tree with no HTML build would
-  // replace a description that has the abstract with one that does not [R107].
+  // An upload overwrites the metadata [R22], including the abstract the HTML build supplies
+  // [R107].
   if (!hasBuildContent(repoRoot)) {
-    return err(
-      2,
-      `no myst build output under _build/site/content, so the deposit description would carry ` +
-        `no abstract and overwrite one that does. Build this working tree before depositing.`,
-    );
+    return err(2, msg.workflow.uploadNoBuildContent);
   }
 
   const latestId = await api.latestVersionDepId(conceptDoi);
   if (latestId === null) {
-    return err(2, `No Zenodo record matches ${conceptDoi} (token mismatch? deleted draft?)`);
+    return err(2, msg.workflow.uploadNoRecord(conceptDoi));
   }
   let dep = await api.getDeposition(latestId);
 
   const expectedConcept = `${zenodoDoiPrefix(sandbox)}${dep.conceptrecid}`;
   if (conceptDoi !== expectedConcept) {
-    return err(
-      2,
-      `Concept DOI sanity check failed: myst.yml has ${conceptDoi}, Zenodo's conceptrecid implies ${expectedConcept}`,
-    );
+    return err(2, msg.workflow.uploadConceptMismatch(conceptDoi, expectedConcept));
   }
 
   if (dep.submitted) {
-    // The CI token lacks `deposit:actions`, which a new version needs, so an editor clicks "New
-    // version" on Zenodo to create the empty draft.
+    // An editor clicks "New version" on Zenodo to create the empty draft.
     const recordUrl = dep.links?.record_html ?? dep.links?.html;
-    process.stderr.write(
-      `::error title=Zenodo: editor must click 'New version'::No unsubmitted draft for this concept. ` +
-        `Record: ${recordUrl ?? '(unavailable)'}\n`,
-    );
-    return err(
-      5,
-      `No unsubmitted Zenodo draft exists for this concept DOI.\n\n` +
-        `An editor must open the record and click **New version** to spawn an empty draft, then re-run failed jobs.\n\n` +
-        `Record: ${recordUrl ?? '(URL unavailable)'}`,
-      { record_url: recordUrl },
-    );
+    if (msg.inCI()) {
+      process.stderr.write(msg.workflow.depositNeedsNewVersionAnnotation(recordUrl) + '\n');
+    }
+    return err(5, msg.workflow.depositNeedsNewVersion(recordUrl ?? '(URL unavailable)'), {
+      record_url: recordUrl,
+    });
   }
-  process.stderr.write(`[publish] reusing existing draft ${dep.id}\n`);
+  process.stderr.write(`[upload] reusing existing draft ${dep.id}\n`);
 
   const md = buildMetadata({
     project,
@@ -1046,7 +1084,7 @@ export async function cmdPublish(input: PublishInput): Promise<Outcome> {
   dep = await api.updateMetadata(dep.id, md);
 
   const bucket = dep.links?.bucket;
-  if (!bucket) return err(4, 'No bucket URL in deposition (unexpected Zenodo API shape).');
+  if (!bucket) return err(4, msg.workflow.uploadNoBucket);
 
   // Predicted from the deposition id; matches what Zenodo assigns at publish.
   const predictedVersionDoi = `${zenodoDoiPrefix(sandbox)}${dep.id}`;
@@ -1060,24 +1098,32 @@ export async function cmdPublish(input: PublishInput): Promise<Outcome> {
     review_pr: await git.reviewPr(repoRoot, sha),
     journal_repo: journal?.repo ?? null,
     journal_commit: journal?.commit ?? null,
-    built_at: new Date().toISOString(),
-    platform: 'linux-x86_64',
-    typst_version: readTypstVersion(engineRoot),
+    built_at: input.builtAt !== undefined ? input.builtAt : new Date().toISOString(),
+    platform: input.platform ?? 'linux-x86_64',
+    typst_version:
+      input.typstVersion !== undefined ? input.typstVersion : readTypstVersion(engineRoot),
   };
-  let files: string[];
-  try {
-    files = await buildBundle(bundleOut, pdf, repoRoot, engineRoot, provenance, git, journal);
-  } catch (e) {
-    if (e instanceof EngineArchiveError) return err(2, e.message);
-    throw e;
-  }
+  const files = await buildBundle(
+    bundleOut,
+    pdf,
+    repoRoot,
+    engineRoot,
+    provenance,
+    git,
+    journal,
+    engineZip,
+  );
 
   for (const p of files) {
-    process.stderr.write(`[publish] upload ${basename(p)}\n`);
+    process.stderr.write(`[upload] upload ${basename(p)}\n`);
     await api.uploadFile(bucket, basename(p), readFileSync(p));
   }
 
-  dep = await api.getDeposition(dep.id);
+  if (input.publish) {
+    process.stderr.write(`[upload] publish ${dep.id}\n`);
+    dep = await api.publish(dep.id);
+  } else dep = await api.getDeposition(dep.id);
+  // A draft has no DOI until it is published.
   const versionDoi = dep.metadata?.doi ?? dep.doi ?? predictedVersionDoi;
   return ok({
     version_doi: versionDoi,
@@ -1085,6 +1131,8 @@ export async function cmdPublish(input: PublishInput): Promise<Outcome> {
     deposition_id: dep.id,
     bundle_dir: bundleOut,
     site_url: siteUrl,
+    published: Boolean(input.publish),
+    ...(input.publish ? { record_url: dep.links?.record_html ?? dep.links?.html } : {}),
   });
 }
 
@@ -1096,8 +1144,8 @@ export interface StatusInput {
 }
 
 /**
- * `oak deposit status`: the deposit's state for the committed concept DOI, and the metadata a
- * publish would send. Writes nothing.
+ * `oak deposit status`: the deposit's state for the committed concept DOI, and the metadata an
+ * upload would send. Writes nothing.
  */
 export async function cmdStatus(input: StatusInput): Promise<Outcome> {
   const { mystPath, api, instanceRoot } = input;
