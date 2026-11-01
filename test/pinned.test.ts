@@ -15,6 +15,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   cacheHome,
+  DEPOSIT_MIN_VERSION,
   handOff,
   readPin,
   runVersion,
@@ -112,6 +113,18 @@ describe('handOff', () => {
       ).toBeNull();
       expect(checkout.calls.clones).toEqual([]);
     }
+  });
+
+  it("refuses release and deposit below DEPOSIT_MIN_VERSION, since myst.yml is the author's", async () => {
+    for (const verb of ['release', 'deposit'] as const) {
+      const { deps, calls } = fakes();
+      await expect(handOff(ctx(paper('v0.2.0'), [], {}, verb), deps)).rejects.toThrow(
+        DEPOSIT_MIN_VERSION,
+      );
+      expect(calls.clones).toEqual([]);
+    }
+    const { deps } = fakes();
+    expect(await handOff(ctx(paper('v0.2.0')), deps)).toBe(7);
   });
 
   it('runs this oak when there is no readable pin', async () => {

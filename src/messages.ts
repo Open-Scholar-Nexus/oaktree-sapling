@@ -762,6 +762,11 @@ export const pinned = {
     `oak ${verb}: the oak version in ${where} is ${JSON.stringify(got.slice(0, 60))}; pin a ` +
     `release tag like v1.2.3 or v1.2.3-dev.4.`,
 
+  belowDepositMin: (verb: HandoffVerb, got: string, min: string): string =>
+    `oak ${verb}: myst.yml pins oak ${got}, and oak ${verb} needs ${min} or later, since older ` +
+    `ones can build the paper beside the Zenodo token. Run oak upgrade on the paper repo, ` +
+    `merge its pull request, and push a new tag.`,
+
   badRepo: (verb: HandoffVerb, got: string, source: PinSource): string =>
     `oak ${verb}: ${
       source.kind === 'paper' ? `engine_repo in ${source.pinsPath ?? 'pins.yml'}` : '--engine-repo'
