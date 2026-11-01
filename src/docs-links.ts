@@ -72,8 +72,6 @@ export const DOCS = {
   publishOwnBuild: 'reference/cli#use-local-build',
   /** Depositing from the editor's computer, for a journal with no Zenodo token on GitHub. */
   publishFromTerminal: 'guide/publish#from-terminal',
-  /** `oak notify new-version`: the standalone reminder and where its PR number comes from. */
-  notify: 'reference/cli#notify',
   /** `oak bootstrap <paper|journal>`: onboarding a repo from templates. */
   bootstrap: 'reference/cli#bootstrap',
   /** `oak upgrade`: render-and-compare against a paper or repo, and the PR it opens. */

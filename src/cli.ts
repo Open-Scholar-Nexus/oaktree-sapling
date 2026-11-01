@@ -36,7 +36,6 @@ type Verb =
   | 'deploy-preview'
   | 'deposit'
   | 'release'
-  | 'notify'
   | 'bootstrap'
   | 'upgrade'
   | 'conformance';
@@ -709,14 +708,12 @@ async function cmdRelease(argv: string[]): Promise<number> {
 }
 
 /** `oak deploy-preview <site> [--verified-head <sha>]`: deploys the build artifact to
- *  Cloudflare Pages, or falls back to a link to it [R16], posts the preview comment, then runs
- *  the new-version reminder. */
+ *  Cloudflare Pages, or falls back to a link to it [R16], and posts the preview comment. */
 async function cmdDeployPreview(argv: string[]): Promise<number> {
   const preview = await import('./preview.js');
   const gh = await import('./gh.js');
   const { eventHeadSha } = await import('./artifact.js');
   const siteDir = resolve(argv.find((a) => !a.startsWith('--')) ?? 'site');
-  const myst = flag(argv, 'myst');
   const paper = flag(argv, 'paper');
   const instance = await resolveInstanceRoot(argv, resolve(paper ?? '.'), 'deploy-preview');
   const out = await preview.cmdDeployPreview(
@@ -733,46 +730,10 @@ async function cmdDeployPreview(argv: string[]): Promise<number> {
       },
       verifiedHead: flag(argv, 'verified-head') ?? eventHeadSha(process.env),
       paper,
-      ...(myst ? { mystPath: resolve(myst) } : {}),
     },
     { deployer: gh.realPagesDeployer, gh: gh.realGhPr },
   );
   emit(argv, out.result);
-  return out.exitCode;
-}
-
-/** `oak notify new-version [--pr N | --site <dir>]`: the new-version reminder on its own.
- *  deploy-preview runs the same logic [R16]; here `.pr-number` is only read, since deleting it is
- *  deploy-preview's [R26]. Documented at DOCS.notify. */
-async function cmdNotify(argv: string[]): Promise<number> {
-  if (argv[0] !== 'new-version') {
-    process.stderr.write(msg.workflow.notifyUsage + '\n');
-    return 2;
-  }
-  const rest = argv.slice(1);
-  const preview = await import('./preview.js');
-  const gh = await import('./gh.js');
-  const artifact = await import('./artifact.js');
-
-  const flagged = flag(rest, 'pr');
-  const pr = flagged
-    ? artifact.assertPrNumber(flagged)
-    : artifact.readPrNumber(resolve(flag(rest, 'site') ?? 'site'), artifact.SITE_FILES.pr);
-  if (!pr) {
-    process.stderr.write(msg.workflow.notifyNoPr + '\n');
-    return 2;
-  }
-
-  const out = preview.runNewVersionReminder(
-    {
-      repoRoot: resolve(flag(rest, 'paper') ?? '.'),
-      mystPath: mystPathOf(rest),
-      repo: gh.currentRepo(flag(rest, 'repo')),
-      pr,
-    },
-    gh.realGhPr,
-  );
-  emit(rest, out.result);
   return out.exitCode;
 }
 
@@ -1331,7 +1292,6 @@ const VERBS: Verb[] = [
   'deploy-preview',
   'deposit',
   'release',
-  'notify',
   'bootstrap',
   'upgrade',
   'conformance',
@@ -1446,7 +1406,6 @@ async function main(argv: string[]): Promise<number> {
   if (verb === 'deposit') return cmdDeposit(argv.slice(1));
   if (verb === 'release') return cmdRelease(argv.slice(1));
   if (verb === 'deploy-preview') return cmdDeployPreview(argv.slice(1));
-  if (verb === 'notify') return cmdNotify(argv.slice(1));
   if (verb === 'bootstrap') return cmdBootstrap(argv.slice(1));
   if (verb === 'upgrade') return cmdUpgrade(argv.slice(1));
   if (verb === 'conformance') return cmdConformance(argv.slice(1));

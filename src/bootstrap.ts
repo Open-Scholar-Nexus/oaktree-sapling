@@ -18,7 +18,7 @@ import { join, dirname, posix } from 'node:path';
 import { isMap, isScalar } from 'yaml';
 import { readDoc } from './yaml-io.js';
 import { themeZipUrl } from './assets.js';
-import { LABEL_EDITOR_ACTION, LABEL_ZENODO_FAILED } from './preview.js';
+import { LABEL_ZENODO_FAILED } from './preview.js';
 import type { Outcome } from './result.js';
 import { pagesUrl } from './schema.js';
 
@@ -477,7 +477,6 @@ function vTagsBody(bypass: unknown[]): unknown {
  * ------------------------------------------------------------------------ */
 
 const LABELS: Array<{ name: string; color: string; description: string }> = [
-  { name: LABEL_EDITOR_ACTION, color: 'b60205', description: msg.bootstrap.labelEditorAction },
   { name: LABEL_ZENODO_FAILED, color: 'b60205', description: msg.bootstrap.labelZenodoFailed },
 ];
 

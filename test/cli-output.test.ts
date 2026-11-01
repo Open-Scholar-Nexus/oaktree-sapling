@@ -526,7 +526,7 @@ describe('subprocess output carries its provenance', () => {
 
 describe('a flag passed without a value is refused', () => {
   it('does not swallow the next flag as the value', () => {
-    const r = oak(['notify', 'new-version', '--repo', '--pr', '1']);
+    const r = oak(['post-checks', '--repo', '--report', 'r.json']);
     expect(r.code).toBe(2);
     expect(r.stderr).toContain('--repo needs a value');
   });
@@ -534,7 +534,7 @@ describe('a flag passed without a value is refused', () => {
   it('does not fall back to the environment when the value is missing', () => {
     // Several callers read `flag(...) ?? process.env.X`, so a missing value (an unquoted empty
     // shell variable) would act on the environment's repo.
-    const r = oak(['notify', 'new-version', '--pr', '1', '--repo']);
+    const r = oak(['post-checks', '--report', 'r.json', '--repo']);
     expect(r.code).toBe(2);
     expect(r.stderr).toContain('--repo needs a value');
   });
@@ -621,12 +621,6 @@ describe('post-checks refuses a forged report [R137]', () => {
 });
 
 describe('a pull request number is a number [R136]', () => {
-  it('refuses one that is not, whether it came from a flag or the artifact', () => {
-    const r = oak(['notify', 'new-version', '--pr', '1/comments?x=', '--paper', fixturePaper]);
-    expect(r.code).toBe(2);
-    expect(r.stderr).toContain('not a pull request number');
-  });
-
   /** post-checks on a valid report, with `files` beside it, and no gh on PATH: a refusal has to
    *  come before any GitHub call. */
   function postChecksWith(files: Record<string, string>) {
