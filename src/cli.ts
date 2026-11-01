@@ -576,7 +576,8 @@ function platformName(): string {
  * `oak release --tag vX [--use-local-build] [--publish-without-review]`: deposits the tag's build,
  * attaches the bundle to the tag's release, and comments on the commit. The environment follows
  * the committed DOI. In Actions it deposits `_build`. Run locally, it expects the clone at the
- * tag and deposits the build of the tag's Deposit version run, or `_build` with --use-local-build.
+ * tag and deposits the build of the tag's Deposit version run, or the local `_build` folder with --use-local-build.
+ * It never builds.
  * Documented at DOCS.release.
  */
 async function cmdRelease(argv: string[]): Promise<number> {
@@ -626,8 +627,7 @@ async function cmdRelease(argv: string[]): Promise<number> {
   // `source.zip` and the provenance are HEAD's, and the metadata the working tree's myst.yml.
   const sha = inActions ? null : release.assertAtTag(paperRoot, tag, gh.realCiBuildSource);
 
-  // In Actions, `_build` holds the build job's artifact. `release` never builds, so the token
-  // never sits beside the paper's code.
+  // In Actions, `_build` holds the build job's artifact
   let builtAt: string | undefined;
   let builtHere: { platform: string; typstVersion: string | null } | undefined;
   if (!inActions && useLocalBuild) {

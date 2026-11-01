@@ -1,26 +1,11 @@
 /**
- * `oak deposit` (prepare, upload, status), and the core of `oak release`.
+ * `oak deposit` (prepare, upload, status), and the core of `oak release`. Each command returns one
+ * JSON result with a `status` field. A draft is reused when one exists, the committed DOI picks
+ * the endpoint for an upload, and an upload overwrites the metadata [R22].
  *
- *  - The journal's description paragraph and Zenodo community come from `journal.yml`
- *    `zenodo:`; both are optional [R19]. See `loadJournalZenodo`.
- *  - Every lookup pages through all depositions [R20] [R35.1]: an account can hold more than a
- *    page, and a missed match makes `prepare` mint a second concept DOI.
- *  - A deposit is identified by the paper's `project.id`, stored as a URN
- *    (`urn:oaktree-sapling:<id>`) beside the GitHub URL and looked up first, so it survives the
- *    repo moving [R7] [design §9].
- *  - Extra files come from the paper's `deposit/` folder and upload as they are, beside oak's
- *    fixed files; a name clash with those is an error [R28].
- *  - The review pull request in the provenance comes from `gh api` (`GitContext.reviewPr`)
- *    [R35.2].
- *  - The Project Website link is the paper's registry `site_url`, else its GitHub Pages URL,
- *    unless `--site-url` names one. See `defaultSiteUrl`.
- *
- * Every command returns one JSON result with a `status` field. A draft is reused when one exists,
- * the committed DOI picks the endpoint for an upload, and an upload overwrites the metadata [R22].
- *
- * The Zenodo HTTP transport and the git and gh side are injected, so tests need neither network
- * nor git; the real ones are `createFetchTransport()` and gh.ts. The abstract is read from the
- * HTML build's JSON on disk, so this module needs no myst-cli.
+ * The Zenodo transport and the git and gh side are injected; the real ones are
+ * `createFetchTransport()` and gh.ts. The abstract comes from the HTML build's JSON, so this
+ * module needs no myst-cli.
  */
 import {
   readFileSync,
@@ -107,8 +92,8 @@ function isSandboxDoi(doi: string): boolean {
   return doi.startsWith(zenodoDoiPrefix(true));
 }
 
-/** The paper's identity on Zenodo [R7]: a URN independent of where the paper lives, stored as a
- *  related identifier so it survives the GitHub URL changing. */
+/** The paper's identity on Zenodo [R7] [design §9]: a URN independent of where the paper lives,
+ *  stored as a related identifier so it survives the GitHub URL changing. */
 export function paperUrn(id: string): string {
   return `urn:oaktree-sapling:${id}`;
 }
