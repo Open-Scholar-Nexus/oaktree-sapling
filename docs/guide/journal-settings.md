@@ -30,6 +30,7 @@ In CI, every run that reads the journal clones the journal repository at its lat
 
 On your machine, `oak` keeps a cached clone of the journal in the paper's `_build/journal/<owner>/<repo>` and reuses it for a week, then fetches it again. If the fetch fails, for example offline, it keeps using the cache and prints a warning. Each run prints which copy it used. To clear the cache and fetch the journal now, delete `_build/journal`.
 
+(previewing-with-other-settings)=
 ## Previewing with other settings
 
 `--instance <path>`

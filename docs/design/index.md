@@ -47,7 +47,7 @@ The assembled result is written to **`myst.oak.yml`**[^public], next to the pape
 
 Each page takes one part (slice?) of oaktree-sapling and explains why it is built that way. What each part _does_ belongs in [Reference](../reference/files.md); this section is for the reasoning.
 
-[How a paper repository's CI is built](paper-ci.md) is the first of them: why every job is split in two, what a job holding a token is allowed to believe, and what `CODEOWNERS` gates.
+[How a paper repository's CI is built](paper-ci.md) is the first of them: why every job is split in two, what a job holding a token is allowed to believe, and what `CODEOWNERS` gates. [The editorial checks](checks.md) covers the checks a journal writes itself.
 
 Code comments cite decisions as `[R#]` and `[design §N]`. Those not yet written up on these pages are in the original [decision record](https://github.com/pollomarzo/whitelabel/blob/v0.0.7/docs/design/record.md) and [design brief](https://github.com/pollomarzo/whitelabel/blob/v0.0.7/docs/design/brief.md), in the repository oaktree-sapling was developed in.
 

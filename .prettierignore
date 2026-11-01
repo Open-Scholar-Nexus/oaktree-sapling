@@ -17,3 +17,6 @@ templates/
 # hand-wrapped line in the tenant docs for no gain and make their diffs unreadable.
 docs/
 *.md
+
+# A check file that fails to parse, on purpose, for test/journal-checks.test.ts.
+test/journal-checks/syntax-error.mjs
