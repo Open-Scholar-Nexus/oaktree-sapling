@@ -497,11 +497,13 @@ describe('readStampedTemplate / resolveTemplateDir ([R76])', () => {
       );
     });
 
-    it('keeps a path that exists here, and one outside the build', () => {
+    it('keeps a path that exists here, and refuses one outside the build', () => {
       const root = clone();
       writeFileSync(join(root, 'myst.oak.yml'), derived('x'));
       expect(rebaseBuildPath(root, root, '/engine')).toBe(root);
-      expect(rebaseBuildPath('/elsewhere/typst', root, '/engine')).toBe('/elsewhere/typst');
+      expect(() => rebaseBuildPath('/elsewhere/typst', root, '/engine')).toThrow(
+        'not on this computer',
+      );
     });
   });
 });

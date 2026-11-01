@@ -1098,6 +1098,10 @@ export const workflow = {
     `typst template "${template}" resolves to ${dir}, which does not exist. The deposit ` +
     `archives the template the PDF was rendered with, since no other file carries it. Run the ` +
     `build in this working tree before depositing.`,
+  depositTemplateElsewhere: (path: string): string =>
+    `the build recorded the typst template at ${path}, which is not on this computer and not ` +
+    `inside the build's engine or repository, so the deposit cannot archive it. Point myst.yml ` +
+    `at a template inside the paper repo, a URL, or a registry name, and build again.`,
   depositNameCollision: (names: string[], reserved: readonly string[]): string =>
     `deposit/ has files named like the ones oak adds: ${names.join(', ')}. Rename them; oak ` +
     `adds ${reserved.join(', ')}.`,

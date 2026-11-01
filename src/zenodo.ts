@@ -606,25 +606,26 @@ export function resolveTemplateDir(template: string, paperRoot: string): string 
  * CI that is `<workspace>/.engine`, so:
  *  - `<workspace>/.engine/x` maps to `<engineRoot>/x`;
  *  - `<workspace>/x` maps to `x` in this clone.
- * A path that exists here, or that this cannot place, is returned as it is.
+ * A relative path, or one that exists here, is returned as it is. Any other path throws a
+ * {@link TemplateArchiveError}, since nothing here holds what it named.
  */
 export function rebaseBuildPath(path: string, paperRoot: string, engineRoot: string): string {
   if (!isAbsolute(path) || existsSync(path)) return path;
   const derived = join(paperRoot, DERIVED_CONFIG_FILE);
-  if (!existsSync(derived)) return path;
-  const first = readDoc(derived).getIn(['extends', 0]);
-  if (typeof first !== 'string' || basename(first) !== 'paper-base.yml') return path;
-
-  const under = (root: string): string | null => {
-    const rel = relative(root, path);
-    return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel)) ? rel : null;
-  };
-  const buildEngine = resolve(first, '..');
-  const inEngine = under(buildEngine);
-  if (inEngine !== null) return join(engineRoot, inEngine);
-  if (basename(buildEngine) !== '.engine') return path;
-  const inWorkspace = under(resolve(buildEngine, '..'));
-  return inWorkspace === null ? path : join(repoRootOf(paperRoot), inWorkspace);
+  const first = existsSync(derived) ? readDoc(derived).getIn(['extends', 0]) : undefined;
+  if (typeof first === 'string' && basename(first) === 'paper-base.yml') {
+    const under = (root: string): string | null => {
+      const rel = relative(root, path);
+      return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel)) ? rel : null;
+    };
+    const buildEngine = resolve(first, '..');
+    const inEngine = under(buildEngine);
+    if (inEngine !== null) return join(engineRoot, inEngine);
+    const inWorkspace =
+      basename(buildEngine) === '.engine' ? under(resolve(buildEngine, '..')) : null;
+    if (inWorkspace !== null) return join(repoRootOf(paperRoot), inWorkspace);
+  }
+  throw new TemplateArchiveError(msg.workflow.depositTemplateElsewhere(path));
 }
 
 /** The nearest directory at or above `dir` holding `.git`, else `dir`. */
