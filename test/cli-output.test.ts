@@ -856,7 +856,7 @@ describe.skipIf(bundleState() === 'absent')('oak release reads the DOI before an
         '  options:\n    oaktree-sapling:\n      version: v9.9.9\n      edition: e\n',
     );
     const { code, stderr } = oak(
-      ['release', '--tag', 'v1.0.0', '--no-build', '--paper', dir, '--no-instance'],
+      ['release', '--tag', 'v1.0.0', '--use-local-build', '--paper', dir, '--no-instance'],
       { OAK_USE_RUNNING: '1', ZENODO_TOKEN: undefined, ZENODO_TOKEN_SANDBOX: undefined },
     );
     expect(code).toBe(2);
@@ -912,7 +912,7 @@ describe.skipIf(bundleState() === 'absent')(
       expect(r.stdout + r.stderr).not.toContain('production-secret');
     });
 
-    it('in Actions it deposits _build and never builds, even without --no-build', () => {
+    it('in Actions it deposits _build and never builds, with no flag', () => {
       const r = oak(
         ['release', '--tag', 'v1.0.0', '--paper', sandboxPaper(), '--no-instance'],
         { ...noTokens, ZENODO_TOKEN_SANDBOX: 'sandbox-token' },
@@ -926,11 +926,7 @@ describe.skipIf(bundleState() === 'absent')(
     const emptySecrets = { OAK_USE_RUNNING: '1', ZENODO_TOKEN: '', ZENODO_TOKEN_SANDBOX: '' };
 
     it('the CI deposit with no token ends green with a notice to deposit from the terminal', () => {
-      const r = oak(
-        ['release', '--tag', 'v1.0.0', '--no-build', '--paper', sandboxPaper()],
-        emptySecrets,
-        true,
-      );
+      const r = oak(['release', '--tag', 'v1.0.0', '--paper', sandboxPaper()], emptySecrets, true);
       expect(r.code).toBe(0);
       expect(r.stderr).toContain('::notice::oak release: the zenodo-publish environment has no');
       expect(r.stderr).toContain('ZENODO_TOKEN_SANDBOX');

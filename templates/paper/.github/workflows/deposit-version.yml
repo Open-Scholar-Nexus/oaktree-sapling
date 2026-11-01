@@ -47,7 +47,7 @@ jobs:
           path: .
       - uses: ./.github/actions/engine
         with:
-          args: release --tag ${{ github.ref_name }} --no-build
+          args: release --tag ${{ github.ref_name }}
         env:
           GH_TOKEN: ${{ github.token }}
           ZENODO_TOKEN: ${{ secrets.ZENODO_TOKEN }}

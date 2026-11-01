@@ -167,7 +167,7 @@ export const usage = (): string =>
   `with no Zenodo token on GitHub runs them in a clone of the paper repo, gh logged in)\n` +
   `  oak deposit prepare [--sandbox] [--repo <owner/repo>] [--site-url <url>] [--instance <dir> | --no-instance]\n` +
   `                    reserve the DOI on Zenodo and open the pull request writing it into myst.yml\n` +
-  `  oak release --tag <vX.Y.Z> [--no-build] [--publish-without-review] [--paper <dir>]\n` +
+  `  oak release --tag <vX.Y.Z> [--use-local-build] [--publish-without-review] [--paper <dir>]\n` +
   `              [--instance <dir> | --no-instance] [--site-url <url>]\n` +
   `                    fill the Zenodo draft with the tag's build from its Deposit version run,\n` +
   `                    attach the files to the tag's GitHub release, comment on the commit\n` +
@@ -1197,7 +1197,7 @@ export const workflow = {
     `with access to the repo.`,
   releaseFetched: (url: string): string => `oak release: using the build from ${url}`,
   releaseNoBuild:
-    `oak release: --no-build deposits the build under _build. The provenance records this ` +
+    `oak release: --use-local-build deposits the build under _build. The provenance records this ` +
     `computer's platform and the typst on PATH as the build's. Build with oak build in a shell ` +
     `without the Zenodo token, since the build runs the paper's code. ` +
     docsUrl(DOCS.publishOwnBuild),

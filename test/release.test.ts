@@ -181,7 +181,7 @@ describe('fetchCiBuild', () => {
   });
 });
 
-describe('assertBuiltAfter, for a local --no-build', () => {
+describe('assertBuiltAfter, for --use-local-build', () => {
   /** A paper with a PDF and one page of HTML content, both modified at `pdfAt` and `pageAt`. */
   function built(pdfAt: number, pageAt: number): { root: string; pdf: string } {
     const root = tmp('oak-built-after-');

@@ -573,10 +573,10 @@ function platformName(): string {
 }
 
 /**
- * `oak release --tag vX [--no-build] [--publish-without-review]`: deposits the tag's build,
+ * `oak release --tag vX [--use-local-build] [--publish-without-review]`: deposits the tag's build,
  * attaches the bundle to the tag's release, and comments on the commit. The environment follows
  * the committed DOI. In Actions it deposits `_build`. Run locally, it expects the clone at the
- * tag and deposits the build of the tag's Deposit version run, or `_build` with --no-build.
+ * tag and deposits the build of the tag's Deposit version run, or `_build` with --use-local-build.
  * Documented at DOCS.release.
  */
 async function cmdRelease(argv: string[]): Promise<number> {
@@ -591,7 +591,7 @@ async function cmdRelease(argv: string[]): Promise<number> {
     process.stderr.write(msg.workflow.releaseBadTag(tag) + '\n');
     return 2;
   }
-  const useBuildDir = has(argv, 'no-build');
+  const useLocalBuild = has(argv, 'use-local-build');
   const inActions = Boolean(process.env.GITHUB_ACTIONS);
   const z = await import('./zenodo.js');
   const gh = await import('./gh.js');
@@ -630,8 +630,8 @@ async function cmdRelease(argv: string[]): Promise<number> {
   // never sits beside the paper's code.
   let builtAt: string | undefined;
   let builtHere: { platform: string; typstVersion: string | null } | undefined;
-  if (!inActions && useBuildDir) {
-    // Locally with --no-build: the editor's own `oak build`, run apart from the token.
+  if (!inActions && useLocalBuild) {
+    // Locally with --use-local-build: the editor's own `oak build`, run apart from the token.
     process.stderr.write(annotate('warning', msg.workflow.releaseNoBuild) + '\n');
     builtHere = { platform: platformName(), typstVersion: await typstOnPath() };
   } else if (!inActions) {
@@ -646,7 +646,7 @@ async function cmdRelease(argv: string[]): Promise<number> {
     process.stderr.write(msg.workflow.releaseNoPdf + '\n');
     return 2;
   }
-  if (!inActions && useBuildDir) {
+  if (!inActions && useLocalBuild) {
     release.assertBuiltAfter(paperRoot, pdf, gh.realCiBuildSource.commitTime(paperRoot, sha!), tag);
   }
 
