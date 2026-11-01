@@ -555,7 +555,8 @@ function findExportedPdf(paperRoot: string): string | null {
   return hit ? join(dir, String(hit)) : null;
 }
 
-/** The version of the `typst` on PATH, which a local build exports with; null when none runs. */
+/** The version of the `typst` on PATH, which `oak build` puts the engine's in front of when it
+ *  runs here; null when none runs. */
 async function typstOnPath(): Promise<string | null> {
   const { parseTypstVersion } = await import('./release.js');
   try {
@@ -572,11 +573,10 @@ function platformName(): string {
 }
 
 /**
- * `oak release --tag vX [--local-build | --no-build] [--publish-without-review]`: deposits the
- * tag's build, attaches the bundle to the tag's release, and comments on the commit. Outside
- * GitHub Actions the build is the tag's Deposit version artifact, unless a flag says otherwise,
- * and the clone must be at the tag. The environment follows the committed DOI. Documented at
- * DOCS.release.
+ * `oak release --tag vX [--no-build] [--publish-without-review]`: deposits the tag's build,
+ * attaches the bundle to the tag's release, and comments on the commit. The environment follows
+ * the committed DOI. Run by hand, it expects the clone at the tag and deposits the build of the
+ * tag's Deposit version run. Documented at DOCS.release.
  */
 async function cmdRelease(argv: string[]): Promise<number> {
   const tag = flag(argv, 'tag');
@@ -584,18 +584,13 @@ async function cmdRelease(argv: string[]): Promise<number> {
     process.stderr.write(msg.workflow.releaseNoTag + '\n');
     return 2;
   }
+  // The tag reaches git as a ref.
   const { PAPER_VERSION_TAG } = await import('./schema.js');
-  // It reaches git as a ref, so it is checked first.
   if (!PAPER_VERSION_TAG.test(tag)) {
     process.stderr.write(msg.workflow.releaseBadTag(tag) + '\n');
     return 2;
   }
-  const localBuild = has(argv, 'local-build');
-  const noBuild = has(argv, 'no-build');
-  if (localBuild && noBuild) {
-    process.stderr.write(msg.workflow.releaseBuildFlags + '\n');
-    return 2;
-  }
+  const useBuildDir = has(argv, 'no-build');
   const inActions = Boolean(process.env.GITHUB_ACTIONS);
   const z = await import('./zenodo.js');
   const gh = await import('./gh.js');
@@ -632,26 +627,22 @@ async function cmdRelease(argv: string[]): Promise<number> {
   const sha = inActions ? null : release.assertAtTag(paperRoot, tag, gh.realCiBuildSource);
 
   let builtAt: string | undefined;
-  if (sha && !localBuild && !noBuild) {
-    const ci = release.fetchCiBuild(paperRoot, tag, sha, gh.realCiBuildSource);
-    builtAt = ci.builtAt ?? undefined;
-    process.stderr.write(msg.workflow.releaseFetched(ci.run.url) + '\n');
-  } else if (noBuild && !inActions) {
-    process.stderr.write(annotate('warning', msg.workflow.releaseNoBuild) + '\n');
-  } else if (!noBuild) {
+  let builtHere: { platform: string; typstVersion: string | null } | undefined;
+  if (useBuildDir) {
+    // `_build` as it is: in CI the build job's artifact; by hand, the editor's own `oak build`,
+    // run apart from the token since it runs the paper's code.
     if (!inActions) {
-      const { readPin } = await import('./pinned.js');
-      const pin = readPin(paperRoot, ENGINE_REPO_DEFAULT);
-      const plugins = release.addedPlugins(paperRoot, instance.root, pin);
-      const systemTypst = platformName() !== 'linux-x86_64';
-      process.stderr.write(
-        annotate('warning', msg.workflow.releaseLocalBuild(plugins, systemTypst)) + '\n',
-      );
+      process.stderr.write(annotate('warning', msg.workflow.releaseNoBuild) + '\n');
+      builtHere = { platform: platformName(), typstVersion: await typstOnPath() };
     }
-    // Build in a child process: myst's HTML build calls process.exit(0) on success, which would
-    // end `release` before the deposit. The parent then reads the PDF (_build/exports) and
-    // abstract (_build/site/content) from the same tree; `oak build` ignores release's extra
-    // flags. The child gets no OAK_RESULT_FILE: the result is release's.
+  } else if (inActions) {
+    // Builds in this job. The paper workflow passes --no-build instead, so the token never
+    // sits beside the paper's code.
+    //
+    // A child process: myst's HTML build calls process.exit(0) on success, which would end
+    // `release` before the deposit. The parent then reads the PDF (_build/exports) and abstract
+    // (_build/site/content) from the same tree; `oak build` ignores release's extra flags. The
+    // child gets no OAK_RESULT_FILE: the result is release's.
     const { OAK_RESULT_FILE: _, ...childEnv } = process.env;
     // The build must be this oak's, since this oak deposits it.
     childEnv[(await import('./pinned.js')).USE_RUNNING_ENV] = '1';
@@ -660,6 +651,11 @@ async function cmdRelease(argv: string[]): Promise<number> {
       stdio: 'inherit',
       env: childEnv,
     });
+  } else {
+    // By hand: the build of the tag's Deposit version run, checked against the clone.
+    const ci = release.fetchCiBuild(paperRoot, tag, sha!, gh.realCiBuildSource);
+    builtAt = ci.builtAt ?? undefined;
+    process.stderr.write(msg.workflow.releaseFetched(ci.run.url) + '\n');
   }
 
   const pdf = findExportedPdf(paperRoot);
@@ -682,7 +678,7 @@ async function cmdRelease(argv: string[]): Promise<number> {
     instanceRoot: instance.root,
     engineRoot: engineRoot(),
     publish,
-    ...(localBuild ? { platform: platformName(), typstVersion: await typstOnPath() } : {}),
+    ...builtHere,
     ...(builtAt ? { builtAt } : {}),
   });
   emit(argv, out.result);
@@ -695,8 +691,10 @@ async function cmdRelease(argv: string[]): Promise<number> {
           msg.workflow.releaseFailureIssue(tag),
           String(out.result.message ?? 'unknown error'),
         );
-      } catch {
-        /* best-effort */
+      } catch (e) {
+        process.stderr.write(
+          annotate('warning', msg.workflow.releaseFailureIssueFailed((e as Error).message)) + '\n',
+        );
       }
     }
     return out.exitCode;

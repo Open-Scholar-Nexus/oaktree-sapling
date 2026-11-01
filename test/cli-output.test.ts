@@ -885,14 +885,8 @@ describe.skipIf(bundleState() === 'absent')(
       ZENODO_TOKEN_SANDBOX: undefined,
     };
 
-    it('refuses --local-build with --no-build, and a tag that is not a paper version', () => {
+    it('refuses a tag that is not a paper version', () => {
       const dir = sandboxPaper();
-      const both = oak(
-        ['release', '--tag', 'v1.0.0', '--local-build', '--no-build', '--paper', dir],
-        noTokens,
-      );
-      expect(both.code).toBe(2);
-      expect(both.stderr).toContain('not both');
       const bad = oak(['release', '--tag', 'v1.0.0;x', '--paper', dir], noTokens);
       expect(bad.code).toBe(2);
       expect(bad.stderr).toContain('--tag must be a paper version');

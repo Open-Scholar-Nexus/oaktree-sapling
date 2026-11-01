@@ -167,7 +167,7 @@ export const usage = (): string =>
   `with no Zenodo token on GitHub runs them in a clone of the paper repo, gh logged in)\n` +
   `  oak deposit prepare [--sandbox] [--repo <owner/repo>] [--site-url <url>] [--instance <dir> | --no-instance]\n` +
   `                    reserve the DOI on Zenodo and open the pull request writing it into myst.yml\n` +
-  `  oak release --tag <vX.Y.Z> [--local-build | --no-build] [--publish-without-review] [--paper <dir>]\n` +
+  `  oak release --tag <vX.Y.Z> [--no-build] [--publish-without-review] [--paper <dir>]\n` +
   `              [--instance <dir> | --no-instance] [--site-url <url>]\n` +
   `                    fill the Zenodo draft with the tag's build from its Deposit version run,\n` +
   `                    attach the files to the tag's GitHub release, comment on the commit\n` +
@@ -1147,7 +1147,6 @@ export const workflow = {
   releaseNoTag: 'oak release: --tag vX.Y.Z is required',
   releaseBadTag: (tag: string): string =>
     `oak release: --tag must be a paper version like v1.2.3, not ${JSON.stringify(tag.slice(0, 40))}.`,
-  releaseBuildFlags: 'oak release: pass --local-build or --no-build, not both.',
   /** `verb` is `release` or `deposit upload`. */
   noDoi: (verb: string): string =>
     `oak ${verb}: project.doi missing; run oak deposit prepare and merge its pull request first.`,
@@ -1164,6 +1163,8 @@ export const workflow = {
   releaseCommitComment: (url: string, published: boolean): string =>
     published ? `Zenodo record published: ${url}` : `Zenodo draft populated: ${url}`,
   releaseFailureIssue: (tag: string): string => `Zenodo publish failed for ${tag}`,
+  releaseFailureIssueFailed: (message: string): string =>
+    `oak release: the deposit failed, and opening the issue that says so failed too (${message})`,
   releaseNoTokenReason: 'no Zenodo token on GitHub',
   releaseNoTokenInCi: (tag: string, sandbox: boolean): string =>
     `oak release: the zenodo-publish environment has no ` +
@@ -1196,18 +1197,10 @@ export const workflow = {
     `with access to the repo.`,
   releaseFetched: (url: string): string => `oak release: using the build from ${url}`,
   releaseNoBuild:
-    `oak release: --no-build deposits whatever is under _build as it is, which may be from ` +
-    `another tag or build, and the provenance records it as built on linux x86_64 with the ` +
-    `engine's typst, as in CI.`,
-  releaseLocalBuild: (plugins: string[], systemTypst: boolean): string =>
-    `oak release: --local-build runs the paper's code on this computer, with the Zenodo token ` +
-    `in the environment. Plugins the paper adds: ${plugins.length ? plugins.join(', ') : 'none'}. ` +
-    `Set up any environment paper-environment.yml describes yourself.` +
-    (systemTypst
-      ? ` The PDF is exported with the system typst, since the engine's is built for linux ` +
-        `x86_64 only, so it can differ from the CI build.`
-      : '') +
-    ` ${docsUrl(DOCS.publishLocalBuild)}`,
+    `oak release: --no-build deposits _build as it is, which may be from another tag. The ` +
+    `provenance records this computer's platform and the typst on PATH as the build's. Build ` +
+    `with oak build in a shell without the Zenodo token, since the build runs the paper's ` +
+    `code. ${docsUrl(DOCS.publishOwnBuild)}`,
 
   // preview / notify
   previewProviderIsNot: (provider: string): string => `preview.provider is '${provider}'`,

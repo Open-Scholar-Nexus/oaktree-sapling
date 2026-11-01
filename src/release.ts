@@ -1,8 +1,8 @@
 /**
- * release.ts: where `oak release` on an editor's computer gets the build it deposits: the tag's
- * Deposit version run, or a local build after a warning (DOCS.publishLocalBuild).
+ * release.ts: for a local `oak release`, this gets the build it deposits from the tag's Deposit
+ * version run.
  *
- * The CI build ran the paper's code with no token, so its artifact is only read and uploaded.
+ * The CI build runs the paper's code with no token, so its artifact is only read and uploaded.
  * The git and gh side is injected (`CiBuildSource`; the real one is in gh.ts).
  */
 import { cpSync, existsSync, mkdtempSync, rmSync } from 'node:fs';
@@ -10,9 +10,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as msg from './messages.js';
 import { UserError } from './messages.js';
-import { DERIVED_CONFIG_FILE, readDoc } from './yaml-io.js';
-import { galleryPluginUrl } from './bootstrap.js';
-import type { PinnedEngine } from './pinned.js';
+import { DERIVED_CONFIG_FILE } from './yaml-io.js';
 
 /** The workflow file `templates/paper/.github/workflows/deposit-version.yml`, as a run's `path`
  *  names it, its build job, and the artifact that job uploads. */
@@ -133,39 +131,6 @@ export function fetchCiBuild(
     rmSync(tmp, { recursive: true, force: true });
   }
   return { run, builtAt: job.completedAt };
-}
-
-/** The `project.plugins` of the YAML file at `file`, as written: a string, or an entry's
- *  `path`. [] when the file or the list is absent. */
-function pluginsIn(file: string): string[] {
-  if (!existsSync(file)) return [];
-  const list = readDoc(file).toJS()?.project?.plugins;
-  if (!Array.isArray(list)) return [];
-  return list.flatMap((p: unknown) => {
-    if (typeof p === 'string') return [p];
-    const path = (p as { path?: unknown } | null)?.path;
-    return typeof path === 'string' ? [path] : [];
-  });
-}
-
-/**
- * The plugins the paper's `myst.yml` lists beyond its edition's and oak's gallery plugin at the
- * pinned version: the code a local build runs that the journal did not choose.
- */
-export function addedPlugins(
-  paperRoot: string,
-  instanceRoot: string | null,
-  pin: PinnedEngine | undefined,
-): string[] {
-  const mystPath = join(paperRoot, 'myst.yml');
-  const edition = readDoc(mystPath).getIn(['project', 'options', 'oaktree-sapling', 'edition']);
-  const known = new Set(
-    instanceRoot && typeof edition === 'string' && edition
-      ? pluginsIn(join(instanceRoot, 'editions', `${edition}.yml`))
-      : [],
-  );
-  if (pin) known.add(galleryPluginUrl(pin.engineRepo, pin.version));
-  return pluginsIn(mystPath).filter((p) => !known.has(p));
 }
 
 /** The version in `typst --version` output (`typst 0.14.2 (b33de9de)`), or null. */

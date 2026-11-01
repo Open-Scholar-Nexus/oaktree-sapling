@@ -1,15 +1,13 @@
 /**
  * `oak release` on an editor's computer, with a fake `CiBuildSource` (no git or gh): the clone
  * must be at the tag, the build comes from the tag's own Deposit version run once its build job
- * passed, and the download replaces the build outputs in the paper. Also the plugins the
- * `--local-build` warning lists.
+ * passed, and the download replaces the build outputs in the paper.
  */
 import { describe, it, expect } from 'vitest';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
-  addedPlugins,
   assertAtTag,
   depositRunFor,
   fetchCiBuild,
@@ -171,40 +169,6 @@ describe('fetchCiBuild', () => {
       },
     });
     expect(refusal(() => fetchCiBuild('/p', TAG, SHA, src))).toContain('HTTP 401');
-  });
-});
-
-describe('the plugins a --local-build warning lists', () => {
-  it("leaves out the edition's plugins and oak's gallery plugin at the pinned version", () => {
-    const pin = { engineRepo: 'o/engine', version: 'v0.4.0' };
-    const paper = tmp('oak-plugins-paper-');
-    writeFileSync(
-      join(paper, 'myst.yml'),
-      [
-        'version: 1',
-        'project:',
-        '  options:',
-        '    oaktree-sapling:',
-        '      edition: e1',
-        '  plugins:',
-        `    - ${galleryPluginUrl(pin.engineRepo, pin.version)}`,
-        `    - ${galleryPluginUrl(pin.engineRepo, 'v0.3.0')}`,
-        '    - journal.mjs',
-        '    - mine.mjs',
-        '    - type: executable',
-        '      path: run.py',
-        '',
-      ].join('\n'),
-    );
-    const journal = tmp('oak-plugins-journal-');
-    mkdirSync(join(journal, 'editions'));
-    writeFileSync(join(journal, 'editions', 'e1.yml'), 'project:\n  plugins:\n    - journal.mjs\n');
-    expect(addedPlugins(paper, journal, pin)).toEqual([
-      galleryPluginUrl(pin.engineRepo, 'v0.3.0'),
-      'mine.mjs',
-      'run.py',
-    ]);
-    expect(addedPlugins(paper, null, undefined)).toHaveLength(5);
   });
 });
 
