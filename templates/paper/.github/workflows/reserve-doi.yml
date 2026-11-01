@@ -9,7 +9,7 @@ on:
       sandbox:
         description: "Use the Zenodo sandbox (rehearsal) instead of production"
         type: boolean
-        default: true
+        default: false
 
 permissions:
   contents: write # commit the DOI PR branch
