@@ -575,7 +575,7 @@ function platformName(): string {
 /**
  * `oak release --tag vX [--no-build] [--publish-without-review]`: deposits the tag's build,
  * attaches the bundle to the tag's release, and comments on the commit. The environment follows
- * the committed DOI. Run by hand, it expects the clone at the tag and deposits the build of the
+ * the committed DOI. Run locally, it expects the clone at the tag and deposits the build of the
  * tag's Deposit version run. Documented at DOCS.release.
  */
 async function cmdRelease(argv: string[]): Promise<number> {
@@ -629,7 +629,7 @@ async function cmdRelease(argv: string[]): Promise<number> {
   let builtAt: string | undefined;
   let builtHere: { platform: string; typstVersion: string | null } | undefined;
   if (useBuildDir) {
-    // `_build` as it is: in CI the build job's artifact; by hand, the editor's own `oak build`,
+    // `_build` as it is: in CI the build job's artifact; locally, the editor's own `oak build`,
     // run apart from the token since it runs the paper's code.
     if (!inActions) {
       process.stderr.write(annotate('warning', msg.workflow.releaseNoBuild) + '\n');
@@ -652,7 +652,7 @@ async function cmdRelease(argv: string[]): Promise<number> {
       env: childEnv,
     });
   } else {
-    // By hand: the build of the tag's Deposit version run, checked against the clone.
+    // Locally: the build of the tag's Deposit version run, checked against the clone.
     const ci = release.fetchCiBuild(paperRoot, tag, sha!, gh.realCiBuildSource);
     builtAt = ci.builtAt ?? undefined;
     process.stderr.write(msg.workflow.releaseFetched(ci.run.url) + '\n');

@@ -68,7 +68,7 @@ export const DOCS = {
   deposit: 'reference/cli#deposit',
   /** `oak release --tag vX`: the build it deposits, the Release asset, and the comment or issue it leaves. */
   release: 'reference/cli#release',
-  /** `oak release --no-build` by hand: depositing the editor's own build, made apart from the token. */
+  /** `oak release --no-build` run locally: depositing the editor's own build, made apart from the token. */
   publishOwnBuild: 'guide/publish#local-build',
   /** Depositing from the editor's computer, for a journal with no Zenodo token on GitHub. */
   publishFromTerminal: 'guide/publish#from-terminal',
