@@ -609,7 +609,7 @@ export function resolveTemplateDir(template: string, paperRoot: string): string 
   // `typst/a/b` → itself. The stamped value is written by the build, which runs paper code, so
   // a name has to stay under `_build/templates`.
   const parts = template.split('/');
-  if (template.startsWith('/') || parts.some((p) => p === '' || p === '..')) {
+  if (parts.some((p) => p === '' || p === '..')) {
     throw new TemplateArchiveError(msg.workflow.depositTemplateBadName(template));
   }
   const normalized =
@@ -618,12 +618,7 @@ export function resolveTemplateDir(template: string, paperRoot: string): string 
       : parts.length === 2
         ? ['typst', ...parts]
         : parts;
-  const dir = join(buildTemplates, ...normalized);
-  const rel = relative(buildTemplates, dir);
-  if (rel === '' || rel.startsWith('..') || isAbsolute(rel)) {
-    throw new TemplateArchiveError(msg.workflow.depositTemplateBadName(template));
-  }
-  return dir;
+  return join(buildTemplates, ...normalized);
 }
 
 /**
