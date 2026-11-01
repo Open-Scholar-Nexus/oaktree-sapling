@@ -728,7 +728,7 @@ describe('cmdUpload', () => {
     const recorded = async (over: {
       platform?: string;
       typstVersion?: string | null;
-      builtAt?: string;
+      builtAt?: string | null;
     }) => {
       const provenance: Array<Record<string, unknown>> = [];
       const { transport } = fakeTransport((r) => {
@@ -772,6 +772,8 @@ describe('cmdUpload', () => {
     expect(await recorded({ builtAt: '2026-10-20T09:00:00Z' })).toMatchObject({
       built_at: '2026-10-20T09:00:00Z',
     });
+    // A build made elsewhere with no known time records none, not the deposit's.
+    expect(await recorded({ builtAt: null })).toMatchObject({ built_at: null });
     const before = Date.now();
     const now = Date.parse(String((await recorded({}))!.built_at));
     expect(now).toBeGreaterThanOrEqual(before - 1000);

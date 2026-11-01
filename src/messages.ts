@@ -1140,6 +1140,9 @@ export const workflow = {
     `${sandbox ? 'ZENODO_TOKEN_SANDBOX' : 'ZENODO_TOKEN'}. Set it there, or reserve the DOI from ` +
     `a clone of the paper repo on your computer with oak deposit prepare` +
     `${sandbox ? ' --sandbox' : ''}. ${docsUrl(DOCS.publishFromTerminal)}`,
+  depositDoiPrNoGh: (conceptDoi: string): string =>
+    `deposit prepare: gh is not logged in, so no pull request was opened. myst.yml now holds ` +
+    `${conceptDoi}; commit it and open the pull request yourself.`,
   depositDoiPrOpened: (url: string): string => `deposit prepare: opened DOI PR ${url}`,
   depositDoiPrFailed: (message: string): string =>
     `deposit prepare: DOI PR not opened (${message})`,
@@ -1236,6 +1239,13 @@ export const workflow = {
   releaseCiFailed: (why: string): string =>
     `oak release: could not get the build from GitHub (${why}). Check that gh is logged in ` +
     `with access to the repo.`,
+  releaseNoBuildJob: (url: string, job: string): string =>
+    `oak release: the Deposit version run has no ${job} job, so there is no build to deposit. ` +
+    `Check that the paper's deposit-version.yml matches the engine's: ${url}`,
+  releaseIncompleteBuild: (url: string, missing: string[]): string =>
+    `oak release: the build from the Deposit version run lacks ${missing.join(', ')}, so it ` +
+    `cannot be deposited as it is. Check the run's build job and the paths its upload step ` +
+    `lists: ${url}`,
   releaseFetched: (url: string): string => `oak release: using the build from ${url}`,
   releaseNoBuild:
     `oak release: --use-local-build deposits the build under _build. The provenance records this ` +

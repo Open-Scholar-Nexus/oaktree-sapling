@@ -524,7 +524,7 @@ export interface BundleProvenance {
    *  commit when it is its own journal, null without one. */
   journal_repo: string | null;
   journal_commit: string | null;
-  built_at: string;
+  built_at: string | null;
   // What it takes to render the deposit again [R66]: engine.zip carries everything but
   // node, so this platform and node.
   platform: string;
@@ -967,8 +967,9 @@ export interface UploadInput {
   /** The typst that exported the PDF, for a build that may not use the pinned one; the pinned
    *  `typst.version` by default. */
   typstVersion?: string | null;
-  /** When the deposited build ran, as ISO 8601, for a build made elsewhere; now by default. */
-  builtAt?: string;
+  /** When the deposited build ran, as ISO 8601, for a build made elsewhere, or null when that
+   *  is unknown; now by default. */
+  builtAt?: string | null;
 }
 
 /** oak's pinned typst version, for the provenance; null without the pin file. The provenance
@@ -1097,7 +1098,7 @@ async function fillDraft(input: UploadInput, engineZip: string): Promise<Outcome
     review_pr: await git.reviewPr(repoRoot, sha),
     journal_repo: journal?.repo ?? null,
     journal_commit: journal?.commit ?? null,
-    built_at: input.builtAt ?? new Date().toISOString(),
+    built_at: input.builtAt !== undefined ? input.builtAt : new Date().toISOString(),
     platform: input.platform ?? 'linux-x86_64',
     typst_version:
       input.typstVersion !== undefined ? input.typstVersion : readTypstVersion(engineRoot),

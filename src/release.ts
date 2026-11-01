@@ -26,6 +26,9 @@ export const RELEASE_BUILD_PATHS = [
   '_build/templates',
 ];
 
+/** The one path a complete build may lack: myst writes it only when it downloads a template. */
+const OPTIONAL_BUILD_PATH = '_build/templates';
+
 export interface CiRun {
   id: number;
   /** The workflow file, relative to the repo root. */
@@ -89,7 +92,8 @@ export function depositRunFor(runs: CiRun[], tag: string, sha: string): CiRun | 
 /**
  * Downloads the tag's build into `paperRoot`, replacing {@link RELEASE_BUILD_PATHS} there, and
  * returns its run and when its build job finished. Throws a UserError while the build job runs,
- * when it did not succeed, or when there is no run. Only the build job is read, so a paper still
+ * when it did not succeed, when there is no run or no build job, and when the artifact lacks a
+ * path, before anything in `paperRoot` is replaced. Only the build job is read, so a paper still
  * carrying a publish job beside it works too.
  */
 export function fetchCiBuild(
@@ -114,8 +118,8 @@ export function fetchCiBuild(
   );
   if (!run) throw new UserError(msg.workflow.releaseNoRun(tag, repo));
   const job = fromGitHub(() => src.jobs(repo, run.id)).find((j) => j.name === DEPOSIT_BUILD_JOB);
-  if (!job || job.status !== 'completed')
-    throw new UserError(msg.workflow.releaseRunPending(run.url));
+  if (!job) throw new UserError(msg.workflow.releaseNoBuildJob(run.url, DEPOSIT_BUILD_JOB));
+  if (job.status !== 'completed') throw new UserError(msg.workflow.releaseRunPending(run.url));
   if (job.conclusion !== 'success') {
     throw new UserError(msg.workflow.releaseRunFailed(run.url, String(job.conclusion)));
   }
@@ -123,6 +127,10 @@ export function fetchCiBuild(
   const tmp = mkdtempSync(join(tmpdir(), 'oak-release-build-'));
   try {
     fromGitHub(() => src.download(repo, run.id, RELEASE_ARTIFACT, tmp));
+    const missing = RELEASE_BUILD_PATHS.filter(
+      (rel) => rel !== OPTIONAL_BUILD_PATH && !existsSync(join(tmp, rel)),
+    );
+    if (missing.length) throw new UserError(msg.workflow.releaseIncompleteBuild(run.url, missing));
     for (const rel of RELEASE_BUILD_PATHS) {
       rmSync(join(paperRoot, rel), { recursive: true, force: true });
       if (existsSync(join(tmp, rel))) {

@@ -70,6 +70,8 @@ function fakeSource(
       downloads.push([repo, id, name]);
       mkdirSync(join(dest, '_build', 'exports'), { recursive: true });
       writeFileSync(join(dest, '_build', 'exports', 'paper.pdf'), '%PDF from CI');
+      mkdirSync(join(dest, '_build', 'site', 'content'), { recursive: true });
+      writeFileSync(join(dest, '_build', 'site', 'content', 'index.json'), '{}');
       writeFileSync(join(dest, 'myst.oak.yml'), 'from: ci\n');
       writeFileSync(join(dest, 'stray.txt'), 'not a build output');
     },
@@ -163,6 +165,35 @@ describe('fetchCiBuild', () => {
     const none = fakeSource({ runs: [run({ headBranch: 'v9.9.9' })] });
     expect(refusal(() => fetchCiBuild('/p', TAG, SHA, none))).toContain('no Deposit version run');
     for (const src of [pending, failed, none]) expect(src.downloads).toEqual([]);
+  });
+
+  it('refuses a run with no build job, which no wait would fix', () => {
+    const src = fakeSource({ jobList: [job({ name: 'publish' })] });
+    const why = refusal(() => fetchCiBuild('/p', TAG, SHA, src));
+    expect(why).toContain('has no build job');
+    expect(why).not.toContain('still building');
+    expect(src.downloads).toEqual([]);
+  });
+
+  it('refuses an artifact missing a build path, before replacing anything', () => {
+    const paper = tmp('oak-release-');
+    mkdirSync(join(paper, '_build', 'exports'), { recursive: true });
+    writeFileSync(join(paper, '_build', 'exports', 'paper.pdf'), '%PDF local');
+    const src = fakeSource({
+      download: (_repo, _id, _name, dest) => {
+        mkdirSync(join(dest, '_build', 'exports'), { recursive: true });
+        writeFileSync(join(dest, '_build', 'exports', 'paper.pdf'), '%PDF from CI');
+        mkdirSync(join(dest, '_build', 'site', 'content'), { recursive: true });
+      },
+    });
+    expect(refusal(() => fetchCiBuild(paper, TAG, SHA, src))).toContain('lacks myst.oak.yml');
+    expect(readFileSync(join(paper, '_build', 'exports', 'paper.pdf'), 'utf8')).toBe('%PDF local');
+  });
+
+  it('accepts an artifact with no _build/templates, which myst writes only for a download', () => {
+    const paper = tmp('oak-release-');
+    fetchCiBuild(paper, TAG, SHA, fakeSource());
+    expect(existsSync(join(paper, '_build', 'templates'))).toBe(false);
   });
 
   it('refuses a clone with no GitHub origin', () => {

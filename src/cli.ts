@@ -504,8 +504,12 @@ async function cmdDeposit(argv: string[]): Promise<number> {
     }
     const out = await z.cmdPrepare({ mystPath, repo, siteUrl, api, instanceRoot });
     // Open the DOI pull request for the myst.yml write [R3]. Without a gh login the write is
-    // left for a person to commit.
-    if (out.exitCode === 0 && !has(rest, 'no-pr') && gh.ghLoggedIn()) {
+    // left for the editor to commit.
+    if (out.exitCode === 0 && !has(rest, 'no-pr') && !gh.ghLoggedIn()) {
+      process.stderr.write(
+        annotate('warning', msg.workflow.depositDoiPrNoGh(String(out.result.concept_doi))) + '\n',
+      );
+    } else if (out.exitCode === 0 && !has(rest, 'no-pr')) {
       try {
         const url = gh.openDoiPr(resolve(mystPath, '..'), {
           conceptDoi: String(out.result.concept_doi),
@@ -628,7 +632,7 @@ async function cmdRelease(argv: string[]): Promise<number> {
   const sha = inActions ? null : release.assertAtTag(paperRoot, tag, gh.realCiBuildSource);
 
   // In Actions, `_build` holds the build job's artifact
-  let builtAt: string | undefined;
+  let builtAt: string | null | undefined;
   let builtHere: { platform: string; typstVersion: string | null } | undefined;
   if (!inActions && useLocalBuild) {
     // Locally with --use-local-build: the editor's own `oak build`, run apart from the token.
@@ -637,7 +641,7 @@ async function cmdRelease(argv: string[]): Promise<number> {
   } else if (!inActions) {
     // Locally: the build of the tag's Deposit version run, checked against the clone.
     const ci = release.fetchCiBuild(paperRoot, tag, sha!, gh.realCiBuildSource);
-    builtAt = ci.builtAt ?? undefined;
+    builtAt = ci.builtAt;
     process.stderr.write(msg.workflow.releaseFetched(ci.run.url) + '\n');
   }
 
@@ -665,7 +669,7 @@ async function cmdRelease(argv: string[]): Promise<number> {
     engineRoot: engineRoot(),
     publish,
     ...builtHere,
-    ...(builtAt ? { builtAt } : {}),
+    ...(builtAt !== undefined ? { builtAt } : {}),
   });
   emit(argv, out.result);
   if (out.exitCode !== 0) {
