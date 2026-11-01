@@ -9,7 +9,7 @@ Oaktree Sapling can publish either with a workflow on GitHub, or with a command 
 
 ## 1. Reserve the DOI
 
-Run the paper repository's **Reserve DOI** workflow:
+Run the paper repository's **Reserve DOI** workflow, or `oak deposit prepare` from the terminal:
 
 ::::{tab-set}
 :::{tab-item} gh
@@ -22,6 +22,17 @@ gh workflow run reserve-doi.yml --repo "$REPO"
 :::
 :::{tab-item} GitHub website
 In the paper repository's **Actions** tab, open **Reserve DOI** and click **Run workflow**. Tick **Use the Zenodo sandbox** to test a deposit on the [Zenodo sandbox](#sandbox).
+:::
+:::{tab-item} oak
+With the Zenodo token on your computer ([setup](#from-terminal)):
+
+```bash
+REPO=owner/paper-repo   # the paper repository
+gh repo clone "$REPO" paper && cd paper
+oak deposit prepare
+```
+
+`--sandbox` reserves the DOI on the [Zenodo sandbox](#sandbox), for a test.
 :::
 ::::
 
@@ -67,7 +78,14 @@ Only editors can create `v*` tags. Only tags in that form are supported: the **D
 
 Creating the tag starts the **Deposit version** workflow, which builds the paper and uploads the PDF, the sources, and the engine and journal settings that built them to a GitHub release. If Zenodo tokens are set, it also uploads everything to the Zenodo draft ([what a deposit carries](#design-releases-deposit)) and comments the draft's address on the tagged commit. The deposit links the paper's website.
 
-Without Zenodo tokens on GitHub, the workflow ends with a notice. Once it has finished, run [`oak release`](#from-terminal) from a clone of the paper repository, which deposits that build in the same way.
+Without Zenodo tokens on GitHub, the workflow ends with a notice. Once it has finished, deposit its build from the terminal ([setup](#from-terminal)):
+
+```bash
+REPO=owner/paper-repo   # the paper repository
+VERSION=v1.0.0
+gh repo clone "$REPO" paper -- --branch "$VERSION" && cd paper
+oak release --tag "$VERSION"
+```
 
 (publish-on-zenodo)=
 ## 3. Publish on Zenodo
@@ -106,9 +124,9 @@ Once a paper is published, every pull request to it gets a comment reminding the
 data/ export-ignore
 ```
 
-The PDF is rendered from the files in the repository, with notebook outputs as they were saved, so the data a figure was made from can be left out. A file the manuscript points to must stay: a figure's image, a notebook it embeds, a file it includes. Without it, the PDF in the deposit cannot be rendered again.
+The PDF is rendered from the files in the repository, with notebook outputs as they were saved. All files the manuscript points to must stay: a figure's image, a notebook it embeds, a file it includes. Without it, the PDF in the deposit cannot be rendered again.
 
-`export-ignore` also leaves the folder out of GitHub's source downloads.
+`export-ignore` also leaves the folder out of the source archives GitHub offers for download, such as **Download ZIP**. A clone still has it.
 
 ## When the publish run fails
 
@@ -117,48 +135,11 @@ The run opens an issue titled **Zenodo publish failed for** the tag, labelled `z
 (from-terminal)=
 ## Publishing from the terminal
 
-The Zenodo tokens are optional on GitHub ([why a journal may leave them unset](../reference/secrets.md)). Without them, an editor runs the Zenodo steps from a clone of the paper repository. Without a token, **Deposit version** still builds the tag and ends with a notice saying to deposit from the terminal, and **Reserve DOI** fails, pointing at `oak deposit prepare`.
+Setting the Zenodo tokens on GitHub is optional ([why a journal may leave them unset](../reference/secrets.md)). Without them, an editor runs the Zenodo steps from a clone of the paper repository. Without a token, **Deposit version** still builds the tag and ends with a notice saying to deposit from the terminal, and **Reserve DOI** fails, pointing at `oak deposit prepare`.
 
-This needs `oak`, [gh](https://cli.github.com) logged in (`gh auth login`) as an editor of the paper repository, and a Zenodo token in `ZENODO_TOKEN`, or in `ZENODO_TOKEN_SANDBOX` for the [sandbox](#sandbox). Create it under **Applications** in the account settings on [Zenodo](https://zenodo.org/account/settings/applications/) or the [sandbox](https://sandbox.zenodo.org/account/settings/applications/). `oak deposit` and `oak release` run the `oak` version the paper's `myst.yml` names, as [`oak build` does](pins.md#pins-local). When that version is too old to deposit from the terminal, they say so: [upgrade the paper](pins.md) and tag again.
+This needs `oak`, [gh](https://cli.github.com) logged in (`gh auth login`) as an editor of the paper repository, and a Zenodo token in `ZENODO_TOKEN`, or in `ZENODO_TOKEN_SANDBOX` for the [sandbox](#sandbox)[^zenodo-secrets-create]. `oak deposit` and `oak release` run the `oak` version the paper's `myst.yml` names, as [`oak build` does](pins.md#pins-local). When that version is too old to deposit from the terminal, they say so: [upgrade the paper](pins.md) and tag again.
 
-To reserve the DOI, in the clone, on an up-to-date `main`:
-
-```bash
-git switch main
-git pull
-oak deposit prepare
-```
-
-It creates a draft on Zenodo and opens the **Reserve Zenodo DOI** pull request. `--sandbox` reserves the DOI on the sandbox.
-
-To fill the draft, [tag the version](#tag-version) as usual. Once its **Deposit version** run has built it, check out the tag and run `oak release`:
-
-```bash
-VERSION=v1.0.0
-git fetch --tags
-git checkout "$VERSION"
-oak release --tag "$VERSION"
-```
-
-`oak release` downloads the build of that run, after checking that the run is the push of that tag at the tag's commit. It uploads the same files the workflow does, also left in `_build/bundle`, attaches them to the tag's GitHub release, and comments the draft's address on the tagged commit. The clone has to be at the tag, with no changes to tracked files, since the deposit archives the commit checked out and reads `myst.yml` from the working tree. Then [publish on Zenodo](#publish-on-zenodo) as usual. For a [new version](#new-version), run `oak release` for its tag after pushing it.
-
-`oak release` refuses while the run is still building, when the build failed, and when the run has no build job or its build lacks a file the deposit needs, with a link to the run. When Zenodo refuses, it prints the reason.
-
-(local-build)=
-### Building on your computer
-
-To deposit a build made on your computer, build at the tag in a shell without the Zenodo token, then deposit it with `--use-local-build`:
-
-```bash
-VERSION=v1.0.0
-git checkout "$VERSION"
-oak build
-oak release --tag "$VERSION" --use-local-build
-```
-
-The build runs the paper's code with your permissions: MyST loads the plugins the paper's `myst.yml` lists, as JavaScript. [Read them](checks.md#validate-runs-paper-code) before building. Set up any environment `paper-environment.yml` describes yourself, since installing it runs package scripts. Building in a shell without the token keeps the token out of the environment the paper's code runs in.
-
-`oak release` refuses a build whose PDF or pages are older than the tag's commit, as a build left from an earlier tag is. Delete `_build` and build again. The deposit's provenance records your computer's platform and the typst on your `PATH`. The engine's typst is built for Linux on x86_64, so on another machine, such as a Mac or an arm64 computer, the PDF comes from your own typst and can differ from the CI build.
+[^zenodo-secrets-create]: See [secrets](../reference/secrets.md) for how to create tokens.
 
 (publish-without-review)=
 ### Publishing without review

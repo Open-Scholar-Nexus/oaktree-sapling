@@ -89,7 +89,7 @@ Branches cannot reach the tokens at all. A repository secret is readable by ever
 Inside those jobs the paper's code never runs. `deposit-version.yml` builds in a job with no secrets and hands the output to the deposit job, whose `oak release` deposits it as it is. The action installs `paper-environment.yml` only when a job asks, and only the build jobs ask. And the engine runs `wrangler` from an empty directory, so a `.npmrc` or `node_modules` in the paper cannot choose which wrangler receives the Cloudflare token.
 
 (design-paper-ci-zenodo)=
-The Zenodo tokens are optional. Zenodo gives a personal token its owner's full rights whatever scopes it lists (tested 2026-10-22), so a journal can leave them off GitHub and have an editor [deposit from the terminal](#from-terminal). The deposit job then ends with a notice, and the build job's artifact is what the editor's [`oak release`](src:src/release.ts) downloads, after checking that the run is the push of that tag at the tag's commit. It only reads and uploads that build, since the paper's code wrote it. An editor who builds on their own computer runs `oak build` in a shell without the token and deposits that build with `oak release --use-local-build`, which refuses a PDF or page older than the tag's commit.
+The Zenodo tokens are optional, since Zenodo does not check a token's scopes ([what a token allows](#ref-secrets)). A journal can leave them off GitHub and have an editor [deposit from the terminal](#from-terminal). The deposit job then ends with a notice, and the build job's artifact is what the editor's [`oak release`](src:src/release.ts) downloads, after checking that the run is the push of that tag at the tag's commit. It only reads and uploads that build, since the paper's code wrote it. It is also possible to build on the editor's computer, with `oak build` in a shell without the token, and deposit that build with `oak release --use-local-build`, which refuses a PDF or page older than the tag's commit.
 
 (design-paper-ci-stage2-inputs)=
 
@@ -145,9 +145,9 @@ In CI the engine action checks out the version the paper pins, while locally an 
 
 As in `ci/run.sh`, only a [release tag](#r57), the commit that carries `dist/cli.cjs`, runs. The clone's `bin/typst` goes on `PATH` when it runs on the machine. oak clones into a temporary folder next to the cache folder and renames it into place once the clone has finished, so an interrupted download leaves nothing behind that a later run would use.
 
-`oak release` and `oak deposit` also hand off when the running oak is the pinned version but is not a git checkout, as an npm install is not: the deposit's `engine.zip` is a `git archive` of the engine.
+`oak release` and `oak deposit` also hand off when the running oak is the pinned version but not a git checkout, such as an npm install, because the deposit's `engine.zip` is a `git archive` of the engine.
 
-They refuse a pinned version older than `DEPOSIT_MIN_VERSION` in [`pinned.ts`](src:src/pinned.ts), the first whose `oak release` never builds. Before it, `oak release` built the paper on the editor's computer by default, with the Zenodo token in the environment. The version sits in `myst.yml`, which authors change without an editor's review, so a pull request lowering it would run the paper's plugins beside the editor's token at the next deposit.
+`oak release` and `oak deposit` refuse a pinned version older than `DEPOSIT_MIN_VERSION` in [`pinned.ts`](src:src/pinned.ts). Older versions of `oak release` built the paper, and so ran its plugins, in a process that had the Zenodo token in its environment. The version sits in `myst.yml`, which authors change without an editor's review, so refusing those versions keeps a pull request that lowers it from running the paper's plugins beside the editor's token at the next deposit.
 
 `oak bootstrap --engine-version` naming another version also runs that version, cloned from `--engine-repo`, so a new repo's files come from the version it pins.
 

@@ -69,7 +69,7 @@ export const DOCS = {
   /** `oak release --tag vX`: the build it deposits, the Release asset, and the comment or issue it leaves. */
   release: 'reference/cli#release',
   /** `oak release --use-local-build`: depositing the editor's own build, made apart from the token. */
-  publishOwnBuild: 'guide/publish#local-build',
+  publishOwnBuild: 'reference/cli#use-local-build',
   /** Depositing from the editor's computer, for a journal with no Zenodo token on GitHub. */
   publishFromTerminal: 'guide/publish#from-terminal',
   /** `oak notify new-version`: the standalone reminder and where its PR number comes from. */
