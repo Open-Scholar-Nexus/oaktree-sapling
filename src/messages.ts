@@ -37,9 +37,9 @@
  *   templates/typst/*.typ ................... the PDF's fixed wording (headers, footers)
  *   ci/run.sh ............................... the launchers' own echoes
  *
- * Two TS files keep their own strings, both read only in a CI log:
+ * Two TS files keep their own strings:
  *   src/conformance.ts . `oak conformance` is the maintainers' release test; its lines are
- *                        progress markers.
+ *                        progress markers, read in a CI log.
  *   src/zenodo.ts ...... the `[prepare]`/`[upload]` progress markers and the Zenodo API's own
  *                        error bodies, echoed as they are. The one line for authors there is the
  *                        skipped-ORCID warning.
@@ -1094,6 +1094,43 @@ export const workflow = {
     `template directory nor a registry name (a name has no empty or ".." part and does not ` +
     `start with /), so the deposit does not archive it. Name a template directory, a URL, or ` +
     `a registry name in myst.yml and build again.`,
+  depositTemplateMissing: (template: string, dir: string): string =>
+    `typst template "${template}" resolves to ${dir}, which does not exist. The deposit ` +
+    `archives the template the PDF was rendered with, since no other file carries it. Run the ` +
+    `build in this working tree before depositing.`,
+  depositNameCollision: (names: string[], reserved: readonly string[]): string =>
+    `deposit/ has files named like the ones oak adds: ${names.join(', ')}. Rename them; oak ` +
+    `adds ${reserved.join(', ')}.`,
+  depositEngineNotReleased: (missing: string[]): string =>
+    `engine.zip carries no ${missing.join(', ')}, so the deposit could not render its own PDF ` +
+    `again. This oak is not a released engine: deposit with a release tag.`,
+  prepareDoiSet: (doi: string): string =>
+    `project.doi is already ${doi}; oak deposit prepare reserves a paper's first DOI only. A new ` +
+    `version starts with New version on its Zenodo record.`,
+  prepareNoDowngrade: (doi: string): string =>
+    `project.doi is the production DOI ${doi}; refusing to replace it with a sandbox one.`,
+  uploadNoDoi:
+    'project.doi missing; run oak deposit prepare and merge its pull request before tagging.',
+  uploadWrongEnvironment: (doiIsSandbox: boolean): string =>
+    `project.doi is a ${doiIsSandbox ? 'sandbox' : 'production'} DOI, but this run talks to ` +
+    `${doiIsSandbox ? 'production Zenodo' : 'the Zenodo sandbox'}.`,
+  uploadBadTag: (tag: string): string =>
+    `the tag must be a paper version like v1.2.3, not ${JSON.stringify(tag.slice(0, 40))}.`,
+  uploadNoPdf: (pdf: string): string => `--pdf not found: ${pdf}`,
+  uploadNoGithub:
+    'project.github missing from myst.yml. oak deposit prepare writes it beside project.doi, ' +
+    'as https://github.com/<owner>/<repo>; put it back.',
+  uploadNoBuildContent:
+    'no myst build output under _build/site/content, so the deposit description would carry ' +
+    'no abstract and overwrite one that does. Build this working tree before depositing.',
+  uploadNoRecord: (doi: string): string =>
+    `no Zenodo record matches ${doi}. Check that the token belongs to the account holding it, ` +
+    `and that the record was not deleted.`,
+  uploadConceptMismatch: (doi: string, found: string): string =>
+    `myst.yml names the concept DOI ${doi}, but the Zenodo record found for it belongs to ${found}.`,
+  uploadNoBucket:
+    'the Zenodo draft came back with no file bucket URL, which its API always returns; Zenodo ' +
+    'may have changed its API.',
   depositNoTokenInCi: (sandbox: boolean): string =>
     `oak deposit: the zenodo-prepare environment has no ` +
     `${sandbox ? 'ZENODO_TOKEN_SANDBOX' : 'ZENODO_TOKEN'}. Set it there, or reserve the DOI from ` +

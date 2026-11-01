@@ -602,7 +602,7 @@ describe('cmdPrepare', () => {
       instanceRoot: null,
     });
     expect(out.exitCode).toBe(2);
-    expect(String(out.result.message)).toContain('downgrade');
+    expect(String(out.result.message)).toContain('refusing to replace it with a sandbox one');
   });
 });
 

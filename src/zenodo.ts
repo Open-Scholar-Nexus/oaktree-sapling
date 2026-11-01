@@ -658,12 +658,7 @@ export function templateArchiveDir(paperRoot: string, engineRoot: string): strin
   if (insideEngine) return null;
 
   if (!existsSync(dir)) {
-    throw new TemplateArchiveError(
-      `typst template "${template}" resolves to "${dir}", which does not exist, so the ` +
-        `deposit cannot archive the template it rendered with. A non-engine template rides ` +
-        `in no other deposit artifact; publishing without it would give a DOI'd PDF that ` +
-        `cannot be reproduced. Run the build in this working tree before depositing.`,
-    );
+    throw new TemplateArchiveError(msg.workflow.depositTemplateMissing(template, dir));
   }
   return dir;
 }
@@ -736,8 +731,7 @@ export function assertBundlePreconditions(repoRoot: string, engineRoot: string):
   const collisions = depositCollisions(extras);
   if (collisions.length) {
     throw new BundleCollisionError(
-      `deposit/ file(s) collide with engine-reserved names: ${collisions.join(', ')}. ` +
-        `Rename them: ${RESERVED_DEPOSIT_NAMES.join(', ')} are added by the engine.`,
+      msg.workflow.depositNameCollision(collisions, RESERVED_DEPOSIT_NAMES),
     );
   }
   templateArchiveDir(repoRoot, engineRoot);
@@ -833,10 +827,7 @@ function assertEngineArchive(zipPath: string): void {
   }
   const missing = ENGINE_ARCHIVE_REQUIRED.filter((n) => !names.includes(n));
   if (missing.length) {
-    throw new EngineArchiveError(
-      `engine.zip carries no ${missing.join(', ')}, so the deposit could not re-render its own ` +
-        `PDF. The engine checkout is not a release ref: deposit from a released engine tag.`,
-    );
+    throw new EngineArchiveError(msg.workflow.depositEngineNotReleased(missing));
   }
 }
 
@@ -908,10 +899,10 @@ export async function cmdPrepare(input: PrepareInput): Promise<Outcome> {
   if (existingDoi) {
     const existingSandbox = isSandboxDoi(existingDoi);
     if (existingSandbox === sandbox) {
-      return err(2, `project.doi already set (${existingDoi}); prepare is for first deposit.`);
+      return err(2, msg.workflow.prepareDoiSet(existingDoi));
     }
     if (!existingSandbox && sandbox) {
-      return err(2, `refusing to downgrade a production DOI (${existingDoi}) to sandbox.`);
+      return err(2, msg.workflow.prepareNoDowngrade(existingDoi));
     }
     // A sandbox DOI and a production prepare: replacing it is allowed [R29].
   }
@@ -996,7 +987,7 @@ function readTypstVersion(engineRoot: string): string | null {
 /**
  * `oak deposit upload`, also the core of `oak release`: fills the reserved draft with the final
  * metadata and files and leaves it unsubmitted, or publishes it with `publish`. The environment
- * follows the committed DOI's prefix, so a tag cannot reach the wrong one [R4]; `api` must agree.
+ * follows the committed DOI's prefix [R4]; `api` must agree.
  */
 export async function cmdUpload(input: UploadInput): Promise<Outcome> {
   const work = mkdtempSync(join(tmpdir(), 'oak-engine-'));
@@ -1015,20 +1006,18 @@ async function fillDraft(input: UploadInput, engineZip: string): Promise<Outcome
   const project = projectOf(doc);
 
   const conceptDoi: string | undefined = project.doi;
-  if (!conceptDoi)
-    return err(2, 'project.doi missing; run prepare and merge that PR before tagging.');
+  if (!conceptDoi) return err(2, msg.workflow.uploadNoDoi);
   const parsed = parseZenodoDoi(conceptDoi);
   if (!parsed) return err(2, msg.workflow.notZenodoDoi(conceptDoi));
-  if (parsed.sandbox !== sandbox) {
-    return err(2, `DOI prefix says sandbox=${parsed.sandbox} but the API is sandbox=${sandbox}.`);
-  }
-  if (!PAPER_VERSION_TAG.test(tag)) return err(2, `tag must match vMAJOR.MINOR.PATCH (got ${tag})`);
+  if (parsed.sandbox !== sandbox)
+    return err(2, msg.workflow.uploadWrongEnvironment(parsed.sandbox));
+  if (!PAPER_VERSION_TAG.test(tag)) return err(2, msg.workflow.uploadBadTag(tag));
   const version = tag.slice(1);
 
-  if (!existsSync(pdf)) return err(2, `--pdf not found: ${pdf}`);
+  if (!existsSync(pdf)) return err(2, msg.workflow.uploadNoPdf(pdf));
 
   const githubUrl: string | undefined = project.github;
-  if (!githubUrl) return err(2, 'project.github missing; should have been set by prepare.');
+  if (!githubUrl) return err(2, msg.workflow.uploadNoGithub);
   const repo = repoFromGithubUrl(githubUrl);
   if (!repo) return err(2, msg.workflow.depositBadGithubUrl(mystPath, githubUrl));
   const siteUrl = input.siteUrl ?? defaultSiteUrl(repo, instanceRoot);
@@ -1058,25 +1047,18 @@ async function fillDraft(input: UploadInput, engineZip: string): Promise<Outcome
   // An upload overwrites the metadata [R22], so uploading from a tree with no HTML build would
   // replace a description that has the abstract with one that does not [R107].
   if (!hasBuildContent(repoRoot)) {
-    return err(
-      2,
-      `no myst build output under _build/site/content, so the deposit description would carry ` +
-        `no abstract and overwrite one that does. Build this working tree before depositing.`,
-    );
+    return err(2, msg.workflow.uploadNoBuildContent);
   }
 
   const latestId = await api.latestVersionDepId(conceptDoi);
   if (latestId === null) {
-    return err(2, `No Zenodo record matches ${conceptDoi} (token mismatch? deleted draft?)`);
+    return err(2, msg.workflow.uploadNoRecord(conceptDoi));
   }
   let dep = await api.getDeposition(latestId);
 
   const expectedConcept = `${zenodoDoiPrefix(sandbox)}${dep.conceptrecid}`;
   if (conceptDoi !== expectedConcept) {
-    return err(
-      2,
-      `Concept DOI sanity check failed: myst.yml has ${conceptDoi}, Zenodo's conceptrecid implies ${expectedConcept}`,
-    );
+    return err(2, msg.workflow.uploadConceptMismatch(conceptDoi, expectedConcept));
   }
 
   if (dep.submitted) {
@@ -1105,7 +1087,7 @@ async function fillDraft(input: UploadInput, engineZip: string): Promise<Outcome
   dep = await api.updateMetadata(dep.id, md);
 
   const bucket = dep.links?.bucket;
-  if (!bucket) return err(4, 'No bucket URL in deposition (unexpected Zenodo API shape).');
+  if (!bucket) return err(4, msg.workflow.uploadNoBucket);
 
   // Predicted from the deposition id; matches what Zenodo assigns at publish.
   const predictedVersionDoi = `${zenodoDoiPrefix(sandbox)}${dep.id}`;
