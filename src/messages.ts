@@ -1204,8 +1204,8 @@ export const workflow = {
   releaseStaleBuild: (tag: string, files: string[]): string =>
     `oak release: ${files.slice(0, 3).join(', ')}${files.length > 3 ? ` and ${files.length - 3} more` : ''} ` +
     `in _build ${files.length === 1 ? 'is' : 'are'} older than ${tag}'s commit, so ` +
-    `${files.length === 1 ? 'it comes' : 'they come'} from an earlier build. Run oak build at ` +
-    `${tag}, in a shell without the Zenodo token, then run this again.`,
+    `${files.length === 1 ? 'it comes' : 'they come'} from an earlier build. Delete _build, ` +
+    `run oak build at ${tag} in a shell without the Zenodo token, then run this again.`,
 
   // preview / notify
   previewProviderIsNot: (provider: string): string => `preview.provider is '${provider}'`,
