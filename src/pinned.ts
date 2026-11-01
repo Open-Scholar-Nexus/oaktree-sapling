@@ -114,7 +114,7 @@ const DEPOSIT_VERBS: HandoffVerb[] = ['release', 'deposit'];
 
 /** The first oak whose `release` never builds beside the token outside Actions. myst.yml, where
  *  the pin lives, is the author's file, so a pin below it is refused for {@link DEPOSIT_VERBS}. */
-export const DEPOSIT_MIN_VERSION = 'v0.3.0-dev.20';
+export const DEPOSIT_MIN_VERSION = 'v0.4.0-dev.1';
 
 /**
  * Runs the verb with the oak the paper pins and returns its exit code, or null when this oak
