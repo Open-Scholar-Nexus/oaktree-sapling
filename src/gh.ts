@@ -433,6 +433,9 @@ export const realCiBuildSource: CiBuildSource = {
   headSha(paperRoot) {
     return git(paperRoot, ['rev-parse', 'HEAD']);
   },
+  commitTime(paperRoot, sha) {
+    return Number(git(paperRoot, ['log', '-1', '--format=%ct', sha]));
+  },
   trackedChanges(paperRoot) {
     return git(paperRoot, ['status', '--porcelain', '--untracked-files=no']) !== '';
   },

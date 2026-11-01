@@ -5,9 +5,9 @@
  * The CI build runs the paper's code with no token, so its artifact is only read and uploaded.
  * The git and gh side is injected (`CiBuildSource`; the real one is in gh.ts).
  */
-import { cpSync, existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, mkdtempSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 import * as msg from './messages.js';
 import { UserError } from './messages.js';
 import { DERIVED_CONFIG_FILE } from './yaml-io.js';
@@ -51,6 +51,8 @@ export interface CiBuildSource {
   /** The commit the local tag `tag` names, or null when the clone has no such tag. */
   tagCommit(paperRoot: string, tag: string): string | null;
   headSha(paperRoot: string): string;
+  /** When commit `sha` was committed, in seconds since the epoch. */
+  commitTime(paperRoot: string, sha: string): number;
   /** Whether tracked files differ from HEAD. */
   trackedChanges(paperRoot: string): boolean;
   /** The workflow runs a push started on commit `sha`, newest first. */
@@ -131,6 +133,34 @@ export function fetchCiBuild(
     rmSync(tmp, { recursive: true, force: true });
   }
   return { run, builtAt: job.completedAt };
+}
+
+/**
+ * Refuses a local build older than the tag's commit, made at `commitTime` (seconds): a build
+ * left from an earlier tag. Checks the files the deposit reads, the PDF and the HTML build's
+ * page content.
+ */
+export function assertBuiltAfter(
+  paperRoot: string,
+  pdf: string,
+  commitTime: number,
+  tag: string,
+): void {
+  const content = join(paperRoot, '_build', 'site', 'content');
+  const pages = existsSync(content)
+    ? readdirSync(content)
+        .filter((f) => f.endsWith('.json'))
+        .map((f) => join(content, f))
+    : [];
+  const stale = [pdf, ...pages].filter((f) => statSync(f).mtimeMs < commitTime * 1000);
+  if (stale.length) {
+    throw new UserError(
+      msg.workflow.releaseStaleBuild(
+        tag,
+        stale.map((f) => relative(paperRoot, f)),
+      ),
+    );
+  }
 }
 
 /** The version in `typst --version` output (`typst 0.14.2 (b33de9de)`), or null. */

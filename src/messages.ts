@@ -1197,10 +1197,15 @@ export const workflow = {
     `with access to the repo.`,
   releaseFetched: (url: string): string => `oak release: using the build from ${url}`,
   releaseNoBuild:
-    `oak release: --no-build deposits _build as it is, which may be from another tag. The ` +
-    `provenance records this computer's platform and the typst on PATH as the build's. Build ` +
-    `with oak build in a shell without the Zenodo token, since the build runs the paper's ` +
-    `code. ${docsUrl(DOCS.publishOwnBuild)}`,
+    `oak release: --no-build deposits the build under _build. The provenance records this ` +
+    `computer's platform and the typst on PATH as the build's. Build with oak build in a shell ` +
+    `without the Zenodo token, since the build runs the paper's code. ` +
+    docsUrl(DOCS.publishOwnBuild),
+  releaseStaleBuild: (tag: string, files: string[]): string =>
+    `oak release: ${files.slice(0, 3).join(', ')}${files.length > 3 ? ` and ${files.length - 3} more` : ''} ` +
+    `in _build ${files.length === 1 ? 'is' : 'are'} older than ${tag}'s commit, so ` +
+    `${files.length === 1 ? 'it comes' : 'they come'} from an earlier build. Run oak build at ` +
+    `${tag}, in a shell without the Zenodo token, then run this again.`,
 
   // preview / notify
   previewProviderIsNot: (provider: string): string => `preview.provider is '${provider}'`,

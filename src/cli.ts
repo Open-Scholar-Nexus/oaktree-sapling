@@ -646,6 +646,9 @@ async function cmdRelease(argv: string[]): Promise<number> {
     process.stderr.write(msg.workflow.releaseNoPdf + '\n');
     return 2;
   }
+  if (!inActions && useBuildDir) {
+    release.assertBuiltAfter(paperRoot, pdf, gh.realCiBuildSource.commitTime(paperRoot, sha!), tag);
+  }
 
   const api = new z.ZenodoApi(z.createFetchTransport(), sandbox, token);
   const bundleOut = resolve(flag(argv, 'bundle-out') ?? join('_build', 'bundle'));

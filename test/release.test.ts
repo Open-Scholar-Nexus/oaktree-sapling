@@ -4,11 +4,19 @@
  * passed, and the download replaces the build outputs in the paper.
  */
 import { describe, it, expect } from 'vitest';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  utimesSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   assertAtTag,
+  assertBuiltAfter,
   depositRunFor,
   fetchCiBuild,
   parseTypstVersion,
@@ -54,6 +62,7 @@ function fakeSource(
     originRepo: () => 'o/paper',
     tagCommit: () => SHA,
     headSha: () => SHA,
+    commitTime: () => 0,
     trackedChanges: () => false,
     pushRuns: () => over.runs ?? [run()],
     jobs: () => over.jobList ?? [job()],
@@ -169,6 +178,38 @@ describe('fetchCiBuild', () => {
       },
     });
     expect(refusal(() => fetchCiBuild('/p', TAG, SHA, src))).toContain('HTTP 401');
+  });
+});
+
+describe('assertBuiltAfter, for a local --no-build', () => {
+  /** A paper with a PDF and one page of HTML content, both modified at `pdfAt` and `pageAt`. */
+  function built(pdfAt: number, pageAt: number): { root: string; pdf: string } {
+    const root = tmp('oak-built-after-');
+    const pdf = join(root, '_build', 'exports', 'paper.pdf');
+    const page = join(root, '_build', 'site', 'content', 'index.json');
+    mkdirSync(join(root, '_build', 'exports'), { recursive: true });
+    mkdirSync(join(root, '_build', 'site', 'content'), { recursive: true });
+    writeFileSync(pdf, '%PDF');
+    writeFileSync(page, '{}');
+    utimesSync(pdf, pdfAt, pdfAt);
+    utimesSync(page, pageAt, pageAt);
+    return { root, pdf };
+  }
+
+  it('passes a build made after the commit', () => {
+    const { root, pdf } = built(2000, 2000);
+    expect(() => assertBuiltAfter(root, pdf, 1000, TAG)).not.toThrow();
+  });
+
+  it('refuses a PDF or a page left from a build before the commit', () => {
+    const oldPdf = built(500, 2000);
+    expect(refusal(() => assertBuiltAfter(oldPdf.root, oldPdf.pdf, 1000, TAG))).toContain(
+      join('_build', 'exports', 'paper.pdf'),
+    );
+    const oldPage = built(2000, 500);
+    expect(refusal(() => assertBuiltAfter(oldPage.root, oldPage.pdf, 1000, TAG))).toContain(
+      'index.json',
+    );
   });
 });
 
