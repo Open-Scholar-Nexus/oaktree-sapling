@@ -4,18 +4,26 @@
  *
  * The CI build runs the paper's code with no token, so its artifact is only read and uploaded.
  * The git and gh side is injected (`CiBuildSource`; the real one is in gh.ts).
+ *
+ * {@link runRelease} is the whole terminal flow, `oak release --repo owner/paper --tag vX`: the
+ * DOI pull request, the tag, the wait for the build, then the deposit. Documented at DOCS.release.
  */
 import { cpSync, existsSync, mkdtempSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import * as msg from './messages.js';
 import { UserError } from './messages.js';
-import { DERIVED_CONFIG_FILE } from './yaml-io.js';
+import { pollUntil } from './poll.js';
+import { parseZenodoDoi } from './schema.js';
+import { DERIVED_CONFIG_FILE, parseYaml } from './yaml-io.js';
+import type { DepositState } from './zenodo.js';
 
 /** The workflow file `templates/paper/.github/workflows/deposit-version.yml`, as a run's `path`
  *  names it, its build job, and the artifact that job uploads. */
 export const DEPOSIT_WORKFLOW_PATH = '.github/workflows/deposit-version.yml';
 export const DEPOSIT_BUILD_JOB = 'build';
+/** The job beside it that deposits with a Zenodo token on GitHub. */
+export const DEPOSIT_PUBLISH_JOB = 'publish';
 export const RELEASE_ARTIFACT = 'release-build';
 
 /** What the artifact holds, relative to the paper root, as deposit-version.yml uploads it. */
@@ -174,4 +182,343 @@ export function assertBuiltAfter(
 /** The version in `typst --version` output (`typst 0.14.2 (b33de9de)`), or null. */
 export function parseTypstVersion(out: string): string | null {
   return /^typst (\S+)/.exec(out.trim())?.[1] ?? null;
+}
+
+/* --------------------------------------------------------------------------
+ * The whole flow from the terminal
+ * ------------------------------------------------------------------------ */
+
+/** The branch `openDoiPr` (gh.ts) pushes. */
+export const DOI_BRANCH = 'zenodo-doi';
+
+/** The file the tag's GitHub release holds once it is deposited. */
+export const DEPOSITED_ASSET = 'publication-provenance.json';
+
+/** The waits: the run to appear, then its jobs (a paper environment can take long to install). */
+export const RUN_WAIT = { tries: 12, intervalMs: 15_000 };
+export const BUILD_WAIT = { tries: 180, intervalMs: 15_000 };
+/** A line every 5 minutes while nothing changes, so a quiet terminal reads as waiting. */
+const HEARTBEAT_TRIES = 20;
+
+/** The GitHub side of {@link runRelease}, as the editor; the real one is `realReleaseSource` in
+ *  gh.ts. `clone` is a fresh clone in a temporary folder, and the git calls run in it. */
+export interface ReleaseSource extends Pick<CiBuildSource, 'tagCommit' | 'pushRuns' | 'jobs'> {
+  /** The repo's tags starting with `v`. */
+  vTags(repo: string): string[];
+  /** Clones `repo` into a new temporary folder and returns it. */
+  clone(repo: string): string;
+  /** Fetches the branches and tags into `clone`. */
+  fetch(clone: string): void;
+  /** The head of the default branch as last fetched. */
+  head(clone: string): { sha: string; subject: string };
+  /** `path` at commit `ref`, or null when it has no such file. */
+  fileAt(clone: string, ref: string, path: string): string | null;
+  checkout(clone: string, ref: string): void;
+  /** The local `branch`'s commit once origin's `branch` is the same, else null. */
+  pushedHead(clone: string, branch: string): string | null;
+  /** The open pull request from `branch` of the repo itself, or null. */
+  openPr(repo: string, branch: string): { number: number; url: string } | null;
+  markChecksSkipped(repo: string, sha: string): void;
+  allowsMergeCommit(repo: string): boolean;
+  /** Merges pull request `pr` if its head is still `sha` and returns the commit the merge put on
+   *  the base. Throws when GitHub refuses. */
+  merge(repo: string, pr: number, sha: string, method: 'merge' | 'squash'): string;
+  /** Creates `tag` at `sha` and returns the commit it names: another one when the tag appeared
+   *  meanwhile. Throws a UserError when the ruleset refuses. */
+  createTag(repo: string, tag: string, sha: string): string;
+  /** `git log --oneline from..to`. */
+  commitsBetween(clone: string, from: string, to: string): string[];
+  /** The asset names of the tag's GitHub release; none without a release. */
+  releaseAssets(repo: string, tag: string): string[];
+}
+
+export interface ReleaseInput {
+  repo: string;
+  tag: string;
+  /** `--sandbox`: where a first deposit reserves the DOI. */
+  sandbox: boolean;
+  publish: boolean;
+  /** The command that resumes this release, printed when it stops early. */
+  rerun: string;
+}
+
+export interface ReleaseDeps {
+  src: ReleaseSource;
+  hasToken(sandbox: boolean): boolean;
+  depositState(conceptDoi: string, sandbox: boolean): Promise<DepositState>;
+  /** `oak deposit prepare` with the pinned oak in `clone`, on the default branch. */
+  prepare(clone: string, sandbox: boolean): Promise<number>;
+  /** `oak release --deposit-only` with the pinned oak in `clone`, at the tag. */
+  deposit(clone: string): Promise<number>;
+  confirm(plan: string[]): Promise<boolean>;
+  sleep(ms: number): Promise<void>;
+  log(line: string): void;
+}
+
+/** A wait that reached its limit; the run exits 3 and a rerun continues. */
+class WaitTimeout extends Error {}
+
+/** A step's exit code as `oak release` reports it: 0, 1 for a bug, else 2. */
+function exitOf(code: number): number {
+  return code === 0 || code === 1 ? code : 2;
+}
+
+/** `src` with each call's failure turned into a UserError saying a rerun continues, but for
+ *  `merge`, whose failure {@link runRelease} words itself. */
+function guarded(src: ReleaseSource): ReleaseSource {
+  return new Proxy(src, {
+    get(target, key, receiver) {
+      const value = Reflect.get(target, key, receiver);
+      if (typeof value !== 'function' || key === 'merge') return value;
+      return (...args: unknown[]) => {
+        try {
+          return value.apply(target, args);
+        } catch (e) {
+          if (e instanceof UserError) throw e;
+          throw new UserError(
+            msg.workflow.releaseGitHubFailed(e instanceof Error ? e.message : String(e)),
+          );
+        }
+      };
+    },
+  });
+}
+
+/**
+ * `oak release` from the terminal: reads where the release of `input.tag` stands on GitHub and
+ * Zenodo and does what is left, so running it again after a stop continues. A first deposit
+ * reserves the DOI, merges the DOI pull request and tags the merge commit; a later version tags
+ * the default branch's head; an existing tag is used as it is. Then it waits for the tag's
+ * Deposit version build and deposits it. Returns the exit code: 0 done, 2 refused or failed, 3 a
+ * wait reached its limit. Every refusal known up front comes before anything changes.
+ */
+export async function runRelease(input: ReleaseInput, deps: ReleaseDeps): Promise<number> {
+  const { repo, tag } = input;
+  const src = guarded(deps.src);
+  deps.log(msg.workflow.releaseCloning(repo));
+  const clone = src.clone(repo);
+  try {
+    return await releaseFrom(clone, input, src, deps);
+  } catch (e) {
+    if (!(e instanceof WaitTimeout)) throw e;
+    deps.log(e.message);
+    deps.log(msg.workflow.releaseRerun(input.rerun));
+    return 3;
+  } finally {
+    rmSync(clone, { recursive: true, force: true });
+  }
+}
+
+async function releaseFrom(
+  clone: string,
+  input: ReleaseInput,
+  src: ReleaseSource,
+  deps: ReleaseDeps,
+): Promise<number> {
+  const { repo, tag, publish } = input;
+  const doiAt = (ref: string) => committedDoi(src, clone, ref);
+  const refuseSandbox = (doi: CommittedDoi) => {
+    if (input.sandbox && !doi.sandbox) {
+      throw new UserError(msg.workflow.releaseSandboxWithProdDoi(doi.doi));
+    }
+  };
+  const needToken = (sandbox: boolean) => {
+    if (!deps.hasToken(sandbox))
+      throw new UserError(msg.workflow.noZenodoToken('release', sandbox));
+  };
+  const deposited = () => src.releaseAssets(repo, tag).includes(DEPOSITED_ASSET);
+  const tail = (sandbox: boolean) => [
+    msg.workflow.releasePlanDeposit(tag, sandbox, publish),
+    msg.workflow.releasePlanAttach(tag),
+  ];
+
+  /** Tags `sha`; an existing tag a concurrent run made is checked as step 0 checks one. */
+  const tagAt = (sha: string): string => {
+    const at = src.createTag(repo, tag, sha);
+    if (at === sha) {
+      deps.log(msg.workflow.releaseTagged(tag, sha));
+      return sha;
+    }
+    src.fetch(clone);
+    if (!doiAt(at)) throw new UserError(msg.workflow.releaseTagNoDoi(tag, repo));
+    deps.log(msg.workflow.releaseUseTag(tag, at));
+    return at;
+  };
+
+  const waitAndDeposit = async (sha: string): Promise<number> => {
+    const run = await waitForBuild(repo, tag, sha, src, deps);
+    if (deposited()) {
+      deps.log(msg.workflow.releaseDepositedByCi(tag, run.url));
+      return 0;
+    }
+    src.fetch(clone);
+    src.checkout(clone, `refs/tags/${tag}`);
+    return exitOf(await deps.deposit(clone));
+  };
+
+  // An existing tag: nothing is asked, as only the deposit is left.
+  const tagged = src.tagCommit(clone, tag);
+  if (tagged) {
+    const doi = doiAt(tagged);
+    if (!doi) throw new UserError(msg.workflow.releaseTagNoDoi(tag, repo));
+    refuseSandbox(doi);
+    if (deposited()) {
+      deps.log(msg.workflow.releaseAlreadyDeposited(tag));
+      return 0;
+    }
+    needToken(doi.sandbox);
+    await assertDraftFor(doi, tag, deps);
+    deps.log(msg.workflow.releaseUseTag(tag, tagged));
+    return waitAndDeposit(tagged);
+  }
+
+  // A later version: the head shown in the confirmation is the commit tagged.
+  const head = src.head(clone);
+  const mainDoi = doiAt(head.sha);
+  if (mainDoi) {
+    refuseSandbox(mainDoi);
+    needToken(mainDoi.sandbox);
+    await assertDraftFor(mainDoi, tag, deps);
+    const plan = [
+      msg.workflow.releasePlanHeader(repo),
+      msg.workflow.releasePlanTagAt(tag, head.sha, head.subject),
+      ...tail(mainDoi.sandbox),
+    ];
+    if (!(await deps.confirm(plan))) return 0;
+    return waitAndDeposit(tagAt(head.sha));
+  }
+
+  // A first deposit. Prepare runs on every such run, so the commit merged is the one pushed now.
+  const { sandbox } = input;
+  needToken(sandbox);
+  const plan = [
+    msg.workflow.releasePlanHeader(repo),
+    msg.workflow.releasePlanReserve(sandbox, src.openPr(repo, DOI_BRANCH) !== null),
+    msg.workflow.releasePlanMerge,
+    msg.workflow.releasePlanTagMerge(tag),
+    ...tail(sandbox),
+  ];
+  if (!(await deps.confirm(plan))) return 0;
+  const prepared = await deps.prepare(clone, sandbox);
+  if (prepared !== 0) return exitOf(prepared);
+  const pushed = src.pushedHead(clone, DOI_BRANCH);
+  if (!pushed) throw new UserError(msg.workflow.releaseDoiNotPushed);
+  const pr = src.openPr(repo, DOI_BRANCH);
+  if (!pr) throw new UserError(msg.workflow.releaseNoDoiPr(repo));
+  src.markChecksSkipped(repo, pushed);
+  const method = src.allowsMergeCommit(repo) ? 'merge' : 'squash';
+  let merged: string;
+  try {
+    merged = src.merge(repo, pr.number, pushed, method);
+  } catch (e) {
+    throw new UserError(
+      msg.workflow.releaseMergeRefused(pr.url, e instanceof Error ? e.message : String(e)),
+    );
+  }
+  deps.log(msg.workflow.releaseMerged(pr.url, merged));
+  const sha = tagAt(merged);
+  src.fetch(clone);
+  const now = src.head(clone);
+  if (now.sha !== merged) {
+    deps.log(msg.workflow.releaseMainMoved(merged, src.commitsBetween(clone, merged, now.sha)));
+  }
+  return waitAndDeposit(sha);
+}
+
+interface CommittedDoi {
+  doi: string;
+  sandbox: boolean;
+}
+
+/** The Zenodo DOI in `myst.yml` at commit `ref`, or null when it has none. */
+function committedDoi(src: ReleaseSource, clone: string, ref: string): CommittedDoi | null {
+  const text = src.fileAt(clone, ref, 'myst.yml');
+  if (text === null) return null;
+  const doi = parseYaml(text, `myst.yml at ${ref.slice(0, 12)}`).getIn(['project', 'doi']);
+  if (typeof doi !== 'string' || !doi) return null;
+  const parsed = parseZenodoDoi(doi);
+  if (!parsed) throw new UserError(msg.workflow.doiNotZenodo('release', doi));
+  return { doi, sandbox: parsed.sandbox };
+}
+
+/** Refuses when Zenodo holds no draft for `tag`: no record, or the newest version published with
+ *  another version. Published with this version passes; the deposit step finishes it. */
+async function assertDraftFor(doi: CommittedDoi, tag: string, deps: ReleaseDeps): Promise<void> {
+  let state: DepositState;
+  try {
+    state = await deps.depositState(doi.doi, doi.sandbox);
+  } catch (e) {
+    throw new UserError(
+      msg.workflow.releaseZenodoFailed(e instanceof Error ? e.message : String(e)),
+    );
+  }
+  if (state.kind === 'none') throw new UserError(msg.workflow.releaseNoRecord(doi.doi));
+  if (state.kind === 'published' && state.version !== tag.slice(1)) {
+    throw new UserError(msg.workflow.releaseNeedsNewVersion(tag, state.recordUrl));
+  }
+}
+
+/**
+ * Waits for the Deposit version run a push of `tag` at `sha` started, until its build job passed
+ * and its publish job, if any, finished, so a CI deposit and this one never fill the same draft.
+ * Throws a UserError when the build fails and a {@link WaitTimeout} at a limit.
+ */
+async function waitForBuild(
+  repo: string,
+  tag: string,
+  sha: string,
+  src: ReleaseSource,
+  deps: ReleaseDeps,
+): Promise<CiRun> {
+  deps.log(msg.workflow.releaseWaitRun(tag, `https://github.com/${repo}/actions`));
+  const run = await pollUntil(
+    () => depositRunFor(src.pushRuns(repo, sha), tag, sha),
+    deps.sleep,
+    RUN_WAIT,
+  );
+  if (!run) throw new WaitTimeout(msg.workflow.releaseNoRunStarted(tag, repo));
+  deps.log(msg.workflow.releaseWaitBuild(run.url));
+  let last = '';
+  let unchanged = 0;
+  const done = await pollUntil(
+    () => {
+      const state = buildState(src.jobs(repo, run.id), run.url);
+      if (state !== last) {
+        deps.log(msg.workflow.releaseBuildState(state));
+        last = state;
+        unchanged = 0;
+      } else if (++unchanged % HEARTBEAT_TRIES === 0) {
+        deps.log(msg.workflow.releaseStillWaiting(run.url));
+      }
+      return state === BUILT ? run : null;
+    },
+    deps.sleep,
+    BUILD_WAIT,
+  );
+  if (!done) throw new WaitTimeout(msg.workflow.releaseBuildTimeout(run.url));
+  return done;
+}
+
+/** The state {@link buildState} ends at. */
+const BUILT = 'build done';
+
+/** Where the run stands, as a line to print: {@link BUILT} once the build passed and the publish
+ *  job, if any, finished. Throws a UserError for a failed build or a finished run with no build job. */
+function buildState(jobs: CiJob[], url: string): string {
+  const build = jobs.find((j) => j.name === DEPOSIT_BUILD_JOB);
+  if (!build) {
+    if (jobs.length && jobs.every((j) => j.status === 'completed')) {
+      throw new UserError(msg.workflow.releaseNoBuildJob(url, DEPOSIT_BUILD_JOB));
+    }
+    return 'queued';
+  }
+  if (build.status !== 'completed') return `build ${build.status.replace('_', ' ')}`;
+  if (build.conclusion !== 'success') {
+    throw new UserError(msg.workflow.releaseRunFailed(url, String(build.conclusion)));
+  }
+  const publish = jobs.find((j) => j.name === DEPOSIT_PUBLISH_JOB);
+  if (publish && publish.status !== 'completed') {
+    return `build done; publish job ${publish.status.replace('_', ' ')}`;
+  }
+  return BUILT;
 }

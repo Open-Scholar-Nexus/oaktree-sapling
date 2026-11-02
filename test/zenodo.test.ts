@@ -18,6 +18,7 @@ import {
   paperUrn,
   cmdPrepare,
   cmdUpload,
+  depositState,
   defaultSiteUrl,
   BundleCollisionError,
   assertBundlePreconditions,
@@ -828,6 +829,46 @@ describe('cmdUpload', () => {
       vi.stubEnv('CI', undefined);
       expect(await needsNewVersion()).not.toContain('::error');
     });
+
+    it("succeeds without uploading when the newest version is published as the tag's", async () => {
+      const mystPath = paperRepo(
+        BARE_MYST + '  doi: 10.5072/zenodo.5\n  github: https://github.com/o/r\n',
+      );
+      writeFileSync(mystPath.replace('myst.yml', 'paper.pdf'), '%PDF');
+      withBuild(mystPath);
+      const record = { record_html: 'https://sandbox.zenodo.org/records/6' };
+      const { transport, calls } = fakeTransport((r) =>
+        r.url.includes('/deposit/depositions/')
+          ? {
+              json: dep({
+                id: 6,
+                conceptrecid: 5,
+                submitted: true,
+                links: record,
+                metadata: { version: '1.0.0', doi: '10.5072/zenodo.6' },
+              }),
+            }
+          : { json: [dep({ id: 6, conceptrecid: 5 })] },
+      );
+      vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+      const out = await cmdUpload({
+        mystPath,
+        pdf: mystPath.replace('myst.yml', 'paper.pdf'),
+        tag: 'v1.0.0',
+        bundleOut: mystPath.replace('myst.yml', '_bundle'),
+        api: new ZenodoApi(transport, true, 't'),
+        git: fakeGit,
+        instanceRoot: null,
+        engineRoot: mystPath.replace('myst.yml', ''),
+      });
+      expect(out.exitCode).toBe(0);
+      expect(out.result).toMatchObject({
+        already_published: true,
+        version_doi: '10.5072/zenodo.6',
+        record_url: 'https://sandbox.zenodo.org/records/6',
+      });
+      expect(calls.filter((c) => c.method !== 'GET')).toEqual([]);
+    });
   });
 
   it('publishes the filled draft only when asked, after every file is up', async () => {
@@ -1312,4 +1353,36 @@ describe('journal.zip', () => {
       expect(z.calls).toHaveLength(0);
     },
   );
+});
+
+describe('depositState', () => {
+  const stateOf = async (latest: Deposition | null) => {
+    const { transport, calls } = fakeTransport((r) =>
+      r.url.includes('/deposit/depositions/')
+        ? { json: latest }
+        : { json: latest ? [dep({ id: latest.id })] : [] },
+    );
+    const state = await depositState(new ZenodoApi(transport, true, 't'), '10.5072/zenodo.5');
+    expect(calls.every((c) => c.method === 'GET')).toBe(true);
+    return state;
+  };
+
+  it('reads no record, a draft, or the published version', async () => {
+    expect(await stateOf(null)).toEqual({ kind: 'none' });
+    expect(await stateOf(dep({ id: 6, submitted: false }))).toEqual({ kind: 'draft' });
+    expect(
+      await stateOf(
+        dep({
+          id: 6,
+          submitted: true,
+          metadata: { version: '1.0.0' },
+          links: { record_html: 'https://sandbox.zenodo.org/records/6' },
+        }),
+      ),
+    ).toEqual({
+      kind: 'published',
+      version: '1.0.0',
+      recordUrl: 'https://sandbox.zenodo.org/records/6',
+    });
+  });
 });

@@ -27,7 +27,7 @@ import type { CheckRun } from './checks.js';
 import type { EnvironmentReviewer, Provisioner } from './bootstrap.js';
 import type { UpgradePr } from './upgrade.js';
 import type { ConformanceGh } from './conformance.js';
-import type { CiBuildSource, CiJob, CiRun } from './release.js';
+import type { CiBuildSource, CiJob, CiRun, ReleaseSource } from './release.js';
 
 /**
  * git and gh output is captured, so the user can tell what oak did from what a tool it called
@@ -471,6 +471,156 @@ export const realCiBuildSource: CiBuildSource = {
   },
   download(repo, runId, name, dest) {
     gh(['run', 'download', String(runId), '--repo', repo, '--name', name, '--dir', dest]);
+  },
+};
+
+/**
+ * The real {@link ReleaseSource} for `oak release --repo`: gh as the editor, git in the temporary
+ * clone. A partial clone (`--filter=blob:none`) fetches only the files it reads.
+ */
+export const realReleaseSource: ReleaseSource = {
+  tagCommit: realCiBuildSource.tagCommit,
+  pushRuns: realCiBuildSource.pushRuns,
+  jobs: realCiBuildSource.jobs,
+  vTags(repo) {
+    return apiList(`repos/${repo}/git/matching-refs/tags/v`, '.[].ref | ltrimstr("refs/tags/")');
+  },
+  clone(repo) {
+    const dir = mkdtempSync(join(tmpdir(), 'oak-release-'));
+    try {
+      gh(['repo', 'clone', repo, dir, '--', '--filter=blob:none', '--quiet']);
+    } catch (e) {
+      rmSync(dir, { recursive: true, force: true });
+      throw e;
+    }
+    return dir;
+  },
+  fetch(clone) {
+    git(clone, ['fetch', '--quiet', '--tags', 'origin']);
+  },
+  head(clone) {
+    const [sha = '', subject = ''] = git(clone, [
+      'log',
+      '-1',
+      '--format=%H%x00%s',
+      'origin/HEAD',
+    ]).split('\0');
+    return { sha, subject };
+  },
+  fileAt(clone, ref, path) {
+    // ls-tree reads only trees, so a failed blob fetch below throws instead of reading as absent.
+    if (!git(clone, ['ls-tree', '--name-only', ref, '--', path])) return null;
+    return git(clone, ['show', `${ref}:${path}`]);
+  },
+  checkout(clone, ref) {
+    git(clone, ['checkout', '--quiet', '--detach', ref]);
+  },
+  pushedHead(clone, branch) {
+    let local: string;
+    try {
+      local = git(clone, ['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`], {
+        quiet: true,
+      });
+    } catch {
+      return null;
+    }
+    const remote = git(clone, ['ls-remote', 'origin', `refs/heads/${branch}`]).split(/\s/)[0];
+    return remote === local ? local : null;
+  },
+  openPr(repo, branch) {
+    const line = gh([
+      'pr',
+      'list',
+      '--repo',
+      repo,
+      '--head',
+      branch,
+      '--state',
+      'open',
+      '--json',
+      'number,url,isCrossRepository',
+      '--jq',
+      '[.[] | select(.isCrossRepository | not)][0] // empty | "\(.number) \(.url)"',
+    ]);
+    if (!line) return null;
+    const [number, url = ''] = line.split(' ');
+    return { number: Number(number), url };
+  },
+  markChecksSkipped: markDoiPrChecksSkipped,
+  allowsMergeCommit(repo) {
+    return gh(['api', `repos/${repo}`, '--jq', '.allow_merge_commit']) === 'true';
+  },
+  merge(repo, pr, sha, method) {
+    // With --repo, gh deletes only the remote branch.
+    gh([
+      'pr',
+      'merge',
+      String(pr),
+      '--repo',
+      repo,
+      `--${method}`,
+      '--match-head-commit',
+      sha,
+      '--delete-branch',
+    ]);
+    return gh([
+      'pr',
+      'view',
+      String(pr),
+      '--repo',
+      repo,
+      '--json',
+      'mergeCommit',
+      '--jq',
+      '.mergeCommit.oid',
+    ]);
+  },
+  createTag(repo, tag, sha) {
+    try {
+      gh(
+        [
+          'api',
+          '--method',
+          'POST',
+          `repos/${repo}/git/refs`,
+          '-f',
+          `ref=refs/tags/${tag}`,
+          '-f',
+          `sha=${sha}`,
+        ],
+        { quiet: true },
+      );
+      return sha;
+    } catch (e) {
+      const why = e instanceof Error ? e.message : String(e);
+      if (/already exists/i.test(why)) {
+        return gh(['api', `repos/${repo}/commits/refs/tags/${tag}`, '--jq', '.sha']);
+      }
+      if (/HTTP 403|rule/i.test(why)) {
+        throw new UserError(msg.workflow.releaseTagForbidden(tag, repo, why));
+      }
+      throw e;
+    }
+  },
+  commitsBetween(clone, from, to) {
+    return git(clone, ['log', '--oneline', `${from}..${to}`])
+      .split('\n')
+      .filter(Boolean);
+  },
+  releaseAssets(repo, tag) {
+    try {
+      return gh(
+        ['release', 'view', tag, '--repo', repo, '--json', 'assets', '--jq', '.assets[].name'],
+        {
+          quiet: true,
+        },
+      )
+        .split('\n')
+        .filter(Boolean);
+    } catch (e) {
+      if (/release not found/i.test(e instanceof Error ? e.message : String(e))) return [];
+      throw e;
+    }
   },
 };
 

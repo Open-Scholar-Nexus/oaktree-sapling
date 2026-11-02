@@ -1058,6 +1058,18 @@ async function fillDraft(input: UploadInput, engineZip: string): Promise<Outcome
     return err(2, msg.workflow.uploadConceptMismatch(conceptDoi, expectedConcept));
   }
 
+  if (dep.submitted && dep.metadata?.version === version) {
+    // A rerun after `--publish-without-review` published this version.
+    process.stderr.write(`[upload] ${tag} is already published as deposition ${dep.id}\n`);
+    return ok({
+      version_doi: dep.metadata?.doi ?? dep.doi ?? `${zenodoDoiPrefix(sandbox)}${dep.id}`,
+      deposition_id: dep.id,
+      site_url: siteUrl,
+      published: true,
+      already_published: true,
+      record_url: dep.links?.record_html ?? dep.links?.html,
+    });
+  }
   if (dep.submitted) {
     // An editor clicks "New version" on Zenodo to create the empty draft.
     const recordUrl = dep.links?.record_html ?? dep.links?.html;
@@ -1134,6 +1146,26 @@ async function fillDraft(input: UploadInput, engineZip: string): Promise<Outcome
     published: Boolean(input.publish),
     ...(input.publish ? { record_url: dep.links?.record_html ?? dep.links?.html } : {}),
   });
+}
+
+/** Where the newest version of a concept DOI stands, for `oak release` before it changes
+ *  anything: no record, an unpublished draft, or published with `version` (`metadata.version`). */
+export type DepositState =
+  | { kind: 'none' }
+  | { kind: 'draft' }
+  | { kind: 'published'; version: string | null; recordUrl: string | null };
+
+/** The {@link DepositState} of `conceptDoi`'s newest version. Reads only. */
+export async function depositState(api: ZenodoApi, conceptDoi: string): Promise<DepositState> {
+  const latestId = await api.latestVersionDepId(conceptDoi);
+  if (latestId === null) return { kind: 'none' };
+  const dep = await api.getDeposition(latestId);
+  if (!dep.submitted) return { kind: 'draft' };
+  return {
+    kind: 'published',
+    version: typeof dep.metadata?.version === 'string' ? dep.metadata.version : null,
+    recordUrl: dep.links?.record_html ?? dep.links?.html ?? null,
+  };
 }
 
 export interface StatusInput {
