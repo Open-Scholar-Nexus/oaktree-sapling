@@ -13,6 +13,8 @@ import {
   COMPARE_FILES_MAX,
   labelChildOutput,
   openDoiPr,
+  doiPrStatus,
+  markDoiPrChecksSkipped,
   realConformanceGh,
   realGitContext,
   realGhPr,
@@ -153,20 +155,20 @@ describe('labelChildOutput', () => {
  * ------------------------------------------------------------------------ */
 
 const child = vi.hoisted(() => ({
-  calls: [] as Array<{ tool: string; args: string[] }>,
+  calls: [] as Array<{ tool: string; args: string[]; input?: string }>,
   respond: (_args: string[]) => ({ status: 0, stdout: '', stderr: '' }),
 }));
 
 vi.mock('node:child_process', () => {
-  const call = (tool: string, args: string[]) => {
-    child.calls.push({ tool, args });
+  const call = (tool: string, args: string[], opts?: { input?: string }) => {
+    child.calls.push({ tool, args, input: opts?.input });
     const r = child.respond(args);
     return { status: r.status ?? 0, stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
   };
   return {
-    spawnSync: (tool: string, args: string[]) => call(tool, args),
-    execFileSync: (tool: string, args: string[]) => {
-      const r = call(tool, args);
+    spawnSync: (tool: string, args: string[], opts?: { input?: string }) => call(tool, args, opts),
+    execFileSync: (tool: string, args: string[], opts?: { input?: string }) => {
+      const r = call(tool, args, opts);
       if (r.status !== 0) throw new Error(r.stderr);
       return r.stdout;
     },
@@ -189,6 +191,7 @@ describe('openDoiPr', () => {
       const custom = over(args);
       if (custom)
         return { status: custom.status, stdout: custom.stdout ?? '', stderr: custom.stderr ?? '' };
+      if (args.includes('rev-parse')) return { status: 0, stdout: 'abc123', stderr: '' };
       if (args.includes('get-url'))
         return { status: 0, stdout: 'https://github.com/o/r.git', stderr: '' };
       if (args[0] === 'api') return { status: 0, stdout: 'main', stderr: '' };
@@ -221,12 +224,15 @@ describe('openDoiPr', () => {
     expect(ghCall('pr', 'create'), 'no PR is opened from a diverged HEAD').toBeUndefined();
   });
 
-  it('the body tells the editor how to run the checks GitHub does not start', () => {
+  it('returns the commit it pushed', () => {
+    expect(openDoiPr('/paper', { conceptDoi: '10.5072/zenodo.5' }).sha).toBe('abc123');
+  });
+
+  it('opened by a workflow, the body says why the checks wait', () => {
     vi.stubEnv('GITHUB_ACTIONS', 'true');
     openDoiPr('/paper', { conceptDoi: '10.5072/zenodo.5' });
     const body = argAfter(ghCall('pr', 'create')!.args, '--body')!;
     expect(body).toContain('10.5072/zenodo.5');
-    expect(body).toContain('close and reopen');
     expect(body).toContain('<details>');
   });
 
@@ -235,7 +241,7 @@ describe('openDoiPr', () => {
     openDoiPr('/paper', { conceptDoi: '10.5072/zenodo.5' });
     const body = argAfter(ghCall('pr', 'create')!.args, '--body')!;
     expect(body).toContain('10.5072/zenodo.5');
-    expect(body).not.toContain('close and reopen');
+    expect(body).not.toContain('<details>');
   });
 
   it('a second prepare returns the pull request the first one opened', () => {
@@ -246,9 +252,10 @@ describe('openDoiPr', () => {
         return { status: 0, stdout: 'https://github.com/o/r/pull/7' };
       return null;
     });
-    expect(openDoiPr('/paper', { conceptDoi: '10.5072/zenodo.5' })).toBe(
-      'https://github.com/o/r/pull/7',
-    );
+    expect(openDoiPr('/paper', { conceptDoi: '10.5072/zenodo.5' })).toEqual({
+      url: 'https://github.com/o/r/pull/7',
+      sha: 'abc123',
+    });
   });
 
   it("never takes a fork's pull request from a branch of the same name", () => {
@@ -263,6 +270,17 @@ describe('openDoiPr', () => {
     const list = ghCall('pr', 'list')!.args;
     expect(argAfter(list, '--json')).toContain('isCrossRepository');
     expect(argAfter(list, '--jq')).toContain('select(.isCrossRepository | not)');
+  });
+});
+
+describe('markDoiPrChecksSkipped', () => {
+  it('posts the skipped Journal checks status on the given commit', () => {
+    child.calls.length = 0;
+    child.respond = () => ({ status: 0, stdout: '', stderr: '' });
+    markDoiPrChecksSkipped('o/r', 'abc123');
+    const status = child.calls.find((c) => c.tool === 'gh')!;
+    expect(status.args).toContain('repos/o/r/statuses/abc123');
+    expect(JSON.parse(status.input!)).toEqual(doiPrStatus);
   });
 });
 

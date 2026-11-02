@@ -510,10 +510,20 @@ async function cmdDeposit(argv: string[]): Promise<number> {
       );
     } else if (out.exitCode === 0 && !has(rest, 'no-pr')) {
       try {
-        const url = gh.openDoiPr(resolve(mystPath, '..'), {
+        const { url, sha } = gh.openDoiPr(resolve(mystPath, '..'), {
           conceptDoi: String(out.result.concept_doi),
         });
         process.stderr.write(msg.workflow.depositDoiPrOpened(url) + '\n');
+        if (process.env.GITHUB_ACTIONS) {
+          try {
+            gh.markDoiPrChecksSkipped(repo, sha);
+          } catch (e) {
+            const why = (e as Error).message;
+            process.stderr.write(
+              annotate('warning', msg.workflow.depositDoiPrStatusFailed(why)) + '\n',
+            );
+          }
+        }
       } catch (e) {
         process.stderr.write(
           annotate('warning', msg.workflow.depositDoiPrFailed((e as Error).message)) + '\n',

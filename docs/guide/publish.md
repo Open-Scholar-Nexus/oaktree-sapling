@@ -38,7 +38,7 @@ oak deposit prepare
 
 The run creates an empty draft on Zenodo to reserve a DOI and opens a pull request, **Reserve Zenodo DOI**, that writes the DOI into `myst.yml`, for you to merge.[^bot-pr-checks] Once main's `myst.yml` contains the reserved DOI, you're ready to fill the draft[^concept-vs-version-doi].
 
-[^bot-pr-checks]: GitHub holds the checks on a pull request a workflow opens, and approving them does not start them. Merging needs the **Journal checks** to pass, so close and reopen the pull request to run them.
+[^bot-pr-checks]: For this automated change, the **Journal checks** are skipped ([why](#design-paper-ci-limits)).
 
 [^concept-vs-version-doi]: The reserved DOI is the paper's concept DOI: one DOI for all its versions, which resolves to the newest. Each version also gets a DOI of its own when its draft is published on Zenodo, and that one always resolves to that version.
 

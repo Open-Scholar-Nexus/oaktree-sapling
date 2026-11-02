@@ -1127,6 +1127,9 @@ export const workflow = {
     `deposit prepare: gh is not logged in, so no pull request was opened. myst.yml now holds ` +
     `${conceptDoi}; commit it and open the pull request yourself.`,
   depositDoiPrOpened: (url: string): string => `deposit prepare: opened DOI PR ${url}`,
+  depositDoiPrStatusFailed: (message: string): string =>
+    `deposit prepare: could not mark the DOI PR's Journal checks as skipped (${message}). Does ` +
+    `reserve-doi.yml grant statuses: write? Close and reopen the pull request to run them.`,
   depositDoiPrFailed: (message: string): string =>
     `deposit prepare: DOI PR not opened (${message})`,
 
@@ -1149,9 +1152,10 @@ export const workflow = {
     `the whole workflow, so the build and the deposit read the same journal commit.`,
 
   /** The DOI pull request `gh.openDoiPr` opens. GitHub holds the checks on a pull request a
-   *  workflow opens, and approving them does not run the preview, so that body says what the
-   *  editor clicks. */
+   *  workflow opens, so in Actions the body says why they wait. */
   doiPrTitle: 'Reserve Zenodo DOI',
+  doiPrChecksSkipped:
+    'Journal checks skipped: an automated change that writes only the reserved DOI',
   doiPrBody: (conceptDoi: string, byWorkflow: boolean): string =>
     [
       `Writes the reserved concept DOI \`${conceptDoi}\` into \`myst.yml\`. Merge before tagging.`,
@@ -1161,9 +1165,10 @@ export const workflow = {
             '<details>',
             '<summary>Why are the checks waiting?</summary>',
             '',
-            'GitHub holds the checks on a pull request a workflow opens, and approving them does ' +
-              'not run the preview. To run the Journal checks and the preview, close and reopen ' +
-              'this pull request.',
+            'GitHub holds the checks on a pull request a workflow opens. This one changes only ' +
+              'the DOI in `myst.yml`, so the workflow skipped the Journal checks, and the other ' +
+              'checks are not needed to merge. If the Journal checks are missing, close and ' +
+              'reopen this pull request to run them.',
             '',
             '</details>',
           ]

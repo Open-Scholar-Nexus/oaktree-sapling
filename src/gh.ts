@@ -297,9 +297,12 @@ export function originRepo(repoRoot: string): string | null {
 
 /**
  * Opens the DOI pull request for the myst.yml write [R3]: a branch, a commit of myst.yml only,
- * a push and `gh pr create`. Returns its URL. Needs `gh` with a token.
+ * a push and `gh pr create`. Returns its URL and the pushed commit. Needs `gh` with a token.
  */
-export function openDoiPr(repoRoot: string, opts: { conceptDoi: string }): string {
+export function openDoiPr(
+  repoRoot: string,
+  opts: { conceptDoi: string },
+): { url: string; sha: string } {
   // One branch name for every version: prepare reserves the concept DOI, and the version comes
   // from the tag at publish. Preparing again force-pushes the same branch.
   const branch = 'zenodo-doi';
@@ -317,6 +320,7 @@ export function openDoiPr(repoRoot: string, opts: { conceptDoi: string }): strin
   git(repoRoot, ['add', 'myst.yml']);
   git(repoRoot, [...BOT_ID, 'commit', '-m', `chore: reserve Zenodo DOI ${opts.conceptDoi}`]);
   git(repoRoot, ['push', '-u', 'origin', branch, '--force']);
+  const sha = git(repoRoot, ['rev-parse', 'HEAD'], { quiet: true });
   // `--repo`: the git calls use `-C repoRoot`, while `gh` would read the current directory's
   // repo. `realUpgradePr` uses `cwd` for the same.
   const scope = repo ? ['--repo', repo] : [];
@@ -334,14 +338,33 @@ export function openDoiPr(repoRoot: string, opts: { conceptDoi: string }): strin
     branch,
   ];
   try {
-    return gh(create);
+    return { url: gh(create), sha };
   } catch (e) {
     // Preparing again is allowed [design §13], and `gh pr create` refuses a second pull request
     // for a branch, so return the open one.
     const existing = openPrUrl(repo, branch);
-    if (existing) return existing;
+    if (existing) return { url: existing, sha };
     throw e;
   }
+}
+
+/** The `Journal checks` status {@link markDoiPrChecksSkipped} posts. */
+export const doiPrStatus = {
+  context: 'Journal checks',
+  state: 'success',
+  description: msg.workflow.doiPrChecksSkipped,
+} as const;
+
+/**
+ * Posts a passing `Journal checks` commit status on `sha`, the commit {@link openDoiPr} pushed,
+ * which changes only myst.yml. GitHub does not run the checks on a pull request a workflow opens,
+ * so without this status the merge rule blocks it. A commit pushed to the branch later has no
+ * `Journal checks` status until the checks run on it.
+ */
+export function markDoiPrChecksSkipped(repo: string, sha: string): void {
+  gh(['api', '--method', 'POST', `repos/${repo}/statuses/${sha}`, '--input', '-'], {
+    input: JSON.stringify(doiPrStatus),
+  });
 }
 
 /** The repo's default branch, the base every DOI or upgrade pull request targets. */
