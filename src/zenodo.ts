@@ -315,6 +315,13 @@ function matchRelated(items: Deposition[], identifier: string): Deposition | nul
   return null;
 }
 
+/** The deposition's page on Zenodo: `/uploads/<id>` for a draft, `/records/<id>` once published.
+ *  The API's `links.html` for a draft, `/deposit/<id>`, does not open in a browser. */
+export function webUrl(dep: Deposition, sandbox: boolean): string {
+  const host = sandbox ? 'https://sandbox.zenodo.org' : 'https://zenodo.org';
+  return `${host}/${dep.submitted ? 'records' : 'uploads'}/${dep.id}`;
+}
+
 /** The deposition's concept DOI. `conceptdoi` is only set after first publish; before that,
  *  build it from `conceptrecid`. */
 export function conceptDoiFor(dep: Deposition, sandbox: boolean): string {
@@ -940,7 +947,7 @@ export async function cmdPrepare(input: PrepareInput): Promise<Outcome> {
   }
 
   const cdoi = conceptDoiFor(dep, sandbox);
-  const draftUrl = dep.links?.html;
+  const draftUrl = webUrl(dep, sandbox);
 
   doc2.setIn(['project', 'doi'], cdoi);
   doc2.setIn(['project', 'github'], githubUrl);
@@ -1067,12 +1074,12 @@ async function fillDraft(input: UploadInput, engineZip: string): Promise<Outcome
       site_url: siteUrl,
       published: true,
       already_published: true,
-      record_url: dep.links?.record_html ?? dep.links?.html,
+      record_url: webUrl(dep, sandbox),
     });
   }
   if (dep.submitted) {
     // An editor clicks "New version" on Zenodo to create the empty draft.
-    const recordUrl = dep.links?.record_html ?? dep.links?.html;
+    const recordUrl = webUrl(dep, sandbox);
     if (msg.inCI()) {
       process.stderr.write(msg.workflow.depositNeedsNewVersionAnnotation(recordUrl) + '\n');
     }
@@ -1139,12 +1146,12 @@ async function fillDraft(input: UploadInput, engineZip: string): Promise<Outcome
   const versionDoi = dep.metadata?.doi ?? dep.doi ?? predictedVersionDoi;
   return ok({
     version_doi: versionDoi,
-    draft_url: dep.links?.html,
+    draft_url: webUrl(dep, sandbox),
     deposition_id: dep.id,
     bundle_dir: bundleOut,
     site_url: siteUrl,
     published: Boolean(input.publish),
-    ...(input.publish ? { record_url: dep.links?.record_html ?? dep.links?.html } : {}),
+    ...(input.publish ? { record_url: webUrl(dep, sandbox) } : {}),
   });
 }
 
@@ -1164,7 +1171,7 @@ export async function depositState(api: ZenodoApi, conceptDoi: string): Promise<
   return {
     kind: 'published',
     version: typeof dep.metadata?.version === 'string' ? dep.metadata.version : null,
-    recordUrl: dep.links?.record_html ?? dep.links?.html ?? null,
+    recordUrl: webUrl(dep, api.sandbox),
   };
 }
 
@@ -1208,7 +1215,7 @@ export async function cmdStatus(input: StatusInput): Promise<Outcome> {
   const dep = await api.getDeposition(latestId);
   out.latest_deposition_id = dep.id;
   out.submitted = dep.submitted ?? false;
-  out.draft_url = dep.links?.html;
+  out.draft_url = webUrl(dep, sandbox);
   out.latest_version = dep.metadata?.version;
   out.latest_doi = dep.metadata?.doi ?? dep.doi;
 
