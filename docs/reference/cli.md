@@ -69,9 +69,6 @@ Outside GitHub Actions the clone has to be at the tag, with no changes to tracke
 `--token <token>`
 : The Zenodo token, ahead of `ZENODO_TOKEN` and `ZENODO_TOKEN_SANDBOX`.
 
-(notify)=
-## notify
-
 (bootstrap)=
 ## bootstrap
 

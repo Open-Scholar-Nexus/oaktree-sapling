@@ -34,7 +34,7 @@ jobs:
     environment: zenodo-publish # v* tags only
     permissions:
       contents: write # attach the Release bundle + commit comment
-      issues: write # open the editor-action issue on failure
+      issues: write # open the failure issue
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

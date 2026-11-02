@@ -1,7 +1,7 @@
 /**
- * deploy-preview and notify, with fakes for Cloudflare, git and gh: a failed Cloudflare
- * deploy falls back to an artifact link [R16], `.pr-number` is removed before serving [R26],
- * Cloudflare settings come from journal.yml [R27], and the new-version reminder [R23].
+ * deploy-preview, with fakes for Cloudflare, git and gh: a failed Cloudflare deploy falls back
+ * to an artifact link [R16], `.pr-number` is removed before serving [R26], and Cloudflare
+ * settings come from journal.yml [R27].
  */
 import { describe, it, expect } from 'vitest';
 import { mkdtempSync, writeFileSync, existsSync, mkdirSync, readdirSync } from 'node:fs';
@@ -12,17 +12,11 @@ import {
   stripPagesControlFiles,
   previewBranch,
   planPreview,
-  recordUrlForDoi,
-  hasVersionTag,
   previewComment,
   artifactComment,
-  newVersionComment,
   loadJournalPreview,
   cmdDeployPreview,
-  runNewVersionReminder,
   STICKY_PREVIEW,
-  STICKY_NEWVERSION,
-  LABEL_EDITOR_ACTION,
   type PagesDeployer,
   type GhPr,
 } from '../src/preview.js';
@@ -36,33 +30,21 @@ interface Sticky {
   header: string;
   body: string;
 }
-interface Label {
-  label: string;
-}
-
 function fakeGh(over: Partial<GhPr> = {}): {
   gh: GhPr;
   stickies: Sticky[];
-  labels: Label[];
 } {
   const stickies: Sticky[] = [];
-  const labels: Label[] = [];
   const gh: GhPr = {
     sticky(_root, _pr, header, body) {
       stickies.push({ header, body });
-    },
-    addLabel(_root, _pr, label) {
-      labels.push({ label });
-    },
-    versionTags() {
-      return [];
     },
     prHead() {
       return HEAD;
     },
     ...over,
   };
-  return { gh, stickies, labels };
+  return { gh, stickies };
 }
 
 /** The commit Stage 1 built, and the head of every pull request {@link fakeGh} knows. */
@@ -237,36 +219,6 @@ describe('planPreview', () => {
   });
 });
 
-describe('recordUrlForDoi', () => {
-  it('maps a sandbox DOI', () => {
-    expect(recordUrlForDoi('10.5072/zenodo.12345')).toEqual({
-      doi: '10.5072/zenodo.12345',
-      recordUrl: 'https://sandbox.zenodo.org/records/12345',
-    });
-  });
-  it('maps a prod DOI', () => {
-    expect(recordUrlForDoi('10.5281/zenodo.999')).toEqual({
-      doi: '10.5281/zenodo.999',
-      recordUrl: 'https://zenodo.org/records/999',
-    });
-  });
-  it('errors on an unknown prefix', () => {
-    expect(recordUrlForDoi('10.9999/x')).toHaveProperty('error');
-  });
-});
-
-describe('hasVersionTag', () => {
-  it('detects version tags, ignoring blanks', () => {
-    expect(hasVersionTag(['v1.0.0', 'other'])).toBe(true);
-    expect(hasVersionTag(['sometag', ''])).toBe(false);
-    expect(hasVersionTag([])).toBe(false);
-  });
-
-  it('counts only the tags oak release publishes', () => {
-    expect(hasVersionTag(['v1.0.0-rc1', 'v2', 'very-old', 'v0.0.0-cert-1'])).toBe(false);
-  });
-});
-
 describe('comment bodies', () => {
   it('the preview comment has the marker and the URL', () => {
     const b = previewComment('https://x.pages.dev');
@@ -278,12 +230,6 @@ describe('comment bodies', () => {
     expect(b).toContain(`oak-sticky: ${STICKY_PREVIEW}`);
     expect(b).toContain('https://gh/o/r/actions');
     expect(b).toContain('no secrets');
-  });
-  it('the new-version comment has the marker, the record URL and the DOI', () => {
-    const b = newVersionComment('10.5281/zenodo.1', 'https://zenodo.org/records/1');
-    expect(b).toContain(`oak-sticky: ${STICKY_NEWVERSION}`);
-    expect(b).toContain('https://zenodo.org/records/1');
-    expect(b).toContain('10.5281/zenodo.1');
   });
 });
 
@@ -335,7 +281,6 @@ const baseInput = (siteDir: string, over: Record<string, unknown> = {}) => ({
   serverUrl: 'https://github.com',
   cf: { apiToken: 't', accountId: 'a' },
   verifiedHead: HEAD,
-  mystPath: join(siteDir, 'no-myst.yml'), // absent: notify's no-DOI path (not reached without tags)
   ...over,
 });
 
@@ -452,17 +397,12 @@ describe('cmdDeployPreview', () => {
     expect(stickies).toHaveLength(0);
   });
 
-  it("reads the paper's myst.yml from the artifact's .paper, and never serves the file", async () => {
+  it("takes the paper from the artifact's .paper, and never serves the file", async () => {
     const dir = siteWithPr('7');
     writeFileSync(join(dir, '.paper'), 'papers/one\n');
-    const repoRoot = mkdtempSync(join(tmpdir(), 'oak-colo-'));
-    mkdirSync(join(repoRoot, 'papers/one'), { recursive: true });
-    writeFileSync(join(repoRoot, 'papers/one/myst.yml'), 'project:\n  doi: 10.5281/zenodo.55\n');
-    const { gh, stickies } = fakeGh({ versionTags: () => ['v1.0.0'] });
-    const input = { ...baseInput(dir, { cf: {} }), repoRoot, mystPath: undefined };
-    const out = await cmdDeployPreview(input, { deployer: okDeployer(), gh });
+    const { gh } = fakeGh();
+    const out = await cmdDeployPreview(baseInput(dir, { cf: {} }), { deployer: okDeployer(), gh });
     expect(out.result.paper).toBe('papers/one');
-    expect(stickies.some((s) => s.header === STICKY_NEWVERSION)).toBe(true);
     expect(existsSync(join(dir, '.paper'))).toBe(false);
   });
 
@@ -472,34 +412,6 @@ describe('cmdDeployPreview', () => {
     const out = await cmdDeployPreview(baseInput(dir), { deployer: okDeployer(), gh });
     expect(out.result.preview).toBe('skipped');
     expect(stickies).toHaveLength(0);
-  });
-
-  it('runs the new-version reminder too, posting on a published paper [R16]', async () => {
-    const dir = siteWithPr('7');
-    const mystPath = join(dir, 'myst.yml');
-    writeFileSync(mystPath, 'project:\n  doi: 10.5281/zenodo.55\n');
-    const { gh, stickies, labels } = fakeGh({ versionTags: () => ['v1.0.0'] });
-    const out = await cmdDeployPreview(baseInput(dir, { cf: {}, mystPath }), {
-      deployer: okDeployer(),
-      gh,
-    });
-    expect((out.result.notify as Record<string, unknown>).reminder).toBe('posted');
-    expect(stickies.some((s) => s.header === STICKY_NEWVERSION)).toBe(true);
-    expect(labels.some((l) => l.label === LABEL_EDITOR_ACTION)).toBe(true);
-  });
-
-  it('fails on a notify failure (published without a DOI) even after posting the preview', async () => {
-    const dir = siteWithPr('7');
-    const mystPath = join(dir, 'myst.yml'); // no project.doi
-    writeFileSync(mystPath, 'project:\n  title: x\n');
-    const { gh, stickies } = fakeGh({ versionTags: () => ['v1.0.0'] });
-    const out = await cmdDeployPreview(baseInput(dir, { cf: {}, mystPath }), {
-      deployer: okDeployer(),
-      gh,
-    });
-    expect(out.exitCode).toBe(1); // the run fails
-    expect(out.result.status).toBe('error');
-    expect(stickies.some((s) => s.header === STICKY_PREVIEW)).toBe(true); // preview still posted
   });
 });
 
@@ -512,66 +424,3 @@ function instanceCf(near: string): string {
   );
   return dir;
 }
-
-/* --------------------------------------------------------------------------
- * Orchestration: runNewVersionReminder
- * ------------------------------------------------------------------------ */
-
-describe('runNewVersionReminder', () => {
-  const mystWith = (doi?: string): string => {
-    const dir = mkdtempSync(join(tmpdir(), 'oak-notify-'));
-    const p = join(dir, 'myst.yml');
-    writeFileSync(p, doi ? `project:\n  doi: ${doi}\n` : 'project:\n  title: x\n');
-    return p;
-  };
-  const input = (mystPath: string, tags: string[]) => ({
-    input: { repoRoot: '/repo', mystPath, repo: 'o/r', pr: '3' },
-    gh: fakeGh({ versionTags: () => tags }),
-  });
-
-  it('skips on a first-deposit paper (no version tags)', () => {
-    const { input: i, gh } = input(mystWith('10.5281/zenodo.1'), []);
-    const out = runNewVersionReminder(i, gh.gh);
-    expect(out.result.reminder).toBe('skipped');
-    expect(gh.stickies).toHaveLength(0);
-  });
-
-  it('posts and labels when published with a valid DOI', () => {
-    const { input: i, gh } = input(mystWith('10.5072/zenodo.9'), ['v1.0.0']);
-    const out = runNewVersionReminder(i, gh.gh);
-    expect(out.result.reminder).toBe('posted');
-    expect(out.result.record_url).toBe('https://sandbox.zenodo.org/records/9');
-    expect(gh.labels).toHaveLength(1);
-  });
-
-  it('exits 1 when a v* tag exists but the DOI is missing', () => {
-    const { input: i, gh } = input(mystWith(undefined), ['v2.0.0']);
-    const out = runNewVersionReminder(i, gh.gh);
-    expect(out.exitCode).toBe(1);
-    expect(out.result.reminder).toBe('error');
-    expect(gh.stickies).toHaveLength(0);
-  });
-
-  it('exits 1 on an unknown DOI prefix', () => {
-    const { input: i, gh } = input(mystWith('10.1234/foo'), ['v2.0.0']);
-    const out = runNewVersionReminder(i, gh.gh);
-    expect(out.exitCode).toBe(1);
-    expect(out.result.reminder).toBe('error');
-  });
-
-  it('a gh failure reading the tags is an error, not a first deposit', () => {
-    const gh = fakeGh({
-      versionTags: () => {
-        throw new Error('gh api failed (exit 1): rate limit exceeded');
-      },
-    });
-    const out = runNewVersionReminder(
-      { repoRoot: '/repo', mystPath: mystWith('10.5281/zenodo.1'), repo: 'o/r', pr: '3' },
-      gh.gh,
-    );
-    expect(out.exitCode).toBe(1);
-    expect(out.result.status).toBe('error');
-    expect(out.result.reminder).toBe('error');
-    expect(gh.stickies).toHaveLength(0);
-  });
-});

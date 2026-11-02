@@ -11,7 +11,7 @@ on:
 permissions:
   contents: read
   actions: read # download the cross-run artifact
-  pull-requests: write # sticky preview comment + new-version reminder
+  pull-requests: write # sticky preview comment
 
 concurrency:
   # Head repo in the key: forks share branch names.

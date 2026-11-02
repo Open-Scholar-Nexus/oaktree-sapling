@@ -179,7 +179,6 @@ export const usage = (): string =>
   `  oak post-checks --report <path> --repo <owner/repo> --sha <headsha> --base <branch>\n` +
   `                  --verified-head <headsha>\n` +
   `  oak deploy-preview <site> [--verified-head <headsha>] [--instance <dir> | --no-instance] [--repo <owner/repo>]\n` +
-  `  oak notify new-version [--pr <n> | --site <dir>] [--repo <owner/repo>]\n` +
   `  oak conformance reset   --repo <owner/name>\n` +
   `  oak conformance run   --repo <owner/name> --tag <vX.Y.Z> [--fork-repo <owner/name>]\n` +
   `\n` +
@@ -395,7 +394,6 @@ export const bootstrap = {
   planNoSite: '  ○ no journal website (--no-site)',
 
   // ── the issue labels oak creates, shown in the repo's labels list ──────────────────────
-  labelEditorAction: 'An editor must take action before this can proceed',
   labelZenodoFailed: 'A Zenodo publish run failed and needs editor attention',
 
   // ── the repo descriptions, shown on GitHub ─────────────────────────────────────────────
@@ -946,21 +944,6 @@ export const pr = {
       `_(${reason}.)_`,
     ].join('\n'),
 
-  newVersionReminder: (doi: string, recordUrl: string): string =>
-    [
-      '**Zenodo new-version reminder**',
-      '',
-      'This paper is already published on Zenodo. Before tagging the next release, an editor must:',
-      '',
-      `1. Open the record: ${recordUrl}`,
-      '2. Click **New version** to create an empty draft.',
-      '',
-      'Pushing the new `v*` tag fills that draft; a journal with no Zenodo token on GitHub ' +
-        'runs `oak release --tag <tag>` instead. The editor then clicks **Publish** on Zenodo.',
-      '',
-      `Concept DOI: \`${doi}\``,
-    ].join('\n'),
-
   checksHeadline: (pass: boolean, title: string): string =>
     `### ${pass ? '✅' : '❌'} ${pass ? 'Journal checks passed' : 'Journal checks failed'}: ${title}`,
   checksFooter: `[What these checks are](${docsUrl(DOCS.checks)}) · _Updated on every push to this pull request._`,
@@ -1032,7 +1015,7 @@ export const pr = {
 };
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════
- * The workflow-run verbs (deposit / release / preview / notify / post-checks / conformance).
+ * The workflow-run verbs (deposit / release / preview / post-checks / conformance).
  * Mostly read in a CI log, but every one of them can be typed by hand.
  * ═════════════════════════════════════════════════════════════════════════════════════════ */
 
@@ -1258,7 +1241,7 @@ export const workflow = {
     `${files.length === 1 ? 'it comes' : 'they come'} from an earlier build. Delete _build, ` +
     `run oak build at ${tag} in a shell without the Zenodo token, then run this again.`,
 
-  // preview / notify
+  // preview
   previewProviderIsNot: (provider: string): string => `preview.provider is '${provider}'`,
   previewNoCloudflareSecrets: 'Cloudflare secrets are not configured',
   previewNoProjectName: 'preview.cf_project_name is unset in journal.yml',
@@ -1270,18 +1253,6 @@ export const workflow = {
   noPrNumber: 'deploy-preview: no .pr-number in artifact; nothing to preview.',
   previewStripped: (names: string[]): string =>
     `deploy-preview: removed Cloudflare Pages control files before serving (${names.join(', ')}).`,
-  notifyUsage: 'oak notify: usage: oak notify new-version [--pr N | --site <dir>]',
-  notifyNoPr: 'oak notify new-version: pass --pr N (or --site <dir> holding a .pr-number)',
-  notifyPublishedButUnlinked:
-    'notify: a version tag (vX.Y.Z) exists but project.doi is missing from myst.yml; the ' +
-    'repo is published but unlinked. Fix myst.yml before tagging the next release.',
-  notifyRecordUrlFailed: (why: string): string => `notify: ${why}`,
-  notifyBadDoi: (doi: string): string =>
-    `not a Zenodo DOI: ${doi} (expected 10.5281/zenodo.* or 10.5072/zenodo.*)`,
-  notifyFirstDeposit: 'no version tags (vX.Y.Z) yet (first-deposit case)',
-  notifyTagsFailed: (why: string): string =>
-    `notify: gh could not list the repo's version tags (${why}); whether the paper is ` +
-    'already published is unknown, and the reminder is not skipped on a guess.',
 
   // post-checks
   postChecksArgs:

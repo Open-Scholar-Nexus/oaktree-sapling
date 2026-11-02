@@ -140,13 +140,6 @@ describe('gh.ts argument vectors', () => {
     expect(fetchLine).toBeGreaterThan(-1);
     expect(guardLine).toBeLessThan(fetchLine);
   });
-
-  it('a versionTags API failure throws instead of reading as no tags', () => {
-    // [] would read as never published.
-    const vt = /versionTags\([^)]*\)\s*\{([\s\S]*?)\n  \},/.exec(SRC('gh.ts'));
-    expect(vt, 'versionTags not found; this lint needs updating').toBeTruthy();
-    expect(codeOnly(vt![1])).not.toMatch(/\bcatch\b/);
-  });
 });
 
 describe('labelChildOutput', () => {
@@ -479,7 +472,7 @@ describe('realProvisioner.createLabel ([R127])', () => {
     child.calls.length = 0;
     child.respond = () => ({ status: 1, stdout: '', stderr: 'gh: Forbidden (HTTP 403)' });
     expect(() =>
-      realProvisioner.createLabel('o/r', 'editor-action-needed', { color: 'b60205' }),
+      realProvisioner.createLabel('o/r', 'zenodo-publish-failed', { color: 'b60205' }),
     ).toThrow();
     expect(ghCall('label', 'create')!.args, 'the create is idempotent on its own').toContain(
       '--force',

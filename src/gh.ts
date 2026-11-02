@@ -5,12 +5,7 @@
  */
 import * as msg from './messages.js';
 import { UserError } from './messages.js';
-import {
-  ENGINE_MANAGED_PATHS,
-  GITHUB_REPO,
-  PAPER_VERSION_TAG,
-  repoFromGithubUrl,
-} from './schema.js';
+import { ENGINE_MANAGED_PATHS, GITHUB_REPO, repoFromGithubUrl } from './schema.js';
 import { execFileSync, spawnSync } from 'node:child_process';
 import {
   cpSync,
@@ -457,11 +452,11 @@ export const realCiBuildSource: CiBuildSource = {
 };
 
 /* --------------------------------------------------------------------------
- * For preview.ts: deploy-preview and notify
+ * For preview.ts: deploy-preview
  * ------------------------------------------------------------------------ */
 
-/** The real pull request calls for `cmdDeployPreview` and the new-version reminder. A sticky
- *  comment carries a hidden HTML marker, so a rerun edits it in place. */
+/** The real pull request calls for `cmdDeployPreview`. A sticky comment carries a hidden HTML
+ *  marker, so a rerun edits it in place. */
 export const realGhPr: GhPr = {
   sticky(repoRoot, prNumber, header, body) {
     // Throws on failure, so post-checks never reports a comment it did not post.
@@ -496,31 +491,6 @@ export const realGhPr: GhPr = {
         { input: body },
       );
     }
-  },
-
-  addLabel(repoRoot, prNumber, label, opts = {}) {
-    const repo = originRepo(repoRoot);
-    const scope = repo ? ['--repo', repo] : [];
-    try {
-      const create = ['label', 'create', label, ...scope];
-      if (opts.color) create.push('--color', opts.color);
-      if (opts.description) create.push('--description', opts.description);
-      gh(create);
-    } catch {
-      /* the label already exists */
-    }
-    gh(['pr', 'edit', prNumber, ...scope, '--add-label', label]);
-  },
-
-  versionTags(_repoRoot, repo) {
-    // From the API, since this job's checkout is shallow [R23]. A failure throws: [] would read
-    // as never published.
-    if (!repo) return [];
-    const out = gh(['api', `repos/${repo}/tags`, '--paginate', '--jq', '.[].name']);
-    return out
-      .split('\n')
-      .map((t) => t.trim())
-      .filter((t) => PAPER_VERSION_TAG.test(t));
   },
 
   prHead(repo, pr) {

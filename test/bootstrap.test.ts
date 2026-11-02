@@ -27,7 +27,7 @@ import {
   type TemplateAnswers,
   type BootstrapDeps,
 } from '../src/bootstrap.js';
-import { LABEL_EDITOR_ACTION, LABEL_ZENODO_FAILED } from '../src/preview.js';
+import { LABEL_ZENODO_FAILED } from '../src/preview.js';
 import { takeEngineManagedPaths } from '../src/gh.js';
 
 const PAPER_ROOT = 'templates/paper';
@@ -879,7 +879,6 @@ describe('cmdBootstrapPaper', () => {
     const { prov, calls } = fakeProv();
     await cmdBootstrapPaper(paperInput(), deps(prov));
     expect((calls.createLabel as Array<{ n: string }>).map((c) => c.n)).toEqual([
-      LABEL_EDITOR_ACTION,
       LABEL_ZENODO_FAILED,
     ]);
   });
@@ -1293,7 +1292,7 @@ describe('a failing setup step [R125]', () => {
     // Independent steps are all attempted.
     expect(actions.pages).toBe('enabled');
     expect(calls.enablePages).toHaveLength(1);
-    expect(calls.createLabel).toHaveLength(2);
+    expect(calls.createLabel).toHaveLength(1);
     expect((out.result.failed as string[]).join('\n')).toContain('protect_main');
     const runbook = (out.result.runbook as string[]).join('\n');
     expect(runbook).toContain('protect_main');

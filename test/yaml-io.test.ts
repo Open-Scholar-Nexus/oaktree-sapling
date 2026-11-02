@@ -21,7 +21,7 @@ import { UserError } from '../src/messages.js';
 import { runValidate } from '../src/validate.js';
 import type { MystEdge } from '../src/materialize.js';
 import { cmdPrepare, type ZenodoApi } from '../src/zenodo.js';
-import { loadJournalPreview, runNewVersionReminder, type GhPr } from '../src/preview.js';
+import { loadJournalPreview } from '../src/preview.js';
 
 const fixturePaper = fileURLToPath(new URL('./fixture-paper/myst.yml', import.meta.url));
 const fixtureInstance = fileURLToPath(new URL('./fixture-instance', import.meta.url));
@@ -251,7 +251,7 @@ describe('a YAML error is refused the same way by every verb', () => {
     expect(refusal(path)).toContain('can appear only once');
   });
 
-  it('validate, deposit and the new-version reminder give that refusal for myst.yml', async () => {
+  it('validate and deposit give that refusal for myst.yml', async () => {
     const myst = withDuplicateKey('myst.yml');
     const why = refusal(myst);
     const paperRoot = join(myst, '..');
@@ -267,13 +267,6 @@ describe('a YAML error is refused the same way by every verb', () => {
         instanceRoot: null,
       }),
     ).rejects.toThrow(why);
-    const gh = { versionTags: () => ['v1.0.0'] } as unknown as GhPr;
-    const reminder = runNewVersionReminder(
-      { repoRoot: paperRoot, mystPath: myst, repo: 'o/r', pr: '7' },
-      gh,
-    );
-    expect(reminder.exitCode).toBe(1);
-    expect(reminder.result.message).toBe(why);
   });
 
   it('deploy-preview falls back with that refusal as the reason for journal.yml', () => {
