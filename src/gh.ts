@@ -344,6 +344,27 @@ export function openDoiPr(repoRoot: string, opts: { conceptDoi: string }): strin
   }
 }
 
+/** The `Journal checks` status {@link markDoiPrChecksSkipped} posts. */
+export const doiPrStatus = {
+  context: 'Journal checks',
+  state: 'success',
+  description: msg.workflow.doiPrChecksSkipped,
+} as const;
+
+/**
+ * Marks the Journal checks passed on the commit {@link openDoiPr} pushed, which changes only
+ * myst.yml. GitHub holds the checks on a pull request a workflow opens, so in Actions nothing
+ * else posts the status the merge rule needs. A later push to the branch gets no status.
+ */
+export function markDoiPrChecksSkipped(repoRoot: string): void {
+  const repo = originRepo(repoRoot);
+  if (!repo) return;
+  const sha = git(repoRoot, ['rev-parse', 'HEAD'], { quiet: true });
+  gh(['api', '--method', 'POST', `repos/${repo}/statuses/${sha}`, '--input', '-'], {
+    input: JSON.stringify(doiPrStatus),
+  });
+}
+
 /** The repo's default branch, the base every DOI or upgrade pull request targets. */
 function defaultBranch(repo: string): string {
   return gh(['api', `repos/${repo}`, '--jq', '.default_branch']) || 'main';

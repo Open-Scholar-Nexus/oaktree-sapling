@@ -514,6 +514,16 @@ async function cmdDeposit(argv: string[]): Promise<number> {
           conceptDoi: String(out.result.concept_doi),
         });
         process.stderr.write(msg.workflow.depositDoiPrOpened(url) + '\n');
+        if (process.env.GITHUB_ACTIONS) {
+          try {
+            gh.markDoiPrChecksSkipped(resolve(mystPath, '..'));
+          } catch (e) {
+            const why = (e as Error).message;
+            process.stderr.write(
+              annotate('warning', msg.workflow.depositDoiPrStatusFailed(why)) + '\n',
+            );
+          }
+        }
       } catch (e) {
         process.stderr.write(
           annotate('warning', msg.workflow.depositDoiPrFailed((e as Error).message)) + '\n',
