@@ -746,6 +746,13 @@ async function cmdReleaseRepo(argv: string[]): Promise<number> {
   const gh = await import('./gh.js');
   const release = await import('./release.js');
   const z = await import('./zenodo.js');
+  // Checked first: it needs neither gh nor the repo.
+  const { PAPER_VERSION_TAG } = await import('./schema.js');
+  const given = flag(argv, 'tag');
+  if (given !== undefined && !PAPER_VERSION_TAG.test(given)) {
+    process.stderr.write(msg.workflow.releaseBadTag(given) + '\n');
+    return 2;
+  }
   if (!gh.ghLoggedIn()) {
     process.stderr.write(msg.workflow.releaseNeedsGh + '\n');
     return 2;
@@ -760,11 +767,6 @@ async function cmdReleaseRepo(argv: string[]): Promise<number> {
     process.stderr.write(
       msg.workflow.releaseNoTagList(repo, gh.realReleaseSource.vTags(repo)) + '\n',
     );
-    return 2;
-  }
-  const { PAPER_VERSION_TAG } = await import('./schema.js');
-  if (!PAPER_VERSION_TAG.test(tag)) {
-    process.stderr.write(msg.workflow.releaseBadTag(tag) + '\n');
     return 2;
   }
   const sandbox = has(argv, 'sandbox');
