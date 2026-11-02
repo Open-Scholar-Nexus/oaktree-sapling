@@ -1,12 +1,9 @@
 /**
- * release.ts: for a local `oak release`, this gets the build it deposits from the tag's Deposit
- * version run.
+ * release.ts: `oak release` from the terminal ({@link runRelease}), and the tag's Deposit version
+ * build it deposits.
  *
  * The CI build runs the paper's code with no token, so its artifact is only read and uploaded.
  * The git and gh side is injected (`CiBuildSource`; the real one is in gh.ts).
- *
- * {@link runRelease} is the whole terminal flow, `oak release --repo owner/paper --tag vX`: the
- * DOI pull request, the tag, the wait for the build, then the deposit. Documented at DOCS.release.
  */
 import { cpSync, existsSync, mkdtempSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -200,8 +197,8 @@ export const BUILD_WAIT = { tries: 180, intervalMs: 15_000 };
 /** A line every 5 minutes while nothing changes, so a quiet terminal reads as waiting. */
 const HEARTBEAT_TRIES = 20;
 
-/** The GitHub side of {@link runRelease}, as the editor; the real one is `realReleaseSource` in
- *  gh.ts. `clone` is a fresh clone in a temporary folder, and the git calls run in it. */
+/** What {@link runRelease} does on GitHub, with the editor's gh login (`realReleaseSource` in
+ *  gh.ts). The git calls run in the temporary clone `clone` returns. */
 export interface ReleaseSource extends Pick<CiBuildSource, 'tagCommit' | 'pushRuns' | 'jobs'> {
   /** The repo's tags starting with `v`. */
   vTags(repo: string): string[];
@@ -332,7 +329,7 @@ async function releaseFrom(
     msg.workflow.releasePlanAttach(tag),
   ];
 
-  /** Tags `sha`; an existing tag a concurrent run made is checked as step 0 checks one. */
+  /** Tags `sha`; an existing tag a concurrent run made is checked as an existing tag is. */
   const tagAt = (sha: string): string => {
     const at = src.createTag(repo, tag, sha);
     if (at === sha) {
@@ -495,7 +492,13 @@ async function waitForBuild(
     deps.sleep,
     BUILD_WAIT,
   );
-  if (!done) throw new WaitTimeout(msg.workflow.releaseBuildTimeout(run.url));
+  if (!done)
+    throw new WaitTimeout(
+      msg.workflow.releaseBuildTimeout(
+        run.url,
+        (BUILD_WAIT.tries * BUILD_WAIT.intervalMs) / 60_000,
+      ),
+    );
   return done;
 }
 

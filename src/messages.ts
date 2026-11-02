@@ -1316,7 +1316,7 @@ export const workflow = {
     `from it. See its output above, then run this again.`,
   releaseMergeRefused: (url: string, why: string): string =>
     `oak release: GitHub refused to merge the DOI pull request (${why}). If someone pushed to ` +
-    `zenodo-doi after oak, running this again pushes a fresh DOI commit and merges that. ${url}`,
+    `zenodo-doi after oak, running this again pushes a new DOI commit and merges that. ${url}`,
   releaseMerged: (url: string, sha: string): string =>
     `oak release: merged the DOI pull request as ${sha.slice(0, 7)}: ${url}`,
   releaseMainMoved: (sha: string, commits: string[]): string =>
@@ -1337,10 +1337,10 @@ export const workflow = {
     `oak release: waiting for the Deposit version run to build: ${url}`,
   releaseBuildState: (state: string): string => `oak release: ${state}`,
   releaseStillWaiting: (url: string): string => `oak release: still waiting on ${url}`,
-  releaseBuildTimeout: (url: string): string =>
-    `oak release: the Deposit version run has not finished after 45 minutes: ${url}`,
+  releaseBuildTimeout: (url: string, minutes: number): string =>
+    `oak release: the Deposit version run has not finished after ${minutes} minutes: ${url}`,
   releaseRerun: (rerun: string): string =>
-    `oak release: still running; rerun the same command to continue: ${rerun}`,
+    `oak release: rerun the same command to continue: ${rerun}`,
   releaseInterrupted: (rerun: string): string =>
     `oak release: stopped. Rerun the same command to continue: ${rerun}`,
   releaseAlreadyPublished: (tag: string, url: string): string =>

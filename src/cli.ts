@@ -587,12 +587,8 @@ function platformName(): string {
 
 /**
  * `oak release --tag vX`. Outside Actions, without `--deposit-only` or `--use-local-build`, it is
- * the whole flow from the terminal ({@link cmdReleaseRepo}). Otherwise it is the deposit step:
- * deposits the tag's build, attaches the bundle to the tag's release, and comments on the commit.
- * The environment follows the committed DOI. In Actions it deposits `_build`. Run locally, it
- * expects the clone at the tag and deposits the build of the tag's Deposit version run, or the
- * local `_build` folder with --use-local-build. It never builds.
- * Documented at DOCS.release.
+ * {@link cmdReleaseRepo}. Otherwise it is the deposit step: deposits the tag's build, attaches the
+ * bundle to the tag's release, and comments on the commit. Documented at DOCS.release.
  */
 async function cmdRelease(argv: string[]): Promise<number> {
   const useLocalBuild = has(argv, 'use-local-build');
@@ -746,7 +742,7 @@ async function cmdReleaseRepo(argv: string[]): Promise<number> {
   const gh = await import('./gh.js');
   const release = await import('./release.js');
   const z = await import('./zenodo.js');
-  // Checked first: it needs neither gh nor the repo.
+  // Checked first, from the flag alone.
   const { PAPER_VERSION_TAG } = await import('./schema.js');
   const given = flag(argv, 'tag');
   if (given !== undefined && !PAPER_VERSION_TAG.test(given)) {
