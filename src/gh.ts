@@ -540,11 +540,15 @@ export const realReleaseSource: ReleaseSource = {
       '--json',
       'number,url,isCrossRepository',
       '--jq',
-      '[.[] | select(.isCrossRepository | not)][0] // empty | "\(.number) \(.url)"',
+      '[.[] | select(.isCrossRepository | not)][0] // empty | "\\(.number) \\(.url)"',
     ]);
     if (!line) return null;
-    const [number, url = ''] = line.split(' ');
-    return { number: Number(number), url };
+    const m = /^(\d+) (https:\/\/\S+)$/.exec(line);
+    if (!m)
+      throw new Error(
+        `gh pr list printed ${JSON.stringify(line.slice(0, 80))}, not a pull request`,
+      );
+    return { number: Number(m[1]), url: m[2]! };
   },
   markChecksSkipped: markDoiPrChecksSkipped,
   allowsMergeCommit(repo) {
