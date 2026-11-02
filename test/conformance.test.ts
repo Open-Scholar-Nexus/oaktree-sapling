@@ -13,12 +13,18 @@ import {
   CERT_BRANCH_PREFIX,
   CERT_TAG_MARKER,
   CERT_DEPOSIT_TAG,
+  FAILING_EDITION,
+  FAILING_ID,
   type ConformanceGh,
   type ConformanceDeps,
   type WorkflowRun,
   type CheckRunRef,
+  type CommitStatusRef,
 } from '../src/conformance.js';
 import { JOURNAL_BUNDLE_NAME, RESERVED_BUNDLE_NAMES } from '../src/zenodo.js';
+import { LABEL_EDITOR_ACTION } from '../src/preview.js';
+import { checksComment, shimWarning, toCheckRun, CheckStatus } from '../src/checks.js';
+import { pr as prMsg, validate as validateMsg, workflow } from '../src/messages.js';
 import { UPGRADE_BRANCH_PREFIX } from '../src/upgrade.js';
 import { pagesUrl } from '../src/schema.js';
 
@@ -142,7 +148,8 @@ describe('cmdConformanceReset', () => {
  * ------------------------------------------------------------------------ */
 
 const TAG = 'v0.0.0-dev.9';
-// Both events, so the push to main and the pull request build each find a passing Build paper.
+// Both events, so the push to main and the pull request build each find a passing Build paper;
+// Check paper so the fork phase finds a run to approve.
 const SUCCESS_CI: WorkflowRun[] = [
   {
     id: 1,
@@ -160,10 +167,59 @@ const SUCCESS_CI: WorkflowRun[] = [
     url: 'pr-run-url',
     event: 'pull_request',
   },
+  {
+    id: 4,
+    name: 'Check paper',
+    status: 'completed',
+    conclusion: 'success',
+    url: 'check-run-url',
+    event: 'pull_request',
+  },
 ];
-const SUCCESS_CHECK: CheckRunRef[] = [{ name: 'Journal checks', conclusion: 'success' }];
+const PASSING_RUN = toCheckRun([
+  { id: 'authors-exist', status: CheckStatus.pass, message: 'Found 1 authors' },
+]);
+const SUCCESS_CHECK: CheckRunRef[] = [{ name: 'Journal checks', ...PASSING_RUN }];
+const SUCCESS_STATUS: CommitStatusRef[] = [{ context: 'Journal checks', state: 'success' }];
 const PREVIEW_COMMENT =
   '<!-- oak-sticky: oak-preview -->\n**Preview deployed** 🚀\n\nhttps://cert-x.oaktree-sapling-test.pages.dev\n';
+const NEWVERSION_COMMENT = '<!-- oak-sticky: zenodo-newversion-reminder -->\nA new version';
+
+// What post-checks posts on the upgrade pull request (#7, head 'pr-head-sha'), which changes
+// `.github/`.
+const UPGRADE_TOUCHED = ['.github/workflows/build-paper.yml'];
+const UPGRADE_CHECK: CheckRunRef[] = [
+  {
+    name: 'Journal checks',
+    conclusion: 'success',
+    title: prMsg.checkRunTitleShimTouched(PASSING_RUN.title),
+    summary: `${shimWarning(UPGRADE_TOUCHED)}\n\n${PASSING_RUN.summary}`,
+  },
+];
+const UPGRADE_COMMENT = checksComment({ checkRun: PASSING_RUN }, UPGRADE_TOUCHED);
+
+// What post-checks posts on the failing-checks pull request (#41, head 'fail-head-sha').
+const FAILING_RUN = toCheckRun(
+  [{ id: 'id-shape', status: CheckStatus.fail, message: 'bad id' }],
+  undefined,
+  [validateMsg.noteComposeFailed('Cannot find config file: editions/typo.yml')],
+);
+const FAILING_CHECK: CheckRunRef[] = [{ name: 'Journal checks', ...FAILING_RUN }];
+const FAILING_STATUS: CommitStatusRef[] = [{ context: 'Journal checks', state: 'failure' }];
+const FAILING_COMMENT = checksComment({ checkRun: FAILING_RUN });
+const PASSING_COMMENT = checksComment({ checkRun: PASSING_RUN });
+
+const RELEASE_COMMENT = workflow.releaseCommitComment('https://sandbox.zenodo.org/deposit/1');
+
+/** Comments by pull request: the upgrade (#7), the same-repo preview (#21), the fork (#31) and
+ *  the failing-checks one (#41). */
+const DEFAULT_COMMENTS = (pr: number): string[] =>
+  ({
+    7: [UPGRADE_COMMENT],
+    21: [PREVIEW_COMMENT, NEWVERSION_COMMENT],
+    31: [PREVIEW_COMMENT, PASSING_COMMENT],
+    41: [FAILING_COMMENT],
+  })[pr] ?? [];
 
 /** A fake `ConformanceGh` for `run`. The reset methods do nothing (the test repo starts clean);
  *  the others follow `over`. It records labels, merges, closes, tags, approvals and releases.
@@ -173,7 +229,10 @@ function fakeCertGh(
   over: {
     workflowRuns?: (sha: string) => WorkflowRun[];
     checkRuns?: (sha: string) => CheckRunRef[];
+    statuses?: (sha: string) => CommitStatusRef[];
     comments?: (pr: number) => string[];
+    labels?: (pr: number) => string[];
+    commitComments?: (sha: string) => string[];
     committedDoi?: () => string | null;
     committedEngineVersion?: () => string | null;
     committedJournalRepo?: () => string | null;
@@ -190,6 +249,7 @@ function fakeCertGh(
   openedForkPr: [string, string][];
   deletedForkBranches: string[];
   approvedRuns: number[];
+  openedFailingPr: [string, string, string][];
 } {
   const labeled: [number, string][] = [];
   const merged: number[] = [];
@@ -200,6 +260,7 @@ function fakeCertGh(
   const openedForkPr: [string, string][] = []; // [forkRepo, branch]
   const deletedForkBranches: string[] = [];
   const approvedRuns: number[] = [];
+  const openedFailingPr: [string, string, string][] = []; // [branch, id, edition]
   let resetSweeps = 0; // reset() calls listOpenPrs first; counting calls shows cleanup ran
   let publishPolls = 0;
   const defaultWorkflowRuns = (sha: string): WorkflowRun[] => {
@@ -227,6 +288,7 @@ function fakeCertGh(
     openedForkPr,
     deletedForkBranches,
     approvedRuns,
+    openedFailingPr,
     get resetSweeps() {
       return resetSweeps;
     },
@@ -246,9 +308,28 @@ function fakeCertGh(
       return 'merge-sha';
     },
     workflowRunsForCommit: (_r, sha) => (over.workflowRuns ?? defaultWorkflowRuns)(sha),
-    checkRunsForCommit: (_r, sha) => (over.checkRuns ?? (() => SUCCESS_CHECK))(sha),
+    checkRunsForCommit: (_r, sha) =>
+      (
+        over.checkRuns ??
+        ((s) =>
+          s === 'pr-head-sha'
+            ? UPGRADE_CHECK
+            : s === 'fail-head-sha'
+              ? FAILING_CHECK
+              : SUCCESS_CHECK)
+      )(sha),
+    commitStatuses: (_r, sha) =>
+      (over.statuses ?? ((s) => (s === 'fail-head-sha' ? FAILING_STATUS : SUCCESS_STATUS)))(sha),
     openPreviewPr: (_r, _b, _m) => ({ number: 21, headSha: 'preview-head-sha' }),
-    listIssueComments: (_r, pr) => (over.comments ?? (() => [PREVIEW_COMMENT]))(pr),
+    listIssueComments: (_r, pr) => (over.comments ?? DEFAULT_COMMENTS)(pr),
+    prLabels: (_r, pr) =>
+      (over.labels ?? ((n) => (n === 21 ? [CONFORMANCE_LABEL, LABEL_EDITOR_ACTION] : [])))(pr),
+    openFailingChecksPr: (_r, branch, _m, id, edition) => {
+      openedFailingPr.push([branch, id, edition]);
+      return { number: 41, headSha: 'fail-head-sha' };
+    },
+    commitComments: (_r, sha) =>
+      (over.commitComments ?? ((s) => (s === 'main-sha' ? [RELEASE_COMMENT] : [])))(sha),
     committedDoi: () => (over.committedDoi ?? (() => '10.5072/zenodo.562233'))(),
     committedEngineVersion: () => (over.committedEngineVersion ?? (() => TAG))(),
     committedJournalRepo: () => (over.committedJournalRepo ?? (() => 'o/journal'))(),
@@ -291,14 +372,14 @@ const runDeps = (
 });
 
 describe('cmdConformanceRun', () => {
-  it('passes the push to main, the same-repo preview, and the deposit', async () => {
+  it('passes the push to main, the deposit, the same-repo preview and the failing checks', async () => {
     const gh = fakeCertGh();
     const out = await cmdConformanceRun({ repo: REPO, tag: TAG, runId: '42' }, runDeps(gh));
 
     expect(out.exitCode).toBe(0);
     expect(out.result).toMatchObject({
       status: 'ok',
-      paths: ['push-main', 'preview-same-repo', 'deposit'],
+      paths: ['push-main', 'deposit', 'preview-same-repo', 'failing-checks'],
       tag: TAG,
       prNumber: 7,
       mergeSha: 'merge-sha',
@@ -307,17 +388,22 @@ describe('cmdConformanceRun', () => {
       previewUrl: 'https://cert-x.oaktree-sapling-test.pages.dev',
       depositTag: CERT_DEPOSIT_TAG,
       releaseAssets: [...RESERVED_BUNDLE_NAMES, JOURNAL_BUNDLE_NAME],
+      failingChecksPr: 41,
     });
     expect(gh.labeled).toEqual([
       [7, CONFORMANCE_LABEL],
       [21, CONFORMANCE_LABEL],
+      [41, CONFORMANCE_LABEL],
     ]);
     expect(gh.merged).toEqual([7]); // only the upgrade pull request is merged (the push to main)
-    expect(gh.closed).toEqual([21]); // the preview pull request is closed, not merged
+    expect(gh.closed).toEqual([21, 41]); // the preview and failing-checks pull requests are closed, not merged
     expect(gh.pushedTags).toEqual([[CERT_DEPOSIT_TAG, 'main-sha']]); // the reserved deposit tag
     expect(gh.deletedReleases).toContain(CERT_DEPOSIT_TAG); // removed before the push and after success
+    expect(gh.openedFailingPr).toEqual([
+      [`${CERT_BRANCH_PREFIX}42-fail`, FAILING_ID, FAILING_EDITION],
+    ]);
     // Without a fork, the fork preview is skipped and no fork method is called.
-    expect((out.result.paths as string[]).length).toBe(3);
+    expect(out.result.paths).not.toContain('preview-fork');
     expect(out.result).not.toHaveProperty('forkPr');
     expect(gh.openedForkPr).toEqual([]);
     expect(gh.sweptForkBranches).toEqual([]);
@@ -335,13 +421,13 @@ describe('cmdConformanceRun', () => {
     expect(out.exitCode).toBe(0);
     expect(out.result).toMatchObject({
       status: 'ok',
-      paths: ['push-main', 'preview-same-repo', 'deposit', 'preview-fork'],
+      paths: ['push-main', 'deposit', 'preview-same-repo', 'failing-checks', 'preview-fork'],
       forkPr: 31,
       forkPreviewUrl: 'https://cert-x.oaktree-sapling-test.pages.dev',
     });
     expect(gh.sweptForkBranches).toEqual([FORK.repo]);
     expect(gh.openedForkPr).toEqual([[FORK.repo, `${CERT_BRANCH_PREFIX}42`]]);
-    expect(gh.approvedRuns).toEqual([2]); // the fork pull request's Build paper run (SUCCESS_CI pull_request)
+    expect(gh.approvedRuns).toEqual([2, 4]); // the fork pull request's Build paper and Check paper runs (SUCCESS_CI)
     expect(gh.labeled).toContainEqual([31, CONFORMANCE_LABEL]);
     expect(gh.closed).toContain(31); // the fork pull request is closed on the test repo (main token)
     expect(gh.deletedForkBranches).toEqual([`${CERT_BRANCH_PREFIX}42`]);
@@ -355,7 +441,7 @@ describe('cmdConformanceRun', () => {
           ? [
               '<!-- oak-sticky: oak-preview -->\n**Preview build ready** 📦\nartifact link, no live preview',
             ]
-          : [PREVIEW_COMMENT],
+          : DEFAULT_COMMENTS(pr),
     });
     const out = await cmdConformanceRun(
       { repo: REPO, tag: TAG, runId: '42' },
@@ -377,6 +463,14 @@ describe('cmdConformanceRun', () => {
               status: 'completed',
               conclusion: 'failure',
               url: 'bad-fork-run',
+              event: 'pull_request',
+            },
+            {
+              id: 6,
+              name: 'Check paper',
+              status: 'completed',
+              conclusion: 'success',
+              url: 'fork-check-run',
               event: 'pull_request',
             },
           ];
@@ -478,9 +572,12 @@ describe('cmdConformanceRun', () => {
 
   it('fails at the preview when the comment fell back to an artifact link (no pages.dev URL)', async () => {
     const gh = fakeCertGh({
-      comments: () => [
-        '<!-- oak-sticky: oak-preview -->\n**Preview build ready** 📦\nartifact link, no live preview',
-      ],
+      comments: (pr) =>
+        pr === 21
+          ? [
+              '<!-- oak-sticky: oak-preview -->\n**Preview build ready** 📦\nartifact link, no live preview',
+            ]
+          : DEFAULT_COMMENTS(pr),
     });
     const out = await cmdConformanceRun({ repo: REPO, tag: TAG }, runDeps(gh));
     expect(out.exitCode).toBe(1);
@@ -567,7 +664,7 @@ describe('cmdConformanceRun', () => {
     expect(out.exitCode).toBe(1);
     expect(out.result).toMatchObject({ status: 'failed', path: 'deposit' });
     expect(out.result.failure).toContain('sandbox DOI');
-    expect(gh.merged).toEqual([7]); // the push to main and the preview passed; the deposit failed
+    expect(gh.merged).toEqual([7]); // the push to main passed; the deposit failed
     expect(gh.pushedTags).toEqual([]); // never tagged; the check before it failed
   });
 
@@ -680,6 +777,124 @@ describe('cmdConformanceRun', () => {
     expect(out.result).toMatchObject({ status: 'failed', path: 'deposit' });
     expect(out.result.failure).toContain('Deposit version');
     expect(gh.deletedReleases).toEqual([CERT_DEPOSIT_TAG]); // only the cleanup before the push ran
+  });
+
+  it('fails at the push to main when no Journal checks commit status is posted', async () => {
+    const gh = fakeCertGh({ statuses: () => [] });
+    const out = await cmdConformanceRun({ repo: REPO, tag: TAG }, runDeps(gh));
+    expect(out.exitCode).toBe(1);
+    expect(out.result).toMatchObject({ status: 'failed', path: 'push-main' });
+    expect(String(out.result.failure)).toContain('commit status never appeared');
+    expect(gh.merged).toEqual([]);
+  });
+
+  it('fails at the push to main when the upgrade Check Run title carries no .github/ warning', async () => {
+    const gh = fakeCertGh({ checkRuns: () => SUCCESS_CHECK });
+    const out = await cmdConformanceRun({ repo: REPO, tag: TAG }, runDeps(gh));
+    expect(out.exitCode).toBe(1);
+    expect(out.result).toMatchObject({ status: 'failed', path: 'push-main' });
+    expect(String(out.result.failure)).toContain('title on PR #7');
+  });
+
+  it('fails at the push to main when the upgrade checks comment carries no .github/ warning', async () => {
+    const gh = fakeCertGh({
+      comments: (pr) => (pr === 7 ? [PASSING_COMMENT] : DEFAULT_COMMENTS(pr)),
+    });
+    const out = await cmdConformanceRun({ repo: REPO, tag: TAG }, runDeps(gh));
+    expect(out.exitCode).toBe(1);
+    expect(out.result).toMatchObject({ status: 'failed', path: 'push-main' });
+    expect(String(out.result.failure)).toContain('checks comment on PR #7');
+  });
+
+  it('fails at the deposit when oak release posted no commit comment', async () => {
+    const gh = fakeCertGh({ commitComments: () => [] });
+    const out = await cmdConformanceRun({ repo: REPO, tag: TAG }, runDeps(gh));
+    expect(out.exitCode).toBe(1);
+    expect(out.result).toMatchObject({ status: 'failed', path: 'deposit' });
+    expect(String(out.result.failure)).toContain('commit comment');
+  });
+
+  it('fails at the preview when the new-version reminder is missing', async () => {
+    const gh = fakeCertGh({
+      comments: (pr) => (pr === 21 ? [PREVIEW_COMMENT] : DEFAULT_COMMENTS(pr)),
+    });
+    const out = await cmdConformanceRun({ repo: REPO, tag: TAG }, runDeps(gh));
+    expect(out.exitCode).toBe(1);
+    expect(out.result).toMatchObject({ status: 'failed', path: 'preview-same-repo' });
+    expect(String(out.result.failure)).toContain('new-version reminder');
+  });
+
+  it('fails at the preview when the editor-action-needed label is missing', async () => {
+    const gh = fakeCertGh({ labels: () => [CONFORMANCE_LABEL] });
+    const out = await cmdConformanceRun({ repo: REPO, tag: TAG }, runDeps(gh));
+    expect(out.exitCode).toBe(1);
+    expect(out.result).toMatchObject({ status: 'failed', path: 'preview-same-repo' });
+    expect(String(out.result.failure)).toContain(LABEL_EDITOR_ACTION);
+  });
+
+  it('keeps the deposit tag until the preview has run', async () => {
+    // The reminder needs a version tag while the preview pull request is open.
+    const gh = fakeCertGh({ labels: () => [] });
+    await cmdConformanceRun({ repo: REPO, tag: TAG }, runDeps(gh));
+    expect(gh.deletedReleases).toEqual([CERT_DEPOSIT_TAG]); // only the cleanup before the push
+  });
+
+  it('fails at the failing checks when that pull request passes them', async () => {
+    const gh = fakeCertGh({
+      checkRuns: (sha) => (sha === 'pr-head-sha' ? UPGRADE_CHECK : SUCCESS_CHECK),
+    });
+    const out = await cmdConformanceRun({ repo: REPO, tag: TAG }, runDeps(gh));
+    expect(out.exitCode).toBe(1);
+    expect(out.result).toMatchObject({ status: 'failed', path: 'failing-checks' });
+    expect(String(out.result.failure)).toContain('concluded success');
+  });
+
+  it('fails at the failing checks when the commit status passes', async () => {
+    const gh = fakeCertGh({ statuses: () => SUCCESS_STATUS });
+    const out = await cmdConformanceRun({ repo: REPO, tag: TAG }, runDeps(gh));
+    expect(out.exitCode).toBe(1);
+    expect(out.result).toMatchObject({ status: 'failed', path: 'failing-checks' });
+    expect(String(out.result.failure)).toContain('status is success, expected failure');
+  });
+
+  it('fails at the failing checks when the comment does not name id-shape', async () => {
+    const other = checksComment({
+      checkRun: toCheckRun([{ id: 'authors-exist', status: CheckStatus.fail, message: 'none' }]),
+    });
+    const gh = fakeCertGh({ comments: (pr) => (pr === 41 ? [other] : DEFAULT_COMMENTS(pr)) });
+    const out = await cmdConformanceRun({ repo: REPO, tag: TAG }, runDeps(gh));
+    expect(out.exitCode).toBe(1);
+    expect(out.result).toMatchObject({ status: 'failed', path: 'failing-checks' });
+    expect(String(out.result.failure)).toContain('id-shape');
+  });
+
+  it('fails at the failing checks when the summary carries no compose-failure note', async () => {
+    const noNote = toCheckRun([{ id: 'id-shape', status: CheckStatus.fail, message: 'bad id' }]);
+    const gh = fakeCertGh({
+      checkRuns: (sha) =>
+        sha === 'pr-head-sha'
+          ? UPGRADE_CHECK
+          : sha === 'fail-head-sha'
+            ? [{ name: 'Journal checks', ...noNote }]
+            : SUCCESS_CHECK,
+    });
+    const out = await cmdConformanceRun({ repo: REPO, tag: TAG }, runDeps(gh));
+    expect(out.exitCode).toBe(1);
+    expect(out.result).toMatchObject({ status: 'failed', path: 'failing-checks' });
+    expect(String(out.result.failure)).toContain('compose-failure note');
+  });
+
+  it('fails at the fork preview when post-checks posts no checks comment on the fork pull request', async () => {
+    const gh = fakeCertGh({
+      comments: (pr) => (pr === 31 ? [PREVIEW_COMMENT] : DEFAULT_COMMENTS(pr)),
+    });
+    const out = await cmdConformanceRun(
+      { repo: REPO, tag: TAG, runId: '42' },
+      runDeps(gh, { fork: FORK }),
+    );
+    expect(out.exitCode).toBe(1);
+    expect(out.result).toMatchObject({ status: 'failed', path: 'preview-fork' });
+    expect(String(out.result.failure)).toContain('fork PR #31 checks comment');
   });
 });
 
