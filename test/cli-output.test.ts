@@ -1023,3 +1023,19 @@ describe.skipIf(bundleState() === 'absent')('oak release and its steps, before Z
     expect(r.stderr).toContain("oak: unknown command 'deposit'");
   });
 });
+
+describe.skipIf(bundleState() === 'absent')('oak clean', () => {
+  beforeAll(assertBundleNotStale);
+
+  it('names the folder it searched and the cache, and asks nothing when nothing is kept', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'oak-clean-tmp-'));
+    const cache = mkdtempSync(join(tmpdir(), 'oak-clean-cache-'));
+    mkdirSync(join(cache, 'oak'));
+    writeFileSync(join(cache, 'oak', 'x'), 'cached');
+    const r = oak(['clean', '--json'], { TMPDIR: dir, XDG_CACHE_HOME: cache });
+    expect(r.code).toBe(0);
+    expect(r.stderr).toContain(`no clones kept by oak release in ${dir}`);
+    expect(r.stderr).toContain(`${join(cache, 'oak')} holds`);
+    expect(JSON.parse(r.stdout)).toMatchObject({ status: 'ok', dir, clones: [] });
+  });
+});

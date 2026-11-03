@@ -79,6 +79,15 @@ Outside GitHub Actions the clone has to be at the tag, with no changes to tracke
 `--token <token>`
 : The Zenodo token, ahead of `ZENODO_TOKEN` and `ZENODO_TOKEN_SANDBOX`. Every `oak release` command takes it.
 
+(clean)=
+## clean
+
+`oak clean` lists the folders [`oak release`](#release) left in the temporary folder, such as the clones it keeps after a failure or Ctrl-C, with their size, asks, and removes them. It searches the temporary folder of the shell it runs in (`TMPDIR`), and names it. A folder counts when its name starts with `oak-release-` and it belongs to you; a symlink never counts. It also removes a clone an `oak release` is still using. A successful `oak release` removes the clones kept for the same repository and version, since a clone's folder name holds both.
+
+It also shows the size of `~/.cache/oak` (`$XDG_CACHE_HOME/oak` when set), which holds the `oak` versions papers pin ([which version runs](#pins-local)). `--cache` removes it too; the next command that needs a version fetches it again.
+
+`--yes` skips the confirmation prompt, and is needed without a terminal; declining removes nothing, so answering no only lists them. `--json` prints what it found and removed.
+
 (bootstrap)=
 ## bootstrap
 
