@@ -594,11 +594,10 @@ export const realReleaseSource: ReleaseSource = {
         ],
         { quiet: true },
       );
-      return sha;
     } catch (e) {
       const why = e instanceof Error ? e.message : String(e);
       if (/already exists/i.test(why)) {
-        return gh(['api', `repos/${repo}/commits/refs/tags/${tag}`, '--jq', '.sha']);
+        throw new UserError(msg.workflow.releaseTagAppeared(tag, repo));
       }
       if (/HTTP 403|rule/i.test(why)) {
         throw new UserError(msg.workflow.releaseTagForbidden(tag, repo, why));

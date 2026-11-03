@@ -1155,15 +1155,15 @@ async function fillDraft(input: UploadInput, engineZip: string): Promise<Outcome
   });
 }
 
-/** Where the newest version of a concept DOI stands, for `oak release` before it changes
- *  anything: no record, an unpublished draft, or published with `version` (`metadata.version`). */
+/** The deposit state of a concept DOI's newest version: no record, an unpublished draft, or
+ *  published with `version` (`metadata.version`). */
 export type DepositState =
   | { kind: 'none' }
   | { kind: 'draft' }
   | { kind: 'published'; version: string | null; recordUrl: string | null };
 
-/** The {@link DepositState} of `conceptDoi`'s newest version. Reads only. */
-export async function depositState(api: ZenodoApi, conceptDoi: string): Promise<DepositState> {
+/** The {@link DepositState} of `conceptDoi`'s newest version. */
+export async function readDepositState(api: ZenodoApi, conceptDoi: string): Promise<DepositState> {
   const latestId = await api.latestVersionDepId(conceptDoi);
   if (latestId === null) return { kind: 'none' };
   const dep = await api.getDeposition(latestId);

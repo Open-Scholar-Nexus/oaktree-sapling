@@ -15,11 +15,15 @@ import { parseZenodoDoi } from './schema.js';
 import { DERIVED_CONFIG_FILE, parseYaml } from './yaml-io.js';
 import type { DepositState } from './zenodo.js';
 
-/** The workflow file `templates/paper/.github/workflows/deposit-version.yml`, as a run's `path`
- *  names it, its build job, and the artifact that job uploads. */
+/* --------------------------------------------------------------------------
+ * The deposit step's build: `oak release --deposit-only`
+ * ------------------------------------------------------------------------ */
+
+/** The Deposit version workflow (the paper template's `deposit-version.yml`): its file as a run's
+ *  `path` gives it, its build job, and the artifact the build job uploads. */
 export const DEPOSIT_WORKFLOW_PATH = '.github/workflows/deposit-version.yml';
 export const DEPOSIT_BUILD_JOB = 'build';
-/** The job beside it that deposits with a Zenodo token on GitHub. */
+/** The Deposit version job that deposits with a Zenodo token on GitHub, after the build job. */
 export const DEPOSIT_PUBLISH_JOB = 'publish';
 export const RELEASE_ARTIFACT = 'release-build';
 
@@ -220,9 +224,9 @@ export interface ReleaseSource extends Pick<CiBuildSource, 'tagCommit' | 'pushRu
   /** Merges pull request `pr` if its head is still `sha` and returns the commit the merge put on
    *  the base. Throws when GitHub refuses. */
   merge(repo: string, pr: number, sha: string, method: 'merge' | 'squash'): string;
-  /** Creates `tag` at `sha` and returns the commit it names: another one when the tag appeared
-   *  meanwhile. Throws a UserError when the ruleset refuses. */
-  createTag(repo: string, tag: string, sha: string): string;
+  /** Creates `tag` at `sha`. Throws a UserError when the tag already exists, created after the
+   *  clone read the tags, or when a ruleset refuses. */
+  createTag(repo: string, tag: string, sha: string): void;
   /** `git log --oneline from..to`. */
   commitsBetween(clone: string, from: string, to: string): string[];
   /** The asset names of the tag's GitHub release; none without a release. */
@@ -242,10 +246,12 @@ export interface ReleaseInput {
 export interface ReleaseDeps {
   src: ReleaseSource;
   hasToken(sandbox: boolean): boolean;
-  depositState(conceptDoi: string, sandbox: boolean): Promise<DepositState>;
-  /** `oak deposit prepare` with the pinned oak in `clone`, on the default branch. */
-  prepare(clone: string, sandbox: boolean): Promise<number>;
-  /** `oak release --deposit-only` with the pinned oak in `clone`, at the tag. */
+  readDepositState(conceptDoi: string, sandbox: boolean): Promise<DepositState>;
+  /** Reserves the DOI: `oak deposit prepare` with the pinned oak in `clone`, on the default
+   *  branch, which opens the DOI pull request. */
+  reserveDoi(clone: string, sandbox: boolean): Promise<number>;
+  /** Fills the Zenodo draft: `oak release --deposit-only` with the pinned oak in `clone`, at the
+   *  tag. */
   deposit(clone: string): Promise<number>;
   confirm(plan: string[]): Promise<boolean>;
   sleep(ms: number): Promise<void>;
@@ -255,9 +261,11 @@ export interface ReleaseDeps {
 /** A wait that reached its limit; the run exits 3 and a rerun continues. */
 class WaitTimeout extends Error {}
 
-/** A step's exit code as `oak release` reports it: 0, 1 for a bug, else 2. */
+/** A pinned step's exit code as `oak release` reports it: 0 and 1 (a bug) as they are, any other
+ *  failure 2, so a step's own 3 never reads as a wait that reached its limit. */
 function exitOf(code: number): number {
-  return code === 0 || code === 1 ? code : 2;
+  if (code === 0 || code === 1) return code;
+  return 2;
 }
 
 /** `src` with each call's failure turned into a UserError saying a rerun continues, but for
@@ -282,12 +290,16 @@ function guarded(src: ReleaseSource): ReleaseSource {
 }
 
 /**
- * `oak release` from the terminal: reads where the release of `input.tag` stands on GitHub and
- * Zenodo and does what is left, so running it again after a stop continues. A first deposit
- * reserves the DOI, merges the DOI pull request and tags the merge commit; a later version tags
- * the default branch's head; an existing tag is used as it is. Then it waits for the tag's
- * Deposit version build and deposits it. Returns the exit code: 0 done, 2 refused or failed, 3 a
- * wait reached its limit. Every refusal known up front comes before anything changes.
+ * `oak release` from the terminal. It checks these in order and runs the steps from the first that
+ * holds, so a rerun after a stop skips what an earlier run did:
+ * 1. `input.tag` exists: wait for its Deposit version run, then deposit at the tag, unless the
+ *    tag's GitHub release already holds {@link DEPOSITED_ASSET}.
+ * 2. `myst.yml` on the default branch has a DOI: tag the branch head, then as 1.
+ * 3. Neither: reserve the DOI, which pushes {@link DOI_BRANCH} and opens its pull request; merge
+ *    it at the commit pushed, tag the merge commit, then as 1.
+ * The refusals it can check first (token, Zenodo draft, sandbox against the committed DOI) come
+ * before the confirmation and the first write. Returns the exit code: 0 done or declined, 1 a
+ * bug, 2 refused or failed, 3 a wait reached its limit.
  */
 export async function runRelease(input: ReleaseInput, deps: ReleaseDeps): Promise<number> {
   const { repo, tag } = input;
@@ -329,17 +341,10 @@ async function releaseFrom(
     msg.workflow.releasePlanAttach(tag),
   ];
 
-  /** Tags `sha`; an existing tag a concurrent run made is checked as an existing tag is. */
   const tagAt = (sha: string): string => {
-    const at = src.createTag(repo, tag, sha);
-    if (at === sha) {
-      deps.log(msg.workflow.releaseTagged(tag, sha));
-      return sha;
-    }
-    src.fetch(clone);
-    if (!doiAt(at)) throw new UserError(msg.workflow.releaseTagNoDoi(tag, repo));
-    deps.log(msg.workflow.releaseUseTag(tag, at));
-    return at;
+    src.createTag(repo, tag, sha);
+    deps.log(msg.workflow.releaseTagged(tag, sha));
+    return sha;
   };
 
   const waitAndDeposit = async (sha: string): Promise<number> => {
@@ -396,7 +401,7 @@ async function releaseFrom(
     ...tail(sandbox),
   ];
   if (!(await deps.confirm(plan))) return 0;
-  const prepared = await deps.prepare(clone, sandbox);
+  const prepared = await deps.reserveDoi(clone, sandbox);
   if (prepared !== 0) return exitOf(prepared);
   const pushed = src.pushedHead(clone, DOI_BRANCH);
   if (!pushed) throw new UserError(msg.workflow.releaseDoiNotPushed);
@@ -443,7 +448,7 @@ function committedDoi(src: ReleaseSource, clone: string, ref: string): Committed
 async function assertDraftFor(doi: CommittedDoi, tag: string, deps: ReleaseDeps): Promise<void> {
   let state: DepositState;
   try {
-    state = await deps.depositState(doi.doi, doi.sandbox);
+    state = await deps.readDepositState(doi.doi, doi.sandbox);
   } catch (e) {
     throw new UserError(
       msg.workflow.releaseZenodoFailed(e instanceof Error ? e.message : String(e)),

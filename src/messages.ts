@@ -1325,6 +1325,9 @@ export const workflow = {
     commits.map((c) => `  ${c}`).join('\n'),
   releaseTagged: (tag: string, sha: string): string =>
     `oak release: tagged ${tag} at ${sha.slice(0, 7)}`,
+  releaseTagAppeared: (tag: string, repo: string): string =>
+    `oak release: ${tag} was created on ${repo} while this ran, so oak left it as it is. Check ` +
+    `who made it; running this again deposits it, if its myst.yml holds the DOI.`,
   releaseTagForbidden: (tag: string, repo: string, why: string): string =>
     `oak release: GitHub refused to create ${tag} (${why}). Only editors can create v* tags on ` +
     `${repo}.`,

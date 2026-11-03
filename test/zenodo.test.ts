@@ -18,7 +18,7 @@ import {
   paperUrn,
   cmdPrepare,
   cmdUpload,
-  depositState,
+  readDepositState,
   defaultSiteUrl,
   BundleCollisionError,
   assertBundlePreconditions,
@@ -1355,14 +1355,14 @@ describe('journal.zip', () => {
   );
 });
 
-describe('depositState', () => {
+describe('readDepositState', () => {
   const stateOf = async (latest: Deposition | null) => {
     const { transport, calls } = fakeTransport((r) =>
       r.url.includes('/deposit/depositions/')
         ? { json: latest }
         : { json: latest ? [dep({ id: latest.id })] : [] },
     );
-    const state = await depositState(new ZenodoApi(transport, true, 't'), '10.5072/zenodo.5');
+    const state = await readDepositState(new ZenodoApi(transport, true, 't'), '10.5072/zenodo.5');
     expect(calls.every((c) => c.method === 'GET')).toBe(true);
     return state;
   };

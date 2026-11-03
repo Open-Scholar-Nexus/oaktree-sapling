@@ -812,12 +812,12 @@ async function cmdReleaseRepo(argv: string[]): Promise<number> {
       {
         src,
         hasToken: (sb) => Boolean(zenodoToken(argv, sb)),
-        depositState: (doi, sb) =>
-          z.depositState(
+        readDepositState: (doi, sb) =>
+          z.readDepositState(
             new z.ZenodoApi(z.createFetchTransport(), sb, zenodoToken(argv, sb)!),
             doi,
           ),
-        prepare: (clone, sb) =>
+        reserveDoi: (clone, sb) =>
           step(
             'deposit',
             [

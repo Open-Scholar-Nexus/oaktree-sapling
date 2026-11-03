@@ -118,7 +118,6 @@ function harness(w: World, input: Partial<ReleaseInput> = {}) {
     createTag: (_r, tag, sha) => {
       outward.push(`tag ${tag} ${sha}`);
       w.tags[tag] = sha;
-      return sha;
     },
     commitsBetween: (_c, from, to) => [`${to.slice(0, 7)} after ${from.slice(0, 7)}`],
     releaseAssets: () => (w.ciAttaches && jobPolls > 0 ? [DEPOSITED_ASSET] : w.assets),
@@ -140,8 +139,8 @@ function harness(w: World, input: Partial<ReleaseInput> = {}) {
   const deps: ReleaseDeps = {
     src,
     hasToken: () => w.token,
-    depositState: async () => w.zenodo,
-    prepare: async () => {
+    readDepositState: async () => w.zenodo,
+    reserveDoi: async () => {
       outward.push('prepare');
       pushed = DOI_COMMIT;
       w.files[DOI_COMMIT] = myst(input.sandbox ? SANDBOX_DOI : PROD_DOI);
