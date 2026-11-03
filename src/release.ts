@@ -305,6 +305,7 @@ function guarded(src: ReleaseSource): ReleaseSource {
  */
 export async function runRelease(input: ReleaseInput, deps: ReleaseDeps): Promise<number> {
   const { repo, tag } = input;
+  // A Proxy: every `src` call but `merge` throws a UserError ({@link guarded}).
   const src = guarded(deps.src);
   deps.log(msg.workflow.releaseCloning(repo));
   const clone = src.clone(repo);
