@@ -11,7 +11,7 @@ import { join, relative } from 'node:path';
 import * as msg from './messages.js';
 import { UserError } from './messages.js';
 import { pollUntil } from './poll.js';
-import { parseZenodoDoi } from './schema.js';
+import { DOI_BRANCH, parseZenodoDoi } from './schema.js';
 import { DERIVED_CONFIG_FILE, parseYaml } from './yaml-io.js';
 import type { DepositState } from './zenodo.js';
 
@@ -191,9 +191,6 @@ export function parseTypstVersion(out: string): string | null {
  * `oak release` from the terminal
  * ------------------------------------------------------------------------ */
 
-/** The branch `openDoiPr` (gh.ts) pushes. */
-export const DOI_BRANCH = 'zenodo-doi';
-
 /** The file the tag's GitHub release holds once it is deposited. */
 export const DEPOSITED_ASSET = 'publication-provenance.json';
 
@@ -297,8 +294,8 @@ function guarded(src: ReleaseSource): ReleaseSource {
  * 1. The tag exists: wait for its Deposit version run, then deposit at the tag, unless the tag's
  *    GitHub release already holds {@link DEPOSITED_ASSET}.
  * 2. No tag, and `myst.yml` on the default branch has a DOI: tag the branch head, then as 1.
- * 3. No tag and no DOI: reserve the DOI, which pushes {@link DOI_BRANCH} and opens its pull request; merge
- *    it at the commit pushed, tag the merge commit, then as 1.
+ * 3. No tag and no DOI: reserve the DOI, which pushes {@link DOI_BRANCH} and opens its pull
+ *    request; merge it at the commit pushed, tag the merge commit, then as 1.
  * The refusals it can check first (token, Zenodo draft, sandbox against the committed DOI) come
  * before the confirmation and the first write. Returns the exit code: 0 done or declined, 1 a
  * bug, 2 refused or failed, 3 a wait reached its limit.

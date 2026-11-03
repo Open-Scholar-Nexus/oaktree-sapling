@@ -597,7 +597,7 @@ async function cmdRelease(argv: string[]): Promise<number> {
     process.stderr.write(msg.workflow.releaseLocalBuildWithRepo + '\n');
     return 2;
   }
-  if (!inActions && !useLocalBuild && !has(argv, 'deposit-only')) return cmdReleaseRepo(argv);
+  if (isTerminalRelease(argv)) return cmdReleaseRepo(argv);
   const tag = flag(argv, 'tag');
   if (!tag) {
     process.stderr.write(msg.workflow.releaseNoTag + '\n');
@@ -730,6 +730,12 @@ async function cmdRelease(argv: string[]): Promise<number> {
   return 0;
 }
 
+/** `oak release` run by an editor in a terminal ({@link cmdReleaseRepo}), which this oak runs
+ *  itself. In Actions, or with `--deposit-only` or `--use-local-build`, it is the deposit step. */
+function isTerminalRelease(argv: string[]): boolean {
+  return !process.env.GITHUB_ACTIONS && !has(argv, 'use-local-build') && !has(argv, 'deposit-only');
+}
+
 /** The flags `oak release` passes on to the steps it hands to the pinned oak. */
 const RELEASE_STEP_FLAGS = ['token', 'site-url', 'instance'] as const;
 
@@ -767,6 +773,7 @@ async function cmdReleaseRepo(argv: string[]): Promise<number> {
   }
   const sandbox = has(argv, 'sandbox');
   const publish = has(argv, 'publish-without-review');
+  // Without --token, --instance and --site-url: a rerun passes them again if this run had them.
   const rerun = [
     'oak release --repo',
     repo,
@@ -1526,6 +1533,8 @@ async function runPinned(verb: PaperVerb, argv: string[]): Promise<number | null
   return handOff({ ...ctx, paperRoot }, await handoffDeps(argv));
 }
 
+/** The verbs that run with the oak the paper pins ({@link runPinned}), but for `oak release` from
+ *  the terminal. Every other verb runs with this oak. */
 const PAPER_VERBS: readonly string[] = [
   'build',
   'validate',
@@ -1549,11 +1558,7 @@ async function main(argv: string[]): Promise<number> {
   }
   // `oak release` from the terminal hands only its Zenodo steps to the pinned oak, from the
   // clone it makes: with --repo, this directory may be another paper's clone.
-  const releaseFlow =
-    verb === 'release' &&
-    !process.env.GITHUB_ACTIONS &&
-    !has(argv, 'use-local-build') &&
-    !has(argv, 'deposit-only');
+  const releaseFlow = verb === 'release' && isTerminalRelease(argv);
   if (verb && PAPER_VERBS.includes(verb) && !releaseFlow) {
     const code = await runPinned(verb as PaperVerb, argv.slice(1));
     if (code !== null) return code;

@@ -21,7 +21,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { parseYaml } from './yaml-io.js';
 import type { GitContext } from './zenodo.js';
-import { COMMIT_ID, locationRepo, type JournalStamp } from './schema.js';
+import { COMMIT_ID, DOI_BRANCH, locationRepo, type JournalStamp } from './schema.js';
 import { LABEL_ZENODO_FAILED, type GhPr, type PagesDeployer } from './preview.js';
 import type { CheckRun } from './checks.js';
 import type { EnvironmentReviewer, Provisioner } from './bootstrap.js';
@@ -305,7 +305,7 @@ export function openDoiPr(
 ): { url: string; sha: string } {
   // One branch name for every version: prepare reserves the concept DOI, and the version comes
   // from the tag at publish. Preparing again force-pushes the same branch.
-  const branch = 'zenodo-doi';
+  const branch = DOI_BRANCH;
   const repo = originRepo(repoRoot);
   const base = repo ? defaultBranch(repo) : 'main';
   // The branch starts at HEAD, so HEAD must be on the base, or the pull request would carry

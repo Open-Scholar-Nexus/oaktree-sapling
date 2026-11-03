@@ -68,6 +68,9 @@ function engineVersionKey(v: string): number[] | null {
 
 /** A paper's published version: a tag `vMAJOR.MINOR.PATCH`, deposited on Zenodo as
  *  `MAJOR.MINOR.PATCH`. */
+/** The branch the DOI commit is pushed to: `openDoiPr` (gh.ts) pushes it, `oak release` merges it. */
+export const DOI_BRANCH = 'zenodo-doi';
+
 export const PAPER_VERSION_TAG = /^v[0-9]+\.[0-9]+\.[0-9]+$/;
 
 /**
