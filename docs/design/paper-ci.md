@@ -149,6 +149,7 @@ As in `ci/run.sh`, only a [release tag](#r57), the commit that carries `dist/cli
 
 `oak release` and `oak deposit` also hand off when the running oak is the pinned version but not a git checkout, such as an npm install, because the deposit's `engine.zip` is a `git archive` of the engine.
 
+(design-paper-ci-deposit-min)=
 `oak release` and `oak deposit` refuse a pinned version older than `DEPOSIT_MIN_VERSION` in [`pinned.ts`](src:src/pinned.ts). Older versions of `oak release` built the paper, and so ran its plugins, in a process that had the Zenodo token in its environment. The version sits in `myst.yml`, which authors change without an editor's review, so refusing those versions keeps a pull request that lowers it from running the paper's plugins beside the editor's token at the next deposit.
 
 `oak bootstrap --engine-version` naming another version also runs that version, cloned from `--engine-repo`, so a new repo's files come from the version it pins.

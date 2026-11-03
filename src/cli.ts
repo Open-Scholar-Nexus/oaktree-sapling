@@ -708,11 +708,17 @@ async function cmdRelease(argv: string[]): Promise<number> {
       msg.workflow.releaseAlreadyPublished(tag, String(out.result.record_url)) + '\n',
     );
   }
+  const url = String(out.result.record_url ?? out.result.draft_url ?? out.result.version_doi);
+  // The last line, as the draft's URL is what the editor needs next.
+  const done = () => {
+    if (!already) process.stderr.write(msg.workflow.releaseDone(tag, url, publish) + '\n');
+    return 0;
+  };
   if (!gh.ghLoggedIn()) {
     if (!already) {
       process.stderr.write(annotate('warning', msg.workflow.releaseNoGh(tag, bundleOut)) + '\n');
     }
-    return 0;
+    return done();
   }
   try {
     if (!already) {
@@ -720,14 +726,13 @@ async function cmdRelease(argv: string[]): Promise<number> {
       gh.uploadReleaseAsset(paperRoot, tag, files);
     }
     const head = sha ?? (await gh.realGitContext.headSha(paperRoot));
-    const url = String(out.result.record_url ?? out.result.draft_url ?? out.result.version_doi);
     gh.postCommitComment(paperRoot, head, msg.workflow.releaseCommitComment(url, publish));
   } catch (e) {
     process.stderr.write(
       annotate('warning', msg.workflow.releasePostStepsFailed((e as Error).message)) + '\n',
     );
   }
-  return 0;
+  return done();
 }
 
 /** `oak release` run by an editor in a terminal ({@link cmdReleaseRepo}), which this oak runs

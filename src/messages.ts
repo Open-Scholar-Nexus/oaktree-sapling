@@ -1358,6 +1358,10 @@ export const workflow = {
   releaseInterrupted: (rerun: string, dir: string | null): string =>
     `oak release: stopped. Rerun the same command to continue: ${rerun}` +
     (dir ? `\nThe clone is kept; delete it when done: rm -rf ${dir}` : ''),
+  releaseDone: (tag: string, url: string, published: boolean): string =>
+    published
+      ? `oak release: ${tag} is published on Zenodo: ${url}`
+      : `oak release: ${tag} is deposited. Check the draft on Zenodo, then click Publish: ${url}`,
   releaseAlreadyPublished: (tag: string, url: string): string =>
     `oak release: ${tag} is already published on Zenodo, so nothing was uploaded and no files ` +
     `are attached to the release; the files are on the record: ${url}`,

@@ -195,7 +195,7 @@ export function parseTypstVersion(out: string): string | null {
 export const DEPOSITED_ASSET = 'publication-provenance.json';
 
 /** The waits: the run to appear, then its jobs (a paper environment can take long to install). */
-export const RUN_WAIT = { tries: 12, intervalMs: 15_000 };
+export const RUN_WAIT = { tries: 40, intervalMs: 15_000 };
 export const BUILD_WAIT = { tries: 180, intervalMs: 15_000 };
 /** A line every 5 minutes while nothing changes, so the editor sees oak is still waiting. */
 const HEARTBEAT_TRIES = 20;

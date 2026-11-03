@@ -10,29 +10,27 @@ Oaktree Sapling can publish with one command run on an editor's computer, or wit
 (from-terminal)=
 ## Publishing from the terminal
 
-This needs `oak`, [gh](https://cli.github.com) logged in (`gh auth login`) as an editor of the paper repository, and a Zenodo token in `ZENODO_TOKEN`, or in `ZENODO_TOKEN_SANDBOX` for the [sandbox](#sandbox)[^zenodo-secrets-create]. Then run:
+This needs `oak`, [gh](https://cli.github.com) logged in (`gh auth login`) as an editor of the paper repository, and a Zenodo token[^zenodo-secrets-create], set as the environment variable `ZENODO_TOKEN` in the shell you run oak from (`export ZENODO_TOKEN=<token>`) or passed with `--token <token>`. Then run:
 
 ```bash
 oak release --repo owner/paper-repo --tag v1.0.0
 ```
 
-Run inside a clone of the paper repository, `--repo` can be left out. The tag is the version, in the form `vMAJOR.MINOR.PATCH`; without `--tag`, oak lists the repository's tags.
+When run inside a clone of the paper repository, `--repo` can be left out. The tag is the version, in the form `vMAJOR.MINOR.PATCH`; without `--tag`, oak lists the repository's tags.
 
-oak lists what it will do on GitHub and Zenodo and asks once (`--yes` answers for you). For the first version it:
+oak lists what it will do on GitHub and Zenodo and asks once (`--yes` skips the confirmation prompt). When publishing the first version, it:
 
 1. reserves the DOI: it creates an empty draft on Zenodo and opens a pull request, **Reserve Zenodo DOI**, that writes the DOI into `myst.yml`[^concept-vs-version-doi];
-2. marks that pull request's **Journal checks** as skipped ([why](#design-paper-ci-limits)) and merges it;
+2. skips that pull request's **Journal checks** ([why](#design-paper-ci-limits)) and merges it;
 3. tags the merge commit with the version, which starts the **Deposit version** workflow;
 4. waits for that workflow to build the paper, which can take several minutes;
-5. fills the Zenodo draft with the build ([what a deposit carries](#design-releases-deposit)), attaches the same files to the tag's GitHub release, and comments the draft's address on the tagged commit.
+5. fills the Zenodo draft with the build ([what a deposit carries](#design-releases-deposit)), attaches the same files to the tag's GitHub release, and prints the draft's URL, which it also comments on the tagged commit.
 
 You then [publish the draft on Zenodo](#publish-on-zenodo) and [list the paper on the journal website](#list-on-site).
 
-oak works in a clone in a temporary folder, so the editor's own clone is never changed. The clone is removed when the release is done; after a failure or Ctrl-C it is kept, and oak prints where, for a look at what failed. If it stops for any reason (a wait that took too long, Ctrl-C, a failed step), run the same command again: it reads from GitHub and Zenodo what is already done and continues from there.
+oak works in a clone in a temporary folder. The clone is removed when the release is done; if the release fails or you interrupt it with Ctrl-C, the clone is kept, and oak prints where. If it stops for any reason (a wait that took too long, Ctrl-C, a failed step), you can run the same command again: it reads from GitHub and Zenodo what is already done and continues from there.
 
-`--sandbox` reserves the DOI on the [Zenodo sandbox](#sandbox), for a test. Once the DOI is committed, it picks the environment, with or without the flag.
-
-`oak release` runs its Zenodo steps with the `oak` version the paper's `myst.yml` names, as [`oak build` does](pins.md#pins-local). When that version is too old to deposit from the terminal, it says so: [upgrade the paper](pins.md) and run it again.
+`oak release` runs its Zenodo steps with the `oak` version the paper's `myst.yml` names, as [`oak build` does](pins.md#pins-local).
 
 [^zenodo-secrets-create]: See [secrets](../reference/secrets.md) for how to create tokens.
 
@@ -150,7 +148,7 @@ The run opens an issue titled **Zenodo publish failed for** the tag, labelled `z
 
 (sandbox)=
 :::{dropdown} Testing on the Zenodo sandbox
-With `oak release --sandbox`, or **Use the Zenodo sandbox** ticked, the DOI is a sandbox one (`10.5072/zenodo.…`), and tags deposit on [sandbox.zenodo.org](https://sandbox.zenodo.org) with `ZENODO_TOKEN_SANDBOX`. A sandbox DOI never resolves, and the journal website leaves out a paper that has one. A paper with no DOI yet is listed.
+With `oak release --sandbox`, or **Use the Zenodo sandbox** ticked, the DOI is a sandbox one (`10.5072/zenodo.…`), and tags deposit on [sandbox.zenodo.org](https://sandbox.zenodo.org) with `ZENODO_TOKEN_SANDBOX` (from the terminal, the environment variable of that name). Once a sandbox DOI is on `main`, every release deposits on the sandbox, with or without `--sandbox`. A sandbox DOI never resolves, and the journal website leaves out a paper that has one. A paper with no DOI yet is listed.
 
 To move to the real Zenodo, run **Reserve DOI** again with the box unticked, or `oak deposit prepare` in a clone. Its pull request replaces the sandbox DOI with a real one.
 :::
