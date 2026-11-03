@@ -160,18 +160,18 @@ describe('the dispatch step takes args as data, not as script ([R153])', () => {
 
   it('does not run a command substitution carried in a tag name', () => {
     // A v* tag reaches the token-bearing publish job; $IFS avoids the space git forbids.
-    const d = dispatch('release --tag v1.0.0$(touch${IFS}pwned)');
+    const d = dispatch('release deposit --tag v1.0.0$(touch${IFS}pwned)');
     expect(existsSync(join(d.dir, 'pwned'))).toBe(false);
-    expect(d.argv).toEqual(['release', '--tag', 'v1.0.0$(touch${IFS}pwned)']);
+    expect(d.argv).toEqual(['release', 'deposit', '--tag', 'v1.0.0$(touch${IFS}pwned)']);
   });
 
   it('does not run a backquoted command either', () => {
-    const d = dispatch('release --tag v1.0.0`touch${IFS}pwned`');
+    const d = dispatch('release deposit --tag v1.0.0`touch${IFS}pwned`');
     expect(existsSync(join(d.dir, 'pwned'))).toBe(false);
   });
 
   it('does not let a metacharacter start a second command', () => {
-    const d = dispatch('release --tag v1;touch pwned');
+    const d = dispatch('release deposit --tag v1;touch pwned');
     expect(existsSync(join(d.dir, 'pwned'))).toBe(false);
   });
 
@@ -186,9 +186,14 @@ describe('the dispatch step takes args as data, not as script ([R153])', () => {
   });
 
   it('splits without globbing: a word is one argument even if it matches a file', () => {
-    const d = dispatch('release --tag v*');
+    const d = dispatch('release deposit --tag v*');
     writeFileSync(join(d.dir, 'v-decoy'), '');
-    expect(dispatch('release --tag v*').argv).toEqual(['release', '--tag', 'v*']);
+    expect(dispatch('release deposit --tag v*').argv).toEqual([
+      'release',
+      'deposit',
+      '--tag',
+      'v*',
+    ]);
   });
 });
 

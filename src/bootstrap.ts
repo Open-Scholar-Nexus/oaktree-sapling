@@ -425,7 +425,7 @@ function protectMainBody(requireChecks: boolean, bypass: unknown[]): unknown {
         require_last_push_approval: false,
         required_review_thread_resolution: false,
         // GitHub defaults this on, which asks for an approving review of a pull request no person
-        // authored, such as the DOI pull request `oak deposit prepare` opens.
+        // authored, such as the DOI pull request `oak release reserve-doi` opens.
         require_extra_approval_for_unattributed_changes: false,
       },
     },

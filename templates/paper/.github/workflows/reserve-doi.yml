@@ -1,7 +1,7 @@
 name: Reserve DOI
 
 # Editor-dispatched: reserves the concept DOI, opens the myst.yml PR. The version enters at publish.
-# https://scholar.nexus/oaktree-sapling/reference/cli#deposit
+# https://scholar.nexus/oaktree-sapling/reference/cli#release-reserve-doi
 
 on:
   workflow_dispatch:
@@ -26,7 +26,7 @@ jobs:
       # A sandbox run with no ZENODO_TOKEN_SANDBOX is refused.
       - uses: ./.github/actions/engine
         with:
-          args: deposit prepare ${{ inputs.sandbox && '--sandbox' || '' }}
+          args: release reserve-doi ${{ inputs.sandbox && '--sandbox' || '' }}
         env:
           GH_TOKEN: ${{ github.token }}
           ZENODO_TOKEN: ${{ secrets.ZENODO_TOKEN }}
