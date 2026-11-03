@@ -1,6 +1,7 @@
 /**
- * poll.ts: the wait loop `oak conformance` and `oak release` share. Each caller words its own
- * timeout. Tests pass a `sleep` that returns at once.
+ * poll.ts: a wait loop used by `oak conformance` and `oak release`. It returns null at the limit,
+ * and each caller throws its own error with its own message. Tests pass a `sleep` that resolves
+ * immediately, so a wait takes no real time.
  */
 
 export interface PollOpts {
@@ -9,8 +10,12 @@ export interface PollOpts {
 }
 
 /**
- * Calls `attempt` until it returns a value, at most `opts.tries` times, sleeping between calls;
- * `null` means keep waiting, and a throw ends the wait. Returns null when every try said wait.
+ * Calls `attempt` up to `opts.tries` times, sleeping `opts.intervalMs` between calls. Each call of
+ * `attempt` either:
+ * - returns a value: the wait is over and `pollUntil` returns it;
+ * - returns null: not ready yet, so it is called again after the sleep;
+ * - throws: the wait ends and the error reaches the caller.
+ * Returns null when every call returned null.
  */
 export async function pollUntil<T>(
   attempt: () => T | null,
