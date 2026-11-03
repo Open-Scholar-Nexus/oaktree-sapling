@@ -74,6 +74,8 @@ export const DOCS = {
   releaseStatus: 'reference/cli#release-status',
   /** `oak release deposit --use-local-build`: depositing the editor's own build, made apart from the token. */
   publishOwnBuild: 'reference/cli#use-local-build',
+  /** `oak clean`: the clones `oak release` keeps after a failure, and `~/.cache/oak`. */
+  clean: 'reference/cli#clean',
   /** Depositing from the editor's computer, for a journal with no Zenodo token on GitHub. */
   publishFromTerminal: 'guide/publish#from-terminal',
   /** `oak bootstrap <paper|journal>`: onboarding a repo from templates. */

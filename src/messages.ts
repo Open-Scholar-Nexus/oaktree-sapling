@@ -1,6 +1,6 @@
 /**
  * The strings oak prints for people, grouped by where they appear: the output helpers, then
- * usage, the confirm prompt, bootstrap, upgrade, build and start, the pinned oak version,
+ * usage, the confirm prompt, bootstrap, upgrade, clean, build and start, the pinned oak version,
  * validate, what lands on a pull request, and the verbs the workflows run.
  *
  * Fixed strings are consts, parameterised ones functions. Keep the `${…}` holes and the
@@ -172,6 +172,9 @@ export const usage = (): string =>
   `                    the tag's GitHub release, comment on the commit. Rerun it to continue.\n` +
   `  oak release status [--sandbox] [--instance <dir> | --no-instance]\n` +
   `                    the deposit's state on Zenodo\n` +
+  `  oak clean [--cache] [--yes]\n` +
+  `                    remove the clones oak release kept after a failure; --cache also removes\n` +
+  `                    the pinned oak versions in ~/.cache/oak\n` +
   `  Its steps, which the Reserve DOI and Deposit version workflows run:\n` +
   `  oak release reserve-doi [--sandbox] [--repo <owner/repo>] [--site-url <url>] [--instance <dir> | --no-instance]\n` +
   `                    reserve the DOI on Zenodo and open the pull request writing it into myst.yml\n` +
@@ -577,6 +580,30 @@ export const upgrade = {
     `A retired engine workflow left here keeps running.`,
 
   prBodyFooter: '_Opened by `oak upgrade`. Review the preview build before merging._',
+};
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════
+ * oak clean
+ * ═════════════════════════════════════════════════════════════════════════════════════════ */
+
+/** A size for a person, in kB, MB or GB. */
+export function bytes(n: number): string {
+  if (n < 1e6) return `${Math.ceil(n / 1e3)} kB`;
+  if (n < 1e9) return `${(n / 1e6).toFixed(1)} MB`;
+  return `${(n / 1e9).toFixed(1)} GB`;
+}
+
+export const clean = {
+  noClones: (dir: string): string => `oak clean: no clones kept by oak release in ${dir}`,
+  cacheKept: (dir: string, n: number): string =>
+    `oak clean: ${dir} holds ${bytes(n)} of pinned oak versions; --cache removes it`,
+  planHeader: 'oak clean will remove:',
+  planClone: (path: string, n: number): string => `  ${path}: ${bytes(n)}`,
+  planCache: (dir: string, n: number): string =>
+    `  ${dir}: the pinned oak versions, ${bytes(n)}; the next command fetches them again (--cache)`,
+  done: (clones: number, cache: boolean, n: number): string =>
+    `oak clean: removed ${clones} ${clones === 1 ? 'clone' : 'clones'}` +
+    `${cache ? ' and the pinned oak versions' : ''}, ${bytes(n)}`,
 };
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════
@@ -1292,7 +1319,11 @@ export const workflow = {
     'takes no --repo. Run it in the clone, or drop --use-local-build to deposit the CI build.',
   releaseCloned: (repo: string, dir: string): string => `oak release: cloned ${repo} into ${dir}`,
   releaseCloneKept: (dir: string): string =>
-    `oak release: the clone is kept for a look at what failed; delete it when done: rm -rf ${dir}`,
+    `oak release: the clone is kept for a look at what failed; delete it when done: rm -rf ${dir} ` +
+    `(or run oak clean)`,
+  releaseClonesRemoved: (dirs: string[]): string =>
+    `oak release: removed the ${dirs.length === 1 ? 'clone' : 'clones'} kept by an earlier run: ` +
+    dirs.join(', '),
   releaseTagNoDoi: (tag: string, repo: string): string =>
     `oak release: ${tag} on ${repo} has no Zenodo DOI in its myst.yml, so it was tagged before ` +
     `the DOI pull request was merged. Delete the tag (editors can) or pick another version.`,
@@ -1382,7 +1413,7 @@ export const workflow = {
     `oak release: rerun the same command to continue: ${rerun}`,
   releaseInterrupted: (rerun: string, dir: string | null): string =>
     `oak release: stopped. Rerun the same command to continue: ${rerun}` +
-    (dir ? `\nThe clone is kept; delete it when done: rm -rf ${dir}` : ''),
+    (dir ? `\nThe clone is kept; delete it when done: rm -rf ${dir} (or run oak clean)` : ''),
   releaseDone: (tag: string, url: string, published: boolean): string =>
     published
       ? `oak release deposit: ${tag} is published on Zenodo: ${url}`

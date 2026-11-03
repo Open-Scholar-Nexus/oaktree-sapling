@@ -212,8 +212,9 @@ const HEARTBEAT_TRIES = 20;
 export interface ReleaseSource extends Pick<CiBuildSource, 'tagCommit' | 'pushRuns' | 'jobs'> {
   /** The repo's tags starting with `v`. */
   vTags(repo: string): string[];
-  /** Clones `repo` into a new temporary folder and returns it. */
-  clone(repo: string): string;
+  /** Clones `repo` into a new temporary folder named for `tag` (clean.ts `clonePrefix`), and
+   *  returns it. */
+  clone(repo: string, tag: string): string;
   /** Fetches the branches and tags into `clone`. */
   fetch(clone: string): void;
   /** The head of the default branch as last fetched. */
@@ -265,6 +266,22 @@ export interface ReleaseDeps {
   log(line: string): void;
 }
 
+/** How a run of {@link runRelease} ended, and its exit code. */
+export type ReleaseReason =
+  'deposited' | 'already-deposited' | 'deposited-by-ci' | 'declined' | 'step-failed' | 'wait-limit';
+
+export interface ReleaseOutcome {
+  code: number;
+  reason: ReleaseReason;
+}
+
+/** The reasons that leave the version deposited. */
+export const DEPOSITED: readonly ReleaseReason[] = [
+  'deposited',
+  'already-deposited',
+  'deposited-by-ci',
+];
+
 /** A wait that reached its limit; the run exits 3 and a rerun continues. */
 class WaitTimeout extends Error {}
 
@@ -312,23 +329,24 @@ function guarded(src: ReleaseSource): ReleaseSource {
  * 3. No tag and no DOI: reserve the DOI, which pushes {@link DOI_BRANCH} and opens its pull
  *    request; merge it at the commit pushed, tag the merge commit, then as 1.
  * The refusals it can check first (token, Zenodo draft, sandbox against the committed DOI) come
- * before the confirmation and the first write. Returns the exit code: 0 done or declined, 1 a
- * bug, 2 refused or failed, 3 a wait reached its limit. The clone is removed on 0 and kept, with
- * its path printed, otherwise.
+ * before the confirmation and the first write. Returns the {@link ReleaseOutcome}, whose code
+ * is 0 done or declined, 1 a bug, 2 a step failed, 3 a wait reached its limit; throws a UserError
+ * when it refuses. The clone is removed on 0 and kept, with its path printed, otherwise.
  */
-export async function runRelease(input: ReleaseInput, deps: ReleaseDeps): Promise<number> {
+export async function runRelease(input: ReleaseInput, deps: ReleaseDeps): Promise<ReleaseOutcome> {
   const { repo, tag } = input;
   // A Proxy: every `src` call but `merge` throws a UserError ({@link guarded}).
   const src = guarded(deps.src);
-  const clone = src.clone(repo);
+  const clone = src.clone(repo, tag);
   deps.log(msg.workflow.releaseCloned(repo, clone));
   let code: number | null = null;
   let refused = false;
   try {
-    code = await releaseFrom(clone, input, src, deps);
-    return code;
+    const outcome = await releaseFrom(clone, input, src, deps);
+    code = outcome.code;
+    return outcome;
   } catch (e) {
-    if (e instanceof StepFailed) return (code = e.code);
+    if (e instanceof StepFailed) return { code: (code = e.code), reason: 'step-failed' };
     // `main` prints the refusal, so the clone's path goes after it, in the same message.
     if (e instanceof UserError) {
       refused = true;
@@ -337,7 +355,7 @@ export async function runRelease(input: ReleaseInput, deps: ReleaseDeps): Promis
     if (!(e instanceof WaitTimeout)) throw e;
     deps.log(e.message);
     deps.log(msg.workflow.releaseRerun(input.rerun));
-    return (code = 3);
+    return { code: (code = 3), reason: 'wait-limit' };
   } finally {
     // Kept after a failure, for the editor to look into.
     if (code === 0) rmSync(clone, { recursive: true, force: true });
@@ -350,7 +368,7 @@ async function releaseFrom(
   input: ReleaseInput,
   src: ReleaseSource,
   deps: ReleaseDeps,
-): Promise<number> {
+): Promise<ReleaseOutcome> {
   const { repo, tag, publish } = input;
   const deposited = () => src.releaseAssets(repo, tag).includes(DEPOSITED_ASSET);
 
@@ -366,7 +384,7 @@ async function releaseFrom(
   }
   if (tagged && deposited()) {
     deps.log(msg.workflow.releaseAlreadyDeposited(tag));
-    return 0;
+    return { code: 0, reason: 'already-deposited' };
   }
   // The steps run with the pinned oak, so a pin they refuse is refused before the tag.
   if (pin) deps.checkPin(pin);
@@ -391,7 +409,7 @@ async function releaseFrom(
       msg.workflow.releasePlanDeposit(tag, sandbox, publish),
       msg.workflow.releasePlanAttach(tag),
     ];
-    if (!(await deps.confirm(plan))) return 0;
+    if (!(await deps.confirm(plan))) return { code: 0, reason: 'declined' };
     // A later version tags the head the confirmation showed.
     sha = doi ? head.sha : await reserveAndMerge(clone, input, src, deps);
     src.createTag(repo, tag, sha);
@@ -401,11 +419,12 @@ async function releaseFrom(
   const run = await waitForBuild(repo, tag, sha, src, deps);
   if (deposited()) {
     deps.log(msg.workflow.releaseDepositedByCi(tag, run.url));
-    return 0;
+    return { code: 0, reason: 'deposited-by-ci' };
   }
   src.fetch(clone);
   src.checkout(clone, `refs/tags/${tag}`);
-  return exitOf(await deps.deposit(clone));
+  const code = exitOf(await deps.deposit(clone));
+  return { code, reason: code === 0 ? 'deposited' : 'step-failed' };
 }
 
 /**

@@ -20,6 +20,7 @@ import type { ComposeInput } from './compose.js';
 import type { MaterializeInput, StartOpts } from './materialize.js';
 import type { JournalStamp } from './schema.js';
 import type { ZenodoApi } from './zenodo.js';
+import type { ReleaseOutcome } from './release.js';
 import type { HandoffContext, HandoffDeps, HandoffVerb, PaperVerb } from './pinned.js';
 import * as msg from './messages.js';
 import { annotate, inCI, UserError } from './messages.js';
@@ -36,6 +37,7 @@ type Verb =
   | 'post-checks'
   | 'deploy-preview'
   | 'release'
+  | 'clean'
   | 'bootstrap'
   | 'upgrade'
   | 'conformance';
@@ -850,7 +852,7 @@ async function cmdReleaseRepo(argv: string[]): Promise<number> {
   let cloneDir: string | null = null;
   const src = {
     ...gh.realReleaseSource,
-    clone: (r: string) => (cloneDir = gh.realReleaseSource.clone(r)),
+    clone: (r: string, t: string) => (cloneDir = gh.realReleaseSource.clone(r, t)),
   };
   const onInterrupt = () => {
     process.stderr.write('\n' + msg.workflow.releaseInterrupted(rerun, cloneDir) + '\n');
@@ -858,8 +860,9 @@ async function cmdReleaseRepo(argv: string[]): Promise<number> {
     process.kill(process.pid, 'SIGINT');
   };
   process.once('SIGINT', onInterrupt);
+  let outcome: ReleaseOutcome;
   try {
-    return await release.runRelease(
+    outcome = await release.runRelease(
       { repo, tag, sandbox, publish, rerun },
       {
         src,
@@ -912,6 +915,33 @@ async function cmdReleaseRepo(argv: string[]): Promise<number> {
   } finally {
     process.off('SIGINT', onInterrupt);
   }
+  // The failures those clones were kept for are resolved once the version is deposited.
+  if (release.DEPOSITED.includes(outcome.reason)) {
+    const { removeKeptClones } = await import('./clean.js');
+    const removed = removeKeptClones(tmpdir(), repo, tag, process.getuid?.());
+    if (removed.length) process.stderr.write(msg.workflow.releaseClonesRemoved(removed) + '\n');
+  }
+  return outcome.code;
+}
+
+/** `oak clean [--cache] [--yes]`. Documented at DOCS.clean. */
+async function cmdClean(argv: string[]): Promise<number> {
+  const { cmdClean: clean } = await import('./clean.js');
+  const { cacheHome } = await import('./pinned.js');
+  const out = await clean(
+    {
+      dir: tmpdir(),
+      cacheDir: join(cacheHome(process.env, homedir()), 'oak'),
+      cache: has(argv, 'cache'),
+    },
+    {
+      uid: process.getuid?.(),
+      confirm: makeConfirm(argv),
+      log: (line) => process.stderr.write(line + '\n'),
+    },
+  );
+  emit(argv, out.result, () => []);
+  return out.exitCode;
 }
 
 /** `oak deploy-preview <site> [--verified-head <sha>]`: deploys the build artifact to
@@ -1498,6 +1528,7 @@ const VERBS: Verb[] = [
   'post-checks',
   'deploy-preview',
   'release',
+  'clean',
   'bootstrap',
   'upgrade',
   'conformance',
@@ -1614,6 +1645,7 @@ async function main(argv: string[]): Promise<number> {
   if (verb === 'validate') return cmdValidate(argv.slice(1));
   if (verb === 'post-checks') return cmdPostChecks(argv.slice(1));
   if (verb === 'release') return cmdRelease(argv.slice(1));
+  if (verb === 'clean') return cmdClean(argv.slice(1));
   if (verb === 'deploy-preview') return cmdDeployPreview(argv.slice(1));
   if (verb === 'bootstrap') return cmdBootstrap(argv.slice(1));
   if (verb === 'upgrade') return cmdUpgrade(argv.slice(1));

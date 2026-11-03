@@ -28,7 +28,7 @@ oak lists what it will do on GitHub and Zenodo and asks once (`--yes` skips the 
 
 You then [publish the draft on Zenodo](#publish-on-zenodo) and [list the paper on the journal website](#list-on-site).
 
-oak works in a clone in a temporary folder. The clone is removed when the release is done; if the release fails or you interrupt it with Ctrl-C, the clone is kept, and oak prints where. If it stops for any reason (a wait that took too long, Ctrl-C, a failed step), you can run the same command again: it reads from GitHub and Zenodo what is already done and continues from there.
+oak works in a clone in a temporary folder. The clone is removed when the release is done; if the release fails or you interrupt it with Ctrl-C, the clone is kept, and oak prints where; [`oak clean`](#clean) lists and removes kept clones. If it stops for any reason (a wait that took too long, Ctrl-C, a failed step), you can run the same command again: it reads from GitHub and Zenodo what is already done and continues from there.
 
 `oak release` runs its Zenodo steps with the `oak` version the paper's `myst.yml` names, as [`oak build` does](pins.md#pins-local).
 

@@ -6,6 +6,7 @@
 import * as msg from './messages.js';
 import { UserError } from './messages.js';
 import { ENGINE_MANAGED_PATHS, GITHUB_REPO, repoFromGithubUrl } from './schema.js';
+import { clonePrefix } from './clean.js';
 import { execFileSync, spawnSync } from 'node:child_process';
 import {
   cpSync,
@@ -495,8 +496,8 @@ export const realReleaseSource: ReleaseSource = {
   vTags(repo) {
     return apiList(`repos/${repo}/git/matching-refs/tags/v`, '.[].ref | ltrimstr("refs/tags/")');
   },
-  clone(repo) {
-    const dir = mkdtempSync(join(tmpdir(), 'oak-release-'));
+  clone(repo, tag) {
+    const dir = mkdtempSync(join(tmpdir(), clonePrefix(repo, tag)));
     try {
       gh(['repo', 'clone', repo, dir, '--', '--filter=blob:none', '--quiet']);
     } catch (e) {
