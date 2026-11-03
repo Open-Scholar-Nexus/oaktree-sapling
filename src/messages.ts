@@ -51,6 +51,7 @@
 import { DOCS, docsUrl } from './docs-links.js';
 import type { JournalCache } from './gh.js';
 import type { HandoffVerb, PinnedEngine, PinSource } from './pinned.js';
+import type { BuildState } from './release.js';
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════
  * Output plumbing: not prose, but it decides HOW the prose is printed.
@@ -1264,7 +1265,9 @@ export const workflow = {
   releaseLocalBuildWithRepo:
     'oak release: --use-local-build deposits this clone, at the tag, with its own _build, so it ' +
     'takes no --repo. Run it in the clone, or drop --use-local-build to deposit the CI build.',
-  releaseCloning: (repo: string): string => `oak release: cloning ${repo} into a temporary folder`,
+  releaseCloned: (repo: string, dir: string): string => `oak release: cloned ${repo} into ${dir}`,
+  releaseCloneKept: (dir: string): string =>
+    `oak release: the clone is kept for a look at what failed; delete it when done: rm -rf ${dir}`,
   releaseTagNoDoi: (tag: string, repo: string): string =>
     `oak release: ${tag} on ${repo} has no Zenodo DOI in its myst.yml, so it was tagged before ` +
     `the DOI pull request was merged. Delete the tag (editors can) or pick another version.`,
@@ -1328,9 +1331,9 @@ export const workflow = {
   releaseTagAppeared: (tag: string, repo: string): string =>
     `oak release: ${tag} was created on ${repo} while this ran, so oak left it as it is. Check ` +
     `who made it; running this again deposits it, if its myst.yml holds the DOI.`,
-  releaseTagForbidden: (tag: string, repo: string, why: string): string =>
-    `oak release: GitHub refused to create ${tag} (${why}). Only editors can create v* tags on ` +
-    `${repo}.`,
+  releaseTagFailed: (tag: string, repo: string, why: string): string =>
+    `oak release: GitHub did not create ${tag} (${why}). Only editors can create v* tags on ` +
+    `${repo}; once that is fixed, run this again.`,
 
   releaseWaitRun: (tag: string, url: string): string =>
     `oak release: waiting for the Deposit version run of ${tag} to start: ${url}`,
@@ -1338,14 +1341,23 @@ export const workflow = {
     `oak release: no Deposit version run started for ${tag}; check Actions is enabled on ${repo}.`,
   releaseWaitBuild: (url: string): string =>
     `oak release: waiting for the Deposit version run to build: ${url}`,
-  releaseBuildState: (state: string): string => `oak release: ${state}`,
+  releaseBuildState: (state: BuildState): string =>
+    'oak release: ' +
+    (state.phase === 'queued'
+      ? 'queued'
+      : state.phase === 'building'
+        ? `build ${state.status.replace('_', ' ')}`
+        : state.phase === 'publishing'
+          ? `build done; publish job ${state.status.replace('_', ' ')}`
+          : 'build done'),
   releaseStillWaiting: (url: string): string => `oak release: still waiting on ${url}`,
   releaseBuildTimeout: (url: string, minutes: number): string =>
     `oak release: the Deposit version run has not finished after ${minutes} minutes: ${url}`,
   releaseRerun: (rerun: string): string =>
     `oak release: rerun the same command to continue: ${rerun}`,
-  releaseInterrupted: (rerun: string): string =>
-    `oak release: stopped. Rerun the same command to continue: ${rerun}`,
+  releaseInterrupted: (rerun: string, dir: string | null): string =>
+    `oak release: stopped. Rerun the same command to continue: ${rerun}` +
+    (dir ? `\nThe clone is kept; delete it when done: rm -rf ${dir}` : ''),
   releaseAlreadyPublished: (tag: string, url: string): string =>
     `oak release: ${tag} is already published on Zenodo, so nothing was uploaded and no files ` +
     `are attached to the release; the files are on the record: ${url}`,

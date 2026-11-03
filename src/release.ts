@@ -223,8 +223,8 @@ export interface ReleaseSource extends Pick<CiBuildSource, 'tagCommit' | 'pushRu
   /** Merges pull request `pr` if its head is still `sha` and returns the commit the merge put on
    *  the base. Throws when GitHub refuses. */
   merge(repo: string, pr: number, sha: string, method: 'merge' | 'squash'): string;
-  /** Creates `tag` at `sha`. Throws a UserError when the tag already exists, created after the
-   *  clone read the tags, or when a ruleset refuses. */
+  /** Creates `tag` at `sha`. Throws a UserError when GitHub does not create it, with its own
+   *  message when the tag was created after the clone read the tags. */
   createTag(repo: string, tag: string, sha: string): void;
   /** `git log --oneline from..to`. */
   commitsBetween(clone: string, from: string, to: string): string[];
@@ -259,6 +259,13 @@ export interface ReleaseDeps {
 
 /** A wait that reached its limit; the run exits 3 and a rerun continues. */
 class WaitTimeout extends Error {}
+
+/** A pinned step that failed; its own output said why, and the run exits with `code`. */
+class StepFailed extends Error {
+  constructor(readonly code: number) {
+    super(`step exited ${code}`);
+  }
+}
 
 /** A pinned step's exit code as `oak release` reports it: 0 and 1 (a bug) as they are, any other
  *  failure 2, so a step's own 3 is never taken for a wait that reached its limit. */
@@ -298,23 +305,29 @@ function guarded(src: ReleaseSource): ReleaseSource {
  *    request; merge it at the commit pushed, tag the merge commit, then as 1.
  * The refusals it can check first (token, Zenodo draft, sandbox against the committed DOI) come
  * before the confirmation and the first write. Returns the exit code: 0 done or declined, 1 a
- * bug, 2 refused or failed, 3 a wait reached its limit.
+ * bug, 2 refused or failed, 3 a wait reached its limit. The clone is removed on 0 and kept, with
+ * its path printed, otherwise.
  */
 export async function runRelease(input: ReleaseInput, deps: ReleaseDeps): Promise<number> {
   const { repo, tag } = input;
   // A Proxy: every `src` call but `merge` throws a UserError ({@link guarded}).
   const src = guarded(deps.src);
-  deps.log(msg.workflow.releaseCloning(repo));
   const clone = src.clone(repo);
+  deps.log(msg.workflow.releaseCloned(repo, clone));
+  let code: number | null = null;
   try {
-    return await releaseFrom(clone, input, src, deps);
+    code = await releaseFrom(clone, input, src, deps);
+    return code;
   } catch (e) {
+    if (e instanceof StepFailed) return (code = e.code);
     if (!(e instanceof WaitTimeout)) throw e;
     deps.log(e.message);
     deps.log(msg.workflow.releaseRerun(input.rerun));
-    return 3;
+    return (code = 3);
   } finally {
-    rmSync(clone, { recursive: true, force: true });
+    // Kept after a failure, for the editor to look into.
+    if (code === 0) rmSync(clone, { recursive: true, force: true });
+    else deps.log(msg.workflow.releaseCloneKept(clone));
   }
 }
 
@@ -325,84 +338,74 @@ async function releaseFrom(
   deps: ReleaseDeps,
 ): Promise<number> {
   const { repo, tag, publish } = input;
-  const doiAt = (ref: string) => committedDoi(src, clone, ref);
-  const refuseSandbox = (doi: CommittedDoi) => {
-    if (input.sandbox && !doi.sandbox) {
-      throw new UserError(msg.workflow.releaseSandboxWithProdDoi(doi.doi));
-    }
-  };
-  const needToken = (sandbox: boolean) => {
-    if (!deps.hasToken(sandbox))
-      throw new UserError(msg.workflow.noZenodoToken('release', sandbox));
-  };
   const deposited = () => src.releaseAssets(repo, tag).includes(DEPOSITED_ASSET);
-  const tail = (sandbox: boolean) => [
-    msg.workflow.releasePlanDeposit(tag, sandbox, publish),
-    msg.workflow.releasePlanAttach(tag),
-  ];
 
-  const tagAt = (sha: string): string => {
-    src.createTag(repo, tag, sha);
-    deps.log(msg.workflow.releaseTagged(tag, sha));
-    return sha;
-  };
-
-  const waitAndDeposit = async (sha: string): Promise<number> => {
-    const run = await waitForBuild(repo, tag, sha, src, deps);
-    if (deposited()) {
-      deps.log(msg.workflow.releaseDepositedByCi(tag, run.url));
-      return 0;
-    }
-    src.fetch(clone);
-    src.checkout(clone, `refs/tags/${tag}`);
-    return exitOf(await deps.deposit(clone));
-  };
-
-  // An existing tag: nothing is asked, as only the deposit is left.
   const tagged = src.tagCommit(clone, tag);
-  if (tagged) {
-    const doi = doiAt(tagged);
-    if (!doi) throw new UserError(msg.workflow.releaseTagNoDoi(tag, repo));
-    refuseSandbox(doi);
-    if (deposited()) {
-      deps.log(msg.workflow.releaseAlreadyDeposited(tag));
-      return 0;
-    }
-    needToken(doi.sandbox);
-    await assertDraftFor(doi, tag, deps);
-    deps.log(msg.workflow.releaseUseTag(tag, tagged));
-    return waitAndDeposit(tagged);
-  }
-
-  // A later version: the head shown in the confirmation is the commit tagged.
   const head = src.head(clone);
-  const mainDoi = doiAt(head.sha);
-  if (mainDoi) {
-    refuseSandbox(mainDoi);
-    needToken(mainDoi.sandbox);
-    await assertDraftFor(mainDoi, tag, deps);
+  const doi = committedDoi(src, clone, tagged ?? head.sha);
+  const sandbox = doi ? doi.sandbox : input.sandbox;
+
+  // Every refusal comes before anything is asked or changed.
+  if (tagged && !doi) throw new UserError(msg.workflow.releaseTagNoDoi(tag, repo));
+  if (doi && input.sandbox && !doi.sandbox) {
+    throw new UserError(msg.workflow.releaseSandboxWithProdDoi(doi.doi));
+  }
+  if (tagged && deposited()) {
+    deps.log(msg.workflow.releaseAlreadyDeposited(tag));
+    return 0;
+  }
+  if (!deps.hasToken(sandbox)) throw new UserError(msg.workflow.noZenodoToken('release', sandbox));
+  if (doi) await assertDraftFor(doi, tag, deps);
+
+  let sha: string;
+  if (tagged) {
+    // Only the deposit is left, so nothing is asked.
+    deps.log(msg.workflow.releaseUseTag(tag, tagged));
+    sha = tagged;
+  } else {
     const plan = [
       msg.workflow.releasePlanHeader(repo),
-      msg.workflow.releasePlanTagAt(tag, head.sha, head.subject),
-      ...tail(mainDoi.sandbox),
+      ...(doi
+        ? [msg.workflow.releasePlanTagAt(tag, head.sha, head.subject)]
+        : [
+            msg.workflow.releasePlanReserve(sandbox, src.openPr(repo, DOI_BRANCH) !== null),
+            msg.workflow.releasePlanMerge,
+            msg.workflow.releasePlanTagMerge(tag),
+          ]),
+      msg.workflow.releasePlanDeposit(tag, sandbox, publish),
+      msg.workflow.releasePlanAttach(tag),
     ];
     if (!(await deps.confirm(plan))) return 0;
-    return waitAndDeposit(tagAt(head.sha));
+    // A later version tags the head the confirmation showed.
+    sha = doi ? head.sha : await reserveAndMerge(clone, input, src, deps);
+    src.createTag(repo, tag, sha);
+    deps.log(msg.workflow.releaseTagged(tag, sha));
   }
 
-  // No DOI yet. reserveDoi runs on every such run, so the commit merged is the one this run pushed.
-  const { sandbox } = input;
-  needToken(sandbox);
-  const plan = [
-    msg.workflow.releasePlanHeader(repo),
-    msg.workflow.releasePlanReserve(sandbox, src.openPr(repo, DOI_BRANCH) !== null),
-    msg.workflow.releasePlanMerge,
-    msg.workflow.releasePlanTagMerge(tag),
-    ...tail(sandbox),
-  ];
-  if (!(await deps.confirm(plan))) return 0;
-  const prepared = await deps.reserveDoi(clone, sandbox);
-  if (prepared !== 0) return exitOf(prepared);
+  const run = await waitForBuild(repo, tag, sha, src, deps);
+  if (deposited()) {
+    deps.log(msg.workflow.releaseDepositedByCi(tag, run.url));
+    return 0;
+  }
+  src.fetch(clone);
+  src.checkout(clone, `refs/tags/${tag}`);
+  return exitOf(await deps.deposit(clone));
+}
+
+/**
+ * Reserves the DOI and merges its pull request at the commit this run pushed. It runs on every
+ * first-deposit run, so a pull request left open by an earlier run gets this run's commit.
+ * Returns the merge commit; throws {@link StepFailed} when the reserve step fails.
+ */
+async function reserveAndMerge(
+  clone: string,
+  input: ReleaseInput,
+  src: ReleaseSource,
+  deps: ReleaseDeps,
+): Promise<string> {
+  const { repo } = input;
+  const reserved = await deps.reserveDoi(clone, input.sandbox);
+  if (reserved !== 0) throw new StepFailed(exitOf(reserved));
   const pushed = src.pushedHead(clone, DOI_BRANCH);
   if (!pushed) throw new UserError(msg.workflow.releaseDoiNotPushed);
   const pr = src.openPr(repo, DOI_BRANCH);
@@ -418,13 +421,12 @@ async function releaseFrom(
     );
   }
   deps.log(msg.workflow.releaseMerged(pr.url, merged));
-  const sha = tagAt(merged);
   src.fetch(clone);
   const now = src.head(clone);
   if (now.sha !== merged) {
     deps.log(msg.workflow.releaseMainMoved(merged, src.commitsBetween(clone, merged, now.sha)));
   }
-  return waitAndDeposit(sha);
+  return merged;
 }
 
 interface CommittedDoi {
@@ -485,14 +487,15 @@ async function waitForBuild(
   const done = await pollUntil(
     () => {
       const state = buildState(src.jobs(repo, run.id), run.url);
-      if (state !== last) {
-        deps.log(msg.workflow.releaseBuildState(state));
-        last = state;
+      const line = msg.workflow.releaseBuildState(state);
+      if (line !== last) {
+        deps.log(line);
+        last = line;
         unchanged = 0;
       } else if (++unchanged % HEARTBEAT_TRIES === 0) {
         deps.log(msg.workflow.releaseStillWaiting(run.url));
       }
-      return state === BUILT ? run : null;
+      return state.phase === 'done' ? run : null;
     },
     deps.sleep,
     BUILD_WAIT,
@@ -507,26 +510,30 @@ async function waitForBuild(
   return done;
 }
 
-/** The state {@link buildState} ends at. */
-const BUILT = 'build done';
+/** Where a Deposit version run is: its jobs' progress, with the status GitHub reports. */
+export type BuildState =
+  | { phase: 'queued' }
+  | { phase: 'building'; status: string }
+  | { phase: 'publishing'; status: string }
+  | { phase: 'done' };
 
-/** The run's state, as a line to print: {@link BUILT} once the build passed and the publish
- *  job, if any, finished. Throws a UserError for a failed build or a finished run with no build job. */
-function buildState(jobs: CiJob[], url: string): string {
+/** The run's {@link BuildState}: `done` once the build passed and the publish job, if any,
+ *  finished. Throws a UserError for a failed build or a finished run with no build job. */
+function buildState(jobs: CiJob[], url: string): BuildState {
   const build = jobs.find((j) => j.name === DEPOSIT_BUILD_JOB);
   if (!build) {
     if (jobs.length && jobs.every((j) => j.status === 'completed')) {
       throw new UserError(msg.workflow.releaseNoBuildJob(url, DEPOSIT_BUILD_JOB));
     }
-    return 'queued';
+    return { phase: 'queued' };
   }
-  if (build.status !== 'completed') return `build ${build.status.replace('_', ' ')}`;
+  if (build.status !== 'completed') return { phase: 'building', status: build.status };
   if (build.conclusion !== 'success') {
     throw new UserError(msg.workflow.releaseRunFailed(url, String(build.conclusion)));
   }
   const publish = jobs.find((j) => j.name === DEPOSIT_PUBLISH_JOB);
   if (publish && publish.status !== 'completed') {
-    return `build done; publish job ${publish.status.replace('_', ' ')}`;
+    return { phase: 'publishing', status: publish.status };
   }
-  return BUILT;
+  return { phase: 'done' };
 }

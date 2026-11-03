@@ -474,6 +474,16 @@ export const realCiBuildSource: CiBuildSource = {
   },
 };
 
+/** Whether `tag` exists on `repo`; false also when GitHub cannot be read. */
+function tagExists(repo: string, tag: string): boolean {
+  try {
+    gh(['api', `repos/${repo}/git/ref/tags/${tag}`, '--jq', '.ref'], { quiet: true });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * The real {@link ReleaseSource} for `oak release --repo`: gh with the editor's login, git in the temporary
  * clone. A partial clone (`--filter=blob:none`) fetches only the files it reads.
@@ -595,14 +605,10 @@ export const realReleaseSource: ReleaseSource = {
         { quiet: true },
       );
     } catch (e) {
+      // Told apart by whether the tag exists now, not by GitHub's wording.
+      if (tagExists(repo, tag)) throw new UserError(msg.workflow.releaseTagAppeared(tag, repo));
       const why = e instanceof Error ? e.message : String(e);
-      if (/already exists/i.test(why)) {
-        throw new UserError(msg.workflow.releaseTagAppeared(tag, repo));
-      }
-      if (/HTTP 403|rule/i.test(why)) {
-        throw new UserError(msg.workflow.releaseTagForbidden(tag, repo, why));
-      }
-      throw e;
+      throw new UserError(msg.workflow.releaseTagFailed(tag, repo, why));
     }
   },
   commitsBetween(clone, from, to) {

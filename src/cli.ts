@@ -736,6 +736,11 @@ function isTerminalRelease(argv: string[]): boolean {
   return !process.env.GITHUB_ACTIONS && !has(argv, 'use-local-build') && !has(argv, 'deposit-only');
 }
 
+/** `arg` as one shell word: quoted when it holds anything but plain path and URL characters. */
+function shellWord(arg: string): string {
+  return /^[\w@%+=:,./-]+$/.test(arg) ? arg : `'${arg.replace(/'/g, `'\\''`)}'`;
+}
+
 /** The flags `oak release` passes on to the steps it hands to the pinned oak. */
 const RELEASE_STEP_FLAGS = ['token', 'site-url', 'instance'] as const;
 
@@ -773,7 +778,12 @@ async function cmdReleaseRepo(argv: string[]): Promise<number> {
   }
   const sandbox = has(argv, 'sandbox');
   const publish = has(argv, 'publish-without-review');
-  // Without --token, --instance and --site-url: a rerun passes them again if this run had them.
+  const passOn = RELEASE_STEP_FLAGS.flatMap((name) => {
+    const value = flag(argv, name);
+    if (value === undefined) return [];
+    return [`--${name}`, name === 'instance' ? resolve(value) : value];
+  }).concat(has(argv, 'no-instance') ? ['--no-instance'] : []);
+  // The token is printed as a placeholder for the editor to fill in.
   const rerun = [
     'oak release --repo',
     repo,
@@ -781,13 +791,8 @@ async function cmdReleaseRepo(argv: string[]): Promise<number> {
     tag,
     ...(sandbox ? ['--sandbox'] : []),
     ...(publish ? ['--publish-without-review'] : []),
+    ...passOn.map((arg, i) => (passOn[i - 1] === '--token' ? '<token>' : shellWord(arg))),
   ].join(' ');
-
-  const passOn = RELEASE_STEP_FLAGS.flatMap((name) => {
-    const value = flag(argv, name);
-    if (value === undefined) return [];
-    return [`--${name}`, name === 'instance' ? resolve(value) : value];
-  }).concat(has(argv, 'no-instance') ? ['--no-instance'] : []);
   /** Runs a step with the oak the clone pins, or in this process when that is this oak. */
   const step = async (
     verb: PaperVerb,
@@ -807,8 +812,7 @@ async function cmdReleaseRepo(argv: string[]): Promise<number> {
     clone: (r: string) => (cloneDir = gh.realReleaseSource.clone(r)),
   };
   const onInterrupt = () => {
-    if (cloneDir) rmSync(cloneDir, { recursive: true, force: true });
-    process.stderr.write('\n' + msg.workflow.releaseInterrupted(rerun) + '\n');
+    process.stderr.write('\n' + msg.workflow.releaseInterrupted(rerun, cloneDir) + '\n');
     // No listener is left, so this ends oak as Ctrl-C would.
     process.kill(process.pid, 'SIGINT');
   };

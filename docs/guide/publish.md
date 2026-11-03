@@ -28,7 +28,7 @@ oak lists what it will do on GitHub and Zenodo and asks once (`--yes` answers fo
 
 You then [publish the draft on Zenodo](#publish-on-zenodo) and [list the paper on the journal website](#list-on-site).
 
-oak works in a clone in a temporary folder, removed when it ends, so the editor's own clone is never changed. If it stops for any reason (a wait that took too long, Ctrl-C, a failed step), run the same command again: it reads from GitHub and Zenodo what is already done and continues from there.
+oak works in a clone in a temporary folder, so the editor's own clone is never changed. The clone is removed when the release is done; after a failure or Ctrl-C it is kept, and oak prints where, for a look at what failed. If it stops for any reason (a wait that took too long, Ctrl-C, a failed step), run the same command again: it reads from GitHub and Zenodo what is already done and continues from there.
 
 `--sandbox` reserves the DOI on the [Zenodo sandbox](#sandbox), for a test. Once the DOI is committed, it picks the environment, with or without the flag.
 

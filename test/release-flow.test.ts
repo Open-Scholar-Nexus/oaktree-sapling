@@ -210,7 +210,8 @@ describe('oak release from the terminal: a first deposit', () => {
     expect(err).toBeInstanceOf(UserError);
     expect((err as Error).message).toContain(PR_URL);
     expect(h.outward.some((c) => c.startsWith('tag '))).toBe(false);
-    expect(existsSync(h.clone())).toBe(false);
+    expect(existsSync(h.clone())).toBe(true);
+    expect(h.logs.join('\n')).toContain(`rm -rf ${h.clone()}`);
   });
 
   it('tags the merge commit when the default branch moved after the merge, and says what is left out', async () => {
@@ -318,7 +319,7 @@ describe('oak release from the terminal: refusals before anything changes', () =
     if (text) expect((err as Error).message).toContain(text);
     expect(h.outward).toEqual([]);
     expect(h.plans).toEqual([]);
-    expect(existsSync(h.clone())).toBe(false);
+    expect(existsSync(h.clone())).toBe(true);
   };
 
   it('a tag whose myst.yml has no DOI', () =>
