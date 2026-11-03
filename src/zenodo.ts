@@ -1,5 +1,5 @@
 /**
- * `oak deposit` (prepare, upload, status), and the core of `oak release`. Each command returns one
+ * The Zenodo side of the `oak release` steps (reserve-doi, deposit, status). Each command returns one
  * JSON result with a `status` field. A draft is reused when one exists, the committed DOI picks
  * the endpoint for an upload, and an upload overwrites the metadata [R22].
  *
@@ -884,7 +884,7 @@ export interface PrepareInput {
 }
 
 /**
- * `oak deposit prepare`: reserves a draft, or reuses one, and writes `project.doi`, `github` and
+ * `oak release reserve-doi`: reserves a draft, or reuses one, and writes `project.doi`, `github` and
  * `date` into myst.yml [R22]. The CLI opens the DOI pull request from that write [R3].
  *
  * Preparing again in the same environment is refused. A production prepare may replace a
@@ -989,7 +989,7 @@ function readTypstVersion(engineRoot: string): string | null {
 }
 
 /**
- * `oak deposit upload`, also the core of `oak release`: fills the reserved draft with the final
+ * The core of `oak release deposit`: fills the reserved draft with the final
  * metadata and files and leaves it unsubmitted, or publishes it with `publish`. The committed
  * DOI's prefix picks sandbox or production [R4], and an `api` for the other one is refused.
  */
@@ -1183,7 +1183,7 @@ export interface StatusInput {
 }
 
 /**
- * `oak deposit status`: the deposit's state for the committed concept DOI, and the metadata an
+ * `oak release status`: the deposit's state for the committed concept DOI, and the metadata an
  * upload would send. Writes nothing.
  */
 export async function cmdStatus(input: StatusInput): Promise<Outcome> {

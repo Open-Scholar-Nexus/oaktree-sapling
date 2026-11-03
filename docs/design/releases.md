@@ -98,4 +98,4 @@ The npm package is a second way to get oak, and papers do not use it: their CI r
 `oak bootstrap` and `upgrade` run from the package. `validate`, `build` and `start` run the version the paper pins, from a clone of its tag when the package is another version ([](#design-paper-ci-local-ref)), and so does `bootstrap --engine-version` naming another version. `release` and `deposit` always run from a clone of the pinned tag, and the workflow commands from a checkout of it, which carries two things the tarball leaves out:
 
 - `bin/typst`, built for linux x86_64 only. A build run from the package exports the PDF with the typst on the system, and one handed to a clone uses the clone's when it runs.
-- The git history `oak release` and `oak deposit` need: they make `engine.zip` with `git archive` over the engine directory, and `node_modules/oaktree-sapling` is not a git repository.
+- The git history the steps of `oak release` need: they make `engine.zip` with `git archive` over the engine directory, and `node_modules/oaktree-sapling` is not a git repository.

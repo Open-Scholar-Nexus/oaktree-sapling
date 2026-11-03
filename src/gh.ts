@@ -436,7 +436,7 @@ export function ghLoggedIn(): boolean {
   }
 }
 
-/** The real {@link CiBuildSource} for `oak release`: git in the paper's clone, gh for the run. */
+/** The real {@link CiBuildSource} for `oak release deposit`: git in the paper's clone, gh for the run. */
 export const realCiBuildSource: CiBuildSource = {
   originRepo,
   tagCommit(paperRoot, tag) {
@@ -485,7 +485,7 @@ function tagExists(repo: string, tag: string): boolean {
 }
 
 /**
- * The real {@link ReleaseSource} for `oak release --repo`: gh with the editor's login, git in the temporary
+ * The real {@link ReleaseSource} for `oak release`: gh with the editor's login, git in the temporary
  * clone. A partial clone (`--filter=blob:none`) fetches only the files it reads.
  */
 export const realReleaseSource: ReleaseSource = {

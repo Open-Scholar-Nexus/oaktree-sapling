@@ -64,11 +64,15 @@ export const DOCS = {
   validate: 'reference/cli#validate',
   /** `oak post-checks`: the Check Run and sticky PR comment it posts from a validate report. */
   postChecks: 'reference/cli#post-checks',
-  /** `oak deposit <prepare|upload|status>`: the Zenodo verbs, and what `--sandbox` isolates. */
-  deposit: 'reference/cli#deposit',
-  /** `oak release --tag vX`: the build it deposits, the Release asset, and the comment or issue it leaves. */
+  /** `oak release vX`: publishing a version from the terminal, and the steps it takes. */
   release: 'reference/cli#release',
-  /** `oak release --use-local-build`: depositing the editor's own build, made apart from the token. */
+  /** `oak release reserve-doi`: reserving the DOI, and what `--sandbox` isolates. */
+  releaseReserveDoi: 'reference/cli#release-reserve-doi',
+  /** `oak release deposit --tag vX`: the build it deposits, the Release asset, and the comment or issue it leaves. */
+  releaseDeposit: 'reference/cli#release-deposit',
+  /** `oak release status`: the deposit's state on Zenodo. */
+  releaseStatus: 'reference/cli#release-status',
+  /** `oak release deposit --use-local-build`: depositing the editor's own build, made apart from the token. */
   publishOwnBuild: 'reference/cli#use-local-build',
   /** Depositing from the editor's computer, for a journal with no Zenodo token on GitHub. */
   publishFromTerminal: 'guide/publish#from-terminal',

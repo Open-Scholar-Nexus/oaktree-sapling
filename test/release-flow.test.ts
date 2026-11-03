@@ -1,5 +1,5 @@
 /**
- * `oak release --repo owner/paper --tag vX` from the terminal (`runRelease`), with a fake GitHub
+ * `oak release --repo owner/paper vX` from the terminal (`runRelease`), with a fake GitHub
  * and Zenodo: each run reads where the release stands and does what is left, refusals come
  * before anything changes, and the DOI pull request is merged only at the commit pushed in the
  * same run.
@@ -140,6 +140,7 @@ function harness(w: World, input: Partial<ReleaseInput> = {}) {
     src,
     hasToken: () => w.token,
     readDepositState: async () => w.zenodo,
+    checkPin: () => {},
     reserveDoi: async () => {
       outward.push('prepare');
       pushed = DOI_COMMIT;
@@ -342,6 +343,20 @@ describe('oak release from the terminal: refusals before anything changes', () =
 
   it('no record for the committed DOI', () =>
     refuses(world({ files: { [MAIN]: myst(PROD_DOI) }, zenodo: { kind: 'none' } })));
+
+  it('a pinned oak whose steps would refuse, checked at the commit to be tagged', async () => {
+    const pinned = `${myst(PROD_DOI)}  options:\n    oaktree-sapling:\n      version: v0.2.0\n`;
+    const h = harness(world({ files: { [MAIN]: pinned } }));
+    const seen: string[] = [];
+    h.deps.checkPin = (version) => {
+      seen.push(version);
+      throw new UserError('too old');
+    };
+    await expect(h.run()).rejects.toThrow('too old');
+    expect(seen).toEqual(['v0.2.0']);
+    expect(h.outward).toEqual([]);
+    expect(h.plans).toEqual([]);
+  });
 
   it('no Zenodo token for the environment', () =>
     refuses(world({ token: false }), {}, 'ZENODO_TOKEN'));
