@@ -56,7 +56,8 @@ function echoChild(tool: string, text: unknown): void {
 
 /**
  * Prints what is running, then erases the line [R85]: cloning or creating a repo takes seconds,
- * and silence reads as a hang. No spinner, since `spawnSync` blocks the event loop. Only on a
+ * and silence reads as a hang. No spinner, since `spawnSync` blocks the event loop; the one
+ * `oak release` shows while it waits (progress.ts) is drawn only between calls. Only on a
  * TTY: a log would keep the half-erased line, and CI prints child output anyway.
  */
 function showWorking(tool: string, args: string[]): () => void {

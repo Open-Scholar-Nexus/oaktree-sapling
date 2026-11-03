@@ -516,9 +516,19 @@ async function waitForBuild(
   src: ReleaseSource,
   deps: ReleaseDeps,
 ): Promise<CiRun> {
-  deps.log(msg.workflow.releaseWaitRun(tag, `https://github.com/${repo}/actions`));
+  const actions = `https://github.com/${repo}/actions`;
+  deps.log(msg.workflow.releaseWaitRun(tag, actions));
+  // Counts the tries after the first, as `unchanged` below does, so both lines come 5 minutes apart.
+  let tries = 0;
   const run = await pollUntil(
-    () => depositRunFor(src.pushRuns(repo, sha), tag, sha),
+    () => {
+      const found = depositRunFor(src.pushRuns(repo, sha), tag, sha);
+      if (!found && tries > 0 && tries % HEARTBEAT_TRIES === 0) {
+        deps.log(msg.workflow.releaseNoRunYet(tag, actions));
+      }
+      tries++;
+      return found;
+    },
     deps.sleep,
     RUN_WAIT,
   );
@@ -529,7 +539,7 @@ async function waitForBuild(
   const done = await pollUntil(
     () => {
       const state = buildState(src.jobs(repo, run.id), run.url);
-      const line = msg.workflow.releaseBuildState(state);
+      const line = msg.workflow.releaseBuildState(state, run.url);
       if (line !== last) {
         deps.log(line);
         last = line;

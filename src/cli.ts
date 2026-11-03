@@ -858,7 +858,10 @@ async function cmdReleaseRepo(argv: string[]): Promise<number> {
     ...gh.realReleaseSource,
     clone: (r: string, t: string) => (cloneDir = gh.realReleaseSource.clone(r, t)),
   };
+  const { waitIndicator } = await import('./progress.js');
+  const progress = waitIndicator(process.stderr, process.env);
   const onInterrupt = () => {
+    progress.clear();
     process.stderr.write('\n' + msg.workflow.releaseInterrupted(rerun, cloneDir) + '\n');
     // No listener is left, so this ends oak as Ctrl-C would.
     process.kill(process.pid, 'SIGINT');
@@ -912,11 +915,12 @@ async function cmdReleaseRepo(argv: string[]): Promise<number> {
             cmdRelease,
           ),
         confirm: makeConfirm(argv),
-        sleep: (ms) => new Promise((done) => setTimeout(done, ms)),
-        log: (line) => process.stderr.write(line + '\n'),
+        sleep: progress.sleep,
+        log: progress.log,
       },
     );
   } finally {
+    progress.clear();
     process.off('SIGINT', onInterrupt);
   }
   // The failures those clones were kept for are resolved once the version is deposited.

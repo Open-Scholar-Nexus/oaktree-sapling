@@ -1400,15 +1400,18 @@ export const workflow = {
     `oak release: no Deposit version run started for ${tag}; check Actions is enabled on ${repo}.`,
   releaseWaitBuild: (url: string): string =>
     `oak release: waiting for the Deposit version run to build: ${url}`,
-  releaseBuildState: (state: BuildState): string =>
+  releaseNoRunYet: (tag: string, url: string): string =>
+    `oak release: no Deposit version run for ${tag} yet: ${url}`,
+  releaseBuildState: (state: BuildState, url: string): string =>
     'oak release: ' +
     (state.phase === 'queued'
-      ? 'queued'
+      ? 'Deposit version run queued'
       : state.phase === 'building'
-        ? `build ${state.status.replace('_', ' ')}`
+        ? `build job ${state.status.replace('_', ' ')}`
         : state.phase === 'publishing'
-          ? `build done; publish job ${state.status.replace('_', ' ')}`
-          : 'build done'),
+          ? `build job done; publish job ${state.status.replace('_', ' ')}`
+          : 'build job done') +
+    `: ${url}`,
   releaseStillWaiting: (url: string): string => `oak release: still waiting on ${url}`,
   releaseBuildTimeout: (url: string, minutes: number): string =>
     `oak release: the Deposit version run has not finished after ${minutes} minutes: ${url}`,

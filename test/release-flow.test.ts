@@ -270,13 +270,15 @@ describe('oak release from the terminal: a rerun continues where the release sta
       }),
     );
     expect(await h.run()).toBe(0);
-    const states = h.logs.filter((l) => /queued|in progress|build done/.test(l));
-    expect(states).toEqual([
-      'oak release: queued',
-      'oak release: build in progress',
-      'oak release: build done; publish job in progress',
-      'oak release: build done',
-    ]);
+    const states = h.logs.filter((l) => /queued|in progress|job done/.test(l));
+    expect(states).toEqual(
+      [
+        'Deposit version run queued',
+        'build job in progress',
+        'build job done; publish job in progress',
+        'build job done',
+      ].map((s) => `oak release: ${s}: ${RUN_URL}`),
+    );
   });
 
   it('published on Zenodo with this version: hands to the deposit step, which finishes it', async () => {
@@ -388,10 +390,15 @@ describe('oak release from the terminal: the build', () => {
     expect(h.outward).toEqual([]);
   });
 
-  it('no run within the limit: exit 3 with the command to rerun', async () => {
+  it('no run within the limit: exit 3 with the command to rerun, and a line every 5 minutes meanwhile', async () => {
     const h = harness(tagged({ runAfter: RUN_WAIT.tries }));
     expect(await h.run()).toBe(3);
     expect(h.logs.join('\n')).toContain('no Deposit version run started for v1.0.0');
+    const heartbeats = h.logs.filter((l) =>
+      l.startsWith('oak release: no Deposit version run for'),
+    );
+    expect(heartbeats).toHaveLength(Math.floor((RUN_WAIT.tries - 1) / 20));
+    expect(heartbeats[0]).toContain('https://github.com/');
     expect(h.logs.join('\n')).toContain('rerun the same command to continue: oak release …');
   });
 
