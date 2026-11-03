@@ -1,7 +1,7 @@
 /**
  * poll.ts: a wait loop used by `oak conformance` and `oak release`. It returns null at the limit,
  * and each caller throws its own error with its own message. Tests pass a `sleep` that resolves
- * immediately, so a wait takes no real time.
+ * immediately.
  */
 
 export interface PollOpts {
