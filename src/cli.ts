@@ -735,7 +735,7 @@ const RELEASE_STEP_FLAGS = ['token', 'site-url', 'instance'] as const;
 
 /**
  * `oak release [--repo owner/paper] --tag vX [--sandbox] [--yes] [--publish-without-review]`
- * from the terminal: `runRelease` (release.ts) in a temporary clone, as the editor on GitHub,
+ * from the terminal: `runRelease` (release.ts) in a temporary clone, with the editor's gh login,
  * with the Zenodo writes handed to the oak the paper pins. Documented at DOCS.release.
  */
 async function cmdReleaseRepo(argv: string[]): Promise<number> {

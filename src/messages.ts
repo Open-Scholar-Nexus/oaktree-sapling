@@ -1249,7 +1249,7 @@ export const workflow = {
     `${files.length === 1 ? 'it comes' : 'they come'} from an earlier build. Delete _build, ` +
     `run oak build at ${tag} in a shell without the Zenodo token, then run this again.`,
 
-  // release from the terminal, the whole flow (release.ts `runRelease`)
+  // oak release from the terminal (release.ts `runRelease`)
   releaseNoTagList: (repo: string, tags: string[]): string =>
     `oak release: --tag vX.Y.Z is required. ` +
     (tags.length

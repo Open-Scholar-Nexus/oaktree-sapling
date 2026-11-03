@@ -475,7 +475,7 @@ export const realCiBuildSource: CiBuildSource = {
 };
 
 /**
- * The real {@link ReleaseSource} for `oak release --repo`: gh as the editor, git in the temporary
+ * The real {@link ReleaseSource} for `oak release --repo`: gh with the editor's login, git in the temporary
  * clone. A partial clone (`--filter=blob:none`) fetches only the files it reads.
  */
 export const realReleaseSource: ReleaseSource = {

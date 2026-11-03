@@ -19,12 +19,14 @@ import type { DepositState } from './zenodo.js';
  * The deposit step's build: `oak release --deposit-only`
  * ------------------------------------------------------------------------ */
 
-/** The Deposit version workflow (the paper template's `deposit-version.yml`): its file as a run's
- *  `path` gives it, its build job, and the artifact the build job uploads. */
+/** The path of the Deposit version workflow in a paper repo, as GitHub reports it in a run's
+ *  `path`. */
 export const DEPOSIT_WORKFLOW_PATH = '.github/workflows/deposit-version.yml';
+/** The Deposit version job that builds the paper, with no Zenodo token. */
 export const DEPOSIT_BUILD_JOB = 'build';
 /** The Deposit version job that deposits with a Zenodo token on GitHub, after the build job. */
 export const DEPOSIT_PUBLISH_JOB = 'publish';
+/** The artifact the build job uploads. */
 export const RELEASE_ARTIFACT = 'release-build';
 
 /** What the artifact holds, relative to the paper root, as deposit-version.yml uploads it. */
@@ -186,7 +188,7 @@ export function parseTypstVersion(out: string): string | null {
 }
 
 /* --------------------------------------------------------------------------
- * The whole flow from the terminal
+ * `oak release` from the terminal
  * ------------------------------------------------------------------------ */
 
 /** The branch `openDoiPr` (gh.ts) pushes. */
@@ -198,7 +200,7 @@ export const DEPOSITED_ASSET = 'publication-provenance.json';
 /** The waits: the run to appear, then its jobs (a paper environment can take long to install). */
 export const RUN_WAIT = { tries: 12, intervalMs: 15_000 };
 export const BUILD_WAIT = { tries: 180, intervalMs: 15_000 };
-/** A line every 5 minutes while nothing changes, so a quiet terminal reads as waiting. */
+/** A line every 5 minutes while nothing changes, so the editor sees oak is still waiting. */
 const HEARTBEAT_TRIES = 20;
 
 /** What {@link runRelease} does on GitHub, with the editor's gh login (`realReleaseSource` in
@@ -262,14 +264,14 @@ export interface ReleaseDeps {
 class WaitTimeout extends Error {}
 
 /** A pinned step's exit code as `oak release` reports it: 0 and 1 (a bug) as they are, any other
- *  failure 2, so a step's own 3 never reads as a wait that reached its limit. */
+ *  failure 2, so a step's own 3 is never taken for a wait that reached its limit. */
 function exitOf(code: number): number {
   if (code === 0 || code === 1) return code;
   return 2;
 }
 
-/** `src` with each call's failure turned into a UserError saying a rerun continues, but for
- *  `merge`, whose failure {@link runRelease} words itself. */
+/** `src` with each call's failure turned into `releaseGitHubFailed`, which says a rerun continues.
+ *  `merge` is left out: its failure gets its own message, `releaseMergeRefused`. */
 function guarded(src: ReleaseSource): ReleaseSource {
   return new Proxy(src, {
     get(target, key, receiver) {
@@ -290,12 +292,12 @@ function guarded(src: ReleaseSource): ReleaseSource {
 }
 
 /**
- * `oak release` from the terminal. It checks these in order and runs the steps from the first that
- * holds, so a rerun after a stop skips what an earlier run did:
- * 1. `input.tag` exists: wait for its Deposit version run, then deposit at the tag, unless the
- *    tag's GitHub release already holds {@link DEPOSITED_ASSET}.
- * 2. `myst.yml` on the default branch has a DOI: tag the branch head, then as 1.
- * 3. Neither: reserve the DOI, which pushes {@link DOI_BRANCH} and opens its pull request; merge
+ * `oak release` from the terminal. It picks its steps from what already exists on GitHub, so a
+ * rerun after a stop continues where the earlier run stopped:
+ * 1. The tag exists: wait for its Deposit version run, then deposit at the tag, unless the tag's
+ *    GitHub release already holds {@link DEPOSITED_ASSET}.
+ * 2. No tag, and `myst.yml` on the default branch has a DOI: tag the branch head, then as 1.
+ * 3. No tag and no DOI: reserve the DOI, which pushes {@link DOI_BRANCH} and opens its pull request; merge
  *    it at the commit pushed, tag the merge commit, then as 1.
  * The refusals it can check first (token, Zenodo draft, sandbox against the committed DOI) come
  * before the confirmation and the first write. Returns the exit code: 0 done or declined, 1 a
@@ -390,7 +392,7 @@ async function releaseFrom(
     return waitAndDeposit(tagAt(head.sha));
   }
 
-  // A first deposit. Prepare runs on every such run, so the commit merged is the one pushed now.
+  // No DOI yet. reserveDoi runs on every such run, so the commit merged is the one this run pushed.
   const { sandbox } = input;
   needToken(sandbox);
   const plan = [
@@ -510,7 +512,7 @@ async function waitForBuild(
 /** The state {@link buildState} ends at. */
 const BUILT = 'build done';
 
-/** Where the run stands, as a line to print: {@link BUILT} once the build passed and the publish
+/** The run's state, as a line to print: {@link BUILT} once the build passed and the publish
  *  job, if any, finished. Throws a UserError for a failed build or a finished run with no build job. */
 function buildState(jobs: CiJob[], url: string): string {
   const build = jobs.find((j) => j.name === DEPOSIT_BUILD_JOB);

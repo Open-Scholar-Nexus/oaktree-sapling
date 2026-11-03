@@ -53,7 +53,7 @@ The Zenodo verbs. The **Reserve DOI** workflow runs `oak deposit prepare`, and a
 (release)=
 ## release
 
-`oak release [--repo <owner/name>] --tag <vX.Y.Z>`, outside GitHub Actions, publishes a version from the terminal ([the steps](#from-terminal)). It acts on GitHub as the editor's gh login, in a clone of the repository (the current clone's origin without `--repo`) in a temporary folder, removed when it ends, also on Ctrl-C. Each run reads where the version stands and does what is left:
+`oak release [--repo <owner/name>] --tag <vX.Y.Z>`, outside GitHub Actions, publishes a version from the terminal ([the steps](#from-terminal)). It acts on GitHub as the editor's gh login, in a clone of the repository (the current clone's origin without `--repo`) in a temporary folder, removed when it ends, also on Ctrl-C. Each run picks its steps from what already exists, so running it again after a stop continues:
 
 - `main` has no DOI: runs [`oak deposit prepare`](#deposit), marks the DOI pull request's Journal checks as skipped, and merges it at the commit that run pushed (`gh pr merge --match-head-commit`), with a merge commit, or a squash when the repository allows no merge commits. Then it tags the merge commit. A pull request left open by an earlier run gets a new commit, which is the one merged.
 - `main` has a DOI and the tag does not exist: tags the head of `main` as shown in the confirmation. It first refuses when the newest version on Zenodo is published with another version, since **New version** was not clicked.
