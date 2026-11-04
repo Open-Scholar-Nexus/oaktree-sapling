@@ -18,6 +18,7 @@ import { stickyMarker } from './messages.js';
 import { JOURNAL_BUNDLE_NAME, RESERVED_BUNDLE_NAMES } from './zenodo.js';
 import { UPGRADE_BRANCH_PREFIX } from './upgrade.js';
 import { pagesUrl, parseZenodoDoi } from './schema.js';
+import { pollUntil as poll, type PollOpts } from './poll.js';
 
 /** The label on every pull request a run opens, which is how `reset` finds them, including pull
  *  requests from the fork, whose branch names it does not know. */
@@ -235,13 +236,10 @@ async function pollUntil<T>(
   label: string,
   attempt: () => T | null,
   deps: { sleep(ms: number): Promise<void>; log(msg: string): void },
-  opts: { tries: number; intervalMs: number; settled?: () => boolean } = POLL,
+  opts: PollOpts & { settled?: () => boolean } = POLL,
 ): Promise<T> {
-  for (let i = 0; i < opts.tries; i++) {
-    const ready = attempt();
-    if (ready !== null) return ready;
-    if (i < opts.tries - 1) await deps.sleep(opts.intervalMs);
-  }
+  const ready = await poll(attempt, deps.sleep, opts);
+  if (ready !== null) return ready;
   if (opts.settled?.()) {
     throw new Error(`${label} never appeared, though every run on its commit has finished`);
   }

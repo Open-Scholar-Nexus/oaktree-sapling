@@ -315,6 +315,13 @@ function matchRelated(items: Deposition[], identifier: string): Deposition | nul
   return null;
 }
 
+/** The deposition's page on Zenodo: `/uploads/<id>` for a draft, `/records/<id>` once published.
+ *  The API's `links.html` for a draft, `/deposit/<id>`, does not open in a browser. */
+export function webUrl(dep: Deposition, sandbox: boolean): string {
+  const host = sandbox ? 'https://sandbox.zenodo.org' : 'https://zenodo.org';
+  return `${host}/${dep.submitted ? 'records' : 'uploads'}/${dep.id}`;
+}
+
 /** The deposition's concept DOI. `conceptdoi` is only set after first publish; before that,
  *  build it from `conceptrecid`. */
 export function conceptDoiFor(dep: Deposition, sandbox: boolean): string {
@@ -940,7 +947,7 @@ export async function cmdPrepare(input: PrepareInput): Promise<Outcome> {
   }
 
   const cdoi = conceptDoiFor(dep, sandbox);
-  const draftUrl = dep.links?.html;
+  const draftUrl = webUrl(dep, sandbox);
 
   doc2.setIn(['project', 'doi'], cdoi);
   doc2.setIn(['project', 'github'], githubUrl);
@@ -1058,9 +1065,21 @@ async function fillDraft(input: UploadInput, engineZip: string): Promise<Outcome
     return err(2, msg.workflow.uploadConceptMismatch(conceptDoi, expectedConcept));
   }
 
+  if (dep.submitted && dep.metadata?.version === version) {
+    // A rerun after `--publish-without-review` published this version.
+    process.stderr.write(`[upload] ${tag} is already published as deposition ${dep.id}\n`);
+    return ok({
+      version_doi: dep.metadata?.doi ?? dep.doi ?? `${zenodoDoiPrefix(sandbox)}${dep.id}`,
+      deposition_id: dep.id,
+      site_url: siteUrl,
+      published: true,
+      already_published: true,
+      record_url: webUrl(dep, sandbox),
+    });
+  }
   if (dep.submitted) {
     // An editor clicks "New version" on Zenodo to create the empty draft.
-    const recordUrl = dep.links?.record_html ?? dep.links?.html;
+    const recordUrl = webUrl(dep, sandbox);
     if (msg.inCI()) {
       process.stderr.write(msg.workflow.depositNeedsNewVersionAnnotation(recordUrl) + '\n');
     }
@@ -1127,13 +1146,33 @@ async function fillDraft(input: UploadInput, engineZip: string): Promise<Outcome
   const versionDoi = dep.metadata?.doi ?? dep.doi ?? predictedVersionDoi;
   return ok({
     version_doi: versionDoi,
-    draft_url: dep.links?.html,
+    draft_url: webUrl(dep, sandbox),
     deposition_id: dep.id,
     bundle_dir: bundleOut,
     site_url: siteUrl,
     published: Boolean(input.publish),
-    ...(input.publish ? { record_url: dep.links?.record_html ?? dep.links?.html } : {}),
+    ...(input.publish ? { record_url: webUrl(dep, sandbox) } : {}),
   });
+}
+
+/** The deposit state of a concept DOI's newest version: no record, an unpublished draft, or
+ *  published with `version` (`metadata.version`). */
+export type DepositState =
+  | { kind: 'none' }
+  | { kind: 'draft' }
+  | { kind: 'published'; version: string | null; recordUrl: string | null };
+
+/** The {@link DepositState} of `conceptDoi`'s newest version. */
+export async function readDepositState(api: ZenodoApi, conceptDoi: string): Promise<DepositState> {
+  const latestId = await api.latestVersionDepId(conceptDoi);
+  if (latestId === null) return { kind: 'none' };
+  const dep = await api.getDeposition(latestId);
+  if (!dep.submitted) return { kind: 'draft' };
+  return {
+    kind: 'published',
+    version: typeof dep.metadata?.version === 'string' ? dep.metadata.version : null,
+    recordUrl: webUrl(dep, api.sandbox),
+  };
 }
 
 export interface StatusInput {
@@ -1176,7 +1215,7 @@ export async function cmdStatus(input: StatusInput): Promise<Outcome> {
   const dep = await api.getDeposition(latestId);
   out.latest_deposition_id = dep.id;
   out.submitted = dep.submitted ?? false;
-  out.draft_url = dep.links?.html;
+  out.draft_url = webUrl(dep, sandbox);
   out.latest_version = dep.metadata?.version;
   out.latest_doi = dep.metadata?.doi ?? dep.doi;
 
