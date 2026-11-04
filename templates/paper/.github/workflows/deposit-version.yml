@@ -1,7 +1,7 @@
 name: Deposit version
 
 # A v* tag fills the Zenodo draft; a human clicks Publish on Zenodo. Token picked by DOI prefix.
-# https://scholar.nexus/oaktree-sapling/reference/cli#release
+# https://scholar.nexus/oaktree-sapling/reference/cli#release-deposit
 
 on:
   push:
@@ -47,7 +47,7 @@ jobs:
           path: .
       - uses: ./.github/actions/engine
         with:
-          args: release --tag ${{ github.ref_name }}
+          args: release deposit --tag ${{ github.ref_name }}
         env:
           GH_TOKEN: ${{ github.token }}
           ZENODO_TOKEN: ${{ secrets.ZENODO_TOKEN }}

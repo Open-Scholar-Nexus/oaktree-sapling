@@ -13,10 +13,10 @@ Oaktree Sapling can publish with one command run on an editor's computer, or wit
 This needs `oak`, [gh](https://cli.github.com) logged in (`gh auth login`) as an editor of the paper repository, and a Zenodo token[^zenodo-secrets-create], set as the environment variable `ZENODO_TOKEN` in the shell you run oak from (`export ZENODO_TOKEN=<token>`) or passed with `--token <token>`. Then run:
 
 ```bash
-oak release --repo owner/paper-repo --tag v1.0.0
+oak release --repo owner/paper-repo v1.0.0
 ```
 
-When run inside a clone of the paper repository, `--repo` can be left out. The tag is the version, in the form `vMAJOR.MINOR.PATCH`; without `--tag`, oak lists the repository's tags.
+When run inside a clone of the paper repository, `--repo` can be left out. `v1.0.0` is the version, in the form `vMAJOR.MINOR.PATCH`, and becomes the tag; without it, oak lists the repository's tags.
 
 oak lists what it will do on GitHub and Zenodo and asks once (`--yes` skips the confirmation prompt). When publishing the first version, it:
 
@@ -28,7 +28,7 @@ oak lists what it will do on GitHub and Zenodo and asks once (`--yes` skips the 
 
 You then [publish the draft on Zenodo](#publish-on-zenodo) and [list the paper on the journal website](#list-on-site).
 
-oak works in a clone in a temporary folder. The clone is removed when the release is done; if the release fails or you interrupt it with Ctrl-C, the clone is kept, and oak prints where. If it stops for any reason (a wait that took too long, Ctrl-C, a failed step), you can run the same command again: it reads from GitHub and Zenodo what is already done and continues from there.
+oak works in a clone in a temporary folder. The clone is removed when the release is done; if the release fails or you interrupt it with Ctrl-C, the clone is kept, and oak prints where; [`oak clean`](#clean) lists and removes kept clones. If it stops for any reason (a wait that took too long, Ctrl-C, a failed step), you can run the same command again: it reads from GitHub and Zenodo what is already done and continues from there.
 
 `oak release` runs its Zenodo steps with the `oak` version the paper's `myst.yml` names, as [`oak build` does](pins.md#pins-local).
 
@@ -65,7 +65,7 @@ A published paper keeps one DOI for all its versions, and each version gets a DO
 
 1. (click-new-version)=
    On the paper's Zenodo record, click **New version**. This creates the empty draft the next tag fills.
-2. Run `oak release` with the new version, such as `--tag v1.1.0`. oak tags the newest commit of `main`, which the confirmation names, and deposits it. With the GitHub workflows, [tag the version](#tag-version) instead.
+2. Run `oak release` with the new version, such as `oak release v1.1.0`. oak tags the newest commit of `main`, which the confirmation names, and deposits it. With the GitHub workflows, [tag the version](#tag-version) instead.
 3. Click **Publish** on the new draft.
 
 If [**New version**](#click-new-version) was not clicked, oak refuses before it creates the tag, and links to the paper's Zenodo record.
@@ -92,7 +92,7 @@ In the paper repository's **Actions** tab, open **Reserve DOI** and click **Run 
 :::
 ::::
 
-The run creates an empty draft on Zenodo to reserve a DOI and opens the pull request **Reserve Zenodo DOI**, for you to merge; its Journal checks are skipped ([why](#design-paper-ci-limits)). `oak deposit prepare`, in a clone, does the same from the terminal.
+The run creates an empty draft on Zenodo to reserve a DOI and opens the pull request **Reserve Zenodo DOI**, for you to merge; its Journal checks are skipped ([why](#design-paper-ci-limits)). `oak release reserve-doi`, in a clone, does the same from the terminal.
 
 (tag-version)=
 ### 2. Tag the version
@@ -128,7 +128,7 @@ In the paper repository, open **Releases** and click **Draft a new release**. Un
 
 Only editors can create `v*` tags. Only tags in that form are supported: the **Deposit version** workflow fails on any other, such as `v1.0.0-rc1`.
 
-The tag starts the **Deposit version** workflow, which builds the paper and, with Zenodo tokens set, fills the draft, attaches the files to the tag's GitHub release and comments the draft's address on the tagged commit. Without tokens, `oak release --repo owner/paper-repo --tag v1.0.0` deposits the existing tag's build from the terminal. Then [publish the draft](#publish-on-zenodo).
+The tag starts the **Deposit version** workflow, which builds the paper and, with Zenodo tokens set, fills the draft, attaches the files to the tag's GitHub release and comments the draft's address on the tagged commit. Without tokens, `oak release --repo owner/paper-repo v1.0.0` deposits the existing tag's build from the terminal. Then [publish the draft](#publish-on-zenodo).
 
 ## Leaving files out of the deposit
 
@@ -150,5 +150,5 @@ The run opens an issue titled **Zenodo publish failed for** the tag, labelled `z
 :::{dropdown} Testing on the Zenodo sandbox
 With `oak release --sandbox`, or **Use the Zenodo sandbox** ticked, the DOI is a sandbox one (`10.5072/zenodo.…`), and tags deposit on [sandbox.zenodo.org](https://sandbox.zenodo.org) with `ZENODO_TOKEN_SANDBOX` (from the terminal, the environment variable of that name). Once a sandbox DOI is on `main`, every release deposits on the sandbox, with or without `--sandbox`. A sandbox DOI never resolves, and the journal website leaves out a paper that has one. A paper with no DOI yet is listed.
 
-To move to the real Zenodo, run **Reserve DOI** again with the box unticked, or `oak deposit prepare` in a clone. Its pull request replaces the sandbox DOI with a real one.
+To move to the real Zenodo, run **Reserve DOI** again with the box unticked, or `oak release reserve-doi` in a clone. Its pull request replaces the sandbox DOI with a real one.
 :::

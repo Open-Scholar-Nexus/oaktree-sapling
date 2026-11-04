@@ -4,7 +4,7 @@ description: >-
 
 inputs:
   args:
-    description: "verb + args for the engine (e.g. 'build', 'release --tag v1.0.0')"
+    description: "verb + args for the engine (e.g. 'build', 'release deposit --tag v1.0.0')"
     required: true
   paper-env:
     description: "install paper-environment.yml; only for a job holding no secret"

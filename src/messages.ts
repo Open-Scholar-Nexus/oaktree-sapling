@@ -1,6 +1,6 @@
 /**
  * The strings oak prints for people, grouped by where they appear: the output helpers, then
- * usage, the confirm prompt, bootstrap, upgrade, build and start, the pinned oak version,
+ * usage, the confirm prompt, bootstrap, upgrade, clean, build and start, the pinned oak version,
  * validate, what lands on a pull request, and the verbs the workflows run.
  *
  * Fixed strings are consts, parameterised ones functions. Keep the `${…}` holes and the
@@ -160,23 +160,26 @@ export const usage = (): string =>
   `                    and branding applied (the same config its CI builds). Reloads as you\n` +
   `                    edit; Ctrl-C stops it. Run in the journal repo, it previews the\n` +
   `                    journal website instead.\n` +
-  `  validate, build, start, release and deposit run the oak version the paper's myst.yml pins,\n` +
+  `  validate, build, start and the release steps run the oak version the paper's myst.yml pins,\n` +
   `  fetched once into ~/.cache/oak.\n` +
   `  OAK_USE_RUNNING=1 runs this oak instead of fetching, for developing oak itself.\n` +
   `\n` +
-  `Publishing a paper (the Reserve DOI and Deposit version workflows run these; a journal\n` +
-  `with no Zenodo token on GitHub runs them in a clone of the paper repo, gh logged in)\n` +
-  `  oak deposit prepare [--sandbox] [--repo <owner/repo>] [--site-url <url>] [--instance <dir> | --no-instance]\n` +
-  `                    reserve the DOI on Zenodo and open the pull request writing it into myst.yml\n` +
-  `  oak release [--repo <owner/repo>] --tag <vX.Y.Z> [--sandbox] [--yes] [--publish-without-review]\n` +
+  `Publishing a paper (from a terminal, gh logged in)\n` +
+  `  oak release [--repo <owner/repo>] <vX.Y.Z> [--sandbox] [--yes] [--publish-without-review]\n` +
   `              [--instance <dir> | --no-instance] [--site-url <url>]\n` +
   `                    publish a version: reserve and merge the DOI if needed, tag, wait for the\n` +
   `                    Deposit version build, fill the Zenodo draft with it, attach the files to\n` +
   `                    the tag's GitHub release, comment on the commit. Rerun it to continue.\n` +
-  `  oak release (--deposit-only | --use-local-build) --tag <vX.Y.Z> [--paper <dir>]\n` +
-  `                    only the deposit, in a clone at the tag; --use-local-build deposits its _build\n` +
-  `  oak deposit upload --pdf <path> --tag <vX.Y.Z> [--site-url <url>] [--instance <dir> | --no-instance]\n` +
-  `  oak deposit status [--sandbox] [--instance <dir> | --no-instance]\n` +
+  `  oak release status [--repo <owner/repo>] [--sandbox] [--instance <dir> | --no-instance]\n` +
+  `                    the deposit's state on Zenodo\n` +
+  `  oak clean [--cache] [--yes]\n` +
+  `                    remove the clones oak release kept after a failure; --cache also removes\n` +
+  `                    the pinned oak versions in ~/.cache/oak\n` +
+  `  Its steps, which the Reserve DOI and Deposit version workflows run:\n` +
+  `  oak release reserve-doi [--sandbox] [--repo <owner/repo>] [--site-url <url>] [--instance <dir> | --no-instance]\n` +
+  `                    reserve the DOI on Zenodo and open the pull request writing it into myst.yml\n` +
+  `  oak release deposit --tag <vX.Y.Z> [--paper <dir>] [--use-local-build] [--publish-without-review]\n` +
+  `                    deposit the tag's build, in a clone at the tag; --use-local-build deposits its _build\n` +
   `  The Zenodo token comes from ZENODO_TOKEN, ZENODO_TOKEN_SANDBOX for the sandbox, or --token.\n` +
   `\n` +
   `Run by the workflows (rarely typed by hand)\n` +
@@ -580,19 +583,51 @@ export const upgrade = {
 };
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════
+ * oak clean
+ * ═════════════════════════════════════════════════════════════════════════════════════════ */
+
+/** A size for a person, in kB, MB or GB. */
+export function bytes(n: number): string {
+  if (n < 1e6) return `${Math.ceil(n / 1e3)} kB`;
+  if (n < 1e9) return `${(n / 1e6).toFixed(1)} MB`;
+  return `${(n / 1e9).toFixed(1)} GB`;
+}
+
+export const clean = {
+  noClones: (dir: string): string => `oak clean: no clones kept by oak release in ${dir}`,
+  cacheKept: (dir: string, n: number): string =>
+    `oak clean: ${dir} holds ${bytes(n)} of pinned oak versions; --cache removes it`,
+  planHeader: 'oak clean will remove:',
+  planClone: (path: string, n: number): string => `  ${path}: ${bytes(n)}`,
+  planCache: (dir: string, n: number): string =>
+    `  ${dir}: the pinned oak versions, ${bytes(n)}; the next command fetches them again (--cache)`,
+  done: (clones: number, cache: boolean, n: number): string =>
+    `oak clean: removed ${clones} ${clones === 1 ? 'clone' : 'clones'}` +
+    `${cache ? ' and the pinned oak versions' : ''}, ${bytes(n)}`,
+};
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════
  * oak build / oak start
  * ═════════════════════════════════════════════════════════════════════════════════════════ */
 
 /** The verbs that find a journal repo the way `oak build` does. */
-export type JournalVerb = 'build' | 'start' | 'validate' | 'release' | 'deposit' | 'deploy-preview';
+export type JournalVerb =
+  | 'build'
+  | 'start'
+  | 'validate'
+  | 'release reserve-doi'
+  | 'release deposit'
+  | 'release status'
+  | 'deploy-preview';
 
 /** What `--no-instance` gives each verb, for {@link build.noInstance}. */
 const WITHOUT_JOURNAL: Record<JournalVerb, string> = {
   build: 'an unbranded build',
   start: 'an unbranded preview',
   validate: 'a bare, engine-only check',
-  release: 'an unbranded build',
-  deposit: "a deposit without the journal's Zenodo settings",
+  'release reserve-doi': "a deposit without the journal's Zenodo settings",
+  'release deposit': "a deposit without the journal's Zenodo settings",
+  'release status': "a deposit without the journal's Zenodo settings",
   'deploy-preview': "a preview without the journal's settings",
 };
 
@@ -1019,13 +1054,12 @@ export const pr = {
 };
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════
- * The workflow-run verbs (deposit / release / preview / post-checks / conformance).
+ * The workflow-run verbs (release / preview / post-checks / conformance).
  * Mostly read in a CI log, but every one of them can be typed by hand.
  * ═════════════════════════════════════════════════════════════════════════════════════════ */
 
 export const workflow = {
-  // deposit
-  depositUsage: 'oak deposit: usage: oak deposit <prepare|upload|status> [...]',
+  // release reserve-doi and status
   badRepoName: (source: string, got: string): string =>
     `${source} takes a GitHub repo as owner/name, not ${JSON.stringify(got.slice(0, 60))}.`,
 
@@ -1059,17 +1093,16 @@ export const workflow = {
     `pull request #${pr} heads at ${actual}, not at ${built}, the commit this run built; ` +
     `refusing to post. A newer push gets its own run.`,
 
-  /** `verb` is `deposit` or `release`. */
+  /** `verb` is `release` or one of its steps, such as `release deposit`. */
   noZenodoToken: (verb: string, sandbox: boolean): string =>
     sandbox
       ? `oak ${verb}: the sandbox needs ZENODO_TOKEN_SANDBOX or --token. A sandbox run never ` +
         'falls back to the production token.'
       : `oak ${verb}: no token. Set ZENODO_TOKEN or pass --token.`,
-  depositNoRepo: 'deposit prepare: pass --repo owner/repo (or set GITHUB_REPOSITORY)',
+  depositNoRepo: 'oak release reserve-doi: pass --repo owner/repo (or set GITHUB_REPOSITORY)',
   depositBadGithubUrl: (mystPath: string, got: string): string =>
     `project.github in ${mystPath} is not a github.com repo URL ` +
     `(${JSON.stringify(got.slice(0, 80))}). Set it to https://github.com/<owner>/<repo>.`,
-  depositUploadArgs: 'oak deposit upload: --pdf and --tag are required',
   depositNeedsNewVersion: (recordUrl: string): string =>
     `no unsubmitted Zenodo draft for this concept DOI. Open the record, click New version, ` +
     `then re-run the failed Deposit version job or run oak release again: ${recordUrl}`,
@@ -1096,20 +1129,20 @@ export const workflow = {
     `engine.zip carries no ${missing.join(', ')}, so the deposit could not render its own PDF ` +
     `again. This oak is not a released engine: deposit with a release tag.`,
   prepareDoiSet: (doi: string): string =>
-    `project.doi is already ${doi}; oak deposit prepare reserves a paper's first DOI only. A new ` +
+    `project.doi is already ${doi}; oak release reserve-doi reserves a paper's first DOI only. A new ` +
     `version starts with New version on its Zenodo record.`,
   prepareNoDowngrade: (doi: string): string =>
     `project.doi is the production DOI ${doi}; refusing to replace it with a sandbox one.`,
   uploadNoDoi:
-    'project.doi missing; run oak deposit prepare and merge its pull request before tagging.',
+    'project.doi missing; run oak release reserve-doi and merge its pull request before tagging.',
   uploadWrongEnvironment: (doiIsSandbox: boolean): string =>
     `project.doi is a ${doiIsSandbox ? 'sandbox' : 'production'} DOI, but this run talks to ` +
     `${doiIsSandbox ? 'production Zenodo' : 'the Zenodo sandbox'}.`,
   uploadBadTag: (tag: string): string =>
     `the tag must be a paper version like v1.2.3, not ${JSON.stringify(tag.slice(0, 40))}.`,
-  uploadNoPdf: (pdf: string): string => `--pdf not found: ${pdf}`,
+  uploadNoPdf: (pdf: string): string => `PDF not found: ${pdf}`,
   uploadNoGithub:
-    'project.github missing from myst.yml. oak deposit prepare writes it beside project.doi, ' +
+    'project.github missing from myst.yml. oak release reserve-doi writes it beside project.doi, ' +
     'as https://github.com/<owner>/<repo>; put it back.',
   uploadNoBuildContent:
     'no myst build output under _build/site/content, so the deposit description would carry ' +
@@ -1122,20 +1155,21 @@ export const workflow = {
   uploadNoBucket:
     'the Zenodo draft came back with no file bucket URL, which its API always returns; Zenodo ' +
     'may have changed its API.',
-  depositNoTokenInCi: (sandbox: boolean): string =>
-    `oak deposit: the zenodo-prepare environment has no ` +
-    `${sandbox ? 'ZENODO_TOKEN_SANDBOX' : 'ZENODO_TOKEN'}. Set it there, or reserve the DOI from ` +
-    `a clone of the paper repo on your computer with oak deposit prepare` +
-    `${sandbox ? ' --sandbox' : ''}. ${docsUrl(DOCS.publishFromTerminal)}`,
+  /** `repo` is GITHUB_REPOSITORY. */
+  depositNoTokenInCi: (repo: string | undefined, sandbox: boolean): string =>
+    `oak release reserve-doi: the zenodo-prepare environment has no ` +
+    `${sandbox ? 'ZENODO_TOKEN_SANDBOX' : 'ZENODO_TOKEN'}. Set it there, or publish from your ` +
+    `computer with oak release --repo ${repo ?? '<owner/repo>'} <vX.Y.Z>` +
+    `${sandbox ? ' --sandbox' : ''}, which reserves the DOI too. ${docsUrl(DOCS.publishFromTerminal)}`,
   depositDoiPrNoGh: (conceptDoi: string): string =>
-    `deposit prepare: gh is not logged in, so no pull request was opened. myst.yml now holds ` +
+    `oak release reserve-doi: gh is not logged in, so no pull request was opened. myst.yml now holds ` +
     `${conceptDoi}; commit it and open the pull request yourself.`,
-  depositDoiPrOpened: (url: string): string => `deposit prepare: opened DOI PR ${url}`,
+  depositDoiPrOpened: (url: string): string => `oak release reserve-doi: opened DOI PR ${url}`,
   depositDoiPrStatusFailed: (message: string): string =>
-    `deposit prepare: could not mark the DOI PR's Journal checks as skipped (${message}). Does ` +
+    `oak release reserve-doi: could not mark the DOI PR's Journal checks as skipped (${message}). Does ` +
     `reserve-doi.yml grant statuses: write? Close and reopen the pull request to run them.`,
   depositDoiPrFailed: (message: string): string =>
-    `deposit prepare: DOI PR not opened (${message})`,
+    `oak release reserve-doi: DOI PR not opened (${message})`,
 
   // journal.zip: the journal commit the build recorded in myst.oak.yml
   depositJournalUnstamped:
@@ -1179,95 +1213,119 @@ export const workflow = {
         : []),
     ].join('\n'),
 
-  // release
-  releaseNoTag: 'oak release: --tag vX.Y.Z is required',
+  // release deposit
+  releaseNoTag: 'oak release deposit: --tag vX.Y.Z is required',
   releaseBadTag: (tag: string): string =>
-    `oak release: --tag must be a paper version like v1.2.3, not ${JSON.stringify(tag.slice(0, 40))}.`,
-  /** `verb` is `release` or `deposit upload`. */
+    `oak release deposit: --tag must be a paper version like v1.2.3, not ${JSON.stringify(tag.slice(0, 40))}.`,
+  /** `verb` is `release deposit`. */
   noDoi: (verb: string): string =>
-    `oak ${verb}: project.doi missing; run oak deposit prepare and merge its pull request first.`,
+    `oak ${verb}: project.doi missing; run oak release reserve-doi and merge its pull request first.`,
   notZenodoDoi: (doi: string): string =>
     `project.doi ${doi} is not a Zenodo DOI; write it as 10.5281/zenodo.<id>, or ` +
     `10.5072/zenodo.<id> from the sandbox`,
   doiNotZenodo: (verb: string, doi: string): string => `oak ${verb}: ${workflow.notZenodoDoi(doi)}`,
-  releaseNoPdf: 'oak release: no PDF under _build/exports (did the typst export run?)',
+  releaseNoPdf: 'oak release deposit: no PDF under _build/exports (did the typst export run?)',
   releasePostStepsFailed: (message: string): string =>
-    `oak release: uploading to the GitHub release or commenting failed (${message})`,
+    `oak release deposit: uploading to the GitHub release or commenting failed (${message})`,
   releaseNoGh: (tag: string, dir: string): string =>
-    `oak release: gh is not logged in, so the files were not attached to the GitHub release ` +
+    `oak release deposit: gh is not logged in, so the files were not attached to the GitHub release ` +
     `and the commit got no comment. Run gh auth login, then gh release upload ${tag} ${dir}/*.`,
   releaseCommitComment: (url: string, published: boolean): string =>
     published ? `Zenodo record published: ${url}` : `Zenodo draft populated: ${url}`,
   releaseFailureIssue: (tag: string): string => `Zenodo publish failed for ${tag}`,
   releaseFailureIssueFailed: (message: string): string =>
-    `oak release: the deposit failed, and opening the issue that says so failed too (${message})`,
+    `oak release deposit: the deposit failed, and opening the issue that says so failed too (${message})`,
   releaseNoTokenReason: 'no Zenodo token on GitHub',
-  releaseNoTokenInCi: (tag: string, sandbox: boolean): string =>
-    `oak release: the zenodo-publish environment has no ` +
+  /** `repo` is GITHUB_REPOSITORY. */
+  releaseNoTokenInCi: (repo: string | undefined, tag: string, sandbox: boolean): string =>
+    `oak release deposit: the zenodo-publish environment has no ` +
     `${sandbox ? 'ZENODO_TOKEN_SANDBOX' : 'ZENODO_TOKEN'}, so this run deposits nothing. To ` +
-    `deposit this build, run oak release --tag ${tag} in a clone of the paper repo on your ` +
+    `deposit this build, run oak release --repo ${repo ?? '<owner/repo>'} ${tag} on your ` +
     `computer. ${docsUrl(DOCS.publishFromTerminal)}`,
 
-  // release: where the build comes from
+  // release deposit: where the build comes from
   releaseNoOrigin: (paperRoot: string): string =>
-    `oak release: ${paperRoot} has no GitHub origin remote, so its Deposit version run cannot ` +
+    `oak release deposit: ${paperRoot} has no GitHub origin remote, so its Deposit version run cannot ` +
     `be found. Run it in a clone of the paper repo.`,
   releaseNoTagHere: (tag: string): string =>
-    `oak release: this clone has no tag ${tag}. Run git fetch --tags, then git checkout ${tag}.`,
+    `oak release deposit: this clone has no tag ${tag}. Run git fetch --tags, then git checkout ${tag}.`,
   releaseNotAtTag: (tag: string, head: string): string =>
-    `oak release: HEAD is ${head.slice(0, 12)}, not ${tag}; the deposit archives HEAD. Run ` +
+    `oak release deposit: HEAD is ${head.slice(0, 12)}, not ${tag}; the deposit archives HEAD. Run ` +
     `git checkout ${tag} first.`,
   releaseTrackedChanges: (tag: string): string =>
-    `oak release: this clone has changes to tracked files, and the deposit reads myst.yml from ` +
+    `oak release deposit: this clone has changes to tracked files, and the deposit reads myst.yml from ` +
     `the working tree. Commit or discard them, so it matches ${tag}.`,
   releaseNoRun: (tag: string, repo: string): string =>
-    `oak release: no Deposit version run built ${tag} on ${repo}. Push the tag, or open the ` +
+    `oak release deposit: no Deposit version run built ${tag} on ${repo}. Push the tag, or open the ` +
     `Actions tab to see why none started.`,
   releaseRunPending: (url: string): string =>
-    `oak release: the Deposit version run is still building; run this again once it finishes: ${url}`,
-  releaseRunFailed: (url: string, conclusion: string): string =>
-    `oak release: the Deposit version build ${conclusion === 'failure' ? 'failed' : `ended ${conclusion}`}, ` +
+    `oak release deposit: the Deposit version run is still building; run this again once it finishes: ${url}`,
+  /** `verb` is `release` or `release deposit`. */
+  releaseRunFailed: (verb: string, url: string, conclusion: string): string =>
+    `oak ${verb}: the Deposit version build ${conclusion === 'failure' ? 'failed' : `ended ${conclusion}`}, ` +
     `so there is nothing to deposit. Fix it and push a new tag: ${url}`,
   releaseCiFailed: (why: string): string =>
-    `oak release: could not get the build from GitHub (${why}). Check that gh is logged in ` +
+    `oak release deposit: could not get the build from GitHub (${why}). Check that gh is logged in ` +
     `with access to the repo.`,
-  releaseNoBuildJob: (url: string, job: string): string =>
-    `oak release: the Deposit version run has no ${job} job, so there is no build to deposit. ` +
+  /** `verb` is `release` or `release deposit`. */
+  releaseNoBuildJob: (verb: string, url: string, job: string): string =>
+    `oak ${verb}: the Deposit version run has no ${job} job, so there is no build to deposit. ` +
     `Check that the paper's deposit-version.yml matches the engine's: ${url}`,
   releaseIncompleteBuild: (url: string, missing: string[]): string =>
-    `oak release: the build from the Deposit version run lacks ${missing.join(', ')}, so it ` +
+    `oak release deposit: the build from the Deposit version run lacks ${missing.join(', ')}, so it ` +
     `cannot be deposited as it is. Check the run's build job and the paths its upload step ` +
     `lists: ${url}`,
-  releaseFetched: (url: string): string => `oak release: using the build from ${url}`,
+  releaseFetched: (url: string): string => `oak release deposit: using the build from ${url}`,
   releaseNoBuild:
-    `oak release: --use-local-build deposits the build under _build. The provenance records this ` +
+    `oak release deposit: --use-local-build deposits the build under _build. The provenance records this ` +
     `computer's platform and the typst on PATH as the build's. Build with oak build in a shell ` +
     `without the Zenodo token, since the build runs the paper's code. ` +
     docsUrl(DOCS.publishOwnBuild),
   releaseStaleBuild: (tag: string, files: string[]): string =>
-    `oak release: ${files.slice(0, 3).join(', ')}${files.length > 3 ? ` and ${files.length - 3} more` : ''} ` +
+    `oak release deposit: ${files.slice(0, 3).join(', ')}${files.length > 3 ? ` and ${files.length - 3} more` : ''} ` +
     `${files.length === 1 ? 'is' : 'are'} older than ${tag}'s commit, so ` +
     `${files.length === 1 ? 'it comes' : 'they come'} from an earlier build. Delete _build, ` +
     `run oak build at ${tag} in a shell without the Zenodo token, then run this again.`,
 
   // oak release from the terminal (release.ts `runRelease`)
   releaseNoTagList: (repo: string, tags: string[]): string =>
-    `oak release: --tag vX.Y.Z is required. ` +
+    `oak release: name the version to publish, as in oak release v1.2.3. ` +
     (tags.length
       ? `Tags on ${repo}: ${tags.slice(-20).join(', ')}${tags.length > 20 ? ` (the last 20 of ${tags.length})` : ''}.`
       : `${repo} has no v* tags yet.`),
   releaseNoRepo:
     'oak release: pass --repo owner/name, or run it in a clone of the paper repo, whose origin ' +
     'names the repo.',
+  releaseStatusRepoAndPaper:
+    'oak release status: --repo reads a clone of the repo, so it takes no --paper or --myst.',
   releaseNeedsGh:
     'oak release: gh is not logged in. oak release pushes, merges and tags on GitHub as you; ' +
     'run gh auth login, then run this again.',
+  releaseUnknownWord: (word: string): string =>
+    `oak release: ${JSON.stringify(word.slice(0, 40))} is neither a version like v1.2.3 nor a ` +
+    `step of oak release (reserve-doi, deposit, status).\n${workflow.releaseUsage}`,
+  releaseUsage:
+    'oak release: usage: oak release [--repo <owner/repo>] <vX.Y.Z> [...], or one of its steps: ' +
+    'oak release reserve-doi [...], oak release deposit --tag <vX.Y.Z> [...], oak release status [...]',
+  releaseFlowInActions: (min: string): string =>
+    `oak release: in GitHub Actions, oak release runs only its steps; this workflow predates oak ` +
+    `${min}. Run oak upgrade on the paper repo and merge its pull request.`,
+  releaseLocalBuildOnFlow:
+    'oak release: --use-local-build is for the deposit step alone, which never tags or merges: ' +
+    'run oak release deposit --use-local-build --tag <vX.Y.Z> in a clone at the tag.',
+  releaseTagOnFlow:
+    'oak release: name the version as an argument, as in oak release v1.2.3. --tag belongs to ' +
+    'oak release deposit, the deposit step alone.',
   releaseLocalBuildWithRepo:
-    'oak release: --use-local-build deposits this clone, at the tag, with its own _build, so it ' +
+    'oak release deposit: --use-local-build deposits this clone, at the tag, with its own _build, so it ' +
     'takes no --repo. Run it in the clone, or drop --use-local-build to deposit the CI build.',
   releaseCloned: (repo: string, dir: string): string => `oak release: cloned ${repo} into ${dir}`,
   releaseCloneKept: (dir: string): string =>
-    `oak release: the clone is kept for a look at what failed; delete it when done: rm -rf ${dir}`,
+    `oak release: the clone is kept for a look at what failed; delete it when done: rm -rf ${dir} ` +
+    `(or run oak clean)`,
+  releaseClonesRemoved: (dirs: string[]): string =>
+    `oak release: removed the ${dirs.length === 1 ? 'clone' : 'clones'} kept by an earlier run: ` +
+    dirs.join(', '),
   releaseTagNoDoi: (tag: string, repo: string): string =>
     `oak release: ${tag} on ${repo} has no Zenodo DOI in its myst.yml, so it was tagged before ` +
     `the DOI pull request was merged. Delete the tag (editors can) or pick another version.`,
@@ -1312,10 +1370,10 @@ export const workflow = {
     `oak release: already deposited by the Deposit version run, which attached the deposit ` +
     `files to the ${tag} release. Nothing to do. ${url}`,
   releaseDoiNotPushed:
-    'oak release: oak deposit prepare did not push the zenodo-doi branch, so there is no DOI ' +
+    'oak release: oak release reserve-doi did not push the zenodo-doi branch, so there is no DOI ' +
     'commit to merge. See its output above, then run this again.',
   releaseNoDoiPr: (repo: string): string =>
-    `oak release: oak deposit prepare pushed zenodo-doi, but ${repo} has no open pull request ` +
+    `oak release: oak release reserve-doi pushed zenodo-doi, but ${repo} has no open pull request ` +
     `from it. See its output above, then run this again.`,
   releaseMergeRefused: (url: string, why: string): string =>
     `oak release: GitHub refused to merge the DOI pull request (${why}). If someone pushed to ` +
@@ -1357,13 +1415,13 @@ export const workflow = {
     `oak release: rerun the same command to continue: ${rerun}`,
   releaseInterrupted: (rerun: string, dir: string | null): string =>
     `oak release: stopped. Rerun the same command to continue: ${rerun}` +
-    (dir ? `\nThe clone is kept; delete it when done: rm -rf ${dir}` : ''),
+    (dir ? `\nThe clone is kept; delete it when done: rm -rf ${dir} (or run oak clean)` : ''),
   releaseDone: (tag: string, url: string, published: boolean): string =>
     published
-      ? `oak release: ${tag} is published on Zenodo: ${url}`
-      : `oak release: ${tag} is deposited. Check the draft on Zenodo, then click Publish: ${url}`,
+      ? `oak release deposit: ${tag} is published on Zenodo: ${url}`
+      : `oak release deposit: ${tag} is deposited. Check the draft on Zenodo, then click Publish: ${url}`,
   releaseAlreadyPublished: (tag: string, url: string): string =>
-    `oak release: ${tag} is already published on Zenodo, so nothing was uploaded and no files ` +
+    `oak release deposit: ${tag} is already published on Zenodo, so nothing was uploaded and no files ` +
     `are attached to the release; the files are on the record: ${url}`,
 
   // preview
@@ -1433,7 +1491,7 @@ export const workflow = {
   /** The DOI pull request must change one file against the default branch. */
   doiPrDiverged: (head: string, base: string): string =>
     `${head} carries commits that are not on ${base}, so the DOI pull request would not be ` +
-    `the one-file change it claims to be. Run prepare on ${base}.`,
+    `the one-file change it claims to be. Run oak release reserve-doi on ${base}.`,
   wranglerNoUrl: 'wrangler did not report a *.pages.dev deployment URL',
   /** No detail from wrangler: this reaches a public pull request comment, and wrangler's output
    *  names the account id. The details stay in the workflow log, where Actions redacts
