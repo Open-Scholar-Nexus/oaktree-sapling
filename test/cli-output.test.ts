@@ -824,6 +824,21 @@ describe.skipIf(bundleState() === 'absent')(
       expect(r.code).toBe(2);
       expect(r.stderr).toContain('oak release status: no journal repo found');
     });
+
+    it('status with --repo refuses --paper, before cloning', () => {
+      const r = oak(['release', 'status', '--repo', 'o/paper', '--paper', '.']);
+      expect(r.code).toBe(2);
+      expect(r.stderr).toContain('--repo reads a clone of the repo, so it takes no --paper');
+    });
+
+    it('status with --repo refuses a missing token before cloning', () => {
+      const r = oak(['release', 'status', '--repo', 'o/paper', '--sandbox'], {
+        ZENODO_TOKEN: undefined,
+        ZENODO_TOKEN_SANDBOX: undefined,
+      });
+      expect(r.code).toBe(2);
+      expect(r.stderr).toContain('the sandbox needs ZENODO_TOKEN_SANDBOX');
+    });
   },
 );
 

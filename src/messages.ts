@@ -170,7 +170,7 @@ export const usage = (): string =>
   `                    publish a version: reserve and merge the DOI if needed, tag, wait for the\n` +
   `                    Deposit version build, fill the Zenodo draft with it, attach the files to\n` +
   `                    the tag's GitHub release, comment on the commit. Rerun it to continue.\n` +
-  `  oak release status [--sandbox] [--instance <dir> | --no-instance]\n` +
+  `  oak release status [--repo <owner/repo>] [--sandbox] [--site-url <url>] [--instance <dir> | --no-instance]\n` +
   `                    the deposit's state on Zenodo\n` +
   `  oak clean [--cache] [--yes]\n` +
   `                    remove the folders oak release left in the temporary folder; --cache also removes\n` +
@@ -1296,6 +1296,11 @@ export const workflow = {
   releaseNoRepo:
     'oak release: pass --repo owner/name, or run it in a clone of the paper repo, whose origin ' +
     'names the repo.',
+  releaseStatusNeedsGh:
+    'oak release status: --repo clones the repo with gh, which is not logged in; run gh auth ' +
+    'login, or run it in a clone of the paper repo without --repo.',
+  releaseStatusRepoAndPaper:
+    'oak release status: --repo reads a clone of the repo, so it takes no --paper or --myst.',
   releaseNeedsGh:
     'oak release: gh is not logged in. oak release pushes, merges and tags on GitHub as you; ' +
     'run gh auth login, then run this again.',
