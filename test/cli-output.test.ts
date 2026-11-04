@@ -816,6 +816,12 @@ describe.skipIf(bundleState() === 'absent')(
       expect(r.stderr).toContain('oak release status: no journal repo found');
       expect(r.stderr).toContain("a deposit without the journal's Zenodo settings");
     });
+
+    it('status with --repo refuses --paper, before cloning', () => {
+      const r = oak(['release', 'status', '--repo', 'o/paper', '--paper', '.']);
+      expect(r.code).toBe(2);
+      expect(r.stderr).toContain('--repo reads a clone of the repo, so it takes no --paper');
+    });
   },
 );
 

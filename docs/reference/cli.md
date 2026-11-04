@@ -50,7 +50,7 @@ The token for the steps comes from `--token`, else `ZENODO_TOKEN`, or `ZENODO_TO
 
 (release-status)=
 `oak release status`
-: The deposit's state for the committed DOI, and the metadata a deposit would send. `--sandbox` reads the sandbox.
+: The deposit's state for the committed DOI, and the metadata a deposit would send. `--sandbox` reads the sandbox. `--repo <owner/name>` reads the repository's default branch from a clone in a temporary folder, removed after, with the editor's gh login.
 
 (release-reserve-doi)=
 ### oak release reserve-doi

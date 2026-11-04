@@ -533,6 +533,29 @@ async function cmdReserveDoi(argv: string[]): Promise<number> {
   return out.exitCode;
 }
 
+/** `oak release status --repo <owner/name>`: `oak release status` in a clone of the repo in a
+ *  temporary folder, removed after. */
+async function releaseStatusOfRepo(repo: string, argv: string[]): Promise<number> {
+  if (flag(argv, 'paper') !== undefined || flag(argv, 'myst') !== undefined) {
+    throw new UserError(msg.workflow.releaseStatusRepoAndPaper);
+  }
+  const gh = await import('./gh.js');
+  const name = gh.currentRepo(repo)!;
+  let dir: string;
+  try {
+    dir = gh.realReleaseSource.clone(name, 'status');
+  } catch (e) {
+    throw new UserError(msg.workflow.releaseGitHubFailed(msg.firstLine(e)));
+  }
+  const at = argv.indexOf('--repo');
+  const rest = [...argv.slice(0, at), ...argv.slice(at + 2)];
+  try {
+    return await main(['release', ...rest, '--paper', dir]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
 /** `oak release status`: the deposit's state on Zenodo. Documented at DOCS.releaseStatus. */
 async function cmdReleaseStatus(argv: string[]): Promise<number> {
   const step = await zenodoStep(argv, 'release status');
@@ -1640,6 +1663,11 @@ async function main(argv: string[]): Promise<number> {
   // `oak release` with a version hands only its steps to the pinned oak, from the clone it
   // makes: with --repo, this directory may be another paper's clone.
   const releaseFlow = verb === 'release' && !isReleaseStep(argv.slice(1));
+  // Before the hand-off, so the pinned oak is the one the cloned repo names.
+  if (verb === 'release' && releaseWord(argv.slice(1))?.word === 'status') {
+    const repo = flag(argv, 'repo');
+    if (repo !== undefined) return releaseStatusOfRepo(repo, argv.slice(1));
+  }
   if (verb && PAPER_VERBS.includes(verb) && !releaseFlow) {
     const code = await runPinned(verb as PaperVerb, argv.slice(1));
     if (code !== null) return code;
