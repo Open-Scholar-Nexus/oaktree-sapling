@@ -796,6 +796,7 @@ async function cmdReleaseRepo(argv: string[]): Promise<number> {
     tag,
     ...(sandbox ? ['--sandbox'] : []),
     ...(publish ? ['--publish-without-review'] : []),
+    ...(has(argv, 'yes') ? ['--yes'] : []),
     ...passOn.map((arg, i) => (passOn[i - 1] === '--token' ? '<token>' : shellWord(arg))),
   ].join(' ');
   /** Runs a step with the oak the clone pins, or in this process when that is this oak. */

@@ -315,11 +315,17 @@ export async function runRelease(input: ReleaseInput, deps: ReleaseDeps): Promis
   const clone = src.clone(repo);
   deps.log(msg.workflow.releaseCloned(repo, clone));
   let code: number | null = null;
+  let refused = false;
   try {
     code = await releaseFrom(clone, input, src, deps);
     return code;
   } catch (e) {
     if (e instanceof StepFailed) return (code = e.code);
+    // `main` prints the refusal, so the clone's path goes after it, in the same message.
+    if (e instanceof UserError) {
+      refused = true;
+      throw new UserError(`${e.message}\n${msg.workflow.releaseCloneKept(clone)}`);
+    }
     if (!(e instanceof WaitTimeout)) throw e;
     deps.log(e.message);
     deps.log(msg.workflow.releaseRerun(input.rerun));
@@ -327,7 +333,7 @@ export async function runRelease(input: ReleaseInput, deps: ReleaseDeps): Promis
   } finally {
     // Kept after a failure, for the editor to look into.
     if (code === 0) rmSync(clone, { recursive: true, force: true });
-    else deps.log(msg.workflow.releaseCloneKept(clone));
+    else if (!refused) deps.log(msg.workflow.releaseCloneKept(clone));
   }
 }
 
