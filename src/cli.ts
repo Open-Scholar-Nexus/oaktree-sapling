@@ -15,12 +15,12 @@ import {
   watchFile,
 } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import type { ComposeInput } from './compose.js';
 import type { MaterializeInput, StartOpts } from './materialize.js';
 import type { JournalStamp } from './schema.js';
 import type { ZenodoApi } from './zenodo.js';
-import type { ReleaseOutcome } from './release.js';
+import type { ReleaseOutcome, SubcommandRun } from './release.js';
 import type { HandoffContext, HandoffDeps, HandoffVerb, PaperVerb } from './pinned.js';
 import * as msg from './messages.js';
 import { annotate, inCI, UserError } from './messages.js';
@@ -128,7 +128,11 @@ async function resolveInstanceRoot(
   try {
     const cache = cachedJournal(journalRepo, paperRoot);
     const line = msg.build.journalCache(verb, journalRepo, cache);
-    process.stderr.write((cache.state === 'stale' ? annotate('warning', line) : line) + '\n');
+    // The release subcommands name the journal clone only with --verbose, or when it is stale.
+    const quiet = verb.startsWith('release') && cache.state !== 'stale' && !has(argv, 'verbose');
+    if (!quiet) {
+      process.stderr.write((cache.state === 'stale' ? annotate('warning', line) : line) + '\n');
+    }
     return found(cache.root);
   } catch (err) {
     const why = err instanceof Error ? err.message : String(err);
@@ -621,7 +625,7 @@ async function cmdReleaseStatus(argv: string[]): Promise<number> {
   const z = await import('./zenodo.js');
   const siteUrl = flag(argv, 'site-url') ?? process.env.SITE_URL;
   const out = await z.cmdStatus({ ...setup, siteUrl });
-  emit(argv, out.result);
+  emit(argv, out.result, msg.workflow.releaseStatusLines);
   return out.exitCode;
 }
 
@@ -749,7 +753,8 @@ async function cmdReleaseDeposit(argv: string[]): Promise<number> {
     ...builtHere,
     ...(builtAt !== undefined ? { builtAt } : {}),
   });
-  emit(argv, out.result);
+  // On success the lines below say what happened; the fields are in --json.
+  emit(argv, out.result, (r) => (r.status === 'ok' ? [] : summarize(r)));
   if (out.exitCode !== 0) {
     // In CI nobody watches the run, so the editors get an issue.
     if (inActions && gh.ghLoggedIn()) {
@@ -805,6 +810,36 @@ async function cmdReleaseDeposit(argv: string[]): Promise<number> {
 /** `arg` as one shell word: quoted when it holds anything but plain path and URL characters. */
 function shellWord(arg: string): string {
   return /^[\w@%+=:,./-]+$/.test(arg) ? arg : `'${arg.replace(/'/g, `'\\''`)}'`;
+}
+
+/** Runs `node <cli> <args>` and collects its exit code, its stdout as JSON, and its stderr,
+ *  which goes to this stderr as it comes when `verbose`. */
+function runChild(
+  cli: string,
+  args: string[],
+  env: NodeJS.ProcessEnv,
+  verbose: boolean,
+): Promise<SubcommandRun> {
+  return new Promise((done) => {
+    const child = spawn(process.execPath, [cli, ...args], {
+      env,
+      stdio: ['inherit', 'pipe', verbose ? 'inherit' : 'pipe'],
+    });
+    let out = '';
+    let log = '';
+    child.stdout?.on('data', (d: Buffer) => (out += d.toString()));
+    child.stderr?.on('data', (d: Buffer) => (log += d.toString()));
+    child.on('error', (e) => done({ code: 1, result: null, log: `${e.message}\n` }));
+    child.on('close', (code) => {
+      let result: Record<string, unknown> | null = null;
+      try {
+        result = JSON.parse(out) as Record<string, unknown>;
+      } catch {
+        // A refusal before the result prints none.
+      }
+      done({ code: code ?? 1, result, log });
+    });
+  });
 }
 
 /** The flags `oak release` passes on to the subcommands it hands to the pinned oak. */
@@ -877,17 +912,29 @@ async function cmdReleaseVersion(argv: string[]): Promise<number> {
     ...(has(argv, 'yes') ? ['--yes'] : []),
     ...passOn.map((arg, i) => (passOn[i - 1] === '--token' ? '<token>' : shellWord(arg))),
   ].join(' ');
-  /** Runs a subcommand with the oak the clone pins, or in this process when that is this oak. */
-  const runSubcommand = async (
-    verb: PaperVerb,
-    args: string[],
-    clone: string,
-    here: (args: string[]) => Promise<number>,
-  ): Promise<number> => {
+  const verbose = has(argv, 'verbose');
+  /** Runs `oak release <args> --json` with the oak the clone pins, or with this oak when that is
+   *  the same version, as a child process: oak prints the result itself, from the child's JSON.
+   *  The child's own output is shown live with --verbose. */
+  const runSubcommand = async (args: string[], clone: string): Promise<SubcommandRun> => {
     const { handOff } = await import('./pinned.js');
-    const ctx = await handoffContext(verb, args);
-    const code = await handOff({ ...ctx, paperRoot: clone }, await handoffDeps(argv));
-    return code ?? here(args);
+    const childArgs = [...args, '--json'];
+    const ctx = await handoffContext('release', childArgs);
+    const deps = await handoffDeps(argv);
+    let run: SubcommandRun | null = null;
+    const code = await handOff(
+      { ...ctx, paperRoot: clone },
+      {
+        ...deps,
+        spawn: async (cli, a, env) => (run = await runChild(cli, a, env, verbose)).code,
+        log: verbose ? deps.log : () => {},
+      },
+    );
+    if (code === null) {
+      const env = { ...process.env, [pinned.USE_RUNNING_ENV]: '1' };
+      return runChild(process.argv[1]!, ['release', ...childArgs], env, verbose);
+    }
+    return run ?? { code, result: null, log: '' };
   };
 
   let cloneDir: string | null = null;
@@ -920,40 +967,46 @@ async function cmdReleaseVersion(argv: string[]): Promise<number> {
           if (!process.env[pinned.USE_RUNNING_ENV]) pinned.assertDepositPin('release', version);
         },
         reserveDoi: (clone, sb) =>
-          runSubcommand(
-            'release',
-            [
-              'reserve-doi',
-              '--myst',
-              join(clone, 'myst.yml'),
-              '--repo',
-              repo,
-              ...(sb ? ['--sandbox'] : []),
-              ...passOn,
-            ],
-            clone,
-            cmdRelease,
+          progress.during(
+            runSubcommand(
+              [
+                'reserve-doi',
+                '--myst',
+                join(clone, 'myst.yml'),
+                '--repo',
+                repo,
+                ...(sb ? ['--sandbox'] : []),
+                ...passOn,
+              ],
+              clone,
+            ),
           ),
         deposit: (clone) =>
-          runSubcommand(
-            'release',
-            [
-              'deposit',
-              '--tag',
-              tag,
-              '--paper',
+          progress.during(
+            runSubcommand(
+              [
+                'deposit',
+                '--tag',
+                tag,
+                '--paper',
+                clone,
+                '--bundle-out',
+                join(clone, '_build', 'bundle'),
+                ...(publish ? ['--publish-without-review'] : []),
+                ...passOn,
+              ],
               clone,
-              '--bundle-out',
-              join(clone, '_build', 'bundle'),
-              ...(publish ? ['--publish-without-review'] : []),
-              ...passOn,
-            ],
-            clone,
-            cmdRelease,
+            ),
           ),
         confirm: makeConfirm(argv),
         sleep: progress.sleep,
         log: progress.log,
+        status: progress.status,
+        next: progress.next,
+        showLog: (text) => {
+          progress.clear();
+          process.stderr.write(text);
+        },
       },
     );
   } finally {
