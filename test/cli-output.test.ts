@@ -905,7 +905,7 @@ describe.skipIf(bundleState() === 'absent')(
 
     /** A paper with a committed sandbox DOI, outside any git repo. */
     function sandboxPaper(): string {
-      const dir = mkdtempSync(join(tmpdir(), 'oak-release-'));
+      const dir = mkdtempSync(join(tmpdir(), 'oak-paper-'));
       writeFileSync(
         join(dir, 'myst.yml'),
         'version: 1\nproject:\n  doi: 10.5072/zenodo.5\n' +
@@ -1015,6 +1015,33 @@ describe.skipIf(bundleState() === 'absent')(
       expect(r.stderr).toContain('ZENODO_TOKEN_SANDBOX');
       expect(r.stderr).toContain('oak release --repo o/paper v1.0.0');
       expect(r.stderr).toContain('deposit: skipped');
+    });
+
+    it('the CI deposit with no token comments on the tagged commit, which notifies its author', () => {
+      const paper = sandboxPaper();
+      const git = (...args: string[]) =>
+        spawnSync('git', ['-C', paper, ...args], { encoding: 'utf8' });
+      git('init', '-q');
+      git('remote', 'add', 'origin', 'https://github.com/o/paper.git');
+      git('add', '.');
+      git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'paper');
+      const head = git('rev-parse', 'HEAD').stdout.trim();
+      const bin = mkdtempSync(join(tmpdir(), 'oak-fakegh-'));
+      const calls = join(bin, 'calls');
+      writeFileSync(join(bin, 'gh'), `#!/bin/sh\nprintf '%s\\n' "$*" >> '${calls}'\n`, {
+        mode: 0o755,
+      });
+      const r = oak(
+        ['release', 'deposit', '--tag', 'v1.0.0', '--paper', paper],
+        { ...emptySecrets, GITHUB_REPOSITORY: 'o/paper', PATH: `${bin}:${process.env.PATH}` },
+        true,
+      );
+      expect(r.code).toBe(0);
+      expect(r.stderr).not.toContain('could not comment');
+      const posted = readFileSync(calls, 'utf8');
+      expect(posted).toContain(`api repos/o/paper/commits/${head}/comments`);
+      expect(posted).toContain('The Deposit version run for v1.0.0 deposited nothing');
+      expect(posted).toContain('oak release --repo o/paper v1.0.0');
     });
 
     it('the CI DOI reservation with no token fails, pointing at oak release', () => {

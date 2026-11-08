@@ -72,7 +72,7 @@ If [**New version**](#click-new-version) was not clicked, oak refuses before it 
 
 ## With the GitHub workflows
 
-The same steps, run one at a time with the paper repository's workflows. Without Zenodo tokens on GitHub, **Reserve DOI** fails, pointing at the terminal, and **Deposit version** builds the tag and ends with a notice.
+The same steps, run one at a time with the paper repository's workflows. Without Zenodo tokens on GitHub, **Reserve DOI** fails, pointing at the terminal, and **Deposit version** builds the tag and comments on the tagged commit with the command that deposits it from the terminal.
 
 ### 1. Reserve the DOI
 
