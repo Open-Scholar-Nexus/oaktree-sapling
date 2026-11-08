@@ -113,12 +113,10 @@ export interface HandoffContext {
  *  the deposit, so they never run from the npm package, which has no git history. */
 const DEPOSIT_VERBS: HandoffVerb[] = ['release'];
 
-// TODO(rename release): raise to the first release with `oak release deposit`, with
-// min_engine_version in templates/paper/.github/actions/engine/pins.yml.
-/** The first oak with the `oak release` steps, which never build beside the token. myst.yml,
- *  where the pin lives, is the author's file, so a pin below it is refused for
- *  {@link DEPOSIT_VERBS}. */
-export const DEPOSIT_MIN_VERSION = 'v0.4.0-dev.1';
+/** The first oak with the `oak release` steps, which never build beside the token, and the
+ *  `min_engine_version` of templates/paper/.github/actions/engine/pins.yml. myst.yml, where the
+ *  pin lives, is the author's file, so a pin below it is refused for {@link DEPOSIT_VERBS}. */
+export const DEPOSIT_MIN_VERSION = 'v0.4.0-dev.6';
 
 /** Throws a {@link UserError} when `version` is below {@link DEPOSIT_MIN_VERSION}, or is no
  *  version at all. */

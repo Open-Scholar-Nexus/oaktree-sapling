@@ -7,4 +7,4 @@ engine_repo: Open-Scholar-Nexus/oaktree-sapling
 instance_repo: pollomarzo/CHANGE-ME-instance-config
 
 # The oldest engine these workflows run with; the engine action refuses an older one in myst.yml
-min_engine_version: v0.4.0-dev.1 # TODO(rename release): the first release with `oak release deposit`
+min_engine_version: v0.4.0-dev.6 # the first with `oak release deposit`; pinned.ts DEPOSIT_MIN_VERSION
