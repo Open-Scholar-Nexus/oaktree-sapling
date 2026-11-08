@@ -1237,14 +1237,6 @@ export const workflow = {
     `oak release deposit: the deposit failed, and opening the issue that says so failed too (${message})`,
   releaseNoTokenReason: 'no Zenodo token on GitHub',
   /** `repo` is GITHUB_REPOSITORY. */
-  releaseNoTokenComment: (repo: string | undefined, tag: string, sandbox: boolean): string =>
-    `The Deposit version run for ${tag} deposited nothing: the zenodo-publish environment has ` +
-    `no ${sandbox ? 'ZENODO_TOKEN_SANDBOX' : 'ZENODO_TOKEN'}. Unless oak release is already ` +
-    `waiting for this run, deposit it from your computer with ` +
-    `\`oak release --repo ${repo ?? '<owner/repo>'} ${tag}\`. ${docsUrl(DOCS.publishFromTerminal)}`,
-  releaseNoTokenCommentFailed: (message: string): string =>
-    `oak release deposit: could not comment on the tagged commit to say this run deposited nothing (${message})`,
-  /** `repo` is GITHUB_REPOSITORY. */
   releaseNoTokenInCi: (repo: string | undefined, tag: string, sandbox: boolean): string =>
     `oak release deposit: the zenodo-publish environment has no ` +
     `${sandbox ? 'ZENODO_TOKEN_SANDBOX' : 'ZENODO_TOKEN'}, so this run deposits nothing. To ` +

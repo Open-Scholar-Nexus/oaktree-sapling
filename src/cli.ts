@@ -685,20 +685,14 @@ async function cmdReleaseDeposit(argv: string[]): Promise<number> {
   const { sandbox } = env;
   const token = zenodoToken(argv, sandbox);
   // The CI token is optional: a journal without one deposits from the terminal, so its run ends
-  // with a notice saying how, and a comment on the tagged commit, which notifies its author.
+  // with a notice saying how.
   if (!token && inActions) {
-    const repo = process.env.GITHUB_REPOSITORY;
     process.stderr.write(
-      annotate('notice', msg.workflow.releaseNoTokenInCi(repo, tag, sandbox)) + '\n',
+      annotate(
+        'notice',
+        msg.workflow.releaseNoTokenInCi(process.env.GITHUB_REPOSITORY, tag, sandbox),
+      ) + '\n',
     );
-    try {
-      const head = await gh.realGitContext.headSha(paperRoot);
-      gh.postCommitComment(paperRoot, head, msg.workflow.releaseNoTokenComment(repo, tag, sandbox));
-    } catch (e) {
-      process.stderr.write(
-        annotate('warning', msg.workflow.releaseNoTokenCommentFailed((e as Error).message)) + '\n',
-      );
-    }
     emit(argv, { status: 'ok', deposit: 'skipped', reason: msg.workflow.releaseNoTokenReason });
     return 0;
   }
