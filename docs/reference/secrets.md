@@ -3,9 +3,9 @@
 
 Draft deposits on Zenodo and live previews of pull requests on Cloudflare need tokens that identify the journal to each service.[^danger-tokens] A paper repository keeps its tokens as secrets on GitHub environments. Each environment is open only to the branch or tag whose workflow reads its secrets. GitHub needs no secret of its own: workflows use the token GitHub gives each run, and `oak` run locally acts as the account logged in to `gh` (see [Create a journal](../start/setup.md)).
 
-:::{warning} A Zenodo token can do everything its owner can
+:::{warning} Zenodo's current security state
 :label: zenodo-token-scopes
-Creating a Zenodo token asks which scopes it gets, such as `deposit:write`, but currently Zenodo does not actually check them. This means that a leaked token can publish, create versions and edit every record of the journal's Zenodo account; while Oaktree Sapling sets up the repo safely, changing configurations could cause a workflow to be merged that exposes a token. Until Zenodo checks token scopes, we suggest leaving the Zenodo tokens unset and having an editor publish [from the terminal](../guide/publish.md#from-terminal), with the token on their own computer.
+Creating a Zenodo token asks which scopes it gets, such as `deposit:write`, but currently Zenodo *does not actually check them*. This means that a leaked token can publish, create versions and edit every record of the journal's Zenodo account; while Oaktree Sapling sets up the repo safely, changing configurations could cause a workflow to be merged that exposes a token. Until Zenodo checks token scopes, we suggest leaving the Zenodo tokens unset and having an editor publish [from the terminal](../guide/publish.md#from-terminal), with the token on their own computer.
 :::
 
 `ZENODO_TOKEN`, `ZENODO_TOKEN_SANDBOX`
