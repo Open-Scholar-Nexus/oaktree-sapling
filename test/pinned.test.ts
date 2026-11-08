@@ -98,7 +98,7 @@ describe('handOff', () => {
     expect(calls.clones).toEqual([]);
   });
 
-  it('runs the release steps from a clone of the pinned tag, even at this version', async () => {
+  it('runs the release subcommands from a clone of the pinned tag, even at this version', async () => {
     // engine.zip is a `git archive` of oak, and the npm package has no git history.
     const { deps, calls } = fakes();
     const dir = paper('v1.0.0');
@@ -114,7 +114,7 @@ describe('handOff', () => {
     expect(checkout.calls.clones).toEqual([]);
   });
 
-  it("refuses the release steps below DEPOSIT_MIN_VERSION, since myst.yml is the author's", async () => {
+  it("refuses the release subcommands below DEPOSIT_MIN_VERSION, since myst.yml is the author's", async () => {
     {
       const { deps, calls } = fakes();
       await expect(handOff(ctx(paper('v0.2.0'), [], {}, 'release'), deps)).rejects.toThrow(

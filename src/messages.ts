@@ -160,8 +160,8 @@ export const usage = (): string =>
   `                    and branding applied (the same config its CI builds). Reloads as you\n` +
   `                    edit; Ctrl-C stops it. Run in the journal repo, it previews the\n` +
   `                    journal website instead.\n` +
-  `  validate, build, start and the release steps run the oak version the paper's myst.yml pins,\n` +
-  `  fetched once into ~/.cache/oak.\n` +
+  `  validate, build, start and the release subcommands run the oak version the paper's myst.yml\n` +
+  `  pins, fetched once into ~/.cache/oak.\n` +
   `  OAK_USE_RUNNING=1 runs this oak instead of fetching, for developing oak itself.\n` +
   `\n` +
   `Publishing a paper (from a terminal, gh logged in)\n` +
@@ -175,7 +175,7 @@ export const usage = (): string =>
   `  oak clean [--cache] [--yes]\n` +
   `                    remove the folders oak release left in the temporary folder; --cache also removes\n` +
   `                    the pinned oak versions in ~/.cache/oak\n` +
-  `  Its steps, which the Reserve DOI and Deposit version workflows run:\n` +
+  `  Its subcommands, which the Reserve DOI and Deposit version workflows run:\n` +
   `  oak release reserve-doi [--sandbox] [--repo <owner/repo>] [--site-url <url>] [--instance <dir> | --no-instance]\n` +
   `                    reserve the DOI on Zenodo and open the pull request writing it into myst.yml\n` +
   `  oak release deposit --tag <vX.Y.Z> [--paper <dir>] [--use-local-build] [--publish-without-review]\n` +
@@ -1093,7 +1093,7 @@ export const workflow = {
     `pull request #${pr} heads at ${actual}, not at ${built}, the commit this run built; ` +
     `refusing to post. A newer push gets its own run.`,
 
-  /** `verb` is `release` or one of its steps, such as `release deposit`. */
+  /** `verb` is `release` or one of its subcommands, such as `release deposit`. */
   noZenodoToken: (verb: string, sandbox: boolean): string =>
     sandbox
       ? `oak ${verb}: the sandbox needs ZENODO_TOKEN_SANDBOX or --token. A sandbox run never ` +
@@ -1306,22 +1306,22 @@ export const workflow = {
     'run gh auth login, then run this again.',
   releaseUnknownWord: (word: string): string =>
     `oak release: ${JSON.stringify(word.slice(0, 40))} is neither a version like v1.2.3 nor a ` +
-    `step of oak release (reserve-doi, deposit, status).\n${workflow.releaseUsage}`,
+    `subcommand of oak release (reserve-doi, deposit, status).\n${workflow.releaseUsage}`,
   releaseUsage:
-    'oak release: usage: oak release [--repo <owner/repo>] <vX.Y.Z> [...], or one of its steps: ' +
+    'oak release: usage: oak release [--repo <owner/repo>] <vX.Y.Z> [...], or one of its subcommands: ' +
     'oak release reserve-doi [...], oak release deposit --tag <vX.Y.Z> [...], oak release status [...]',
   releaseInActions:
     'oak release: publishing a version runs from the terminal; in GitHub Actions the workflows ' +
-    'run its steps, oak release reserve-doi and oak release deposit.',
+    'run its subcommands, oak release reserve-doi and oak release deposit.',
   releaseFlowInActions: (min: string): string =>
-    `oak release: in GitHub Actions, oak release runs only its steps; this workflow predates oak ` +
+    `oak release: in GitHub Actions, oak release runs only its subcommands; this workflow predates oak ` +
     `${min}. Run oak upgrade on the paper repo and merge its pull request.`,
   releaseLocalBuildOnFlow:
-    'oak release: --use-local-build is for the deposit step alone, which never tags or merges: ' +
+    'oak release: --use-local-build is for oak release deposit alone, which never tags or merges: ' +
     'run oak release deposit --use-local-build --tag <vX.Y.Z> in a clone at the tag.',
   releaseTagOnFlow:
     'oak release: name the version as an argument, as in oak release v1.2.3. --tag belongs to ' +
-    'oak release deposit, the deposit step alone.',
+    'oak release deposit alone.',
   releaseLocalBuildWithRepo:
     'oak release deposit: --use-local-build deposits this clone, at the tag, with its own _build, so it ' +
     'takes no --repo. Run it in the clone, or drop --use-local-build to deposit the CI build.',

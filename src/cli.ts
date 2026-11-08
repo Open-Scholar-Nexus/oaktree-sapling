@@ -438,10 +438,10 @@ function emit(
   for (const line of (human ?? summarize)(result)) process.stderr.write(line + '\n');
 }
 
-/** The steps of `oak release`, which the paper's workflows run and the pinned oak runs. */
-const RELEASE_STEPS = ['reserve-doi', 'deposit', 'status'] as const;
+/** The subcommands of `oak release`, which the paper's workflows run and the pinned oak runs. */
+const RELEASE_SUBCOMMANDS = ['reserve-doi', 'deposit', 'status'] as const;
 
-/** The flags of `oak release` and its steps that take a value. */
+/** The flags of `oak release` and its subcommands that take a value. */
 const RELEASE_VALUE_FLAGS = [
   'repo',
   'tag',
@@ -463,15 +463,15 @@ function releaseWord(argv: string[]): { word: string; at: number } | null {
   return null;
 }
 
-/** Whether `oak release <argv>` runs one of {@link RELEASE_STEPS}. */
-function isReleaseStep(argv: string[]): boolean {
+/** Whether `oak release <argv>` runs one of {@link RELEASE_SUBCOMMANDS}. */
+function isReleaseSubcommand(argv: string[]): boolean {
   const first = releaseWord(argv);
-  return first !== null && (RELEASE_STEPS as readonly string[]).includes(first.word);
+  return first !== null && (RELEASE_SUBCOMMANDS as readonly string[]).includes(first.word);
 }
 
 /**
- * `oak release`: {@link cmdReleaseVersion} with a version or no word, else the step its first word
- * names, with that word left out of its arguments. Documented at DOCS.release.
+ * `oak release`: {@link cmdReleaseVersion} with a version or no word, else the subcommand its first
+ * word names, with that word left out of its arguments. Documented at DOCS.release.
  */
 async function cmdRelease(argv: string[]): Promise<number> {
   const first = releaseWord(argv);
@@ -505,7 +505,7 @@ async function sandboxFromDoi(
 
 /** The Zenodo API and the journal root for `oak release reserve-doi` and `status`, or the exit
  *  code after printing why not. */
-async function zenodoStep(
+async function zenodoSetup(
   argv: string[],
   verb: 'release reserve-doi' | 'release status',
 ): Promise<{ api: ZenodoApi; mystPath: string; instanceRoot: string | null } | number> {
@@ -533,9 +533,9 @@ async function zenodoStep(
 /** `oak release reserve-doi`: reserves the DOI and opens the DOI pull request. Documented at
  *  DOCS.releaseReserveDoi. */
 async function cmdReleaseReserveDoi(argv: string[]): Promise<number> {
-  const step = await zenodoStep(argv, 'release reserve-doi');
-  if (typeof step === 'number') return step;
-  const { api, mystPath, instanceRoot } = step;
+  const setup = await zenodoSetup(argv, 'release reserve-doi');
+  if (typeof setup === 'number') return setup;
+  const { api, mystPath, instanceRoot } = setup;
   const z = await import('./zenodo.js');
   const gh = await import('./gh.js');
   const repo = gh.currentRepo(flag(argv, 'repo'), dirname(mystPath));
@@ -616,11 +616,11 @@ async function releaseStatusOfRepo(repo: string, argv: string[]): Promise<number
 
 /** `oak release status`: the deposit's state on Zenodo. Documented at DOCS.releaseStatus. */
 async function cmdReleaseStatus(argv: string[]): Promise<number> {
-  const step = await zenodoStep(argv, 'release status');
-  if (typeof step === 'number') return step;
+  const setup = await zenodoSetup(argv, 'release status');
+  if (typeof setup === 'number') return setup;
   const z = await import('./zenodo.js');
   const siteUrl = flag(argv, 'site-url') ?? process.env.SITE_URL;
-  const out = await z.cmdStatus({ ...step, siteUrl });
+  const out = await z.cmdStatus({ ...setup, siteUrl });
   emit(argv, out.result);
   return out.exitCode;
 }
@@ -807,8 +807,8 @@ function shellWord(arg: string): string {
   return /^[\w@%+=:,./-]+$/.test(arg) ? arg : `'${arg.replace(/'/g, `'\\''`)}'`;
 }
 
-/** The flags `oak release` passes on to the steps it hands to the pinned oak. */
-const RELEASE_STEP_FLAGS = ['token', 'site-url', 'instance'] as const;
+/** The flags `oak release` passes on to the subcommands it hands to the pinned oak. */
+const RELEASE_SUBCOMMAND_FLAGS = ['token', 'site-url', 'instance'] as const;
 
 /**
  * `oak release [--repo owner/paper] vX [--sandbox] [--yes] [--publish-without-review]` from the
@@ -827,7 +827,7 @@ async function cmdReleaseVersion(argv: string[]): Promise<number> {
     process.stderr.write(msg.workflow.releaseUnknownWord(word) + '\n');
     return 2;
   }
-  // The workflows run only the steps; an older deposit-version.yml runs `release --tag`.
+  // The workflows run only the subcommands; an older deposit-version.yml runs `release --tag`.
   if (process.env.GITHUB_ACTIONS) {
     const why =
       flag(argv, 'tag') !== undefined
@@ -862,7 +862,7 @@ async function cmdReleaseVersion(argv: string[]): Promise<number> {
   }
   const sandbox = has(argv, 'sandbox');
   const publish = has(argv, 'publish-without-review');
-  const passOn = RELEASE_STEP_FLAGS.flatMap((name) => {
+  const passOn = RELEASE_SUBCOMMAND_FLAGS.flatMap((name) => {
     const value = flag(argv, name);
     if (value === undefined) return [];
     return [`--${name}`, name === 'instance' ? resolve(value) : value];
@@ -877,8 +877,8 @@ async function cmdReleaseVersion(argv: string[]): Promise<number> {
     ...(has(argv, 'yes') ? ['--yes'] : []),
     ...passOn.map((arg, i) => (passOn[i - 1] === '--token' ? '<token>' : shellWord(arg))),
   ].join(' ');
-  /** Runs a step with the oak the clone pins, or in this process when that is this oak. */
-  const step = async (
+  /** Runs a subcommand with the oak the clone pins, or in this process when that is this oak. */
+  const runSubcommand = async (
     verb: PaperVerb,
     args: string[],
     clone: string,
@@ -920,7 +920,7 @@ async function cmdReleaseVersion(argv: string[]): Promise<number> {
           if (!process.env[pinned.USE_RUNNING_ENV]) pinned.assertDepositPin('release', version);
         },
         reserveDoi: (clone, sb) =>
-          step(
+          runSubcommand(
             'release',
             [
               'reserve-doi',
@@ -935,7 +935,7 @@ async function cmdReleaseVersion(argv: string[]): Promise<number> {
             cmdRelease,
           ),
         deposit: (clone) =>
-          step(
+          runSubcommand(
             'release',
             [
               'deposit',
@@ -1650,7 +1650,7 @@ async function handoffDeps(argv: string[]): Promise<HandoffDeps> {
 async function runPinned(verb: PaperVerb, argv: string[]): Promise<number | null> {
   const { handOff } = await import('./pinned.js');
   const ctx = await handoffContext(verb, argv);
-  // The `release` steps find the paper from `--myst` too.
+  // The `release` subcommands find the paper from `--myst` too.
   const paperRoot =
     verb === 'release' ? dirname(mystPathOf(argv)) : resolve(flag(argv, 'paper') ?? '.');
   return handOff({ ...ctx, paperRoot }, await handoffDeps(argv));
@@ -1658,12 +1658,12 @@ async function runPinned(verb: PaperVerb, argv: string[]): Promise<number | null
 
 /**
  * Whether `oak <verb> <args>` runs with the oak the paper pins ({@link runPinned}): `build`,
- * `validate`, `start` and the `release` steps. Every other verb runs with this oak, and so does
- * `oak release vX`, which hands only its steps over, from the clone it makes: with --repo, this
+ * `validate`, `start` and the `release` subcommands. Every other verb runs with this oak, and so
+ * does `oak release vX`, which hands only its subcommands over, from the clone it makes: with --repo, this
  * directory may be another paper's clone.
  */
 function runsPinned(verb: Verb | undefined, args: string[]): verb is PaperVerb {
-  if (verb === 'release') return isReleaseStep(args);
+  if (verb === 'release') return isReleaseSubcommand(args);
   return verb === 'build' || verb === 'validate' || verb === 'start';
 }
 

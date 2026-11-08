@@ -804,7 +804,7 @@ describe.skipIf(bundleState() === 'absent')('validate with a malformed --repo', 
 });
 
 describe.skipIf(bundleState() === 'absent')(
-  'the release steps find the journal as build does',
+  'the release subcommands find the journal as build does',
   () => {
     beforeAll(assertBundleNotStale);
 
@@ -898,146 +898,149 @@ describe.skipIf(bundleState() === 'absent')(
   },
 );
 
-describe.skipIf(bundleState() === 'absent')('oak release and its steps, before Zenodo', () => {
-  beforeAll(assertBundleNotStale);
+describe.skipIf(bundleState() === 'absent')(
+  'oak release and its subcommands, before Zenodo',
+  () => {
+    beforeAll(assertBundleNotStale);
 
-  /** A paper with a committed sandbox DOI, outside any git repo. */
-  function sandboxPaper(): string {
-    const dir = mkdtempSync(join(tmpdir(), 'oak-release-'));
-    writeFileSync(
-      join(dir, 'myst.yml'),
-      'version: 1\nproject:\n  doi: 10.5072/zenodo.5\n' +
-        '  options:\n    oaktree-sapling:\n      version: v9.9.9\n      edition: e\n',
-    );
-    return dir;
-  }
-  const noTokens = {
-    OAK_USE_RUNNING: '1',
-    ZENODO_TOKEN: undefined,
-    ZENODO_TOKEN_SANDBOX: undefined,
-  };
-
-  it('refuses a tag that is not a paper version', () => {
-    const dir = sandboxPaper();
-    const bad = oak(['release', 'deposit', '--tag', 'v1.0.0;x', '--paper', dir], noTokens);
-    expect(bad.code).toBe(2);
-    expect(bad.stderr).toContain('oak release deposit: --tag must be a paper version');
-  });
-
-  it('refuses a word that is neither a version nor a step, so a typo never starts the flow', () => {
-    for (const word of ['depost', 'v1.0.0;x']) {
-      const r = oak(['release', word, '--tag', 'v1.0.0'], noTokens);
-      expect(r.code, word).toBe(2);
-      expect(r.stderr, word).toContain('is neither a version like v1.2.3 nor a step');
-      expect(r.stderr, word).toContain('oak release: usage:');
+    /** A paper with a committed sandbox DOI, outside any git repo. */
+    function sandboxPaper(): string {
+      const dir = mkdtempSync(join(tmpdir(), 'oak-release-'));
+      writeFileSync(
+        join(dir, 'myst.yml'),
+        'version: 1\nproject:\n  doi: 10.5072/zenodo.5\n' +
+          '  options:\n    oaktree-sapling:\n      version: v9.9.9\n      edition: e\n',
+      );
+      return dir;
     }
-  });
+    const noTokens = {
+      OAK_USE_RUNNING: '1',
+      ZENODO_TOKEN: undefined,
+      ZENODO_TOKEN_SANDBOX: undefined,
+    };
 
-  it('the flow refuses in GitHub Actions, pointing at oak upgrade', () => {
-    const r = oak(['release', '--tag', 'v1.0.0', '--paper', sandboxPaper()], noTokens, true);
-    expect(r.code).toBe(2);
-    expect(r.stderr).toContain('oak release runs only its steps');
-    expect(r.stderr).toContain('Run oak upgrade');
-  });
-
-  it('in GitHub Actions, a version is refused as terminal-only and a mistyped step as unknown', () => {
-    const version = oak(['release', 'v1.0.0'], noTokens, true);
-    expect(version.code).toBe(2);
-    expect(version.stderr).toContain('publishing a version runs from the terminal');
-    const typo = oak(['release', 'reserv-doi'], noTokens, true);
-    expect(typo.code).toBe(2);
-    expect(typo.stderr).toContain('oak release: usage:');
-  });
-
-  it('the flow refuses --use-local-build and --tag, which belong to the deposit step', () => {
-    const local = oak(['release', 'v1.0.0', '--use-local-build'], noTokens);
-    expect(local.code).toBe(2);
-    expect(local.stderr).toContain('run oak release deposit --use-local-build');
-    const tag = oak(['release', '--tag', 'v1.0.0'], noTokens);
-    expect(tag.code).toBe(2);
-    expect(tag.stderr).toContain('name the version as an argument');
-  });
-
-  it('a local release needs the clone at the tag, checked before any build or download', () => {
-    const dir = sandboxPaper();
-    const r = oak(['release', 'deposit', '--tag', 'v1.0.0', '--paper', dir, '--no-instance'], {
-      ...noTokens,
-      ZENODO_TOKEN_SANDBOX: 'sandbox-token',
+    it('refuses a tag that is not a paper version', () => {
+      const dir = sandboxPaper();
+      const bad = oak(['release', 'deposit', '--tag', 'v1.0.0;x', '--paper', dir], noTokens);
+      expect(bad.code).toBe(2);
+      expect(bad.stderr).toContain('oak release deposit: --tag must be a paper version');
     });
-    expect(r.code).toBe(2);
-    expect(r.stderr).toContain('oak release deposit: this clone has no tag v1.0.0');
-  });
 
-  it('--use-local-build deposits this clone, so it refuses --repo', () => {
-    const r = oak(
-      ['release', 'deposit', '--use-local-build', '--repo', 'o/paper', '--tag', 'v1.0.0'],
-      noTokens,
-    );
-    expect(r.code).toBe(2);
-    expect(r.stderr).toContain('--use-local-build deposits this clone');
-  });
+    it('refuses a word that is neither a version nor a subcommand, so a typo never starts the flow', () => {
+      for (const word of ['depost', 'v1.0.0;x']) {
+        const r = oak(['release', word, '--tag', 'v1.0.0'], noTokens);
+        expect(r.code, word).toBe(2);
+        expect(r.stderr, word).toContain('is neither a version like v1.2.3 nor a subcommand');
+        expect(r.stderr, word).toContain('oak release: usage:');
+      }
+    });
 
-  it('the deposit step takes the sandbox from the DOI, with no --sandbox', () => {
-    const r = oak(
-      ['release', 'deposit', '--tag', 'v1.0.0', '--paper', sandboxPaper(), '--no-instance'],
-      { ...noTokens, ZENODO_TOKEN: 'production-secret' },
-    );
-    expect(r.code).toBe(2);
-    expect(r.stderr).toContain('ZENODO_TOKEN_SANDBOX');
-    expect(r.stdout + r.stderr).not.toContain('production-secret');
-  });
+    it('the flow refuses in GitHub Actions, pointing at oak upgrade', () => {
+      const r = oak(['release', '--tag', 'v1.0.0', '--paper', sandboxPaper()], noTokens, true);
+      expect(r.code).toBe(2);
+      expect(r.stderr).toContain('oak release runs only its subcommands');
+      expect(r.stderr).toContain('Run oak upgrade');
+    });
 
-  it('in Actions it deposits _build and never builds, with no flag', () => {
-    const r = oak(
-      ['release', 'deposit', '--tag', 'v1.0.0', '--paper', sandboxPaper(), '--no-instance'],
-      { ...noTokens, ZENODO_TOKEN_SANDBOX: 'sandbox-token' },
-      true,
-    );
-    expect(r.code).toBe(2);
-    expect(r.stderr).toContain('no PDF under _build/exports');
-  });
+    it('in GitHub Actions, a version is refused as terminal-only and a mistyped step as unknown', () => {
+      const version = oak(['release', 'v1.0.0'], noTokens, true);
+      expect(version.code).toBe(2);
+      expect(version.stderr).toContain('publishing a version runs from the terminal');
+      const typo = oak(['release', 'reserv-doi'], noTokens, true);
+      expect(typo.code).toBe(2);
+      expect(typo.stderr).toContain('oak release: usage:');
+    });
 
-  // An unset secret reaches the workflow step as an empty string.
-  const emptySecrets = { OAK_USE_RUNNING: '1', ZENODO_TOKEN: '', ZENODO_TOKEN_SANDBOX: '' };
+    it('the flow refuses --use-local-build and --tag, which belong to oak release deposit', () => {
+      const local = oak(['release', 'v1.0.0', '--use-local-build'], noTokens);
+      expect(local.code).toBe(2);
+      expect(local.stderr).toContain('run oak release deposit --use-local-build');
+      const tag = oak(['release', '--tag', 'v1.0.0'], noTokens);
+      expect(tag.code).toBe(2);
+      expect(tag.stderr).toContain('name the version as an argument');
+    });
 
-  it('the CI deposit with no token ends green with a notice to deposit from the terminal', () => {
-    const r = oak(
-      ['release', 'deposit', '--tag', 'v1.0.0', '--paper', sandboxPaper()],
-      { ...emptySecrets, GITHUB_REPOSITORY: 'o/paper' },
-      true,
-    );
-    expect(r.code).toBe(0);
-    expect(r.stderr).toContain(
-      '::notice::oak release deposit: the zenodo-publish environment has no',
-    );
-    expect(r.stderr).toContain('ZENODO_TOKEN_SANDBOX');
-    expect(r.stderr).toContain('oak release --repo o/paper v1.0.0');
-    expect(r.stderr).toContain('deposit: skipped');
-  });
+    it('a local release needs the clone at the tag, checked before any build or download', () => {
+      const dir = sandboxPaper();
+      const r = oak(['release', 'deposit', '--tag', 'v1.0.0', '--paper', dir, '--no-instance'], {
+        ...noTokens,
+        ZENODO_TOKEN_SANDBOX: 'sandbox-token',
+      });
+      expect(r.code).toBe(2);
+      expect(r.stderr).toContain('oak release deposit: this clone has no tag v1.0.0');
+    });
 
-  it('the CI DOI reservation with no token fails, pointing at oak release', () => {
-    const r = oak(
-      ['release', 'reserve-doi', '--sandbox', '--paper', sandboxPaper()],
-      { ...emptySecrets, GITHUB_REPOSITORY: 'o/paper' },
-      true,
-    );
-    expect(r.code).toBe(2);
-    expect(r.stderr).toContain('the zenodo-prepare environment has no ZENODO_TOKEN_SANDBOX');
-    expect(r.stderr).toContain('oak release --repo o/paper <vX.Y.Z> --sandbox');
-  });
+    it('--use-local-build deposits this clone, so it refuses --repo', () => {
+      const r = oak(
+        ['release', 'deposit', '--use-local-build', '--repo', 'o/paper', '--tag', 'v1.0.0'],
+        noTokens,
+      );
+      expect(r.code).toBe(2);
+      expect(r.stderr).toContain('--use-local-build deposits this clone');
+    });
 
-  it('a local release with no token is refused', () => {
-    const r = oak(['release', 'deposit', '--tag', 'v1.0.0', '--paper', sandboxPaper()], noTokens);
-    expect(r.code).toBe(2);
-    expect(r.stderr).toContain('the sandbox needs ZENODO_TOKEN_SANDBOX');
-  });
+    it('oak release deposit takes the sandbox from the DOI, with no --sandbox', () => {
+      const r = oak(
+        ['release', 'deposit', '--tag', 'v1.0.0', '--paper', sandboxPaper(), '--no-instance'],
+        { ...noTokens, ZENODO_TOKEN: 'production-secret' },
+      );
+      expect(r.code).toBe(2);
+      expect(r.stderr).toContain('ZENODO_TOKEN_SANDBOX');
+      expect(r.stdout + r.stderr).not.toContain('production-secret');
+    });
 
-  it('oak deposit is no command', () => {
-    const r = oak(['deposit', 'prepare', '--paper', sandboxPaper()], noTokens);
-    expect(r.code).toBe(2);
-    expect(r.stderr).toContain("oak: unknown command 'deposit'");
-  });
-});
+    it('in Actions it deposits _build and never builds, with no flag', () => {
+      const r = oak(
+        ['release', 'deposit', '--tag', 'v1.0.0', '--paper', sandboxPaper(), '--no-instance'],
+        { ...noTokens, ZENODO_TOKEN_SANDBOX: 'sandbox-token' },
+        true,
+      );
+      expect(r.code).toBe(2);
+      expect(r.stderr).toContain('no PDF under _build/exports');
+    });
+
+    // An unset secret reaches the workflow step as an empty string.
+    const emptySecrets = { OAK_USE_RUNNING: '1', ZENODO_TOKEN: '', ZENODO_TOKEN_SANDBOX: '' };
+
+    it('the CI deposit with no token ends green with a notice to deposit from the terminal', () => {
+      const r = oak(
+        ['release', 'deposit', '--tag', 'v1.0.0', '--paper', sandboxPaper()],
+        { ...emptySecrets, GITHUB_REPOSITORY: 'o/paper' },
+        true,
+      );
+      expect(r.code).toBe(0);
+      expect(r.stderr).toContain(
+        '::notice::oak release deposit: the zenodo-publish environment has no',
+      );
+      expect(r.stderr).toContain('ZENODO_TOKEN_SANDBOX');
+      expect(r.stderr).toContain('oak release --repo o/paper v1.0.0');
+      expect(r.stderr).toContain('deposit: skipped');
+    });
+
+    it('the CI DOI reservation with no token fails, pointing at oak release', () => {
+      const r = oak(
+        ['release', 'reserve-doi', '--sandbox', '--paper', sandboxPaper()],
+        { ...emptySecrets, GITHUB_REPOSITORY: 'o/paper' },
+        true,
+      );
+      expect(r.code).toBe(2);
+      expect(r.stderr).toContain('the zenodo-prepare environment has no ZENODO_TOKEN_SANDBOX');
+      expect(r.stderr).toContain('oak release --repo o/paper <vX.Y.Z> --sandbox');
+    });
+
+    it('a local release with no token is refused', () => {
+      const r = oak(['release', 'deposit', '--tag', 'v1.0.0', '--paper', sandboxPaper()], noTokens);
+      expect(r.code).toBe(2);
+      expect(r.stderr).toContain('the sandbox needs ZENODO_TOKEN_SANDBOX');
+    });
+
+    it('oak deposit is no command', () => {
+      const r = oak(['deposit', 'prepare', '--paper', sandboxPaper()], noTokens);
+      expect(r.code).toBe(2);
+      expect(r.stderr).toContain("oak: unknown command 'deposit'");
+    });
+  },
+);
 
 describe.skipIf(bundleState() === 'absent')('oak clean', () => {
   beforeAll(assertBundleNotStale);

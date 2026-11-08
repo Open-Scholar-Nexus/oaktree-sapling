@@ -16,7 +16,7 @@ import { DERIVED_CONFIG_FILE, parseYaml } from './yaml-io.js';
 import type { DepositState } from './zenodo.js';
 
 /* --------------------------------------------------------------------------
- * The deposit step's build: `oak release deposit`
+ * The build `oak release deposit` deposits
  * ------------------------------------------------------------------------ */
 
 /** The path of the Deposit version workflow in a paper repo, as GitHub reports it in a run's
@@ -40,7 +40,7 @@ export const RELEASE_BUILD_PATHS = [
 /** The one path a complete build may lack: myst writes it only when it downloads a template. */
 const OPTIONAL_BUILD_PATH = '_build/templates';
 
-/** The command the deposit step's messages name. */
+/** The command `oak release deposit`'s messages name. */
 const DEPOSIT_STEP = 'release deposit';
 
 export interface CiRun {
@@ -387,7 +387,7 @@ async function releaseFrom(
     deps.log(msg.workflow.releaseAlreadyDeposited(tag));
     return { code: 0, reason: 'already-deposited' };
   }
-  // The steps run with the pinned oak, so a pin they refuse is refused before the tag.
+  // The subcommands run with the pinned oak, so a pin they refuse is refused before the tag.
   if (pin) deps.checkPin(pin);
   if (!deps.hasToken(sandbox)) throw new UserError(msg.workflow.noZenodoToken('release', sandbox));
   if (doi) await assertDraftFor(doi, tag, deps);
@@ -489,7 +489,7 @@ function committed(
 }
 
 /** Refuses when Zenodo holds no draft for `tag`: no record, or the newest version published with
- *  another version. Published with this version passes; the deposit step finishes it. */
+ *  another version. Published with this version passes; `oak release deposit` finishes it. */
 async function assertDraftFor(doi: CommittedDoi, tag: string, deps: ReleaseDeps): Promise<void> {
   let state: DepositState;
   try {

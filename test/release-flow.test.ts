@@ -281,7 +281,7 @@ describe('oak release from the terminal: a rerun continues where the release sta
     );
   });
 
-  it('published on Zenodo with this version: hands to the deposit step, which finishes it', async () => {
+  it('published on Zenodo with this version: hands to oak release deposit, which finishes it', async () => {
     const h = harness(
       world({
         files: { [MAIN]: myst(PROD_DOI) },
@@ -307,7 +307,7 @@ describe('oak release from the terminal: a rerun continues where the release sta
     expect(h.logs.join('\n')).toContain('already deposited');
   });
 
-  it('deposited by the Deposit version run: ends after the wait, with no deposit step', async () => {
+  it('deposited by the Deposit version run: ends after the wait, with no oak release deposit', async () => {
     const h = harness(
       world({ files: { [MAIN]: myst(PROD_DOI) }, tags: { [TAG]: MAIN }, ciAttaches: true }),
     );
