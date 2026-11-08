@@ -53,6 +53,8 @@ site:
   # The theme oak pins in src/assets.ts; bump the two together.
   template: https://github.com/jupyter-book/myst-theme/releases/download/myst-to-react%401.4.1/book-theme.zip
   options:
+    logo: brand/sapling.svg
+    favicon: brand/sapling-64.png
     logo_text: Oaktree Sapling
     # Keeps the folder in each URL (/guide/journal-yml), which oak's printed links rely on.
     folders: true
