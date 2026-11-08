@@ -888,12 +888,21 @@ describe.skipIf(bundleState() === 'absent')(
 
     it('a local release needs the clone at the tag, checked before any build or download', () => {
       const dir = sandboxPaper();
-      const r = oak(['release', '--tag', 'v1.0.0', '--paper', dir, '--no-instance'], {
-        ...noTokens,
-        ZENODO_TOKEN_SANDBOX: 'sandbox-token',
-      });
+      const r = oak(
+        ['release', '--deposit-only', '--tag', 'v1.0.0', '--paper', dir, '--no-instance'],
+        { ...noTokens, ZENODO_TOKEN_SANDBOX: 'sandbox-token' },
+      );
       expect(r.code).toBe(2);
       expect(r.stderr).toContain('this clone has no tag v1.0.0');
+    });
+
+    it('--use-local-build deposits this clone, so it refuses --repo', () => {
+      const r = oak(
+        ['release', '--use-local-build', '--repo', 'o/paper', '--tag', 'v1.0.0'],
+        noTokens,
+      );
+      expect(r.code).toBe(2);
+      expect(r.stderr).toContain('--use-local-build deposits this clone');
     });
 
     it('deposit upload takes the sandbox from the DOI, with no --sandbox', () => {
@@ -940,7 +949,10 @@ describe.skipIf(bundleState() === 'absent')(
     });
 
     it('a local release with no token is refused', () => {
-      const r = oak(['release', '--tag', 'v1.0.0', '--paper', sandboxPaper()], noTokens);
+      const r = oak(
+        ['release', '--deposit-only', '--tag', 'v1.0.0', '--paper', sandboxPaper()],
+        noTokens,
+      );
       expect(r.code).toBe(2);
       expect(r.stderr).toContain('the sandbox needs ZENODO_TOKEN_SANDBOX');
     });
