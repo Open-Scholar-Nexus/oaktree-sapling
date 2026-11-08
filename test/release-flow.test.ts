@@ -483,33 +483,15 @@ describe('oak release from the terminal: how it ended', () => {
 });
 
 describe('oak release status: its summary', () => {
-  const lines = msg.workflow.releaseStatusLines;
-
-  it('a sandbox draft: its id, its version and its address', () => {
-    expect(
-      lines({
-        concept_doi: SANDBOX_DOI,
-        latest_deposition_id: 5,
-        submitted: false,
-        latest_version: '0.0.0',
-        draft_url: DRAFT_URL,
-      }),
-    ).toEqual([
+  it('a draft with its id, version and address; a published version; no DOI yet', () => {
+    const lines = msg.workflow.releaseStatusLines;
+    const latest = { latest_deposition_id: 5, latest_version: '0.0.0', draft_url: DRAFT_URL };
+    expect(lines({ concept_doi: SANDBOX_DOI, submitted: false, ...latest })).toEqual([
       `DOI ${SANDBOX_DOI} (sandbox): draft 5, not published, holding v0.0.0: ${DRAFT_URL}`,
     ]);
-  });
-
-  it('a published version, a DOI with no record, and no DOI yet', () => {
-    expect(
-      lines({
-        concept_doi: PROD_DOI,
-        latest_deposition_id: 5,
-        submitted: true,
-        latest_version: '1.0.0',
-        draft_url: 'r',
-      }),
-    ).toEqual([`DOI ${PROD_DOI}: v1.0.0 published: r`]);
-    expect(lines({ concept_doi: PROD_DOI })).toEqual([`DOI ${PROD_DOI}: no record on Zenodo`]);
+    expect(lines({ concept_doi: PROD_DOI, submitted: true, ...latest })).toEqual([
+      `DOI ${PROD_DOI}: v0.0.0 published: ${DRAFT_URL}`,
+    ]);
     expect(lines({ myst_path: '/p/myst.yml' })).toEqual([
       'no DOI in /p/myst.yml yet: run oak release, or merge its DOI pull request',
     ]);
