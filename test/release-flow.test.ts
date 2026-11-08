@@ -1,5 +1,5 @@
 /**
- * `oak release --repo owner/paper --tag vX` from the terminal (`runRelease`), with a fake GitHub
+ * `oak release --repo owner/paper vX` from the terminal (`runRelease`), with a fake GitHub
  * and Zenodo: each run reads where the release stands and does what is left, refusals come
  * before anything changes, and the DOI pull request is merged only at the commit pushed in the
  * same run.
@@ -34,8 +34,9 @@ const OLD_DOI_COMMIT = 'e'.repeat(40);
 const PR_URL = 'https://github.com/o/paper/pull/9';
 const RUN_URL = 'https://github.com/o/paper/actions/runs/7';
 
-const myst = (doi?: string) =>
-  `version: 1\nproject:\n  title: Paper\n${doi ? `  doi: ${doi}\n` : ''}`;
+const myst = (doi?: string, oak: string | null = 'v0.4.0-dev.6') =>
+  `version: 1\nproject:\n  title: Paper\n${doi ? `  doi: ${doi}\n` : ''}` +
+  (oak ? `  options:\n    oaktree-sapling:\n      version: ${oak}\n` : '');
 
 /** GitHub and Zenodo as a run finds them; each test sets where the release stands. */
 interface World {
@@ -140,6 +141,7 @@ function harness(w: World, input: Partial<ReleaseInput> = {}) {
     src,
     hasToken: () => w.token,
     readDepositState: async () => w.zenodo,
+    checkPin: () => {},
     reserveDoi: async () => {
       outward.push('prepare');
       pushed = DOI_COMMIT;
@@ -159,12 +161,13 @@ function harness(w: World, input: Partial<ReleaseInput> = {}) {
     sleep: async () => {},
     log: (line) => void logs.push(line),
   };
-  const run = () =>
+  const outcome = () =>
     runRelease(
       { repo: REPO, tag: TAG, sandbox: false, publish: false, rerun: 'oak release …', ...input },
       deps,
     );
-  return { run, deps, outward, logs, plans, clone: () => clone };
+  const run = async () => (await outcome()).code;
+  return { run, outcome, deps, outward, logs, plans, clone: () => clone };
 }
 
 describe('oak release from the terminal: a first deposit', () => {
@@ -268,16 +271,18 @@ describe('oak release from the terminal: a rerun continues where the release sta
       }),
     );
     expect(await h.run()).toBe(0);
-    const states = h.logs.filter((l) => /queued|in progress|build done/.test(l));
-    expect(states).toEqual([
-      'oak release: queued',
-      'oak release: build in progress',
-      'oak release: build done; publish job in progress',
-      'oak release: build done',
-    ]);
+    const states = h.logs.filter((l) => /queued|in progress|job done/.test(l));
+    expect(states).toEqual(
+      [
+        'Deposit version run queued',
+        'build job in progress',
+        'build job done; publish job in progress',
+        'build job done',
+      ].map((s) => `oak release: ${s}: ${RUN_URL}`),
+    );
   });
 
-  it('published on Zenodo with this version: hands to the deposit step, which finishes it', async () => {
+  it('published on Zenodo with this version: hands to oak release deposit, which finishes it', async () => {
     const h = harness(
       world({
         files: { [MAIN]: myst(PROD_DOI) },
@@ -303,7 +308,7 @@ describe('oak release from the terminal: a rerun continues where the release sta
     expect(h.logs.join('\n')).toContain('already deposited');
   });
 
-  it('deposited by the Deposit version run: ends after the wait, with no deposit step', async () => {
+  it('deposited by the Deposit version run: ends after the wait, with no oak release deposit', async () => {
     const h = harness(
       world({ files: { [MAIN]: myst(PROD_DOI) }, tags: { [TAG]: MAIN }, ciAttaches: true }),
     );
@@ -343,6 +348,23 @@ describe('oak release from the terminal: refusals before anything changes', () =
   it('no record for the committed DOI', () =>
     refuses(world({ files: { [MAIN]: myst(PROD_DOI) }, zenodo: { kind: 'none' } })));
 
+  it('a repo whose myst.yml names no oak version, which is no oak paper', () =>
+    refuses(world({ files: { [MAIN]: myst(PROD_DOI, null) } }), {}, 'is not an oak paper repo'));
+
+  it('a pinned oak whose subcommands would refuse, checked at the commit to be tagged', async () => {
+    const pinned = myst(PROD_DOI, 'v0.2.0');
+    const h = harness(world({ files: { [MAIN]: pinned } }));
+    const seen: string[] = [];
+    h.deps.checkPin = (version) => {
+      seen.push(version);
+      throw new UserError('too old');
+    };
+    await expect(h.run()).rejects.toThrow('too old');
+    expect(seen).toEqual(['v0.2.0']);
+    expect(h.outward).toEqual([]);
+    expect(h.plans).toEqual([]);
+  });
+
   it('no Zenodo token for the environment', () =>
     refuses(world({ token: false }), {}, 'ZENODO_TOKEN'));
 
@@ -372,10 +394,15 @@ describe('oak release from the terminal: the build', () => {
     expect(h.outward).toEqual([]);
   });
 
-  it('no run within the limit: exit 3 with the command to rerun', async () => {
+  it('no run within the limit: exit 3 with the command to rerun, and a line every 5 minutes meanwhile', async () => {
     const h = harness(tagged({ runAfter: RUN_WAIT.tries }));
     expect(await h.run()).toBe(3);
     expect(h.logs.join('\n')).toContain('no Deposit version run started for v1.0.0');
+    const heartbeats = h.logs.filter((l) =>
+      l.startsWith('oak release: no Deposit version run for'),
+    );
+    expect(heartbeats).toHaveLength(Math.floor((RUN_WAIT.tries - 1) / 20));
+    expect(heartbeats[0]).toContain('https://github.com/');
     expect(h.logs.join('\n')).toContain('rerun the same command to continue: oak release …');
   });
 
@@ -388,5 +415,27 @@ describe('oak release from the terminal: the build', () => {
     expect(await h.run()).toBe(3);
     const heartbeats = h.logs.filter((l) => l.startsWith('oak release: still waiting'));
     expect(heartbeats).toHaveLength(Math.floor((BUILD_WAIT.tries - 1) / 20));
+  });
+});
+
+describe('oak release from the terminal: how it ended', () => {
+  const done = { files: { [MAIN]: myst(PROD_DOI) }, tags: { [TAG]: MAIN } };
+
+  it('names the reason with the exit code', async () => {
+    expect(await harness(world(done)).outcome()).toEqual({ code: 0, reason: 'deposited' });
+    expect(await harness(world({ ...done, assets: [DEPOSITED_ASSET] })).outcome()).toEqual({
+      code: 0,
+      reason: 'already-deposited',
+    });
+    expect(await harness(world({ ...done, ciAttaches: true })).outcome()).toEqual({
+      code: 0,
+      reason: 'deposited-by-ci',
+    });
+    const declined = harness(world());
+    declined.deps.confirm = async () => false;
+    expect(await declined.outcome()).toEqual({ code: 0, reason: 'declined' });
+    const failed = harness(world(done));
+    failed.deps.deposit = async () => 2;
+    expect(await failed.outcome()).toEqual({ code: 2, reason: 'step-failed' });
   });
 });

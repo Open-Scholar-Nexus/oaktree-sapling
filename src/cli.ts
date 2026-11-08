@@ -19,6 +19,8 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import type { ComposeInput } from './compose.js';
 import type { MaterializeInput, StartOpts } from './materialize.js';
 import type { JournalStamp } from './schema.js';
+import type { ZenodoApi } from './zenodo.js';
+import type { ReleaseOutcome } from './release.js';
 import type { HandoffContext, HandoffDeps, HandoffVerb, PaperVerb } from './pinned.js';
 import * as msg from './messages.js';
 import { annotate, inCI, UserError } from './messages.js';
@@ -34,8 +36,8 @@ type Verb =
   | 'validate'
   | 'post-checks'
   | 'deploy-preview'
-  | 'deposit'
   | 'release'
+  | 'clean'
   | 'bootstrap'
   | 'upgrade'
   | 'conformance';
@@ -436,6 +438,50 @@ function emit(
   for (const line of (human ?? summarize)(result)) process.stderr.write(line + '\n');
 }
 
+/** The subcommands of `oak release`, which the paper's workflows run and the pinned oak runs. */
+const RELEASE_SUBCOMMANDS = ['reserve-doi', 'deposit', 'status'] as const;
+
+/** The flags of `oak release` and its subcommands that take a value. */
+const RELEASE_VALUE_FLAGS = [
+  'repo',
+  'tag',
+  'paper',
+  'myst',
+  'token',
+  'site-url',
+  'instance',
+  'bundle-out',
+];
+
+/** The first word of `argv` that is no flag and no flag's value, with its index, or null. */
+function releaseWord(argv: string[]): { word: string; at: number } | null {
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i]!;
+    if (!arg.startsWith('--')) return { word: arg, at: i };
+    if (RELEASE_VALUE_FLAGS.includes(arg.slice(2))) i++;
+  }
+  return null;
+}
+
+/** Whether `oak release <argv>` runs one of {@link RELEASE_SUBCOMMANDS}. */
+function isReleaseSubcommand(argv: string[]): boolean {
+  const first = releaseWord(argv);
+  return first !== null && (RELEASE_SUBCOMMANDS as readonly string[]).includes(first.word);
+}
+
+/**
+ * `oak release`: {@link cmdReleaseVersion} with a version or no word, else the subcommand its first
+ * word names, with that word left out of its arguments. Documented at DOCS.release.
+ */
+async function cmdRelease(argv: string[]): Promise<number> {
+  const first = releaseWord(argv);
+  const rest = first ? argv.filter((_, i) => i !== first.at) : argv;
+  if (first?.word === 'reserve-doi') return cmdReleaseReserveDoi(rest);
+  if (first?.word === 'deposit') return cmdReleaseDeposit(rest);
+  if (first?.word === 'status') return cmdReleaseStatus(rest);
+  return cmdReleaseVersion(argv);
+}
+
 /** The Zenodo token for the sandbox or production: `--token`, else the environment's [R102]. A
  *  sandbox run never uses the production one [R102]. */
 function zenodoToken(argv: string[], sandbox: boolean): string | undefined {
@@ -457,107 +503,125 @@ async function sandboxFromDoi(
   return { sandbox: parsed.sandbox };
 }
 
-/** `oak deposit <prepare|upload|status>`, the Zenodo verbs. Documented at DOCS.deposit. */
-async function cmdDeposit(argv: string[]): Promise<number> {
-  const sub = argv[0];
-  const rest = argv.slice(1);
-  if (sub !== 'prepare' && sub !== 'upload' && sub !== 'status') {
-    process.stderr.write(msg.workflow.depositUsage + '\n');
-    return 2;
-  }
+/** The Zenodo API and the journal root for `oak release reserve-doi` and `status`, or the exit
+ *  code after printing why not. */
+async function zenodoSetup(
+  argv: string[],
+  verb: 'release reserve-doi' | 'release status',
+): Promise<{ api: ZenodoApi; mystPath: string; instanceRoot: string | null } | number> {
   const z = await import('./zenodo.js');
-  const gh = await import('./gh.js');
-
-  const mystPath = mystPathOf(rest);
-  const siteUrl = flag(rest, 'site-url') ?? process.env.SITE_URL;
-  let sandbox = has(rest, 'sandbox');
-  if (sub === 'upload') {
-    const env = await sandboxFromDoi(mystPath, 'deposit upload');
-    if ('error' in env) {
-      process.stderr.write(env.error + '\n');
-      return 2;
-    }
-    sandbox = env.sandbox;
-  }
-  const token = zenodoToken(rest, sandbox);
+  const mystPath = mystPathOf(argv);
+  const sandbox = has(argv, 'sandbox');
+  const token = zenodoToken(argv, sandbox);
   if (!token) {
-    const why = process.env.GITHUB_ACTIONS
-      ? msg.workflow.depositNoTokenInCi(sandbox)
-      : msg.workflow.noZenodoToken('deposit', sandbox);
+    const why =
+      process.env.GITHUB_ACTIONS && verb === 'release reserve-doi'
+        ? msg.workflow.depositNoTokenInCi(process.env.GITHUB_REPOSITORY, sandbox)
+        : msg.workflow.noZenodoToken(verb, sandbox);
     process.stderr.write(why + '\n');
     return 2;
   }
-  const api = new z.ZenodoApi(z.createFetchTransport(), sandbox, token);
-  const instance = await resolveInstanceRoot(rest, dirname(mystPath), 'deposit');
+  const instance = await resolveInstanceRoot(argv, dirname(mystPath), verb);
   if ('error' in instance) {
     process.stderr.write(instance.error + '\n');
     return 2;
   }
-  const instanceRoot = instance.root;
+  const api = new z.ZenodoApi(z.createFetchTransport(), sandbox, token);
+  return { api, mystPath, instanceRoot: instance.root };
+}
 
-  if (sub === 'prepare') {
-    const repo = gh.currentRepo(flag(rest, 'repo'), dirname(mystPath));
-    if (!repo) {
-      process.stderr.write(msg.workflow.depositNoRepo + '\n');
-      return 2;
-    }
-    const out = await z.cmdPrepare({ mystPath, repo, siteUrl, api, instanceRoot });
-    // Open the DOI pull request for the myst.yml write [R3]. Without a gh login the write is
-    // left for the editor to commit.
-    if (out.exitCode === 0 && !has(rest, 'no-pr') && !gh.ghLoggedIn()) {
-      process.stderr.write(
-        annotate('warning', msg.workflow.depositDoiPrNoGh(String(out.result.concept_doi))) + '\n',
-      );
-    } else if (out.exitCode === 0 && !has(rest, 'no-pr')) {
-      try {
-        const { url, sha } = gh.openDoiPr(resolve(mystPath, '..'), {
-          conceptDoi: String(out.result.concept_doi),
-        });
-        process.stderr.write(msg.workflow.depositDoiPrOpened(url) + '\n');
-        if (process.env.GITHUB_ACTIONS) {
-          try {
-            gh.markDoiPrChecksSkipped(repo, sha);
-          } catch (e) {
-            const why = (e as Error).message;
-            process.stderr.write(
-              annotate('warning', msg.workflow.depositDoiPrStatusFailed(why)) + '\n',
-            );
-          }
+/** `oak release reserve-doi`: reserves the DOI and opens the DOI pull request. Documented at
+ *  DOCS.releaseReserveDoi. */
+async function cmdReleaseReserveDoi(argv: string[]): Promise<number> {
+  const setup = await zenodoSetup(argv, 'release reserve-doi');
+  if (typeof setup === 'number') return setup;
+  const { api, mystPath, instanceRoot } = setup;
+  const z = await import('./zenodo.js');
+  const gh = await import('./gh.js');
+  const repo = gh.currentRepo(flag(argv, 'repo'), dirname(mystPath));
+  if (!repo) {
+    process.stderr.write(msg.workflow.depositNoRepo + '\n');
+    return 2;
+  }
+  const siteUrl = flag(argv, 'site-url') ?? process.env.SITE_URL;
+  const out = await z.cmdPrepare({ mystPath, repo, siteUrl, api, instanceRoot });
+  // Open the DOI pull request for the myst.yml write [R3]. Without a gh login the write is
+  // left for the editor to commit.
+  if (out.exitCode === 0 && !gh.ghLoggedIn()) {
+    process.stderr.write(
+      annotate('warning', msg.workflow.depositDoiPrNoGh(String(out.result.concept_doi))) + '\n',
+    );
+  } else if (out.exitCode === 0) {
+    try {
+      const { url, sha } = gh.openDoiPr(resolve(mystPath, '..'), {
+        conceptDoi: String(out.result.concept_doi),
+      });
+      process.stderr.write(msg.workflow.depositDoiPrOpened(url) + '\n');
+      if (process.env.GITHUB_ACTIONS) {
+        try {
+          gh.markDoiPrChecksSkipped(repo, sha);
+        } catch (e) {
+          const why = (e as Error).message;
+          process.stderr.write(
+            annotate('warning', msg.workflow.depositDoiPrStatusFailed(why)) + '\n',
+          );
         }
-      } catch (e) {
-        process.stderr.write(
-          annotate('warning', msg.workflow.depositDoiPrFailed((e as Error).message)) + '\n',
-        );
       }
+    } catch (e) {
+      process.stderr.write(
+        annotate('warning', msg.workflow.depositDoiPrFailed((e as Error).message)) + '\n',
+      );
     }
-    emit(rest, out.result);
-    return out.exitCode;
   }
+  emit(argv, out.result);
+  return out.exitCode;
+}
 
-  if (sub === 'upload') {
-    const pdf = flag(rest, 'pdf');
-    const tag = flag(rest, 'tag');
-    if (!pdf || !tag) {
-      process.stderr.write(msg.workflow.depositUploadArgs + '\n');
-      return 2;
-    }
-    const out = await z.cmdUpload({
-      mystPath,
-      pdf: resolve(pdf),
-      tag,
-      siteUrl,
-      bundleOut: resolve(flag(rest, 'bundle-out') ?? join('_build', 'bundle')),
-      api,
-      git: gh.realGitContext,
-      instanceRoot,
-      engineRoot: engineRoot(),
-    });
-    emit(rest, out.result);
-    return out.exitCode;
+/** `oak release status --repo <owner/name>`: `oak release status` in a clone of the repo in a
+ *  temporary folder, removed after. */
+async function releaseStatusOfRepo(repo: string, argv: string[]): Promise<number> {
+  if (flag(argv, 'paper') !== undefined || flag(argv, 'myst') !== undefined) {
+    throw new UserError(msg.workflow.releaseStatusRepoAndPaper);
   }
+  const gh = await import('./gh.js');
+  const name = gh.currentRepo(repo)!;
+  // The refusals `oak release status` would make after the clone, made before it.
+  const sandbox = has(argv, 'sandbox');
+  if (!zenodoToken(argv, sandbox)) {
+    throw new UserError(msg.workflow.noZenodoToken('release status', sandbox));
+  }
+  if (!gh.ghLoggedIn()) throw new UserError(msg.workflow.releaseStatusNeedsGh);
+  let dir: string;
+  try {
+    dir = gh.realReleaseSource.clone(name, 'status');
+  } catch (e) {
+    throw new UserError(msg.workflow.releaseGitHubFailed(msg.firstLine(e)));
+  }
+  const at = argv.indexOf('--repo');
+  const rest = [...argv.slice(0, at), ...argv.slice(at + 2)];
+  const remove = () => rmSync(dir, { recursive: true, force: true });
+  // Ctrl-C removes the clone, then ends oak as it would with no listener.
+  const onInterrupt = () => {
+    remove();
+    process.kill(process.pid, 'SIGINT');
+  };
+  process.once('SIGINT', onInterrupt);
+  try {
+    return await main(['release', ...rest, '--paper', dir]);
+  } finally {
+    process.off('SIGINT', onInterrupt);
+    remove();
+  }
+}
 
-  const out = await z.cmdStatus({ mystPath, siteUrl, api, instanceRoot });
-  emit(rest, out.result);
+/** `oak release status`: the deposit's state on Zenodo. Documented at DOCS.releaseStatus. */
+async function cmdReleaseStatus(argv: string[]): Promise<number> {
+  const setup = await zenodoSetup(argv, 'release status');
+  if (typeof setup === 'number') return setup;
+  const z = await import('./zenodo.js');
+  const siteUrl = flag(argv, 'site-url') ?? process.env.SITE_URL;
+  const out = await z.cmdStatus({ ...setup, siteUrl });
+  emit(argv, out.result);
   return out.exitCode;
 }
 
@@ -586,18 +650,16 @@ function platformName(): string {
 }
 
 /**
- * `oak release --tag vX`. Outside Actions, without `--deposit-only` or `--use-local-build`, it is
- * {@link cmdReleaseRepo}. Otherwise it is the deposit step: deposits the tag's build, attaches the
- * bundle to the tag's release, and comments on the commit. Documented at DOCS.release.
+ * `oak release deposit --tag vX`: deposits the tag's build, attaches the bundle to the tag's
+ * release, and comments on the commit. Documented at DOCS.releaseDeposit.
  */
-async function cmdRelease(argv: string[]): Promise<number> {
+async function cmdReleaseDeposit(argv: string[]): Promise<number> {
   const useLocalBuild = has(argv, 'use-local-build');
   const inActions = Boolean(process.env.GITHUB_ACTIONS);
   if (useLocalBuild && flag(argv, 'repo') !== undefined) {
     process.stderr.write(msg.workflow.releaseLocalBuildWithRepo + '\n');
     return 2;
   }
-  if (isTerminalRelease(argv)) return cmdReleaseRepo(argv);
   const tag = flag(argv, 'tag');
   if (!tag) {
     process.stderr.write(msg.workflow.releaseNoTag + '\n');
@@ -615,7 +677,7 @@ async function cmdRelease(argv: string[]): Promise<number> {
 
   const paperRoot = resolve(flag(argv, 'paper') ?? '.');
   const mystPath = mystPathOf(argv);
-  const env = await sandboxFromDoi(mystPath, 'release');
+  const env = await sandboxFromDoi(mystPath, 'release deposit');
   if ('error' in env) {
     process.stderr.write(env.error + '\n');
     return 2;
@@ -625,16 +687,21 @@ async function cmdRelease(argv: string[]): Promise<number> {
   // The CI token is optional: a journal without one deposits from the terminal, so its run ends
   // with a notice saying how.
   if (!token && inActions) {
-    process.stderr.write(annotate('notice', msg.workflow.releaseNoTokenInCi(tag, sandbox)) + '\n');
+    process.stderr.write(
+      annotate(
+        'notice',
+        msg.workflow.releaseNoTokenInCi(process.env.GITHUB_REPOSITORY, tag, sandbox),
+      ) + '\n',
+    );
     emit(argv, { status: 'ok', deposit: 'skipped', reason: msg.workflow.releaseNoTokenReason });
     return 0;
   }
   if (!token) {
-    process.stderr.write(msg.workflow.noZenodoToken('release', sandbox) + '\n');
+    process.stderr.write(msg.workflow.noZenodoToken('release deposit', sandbox) + '\n');
     return 2;
   }
   // The deposit archives this journal and reads its `zenodo:`.
-  const instance = await resolveInstanceRoot(argv, paperRoot, 'release');
+  const instance = await resolveInstanceRoot(argv, paperRoot, 'release deposit');
   if ('error' in instance) {
     process.stderr.write(instance.error + '\n');
     return 2;
@@ -735,34 +802,46 @@ async function cmdRelease(argv: string[]): Promise<number> {
   return done();
 }
 
-/** `oak release` run by an editor in a terminal ({@link cmdReleaseRepo}), which this oak runs
- *  itself. In Actions, or with `--deposit-only` or `--use-local-build`, it is the deposit step. */
-function isTerminalRelease(argv: string[]): boolean {
-  return !process.env.GITHUB_ACTIONS && !has(argv, 'use-local-build') && !has(argv, 'deposit-only');
-}
-
 /** `arg` as one shell word: quoted when it holds anything but plain path and URL characters. */
 function shellWord(arg: string): string {
   return /^[\w@%+=:,./-]+$/.test(arg) ? arg : `'${arg.replace(/'/g, `'\\''`)}'`;
 }
 
-/** The flags `oak release` passes on to the steps it hands to the pinned oak. */
-const RELEASE_STEP_FLAGS = ['token', 'site-url', 'instance'] as const;
+/** The flags `oak release` passes on to the subcommands it hands to the pinned oak. */
+const RELEASE_SUBCOMMAND_FLAGS = ['token', 'site-url', 'instance'] as const;
 
 /**
- * `oak release [--repo owner/paper] --tag vX [--sandbox] [--yes] [--publish-without-review]`
- * from the terminal: `runRelease` (release.ts) in a temporary clone, with the editor's gh login,
- * with the Zenodo writes handed to the oak the paper pins. Documented at DOCS.release.
+ * `oak release [--repo owner/paper] vX [--sandbox] [--yes] [--publish-without-review]` from the
+ * terminal: `runRelease` (release.ts) in a temporary clone, with the editor's gh login, with the
+ * Zenodo writes handed to the oak the paper pins. Documented at DOCS.release.
  */
-async function cmdReleaseRepo(argv: string[]): Promise<number> {
+async function cmdReleaseVersion(argv: string[]): Promise<number> {
   const gh = await import('./gh.js');
   const release = await import('./release.js');
   const z = await import('./zenodo.js');
-  // Checked first, from the flag alone.
+  const pinned = await import('./pinned.js');
+  // Checked first, from the arguments alone.
   const { PAPER_VERSION_TAG } = await import('./schema.js');
-  const given = flag(argv, 'tag');
-  if (given !== undefined && !PAPER_VERSION_TAG.test(given)) {
-    process.stderr.write(msg.workflow.releaseBadTag(given) + '\n');
+  const word = releaseWord(argv)?.word;
+  if (word !== undefined && !PAPER_VERSION_TAG.test(word)) {
+    process.stderr.write(msg.workflow.releaseUnknownWord(word) + '\n');
+    return 2;
+  }
+  // The workflows run only the subcommands; an older deposit-version.yml runs `release --tag`.
+  if (process.env.GITHUB_ACTIONS) {
+    const why =
+      flag(argv, 'tag') !== undefined
+        ? msg.workflow.releaseFlowInActions(pinned.DEPOSIT_MIN_VERSION)
+        : msg.workflow.releaseInActions;
+    process.stderr.write(why + '\n');
+    return 2;
+  }
+  if (has(argv, 'use-local-build')) {
+    process.stderr.write(msg.workflow.releaseLocalBuildOnFlow + '\n');
+    return 2;
+  }
+  if (flag(argv, 'tag') !== undefined) {
+    process.stderr.write(msg.workflow.releaseTagOnFlow + '\n');
     return 2;
   }
   if (!gh.ghLoggedIn()) {
@@ -774,7 +853,7 @@ async function cmdReleaseRepo(argv: string[]): Promise<number> {
     process.stderr.write(msg.workflow.releaseNoRepo + '\n');
     return 2;
   }
-  const tag = flag(argv, 'tag');
+  const tag = word;
   if (!tag) {
     process.stderr.write(
       msg.workflow.releaseNoTagList(repo, gh.realReleaseSource.vTags(repo)) + '\n',
@@ -783,7 +862,7 @@ async function cmdReleaseRepo(argv: string[]): Promise<number> {
   }
   const sandbox = has(argv, 'sandbox');
   const publish = has(argv, 'publish-without-review');
-  const passOn = RELEASE_STEP_FLAGS.flatMap((name) => {
+  const passOn = RELEASE_SUBCOMMAND_FLAGS.flatMap((name) => {
     const value = flag(argv, name);
     if (value === undefined) return [];
     return [`--${name}`, name === 'instance' ? resolve(value) : value];
@@ -792,15 +871,14 @@ async function cmdReleaseRepo(argv: string[]): Promise<number> {
   const rerun = [
     'oak release --repo',
     repo,
-    '--tag',
     tag,
     ...(sandbox ? ['--sandbox'] : []),
     ...(publish ? ['--publish-without-review'] : []),
     ...(has(argv, 'yes') ? ['--yes'] : []),
     ...passOn.map((arg, i) => (passOn[i - 1] === '--token' ? '<token>' : shellWord(arg))),
   ].join(' ');
-  /** Runs a step with the oak the clone pins, or in this process when that is this oak. */
-  const step = async (
+  /** Runs a subcommand with the oak the clone pins, or in this process when that is this oak. */
+  const runSubcommand = async (
     verb: PaperVerb,
     args: string[],
     clone: string,
@@ -815,16 +893,20 @@ async function cmdReleaseRepo(argv: string[]): Promise<number> {
   let cloneDir: string | null = null;
   const src = {
     ...gh.realReleaseSource,
-    clone: (r: string) => (cloneDir = gh.realReleaseSource.clone(r)),
+    clone: (r: string, t: string) => (cloneDir = gh.realReleaseSource.clone(r, t)),
   };
+  const { waitIndicator } = await import('./progress.js');
+  const progress = waitIndicator(process.stderr, process.env);
   const onInterrupt = () => {
+    progress.clear();
     process.stderr.write('\n' + msg.workflow.releaseInterrupted(rerun, cloneDir) + '\n');
     // No listener is left, so this ends oak as Ctrl-C would.
     process.kill(process.pid, 'SIGINT');
   };
   process.once('SIGINT', onInterrupt);
+  let outcome: ReleaseOutcome;
   try {
-    return await release.runRelease(
+    outcome = await release.runRelease(
       { repo, tag, sandbox, publish, rerun },
       {
         src,
@@ -834,11 +916,14 @@ async function cmdReleaseRepo(argv: string[]): Promise<number> {
             new z.ZenodoApi(z.createFetchTransport(), sb, zenodoToken(argv, sb)!),
             doi,
           ),
+        checkPin: (version) => {
+          if (!process.env[pinned.USE_RUNNING_ENV]) pinned.assertDepositPin('release', version);
+        },
         reserveDoi: (clone, sb) =>
-          step(
-            'deposit',
+          runSubcommand(
+            'release',
             [
-              'prepare',
+              'reserve-doi',
               '--myst',
               join(clone, 'myst.yml'),
               '--repo',
@@ -847,13 +932,13 @@ async function cmdReleaseRepo(argv: string[]): Promise<number> {
               ...passOn,
             ],
             clone,
-            cmdDeposit,
+            cmdRelease,
           ),
         deposit: (clone) =>
-          step(
+          runSubcommand(
             'release',
             [
-              '--deposit-only',
+              'deposit',
               '--tag',
               tag,
               '--paper',
@@ -867,13 +952,41 @@ async function cmdReleaseRepo(argv: string[]): Promise<number> {
             cmdRelease,
           ),
         confirm: makeConfirm(argv),
-        sleep: (ms) => new Promise((done) => setTimeout(done, ms)),
-        log: (line) => process.stderr.write(line + '\n'),
+        sleep: progress.sleep,
+        log: progress.log,
       },
     );
   } finally {
+    progress.clear();
     process.off('SIGINT', onInterrupt);
   }
+  // The failures those clones were kept for are resolved once the version is deposited.
+  if (release.DEPOSITED.includes(outcome.reason)) {
+    const { removeKeptClones } = await import('./clean.js');
+    const removed = removeKeptClones(tmpdir(), repo, tag, process.getuid?.());
+    if (removed.length) process.stderr.write(msg.workflow.releaseClonesRemoved(removed) + '\n');
+  }
+  return outcome.code;
+}
+
+/** `oak clean [--cache] [--yes]`. Documented at DOCS.clean. */
+async function cmdClean(argv: string[]): Promise<number> {
+  const { cmdClean: clean } = await import('./clean.js');
+  const { cacheHome } = await import('./pinned.js');
+  const out = await clean(
+    {
+      dir: tmpdir(),
+      cacheDir: join(cacheHome(process.env, homedir()), 'oak'),
+      cache: has(argv, 'cache'),
+    },
+    {
+      uid: process.getuid?.(),
+      confirm: makeConfirm(argv),
+      log: (line) => process.stderr.write(line + '\n'),
+    },
+  );
+  emit(argv, out.result, () => []);
+  return out.exitCode;
 }
 
 /** `oak deploy-preview <site> [--verified-head <sha>]`: deploys the build artifact to
@@ -1459,8 +1572,8 @@ const VERBS: Verb[] = [
   'validate',
   'post-checks',
   'deploy-preview',
-  'deposit',
   'release',
+  'clean',
   'bootstrap',
   'upgrade',
   'conformance',
@@ -1537,21 +1650,22 @@ async function handoffDeps(argv: string[]): Promise<HandoffDeps> {
 async function runPinned(verb: PaperVerb, argv: string[]): Promise<number | null> {
   const { handOff } = await import('./pinned.js');
   const ctx = await handoffContext(verb, argv);
-  // `deposit` finds the paper from `--myst` too; its subcommand comes first in argv.
+  // The `release` subcommands find the paper from `--myst` too.
   const paperRoot =
-    verb === 'deposit' ? dirname(mystPathOf(argv.slice(1))) : resolve(flag(argv, 'paper') ?? '.');
+    verb === 'release' ? dirname(mystPathOf(argv)) : resolve(flag(argv, 'paper') ?? '.');
   return handOff({ ...ctx, paperRoot }, await handoffDeps(argv));
 }
 
-/** The verbs that run with the oak the paper pins ({@link runPinned}), but for `oak release` from
- *  the terminal. Every other verb runs with this oak. */
-const PAPER_VERBS: readonly string[] = [
-  'build',
-  'validate',
-  'start',
-  'release',
-  'deposit',
-] satisfies PaperVerb[];
+/**
+ * Whether `oak <verb> <args>` runs with the oak the paper pins ({@link runPinned}): `build`,
+ * `validate`, `start` and the `release` subcommands. Every other verb runs with this oak, and so
+ * does `oak release vX`, which hands only its subcommands over, from the clone it makes: with --repo, this
+ * directory may be another paper's clone.
+ */
+function runsPinned(verb: Verb | undefined, args: string[]): verb is PaperVerb {
+  if (verb === 'release') return isReleaseSubcommand(args);
+  return verb === 'build' || verb === 'validate' || verb === 'start';
+}
 
 async function main(argv: string[]): Promise<number> {
   const verb = argv[0] as Verb | undefined;
@@ -1566,19 +1680,21 @@ async function main(argv: string[]): Promise<number> {
     process.stdout.write(msg.version(OAK_VERSION) + '\n');
     return 0;
   }
-  // `oak release` from the terminal hands only its Zenodo steps to the pinned oak, from the
-  // clone it makes: with --repo, this directory may be another paper's clone.
-  const releaseFlow = verb === 'release' && isTerminalRelease(argv);
-  if (verb && PAPER_VERBS.includes(verb) && !releaseFlow) {
-    const code = await runPinned(verb as PaperVerb, argv.slice(1));
+  const args = argv.slice(1);
+  // Before the hand-off, so the pinned oak is the one the cloned repo names.
+  const statusRepo =
+    verb === 'release' && releaseWord(args)?.word === 'status' ? flag(args, 'repo') : undefined;
+  if (statusRepo !== undefined) return releaseStatusOfRepo(statusRepo, args);
+  if (runsPinned(verb, args)) {
+    const code = await runPinned(verb, args);
     if (code !== null) return code;
   }
   if (verb === 'build') return cmdBuild(argv.slice(1));
   if (verb === 'start') return cmdStart(argv.slice(1));
   if (verb === 'validate') return cmdValidate(argv.slice(1));
   if (verb === 'post-checks') return cmdPostChecks(argv.slice(1));
-  if (verb === 'deposit') return cmdDeposit(argv.slice(1));
   if (verb === 'release') return cmdRelease(argv.slice(1));
+  if (verb === 'clean') return cmdClean(argv.slice(1));
   if (verb === 'deploy-preview') return cmdDeployPreview(argv.slice(1));
   if (verb === 'bootstrap') return cmdBootstrap(argv.slice(1));
   if (verb === 'upgrade') return cmdUpgrade(argv.slice(1));

@@ -659,7 +659,7 @@ describe('a pull request number is a number [R136]', () => {
 describe('a sandbox deposit never uses the production token [R102]', () => {
   it('refuses when only the production token is set', () => {
     const env = { ZENODO_TOKEN: 'production-secret', ZENODO_TOKEN_SANDBOX: undefined };
-    const r = oak(['deposit', 'prepare', '--sandbox', '--paper', fixturePaper], env);
+    const r = oak(['release', 'reserve-doi', '--sandbox', '--paper', fixturePaper], env);
     expect(r.code).toBe(2);
     expect(r.stderr).toContain('ZENODO_TOKEN_SANDBOX');
     expect(r.stderr).toContain('never falls back to the production token');
@@ -803,18 +803,44 @@ describe.skipIf(bundleState() === 'absent')('validate with a malformed --repo', 
   });
 });
 
-describe.skipIf(bundleState() === 'absent')('deposit finds the journal as build does', () => {
-  beforeAll(assertBundleNotStale);
+describe.skipIf(bundleState() === 'absent')(
+  'the release subcommands find the journal as build does',
+  () => {
+    beforeAll(assertBundleNotStale);
 
-  it('stops before Zenodo when no journal repo is found', () => {
-    const paper = mkdtempSync(join(tmpdir(), 'oak-deposit-'));
-    writeFileSync(join(paper, 'myst.yml'), 'version: 1\nproject:\n  title: x\n');
-    const r = oak(['deposit', 'status', '--sandbox', '--token', 'x', '--paper', paper]);
-    expect(r.code).toBe(2);
-    expect(r.stderr).toContain('oak deposit: no journal repo found');
-    expect(r.stderr).toContain("a deposit without the journal's Zenodo settings");
-  });
-});
+    it('stops before Zenodo when no journal repo is found', () => {
+      const paper = mkdtempSync(join(tmpdir(), 'oak-deposit-'));
+      writeFileSync(join(paper, 'myst.yml'), 'version: 1\nproject:\n  title: x\n');
+      const r = oak(['release', 'status', '--sandbox', '--token', 'x', '--paper', paper]);
+      expect(r.code).toBe(2);
+      expect(r.stderr).toContain('oak release status: no journal repo found');
+      expect(r.stderr).toContain("the deposit metadata without the journal's Zenodo settings");
+    });
+
+    it('finds the step after flags that take a value, as the pinned oak receives it', () => {
+      const paper = mkdtempSync(join(tmpdir(), 'oak-deposit-'));
+      writeFileSync(join(paper, 'myst.yml'), 'version: 1\nproject:\n  title: x\n');
+      const r = oak(['release', '--paper', paper, '--token', 'x', 'status', '--sandbox']);
+      expect(r.code).toBe(2);
+      expect(r.stderr).toContain('oak release status: no journal repo found');
+    });
+
+    it('status with --repo refuses --paper, before cloning', () => {
+      const r = oak(['release', 'status', '--repo', 'o/paper', '--paper', '.']);
+      expect(r.code).toBe(2);
+      expect(r.stderr).toContain('--repo reads a clone of the repo, so it takes no --paper');
+    });
+
+    it('status with --repo refuses a missing token before cloning', () => {
+      const r = oak(['release', 'status', '--repo', 'o/paper', '--sandbox'], {
+        ZENODO_TOKEN: undefined,
+        ZENODO_TOKEN_SANDBOX: undefined,
+      });
+      expect(r.code).toBe(2);
+      expect(r.stderr).toContain('the sandbox needs ZENODO_TOKEN_SANDBOX');
+    });
+  },
+);
 
 describe.skipIf(bundleState() === 'absent')("pins.yml's journal comes before a journal.yml", () => {
   beforeAll(assertBundleNotStale);
@@ -829,7 +855,7 @@ describe.skipIf(bundleState() === 'absent')("pins.yml's journal comes before a j
       'instance_repo: acme/journal\n',
     );
     // github.com points at an empty folder, so the pinned journal's clone fails offline.
-    const r = oak(['deposit', 'status', '--sandbox', '--token', 'x', '--paper', paper], {
+    const r = oak(['release', 'status', '--sandbox', '--token', 'x', '--paper', paper], {
       GIT_CONFIG_COUNT: '1',
       GIT_CONFIG_KEY_0: `url.file://${mkdtempSync(join(tmpdir(), 'oak-mirrors-'))}/.insteadOf`,
       GIT_CONFIG_VALUE_0: 'https://github.com/',
@@ -839,33 +865,47 @@ describe.skipIf(bundleState() === 'absent')("pins.yml's journal comes before a j
   });
 });
 
-describe.skipIf(bundleState() === 'absent')('oak release reads the DOI before any token', () => {
-  beforeAll(assertBundleNotStale);
+describe.skipIf(bundleState() === 'absent')(
+  'oak release deposit reads the DOI before any token',
+  () => {
+    beforeAll(assertBundleNotStale);
 
-  it('refuses a DOI that is not a Zenodo one', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'oak-release-doi-'));
-    writeFileSync(
-      join(dir, 'myst.yml'),
-      'version: 1\nproject:\n  doi: https://doi.org/10.5072/zenodo.5\n' +
-        '  options:\n    oaktree-sapling:\n      version: v9.9.9\n      edition: e\n',
-    );
-    const { code, stderr } = oak(
-      ['release', '--tag', 'v1.0.0', '--use-local-build', '--paper', dir, '--no-instance'],
-      { OAK_USE_RUNNING: '1', ZENODO_TOKEN: undefined, ZENODO_TOKEN_SANDBOX: undefined },
-    );
-    expect(code).toBe(2);
-    expect(stderr).toContain('oak release: project.doi https://doi.org/10.5072/zenodo.5 is not');
-  });
-});
+    it('refuses a DOI that is not a Zenodo one', () => {
+      const dir = mkdtempSync(join(tmpdir(), 'oak-release-doi-'));
+      writeFileSync(
+        join(dir, 'myst.yml'),
+        'version: 1\nproject:\n  doi: https://doi.org/10.5072/zenodo.5\n' +
+          '  options:\n    oaktree-sapling:\n      version: v9.9.9\n      edition: e\n',
+      );
+      const { code, stderr } = oak(
+        [
+          'release',
+          'deposit',
+          '--tag',
+          'v1.0.0',
+          '--use-local-build',
+          '--paper',
+          dir,
+          '--no-instance',
+        ],
+        { OAK_USE_RUNNING: '1', ZENODO_TOKEN: undefined, ZENODO_TOKEN_SANDBOX: undefined },
+      );
+      expect(code).toBe(2);
+      expect(stderr).toContain(
+        'oak release deposit: project.doi https://doi.org/10.5072/zenodo.5 is not',
+      );
+    });
+  },
+);
 
 describe.skipIf(bundleState() === 'absent')(
-  'oak release and oak deposit upload, before Zenodo',
+  'oak release and its subcommands, before Zenodo',
   () => {
     beforeAll(assertBundleNotStale);
 
     /** A paper with a committed sandbox DOI, outside any git repo. */
     function sandboxPaper(): string {
-      const dir = mkdtempSync(join(tmpdir(), 'oak-release-'));
+      const dir = mkdtempSync(join(tmpdir(), 'oak-paper-'));
       writeFileSync(
         join(dir, 'myst.yml'),
         'version: 1\nproject:\n  doi: 10.5072/zenodo.5\n' +
@@ -881,33 +921,67 @@ describe.skipIf(bundleState() === 'absent')(
 
     it('refuses a tag that is not a paper version', () => {
       const dir = sandboxPaper();
-      const bad = oak(['release', '--tag', 'v1.0.0;x', '--paper', dir], noTokens);
+      const bad = oak(['release', 'deposit', '--tag', 'v1.0.0;x', '--paper', dir], noTokens);
       expect(bad.code).toBe(2);
-      expect(bad.stderr).toContain('--tag must be a paper version');
+      expect(bad.stderr).toContain('oak release deposit: --tag must be a paper version');
+    });
+
+    it('refuses a word that is neither a version nor a subcommand, so a typo never starts the flow', () => {
+      for (const word of ['depost', 'v1.0.0;x']) {
+        const r = oak(['release', word, '--tag', 'v1.0.0'], noTokens);
+        expect(r.code, word).toBe(2);
+        expect(r.stderr, word).toContain('is neither a version like v1.2.3 nor a subcommand');
+        expect(r.stderr, word).toContain('oak release: usage:');
+      }
+    });
+
+    it('the flow refuses in GitHub Actions, pointing at oak upgrade', () => {
+      const r = oak(['release', '--tag', 'v1.0.0', '--paper', sandboxPaper()], noTokens, true);
+      expect(r.code).toBe(2);
+      expect(r.stderr).toContain('oak release runs only its subcommands');
+      expect(r.stderr).toContain('Run oak upgrade');
+    });
+
+    it('in GitHub Actions, a version is refused as terminal-only and a mistyped step as unknown', () => {
+      const version = oak(['release', 'v1.0.0'], noTokens, true);
+      expect(version.code).toBe(2);
+      expect(version.stderr).toContain('publishing a version runs from the terminal');
+      const typo = oak(['release', 'reserv-doi'], noTokens, true);
+      expect(typo.code).toBe(2);
+      expect(typo.stderr).toContain('oak release: usage:');
+    });
+
+    it('the flow refuses --use-local-build and --tag, which belong to oak release deposit', () => {
+      const local = oak(['release', 'v1.0.0', '--use-local-build'], noTokens);
+      expect(local.code).toBe(2);
+      expect(local.stderr).toContain('run oak release deposit --use-local-build');
+      const tag = oak(['release', '--tag', 'v1.0.0'], noTokens);
+      expect(tag.code).toBe(2);
+      expect(tag.stderr).toContain('name the version as an argument');
     });
 
     it('a local release needs the clone at the tag, checked before any build or download', () => {
       const dir = sandboxPaper();
-      const r = oak(
-        ['release', '--deposit-only', '--tag', 'v1.0.0', '--paper', dir, '--no-instance'],
-        { ...noTokens, ZENODO_TOKEN_SANDBOX: 'sandbox-token' },
-      );
+      const r = oak(['release', 'deposit', '--tag', 'v1.0.0', '--paper', dir, '--no-instance'], {
+        ...noTokens,
+        ZENODO_TOKEN_SANDBOX: 'sandbox-token',
+      });
       expect(r.code).toBe(2);
-      expect(r.stderr).toContain('this clone has no tag v1.0.0');
+      expect(r.stderr).toContain('oak release deposit: this clone has no tag v1.0.0');
     });
 
     it('--use-local-build deposits this clone, so it refuses --repo', () => {
       const r = oak(
-        ['release', '--use-local-build', '--repo', 'o/paper', '--tag', 'v1.0.0'],
+        ['release', 'deposit', '--use-local-build', '--repo', 'o/paper', '--tag', 'v1.0.0'],
         noTokens,
       );
       expect(r.code).toBe(2);
       expect(r.stderr).toContain('--use-local-build deposits this clone');
     });
 
-    it('deposit upload takes the sandbox from the DOI, with no --sandbox', () => {
+    it('oak release deposit takes the sandbox from the DOI, with no --sandbox', () => {
       const r = oak(
-        ['deposit', 'upload', '--pdf', 'x.pdf', '--tag', 'v1.0.0', '--paper', sandboxPaper()],
+        ['release', 'deposit', '--tag', 'v1.0.0', '--paper', sandboxPaper(), '--no-instance'],
         { ...noTokens, ZENODO_TOKEN: 'production-secret' },
       );
       expect(r.code).toBe(2);
@@ -917,7 +991,7 @@ describe.skipIf(bundleState() === 'absent')(
 
     it('in Actions it deposits _build and never builds, with no flag', () => {
       const r = oak(
-        ['release', '--tag', 'v1.0.0', '--paper', sandboxPaper(), '--no-instance'],
+        ['release', 'deposit', '--tag', 'v1.0.0', '--paper', sandboxPaper(), '--no-instance'],
         { ...noTokens, ZENODO_TOKEN_SANDBOX: 'sandbox-token' },
         true,
       );
@@ -929,38 +1003,57 @@ describe.skipIf(bundleState() === 'absent')(
     const emptySecrets = { OAK_USE_RUNNING: '1', ZENODO_TOKEN: '', ZENODO_TOKEN_SANDBOX: '' };
 
     it('the CI deposit with no token ends green with a notice to deposit from the terminal', () => {
-      const r = oak(['release', '--tag', 'v1.0.0', '--paper', sandboxPaper()], emptySecrets, true);
+      const r = oak(
+        ['release', 'deposit', '--tag', 'v1.0.0', '--paper', sandboxPaper()],
+        { ...emptySecrets, GITHUB_REPOSITORY: 'o/paper' },
+        true,
+      );
       expect(r.code).toBe(0);
-      expect(r.stderr).toContain('::notice::oak release: the zenodo-publish environment has no');
+      expect(r.stderr).toContain(
+        '::notice::oak release deposit: the zenodo-publish environment has no',
+      );
       expect(r.stderr).toContain('ZENODO_TOKEN_SANDBOX');
-      expect(r.stderr).toContain('oak release --tag v1.0.0');
+      expect(r.stderr).toContain('oak release --repo o/paper v1.0.0');
       expect(r.stderr).toContain('deposit: skipped');
     });
 
-    it('the CI DOI reservation with no token fails, pointing at oak deposit prepare', () => {
+    it('the CI DOI reservation with no token fails, pointing at oak release', () => {
       const r = oak(
-        ['deposit', 'prepare', '--sandbox', '--paper', sandboxPaper()],
-        emptySecrets,
+        ['release', 'reserve-doi', '--sandbox', '--paper', sandboxPaper()],
+        { ...emptySecrets, GITHUB_REPOSITORY: 'o/paper' },
         true,
       );
       expect(r.code).toBe(2);
       expect(r.stderr).toContain('the zenodo-prepare environment has no ZENODO_TOKEN_SANDBOX');
-      expect(r.stderr).toContain('oak deposit prepare --sandbox');
+      expect(r.stderr).toContain('oak release --repo o/paper <vX.Y.Z> --sandbox');
     });
 
     it('a local release with no token is refused', () => {
-      const r = oak(
-        ['release', '--deposit-only', '--tag', 'v1.0.0', '--paper', sandboxPaper()],
-        noTokens,
-      );
+      const r = oak(['release', 'deposit', '--tag', 'v1.0.0', '--paper', sandboxPaper()], noTokens);
       expect(r.code).toBe(2);
       expect(r.stderr).toContain('the sandbox needs ZENODO_TOKEN_SANDBOX');
     });
 
-    it('deposit publish is no verb: upload fills the draft', () => {
-      const r = oak(['deposit', 'publish', '--paper', sandboxPaper()], noTokens);
+    it('oak deposit is no command', () => {
+      const r = oak(['deposit', 'prepare', '--paper', sandboxPaper()], noTokens);
       expect(r.code).toBe(2);
-      expect(r.stderr).toContain('<prepare|upload|status>');
+      expect(r.stderr).toContain("oak: unknown command 'deposit'");
     });
   },
 );
+
+describe.skipIf(bundleState() === 'absent')('oak clean', () => {
+  beforeAll(assertBundleNotStale);
+
+  it('names the folder it searched and the cache, and asks nothing when nothing is kept', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'oak-clean-tmp-'));
+    const cache = mkdtempSync(join(tmpdir(), 'oak-clean-cache-'));
+    mkdirSync(join(cache, 'oak'));
+    writeFileSync(join(cache, 'oak', 'x'), 'cached');
+    const r = oak(['clean', '--json'], { TMPDIR: dir, XDG_CACHE_HOME: cache });
+    expect(r.code).toBe(0);
+    expect(r.stderr).toContain(`no clones kept by oak release in ${dir}`);
+    expect(r.stderr).toContain(`${join(cache, 'oak')} holds`);
+    expect(JSON.parse(r.stdout)).toMatchObject({ status: 'ok', dir, clones: [] });
+  });
+});

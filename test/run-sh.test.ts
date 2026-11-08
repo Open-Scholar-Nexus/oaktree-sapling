@@ -80,7 +80,7 @@ describe('ci/run.sh', () => {
 
   it('leaves the journal repo to oak, so it passes no --instance', () => {
     const dir = engine({ status: 'ok' });
-    for (const verb of ['build', 'validate', 'release', 'deploy-preview', 'deposit'])
+    for (const verb of ['build', 'validate', 'release', 'deploy-preview'])
       expect(
         run(dir, [verb], { INSTANCE_REPO: 'acme/journal', GITHUB_REPOSITORY: 'acme/paper' }).argv,
         verb,

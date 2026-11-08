@@ -28,10 +28,10 @@ export const CONFORMANCE_LABEL = 'conformance';
 export const CERT_BRANCH_PREFIX = 'cert-';
 
 /** Marks a run's throwaway tags (`reset` removes `*-cert-*`). The deposit tag cannot use it:
- *  `oak release` needs a plain `vX.Y.Z` (see `CERT_DEPOSIT_TAG`). */
+ *  `oak release deposit` needs a plain `vX.Y.Z` (see `CERT_DEPOSIT_TAG`). */
 export const CERT_TAG_MARKER = '-cert-';
 
-/** The deposit tag. `oak release` takes only `vX.Y.Z`, so a reserved version that cannot clash
+/** The deposit tag. `oak release deposit` takes only `vX.Y.Z`, so a reserved version that cannot clash
  *  with the test repo's real ones is pushed, published, checked and deleted, every run.
  *  The deposit draft is keyed by the repo, not the tag, so reusing the version is fine. */
 export const CERT_DEPOSIT_TAG = 'v0.0.0';
@@ -466,10 +466,10 @@ export async function cmdConformanceRun(input: RunInput, deps: ConformanceDeps):
     gh.deleteBranch(repo, branch);
     log(`same-repo preview CERTIFIED for ${tag}`);
 
-    // ---- The deposit: deposit-version.yml and `oak release` ----
+    // ---- The deposit: deposit-version.yml and `oak release deposit` ----
     // The tag push, the publish run, and the deposit files on the tag's release [R24].
-    // Reserving a DOI is not tested: the test repo already has a sandbox DOI and `oak
-    // deposit prepare` refuses when one is set. This holds no Zenodo token, so it checks the
+    // Reserving a DOI is not tested: the test repo already has a sandbox DOI and `oak release
+    // reserve-doi` refuses when one is set. This holds no Zenodo token, so it checks the
     // deposit by the release's file names.
     phase = 'deposit';
 

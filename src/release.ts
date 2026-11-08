@@ -16,7 +16,7 @@ import { DERIVED_CONFIG_FILE, parseYaml } from './yaml-io.js';
 import type { DepositState } from './zenodo.js';
 
 /* --------------------------------------------------------------------------
- * The deposit step's build: `oak release --deposit-only`
+ * The build `oak release deposit` deposits
  * ------------------------------------------------------------------------ */
 
 /** The path of the Deposit version workflow in a paper repo, as GitHub reports it in a run's
@@ -39,6 +39,9 @@ export const RELEASE_BUILD_PATHS = [
 
 /** The one path a complete build may lack: myst writes it only when it downloads a template. */
 const OPTIONAL_BUILD_PATH = '_build/templates';
+
+/** The command `oak release deposit`'s messages name. */
+const DEPOSIT_STEP = 'release deposit';
 
 export interface CiRun {
   id: number;
@@ -129,10 +132,14 @@ export function fetchCiBuild(
   );
   if (!run) throw new UserError(msg.workflow.releaseNoRun(tag, repo));
   const job = fromGitHub(() => src.jobs(repo, run.id)).find((j) => j.name === DEPOSIT_BUILD_JOB);
-  if (!job) throw new UserError(msg.workflow.releaseNoBuildJob(run.url, DEPOSIT_BUILD_JOB));
+  if (!job) {
+    throw new UserError(msg.workflow.releaseNoBuildJob(DEPOSIT_STEP, run.url, DEPOSIT_BUILD_JOB));
+  }
   if (job.status !== 'completed') throw new UserError(msg.workflow.releaseRunPending(run.url));
   if (job.conclusion !== 'success') {
-    throw new UserError(msg.workflow.releaseRunFailed(run.url, String(job.conclusion)));
+    throw new UserError(
+      msg.workflow.releaseRunFailed(DEPOSIT_STEP, run.url, String(job.conclusion)),
+    );
   }
 
   const tmp = mkdtempSync(join(tmpdir(), 'oak-release-build-'));
@@ -205,8 +212,9 @@ const HEARTBEAT_TRIES = 20;
 export interface ReleaseSource extends Pick<CiBuildSource, 'tagCommit' | 'pushRuns' | 'jobs'> {
   /** The repo's tags starting with `v`. */
   vTags(repo: string): string[];
-  /** Clones `repo` into a new temporary folder and returns it. */
-  clone(repo: string): string;
+  /** Clones `repo` into a new temporary folder named for `tag` (clean.ts `clonePrefix`), and
+   *  returns it. */
+  clone(repo: string, tag: string): string;
   /** Fetches the branches and tags into `clone`. */
   fetch(clone: string): void;
   /** The head of the default branch as last fetched. */
@@ -246,16 +254,34 @@ export interface ReleaseDeps {
   src: ReleaseSource;
   hasToken(sandbox: boolean): boolean;
   readDepositState(conceptDoi: string, sandbox: boolean): Promise<DepositState>;
-  /** Reserves the DOI: `oak deposit prepare` with the pinned oak in `clone`, on the default
+  /** Throws a UserError when `version`, the oak myst.yml pins, is older than the first that has
+   *  `oak release reserve-doi` and `oak release deposit` (pinned.ts `DEPOSIT_MIN_VERSION`). */
+  checkPin(version: string): void;
+  /** Reserves the DOI: `oak release reserve-doi` with the pinned oak in `clone`, on the default
    *  branch, which opens the DOI pull request. */
   reserveDoi(clone: string, sandbox: boolean): Promise<number>;
-  /** Fills the Zenodo draft: `oak release --deposit-only` with the pinned oak in `clone`, at the
-   *  tag. */
+  /** Fills the Zenodo draft: `oak release deposit` with the pinned oak in `clone`, at the tag. */
   deposit(clone: string): Promise<number>;
   confirm(plan: string[]): Promise<boolean>;
   sleep(ms: number): Promise<void>;
   log(line: string): void;
 }
+
+/** How a run of {@link runRelease} ended, and its exit code. */
+export type ReleaseReason =
+  'deposited' | 'already-deposited' | 'deposited-by-ci' | 'declined' | 'step-failed' | 'wait-limit';
+
+export interface ReleaseOutcome {
+  code: number;
+  reason: ReleaseReason;
+}
+
+/** The reasons that leave the version deposited. */
+export const DEPOSITED: readonly ReleaseReason[] = [
+  'deposited',
+  'already-deposited',
+  'deposited-by-ci',
+];
 
 /** A wait that reached its limit; the run exits 3 and a rerun continues. */
 class WaitTimeout extends Error {}
@@ -304,23 +330,24 @@ function guarded(src: ReleaseSource): ReleaseSource {
  * 3. No tag and no DOI: reserve the DOI, which pushes {@link DOI_BRANCH} and opens its pull
  *    request; merge it at the commit pushed, tag the merge commit, then as 1.
  * The refusals it can check first (token, Zenodo draft, sandbox against the committed DOI) come
- * before the confirmation and the first write. Returns the exit code: 0 done or declined, 1 a
- * bug, 2 refused or failed, 3 a wait reached its limit. The clone is removed on 0 and kept, with
- * its path printed, otherwise.
+ * before the confirmation and the first write. Returns the {@link ReleaseOutcome}, whose code
+ * is 0 done or declined, 1 a bug, 2 a step failed, 3 a wait reached its limit; throws a UserError
+ * when it refuses. The clone is removed on 0 and kept, with its path printed, otherwise.
  */
-export async function runRelease(input: ReleaseInput, deps: ReleaseDeps): Promise<number> {
+export async function runRelease(input: ReleaseInput, deps: ReleaseDeps): Promise<ReleaseOutcome> {
   const { repo, tag } = input;
   // A Proxy: every `src` call but `merge` throws a UserError ({@link guarded}).
   const src = guarded(deps.src);
-  const clone = src.clone(repo);
+  const clone = src.clone(repo, tag);
   deps.log(msg.workflow.releaseCloned(repo, clone));
   let code: number | null = null;
   let refused = false;
   try {
-    code = await releaseFrom(clone, input, src, deps);
-    return code;
+    const outcome = await releaseFrom(clone, input, src, deps);
+    code = outcome.code;
+    return outcome;
   } catch (e) {
-    if (e instanceof StepFailed) return (code = e.code);
+    if (e instanceof StepFailed) return { code: (code = e.code), reason: 'step-failed' };
     // `main` prints the refusal, so the clone's path goes after it, in the same message.
     if (e instanceof UserError) {
       refused = true;
@@ -329,7 +356,7 @@ export async function runRelease(input: ReleaseInput, deps: ReleaseDeps): Promis
     if (!(e instanceof WaitTimeout)) throw e;
     deps.log(e.message);
     deps.log(msg.workflow.releaseRerun(input.rerun));
-    return (code = 3);
+    return { code: (code = 3), reason: 'wait-limit' };
   } finally {
     // Kept after a failure, for the editor to look into.
     if (code === 0) rmSync(clone, { recursive: true, force: true });
@@ -342,24 +369,30 @@ async function releaseFrom(
   input: ReleaseInput,
   src: ReleaseSource,
   deps: ReleaseDeps,
-): Promise<number> {
+): Promise<ReleaseOutcome> {
   const { repo, tag, publish } = input;
   const deposited = () => src.releaseAssets(repo, tag).includes(DEPOSITED_ASSET);
 
   const tagged = src.tagCommit(clone, tag);
   const head = src.head(clone);
-  const doi = committedDoi(src, clone, tagged ?? head.sha);
+  const { doi, pin } = committed(src, clone, tagged ?? head.sha);
   const sandbox = doi ? doi.sandbox : input.sandbox;
 
   // Every refusal comes before anything is asked or changed.
+  if (!pin)
+    throw new UserError(
+      msg.workflow.releaseNotPaper(repo, tagged ? `at ${tag}` : 'on the default branch'),
+    );
   if (tagged && !doi) throw new UserError(msg.workflow.releaseTagNoDoi(tag, repo));
   if (doi && input.sandbox && !doi.sandbox) {
     throw new UserError(msg.workflow.releaseSandboxWithProdDoi(doi.doi));
   }
   if (tagged && deposited()) {
     deps.log(msg.workflow.releaseAlreadyDeposited(tag));
-    return 0;
+    return { code: 0, reason: 'already-deposited' };
   }
+  // The subcommands run with the pinned oak, so a pin they refuse is refused before the tag.
+  deps.checkPin(pin);
   if (!deps.hasToken(sandbox)) throw new UserError(msg.workflow.noZenodoToken('release', sandbox));
   if (doi) await assertDraftFor(doi, tag, deps);
 
@@ -381,7 +414,7 @@ async function releaseFrom(
       msg.workflow.releasePlanDeposit(tag, sandbox, publish),
       msg.workflow.releasePlanAttach(tag),
     ];
-    if (!(await deps.confirm(plan))) return 0;
+    if (!(await deps.confirm(plan))) return { code: 0, reason: 'declined' };
     // A later version tags the head the confirmation showed.
     sha = doi ? head.sha : await reserveAndMerge(clone, input, src, deps);
     src.createTag(repo, tag, sha);
@@ -391,11 +424,12 @@ async function releaseFrom(
   const run = await waitForBuild(repo, tag, sha, src, deps);
   if (deposited()) {
     deps.log(msg.workflow.releaseDepositedByCi(tag, run.url));
-    return 0;
+    return { code: 0, reason: 'deposited-by-ci' };
   }
   src.fetch(clone);
   src.checkout(clone, `refs/tags/${tag}`);
-  return exitOf(await deps.deposit(clone));
+  const code = exitOf(await deps.deposit(clone));
+  return { code, reason: code === 0 ? 'deposited' : 'step-failed' };
 }
 
 /**
@@ -440,19 +474,26 @@ interface CommittedDoi {
   sandbox: boolean;
 }
 
-/** The Zenodo DOI in `myst.yml` at commit `ref`, or null when it has none. */
-function committedDoi(src: ReleaseSource, clone: string, ref: string): CommittedDoi | null {
+/** The Zenodo DOI and the oak version `myst.yml` holds at commit `ref`, each null when absent. */
+function committed(
+  src: ReleaseSource,
+  clone: string,
+  ref: string,
+): { doi: CommittedDoi | null; pin: string | null } {
   const text = src.fileAt(clone, ref, 'myst.yml');
-  if (text === null) return null;
-  const doi = parseYaml(text, `myst.yml at ${ref.slice(0, 12)}`).getIn(['project', 'doi']);
-  if (typeof doi !== 'string' || !doi) return null;
+  if (text === null) return { doi: null, pin: null };
+  const doc = parseYaml(text, `myst.yml at ${ref.slice(0, 12)}`);
+  const version = doc.getIn(['project', 'options', 'oaktree-sapling', 'version']);
+  const pin = typeof version === 'string' && version ? version : null;
+  const doi = doc.getIn(['project', 'doi']);
+  if (typeof doi !== 'string' || !doi) return { doi: null, pin };
   const parsed = parseZenodoDoi(doi);
   if (!parsed) throw new UserError(msg.workflow.doiNotZenodo('release', doi));
-  return { doi, sandbox: parsed.sandbox };
+  return { doi: { doi, sandbox: parsed.sandbox }, pin };
 }
 
 /** Refuses when Zenodo holds no draft for `tag`: no record, or the newest version published with
- *  another version. Published with this version passes; the deposit step finishes it. */
+ *  another version. Published with this version passes; `oak release deposit` finishes it. */
 async function assertDraftFor(doi: CommittedDoi, tag: string, deps: ReleaseDeps): Promise<void> {
   let state: DepositState;
   try {
@@ -480,9 +521,19 @@ async function waitForBuild(
   src: ReleaseSource,
   deps: ReleaseDeps,
 ): Promise<CiRun> {
-  deps.log(msg.workflow.releaseWaitRun(tag, `https://github.com/${repo}/actions`));
+  const actions = `https://github.com/${repo}/actions`;
+  deps.log(msg.workflow.releaseWaitRun(tag, actions));
+  // Counts the tries after the first, as `unchanged` below does, so both lines come 5 minutes apart.
+  let tries = 0;
   const run = await pollUntil(
-    () => depositRunFor(src.pushRuns(repo, sha), tag, sha),
+    () => {
+      const found = depositRunFor(src.pushRuns(repo, sha), tag, sha);
+      if (!found && tries > 0 && tries % HEARTBEAT_TRIES === 0) {
+        deps.log(msg.workflow.releaseNoRunYet(tag, actions));
+      }
+      tries++;
+      return found;
+    },
     deps.sleep,
     RUN_WAIT,
   );
@@ -493,7 +544,7 @@ async function waitForBuild(
   const done = await pollUntil(
     () => {
       const state = buildState(src.jobs(repo, run.id), run.url);
-      const line = msg.workflow.releaseBuildState(state);
+      const line = msg.workflow.releaseBuildState(state, run.url);
       if (line !== last) {
         deps.log(line);
         last = line;
@@ -529,13 +580,13 @@ function buildState(jobs: CiJob[], url: string): BuildState {
   const build = jobs.find((j) => j.name === DEPOSIT_BUILD_JOB);
   if (!build) {
     if (jobs.length && jobs.every((j) => j.status === 'completed')) {
-      throw new UserError(msg.workflow.releaseNoBuildJob(url, DEPOSIT_BUILD_JOB));
+      throw new UserError(msg.workflow.releaseNoBuildJob('release', url, DEPOSIT_BUILD_JOB));
     }
     return { phase: 'queued' };
   }
   if (build.status !== 'completed') return { phase: 'building', status: build.status };
   if (build.conclusion !== 'success') {
-    throw new UserError(msg.workflow.releaseRunFailed(url, String(build.conclusion)));
+    throw new UserError(msg.workflow.releaseRunFailed('release', url, String(build.conclusion)));
   }
   const publish = jobs.find((j) => j.name === DEPOSIT_PUBLISH_JOB);
   if (publish && publish.status !== 'completed') {

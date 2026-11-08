@@ -98,27 +98,26 @@ describe('handOff', () => {
     expect(calls.clones).toEqual([]);
   });
 
-  it('runs release and deposit from a clone of the pinned tag, even at this version', async () => {
+  it('runs the release subcommands from a clone of the pinned tag, even at this version', async () => {
     // engine.zip is a `git archive` of oak, and the npm package has no git history.
-    for (const verb of ['release', 'deposit'] as const) {
-      const { deps, calls } = fakes();
-      const dir = paper('v1.0.0');
-      expect(await handOff(ctx(dir, [], {}, verb), deps), verb).toBe(7);
-      expect(calls.clones, verb).toEqual([[DEFAULT_REPO, 'v1.0.0']]);
-      expect(calls.spawns[0]!.argv[0], verb).toBe(verb);
+    const { deps, calls } = fakes();
+    const dir = paper('v1.0.0');
+    const args = ['deposit', '--tag', 'v1.0.0'];
+    expect(await handOff(ctx(dir, args, {}, 'release'), deps)).toBe(7);
+    expect(calls.clones).toEqual([[DEFAULT_REPO, 'v1.0.0']]);
+    expect(calls.spawns[0]!.argv).toEqual(['release', '--paper', dir, ...args]);
 
-      const checkout = fakes();
-      expect(
-        await handOff({ ...ctx(dir, [], {}, verb), runningIsCheckout: true }, checkout.deps),
-      ).toBeNull();
-      expect(checkout.calls.clones).toEqual([]);
-    }
+    const checkout = fakes();
+    expect(
+      await handOff({ ...ctx(dir, args, {}, 'release'), runningIsCheckout: true }, checkout.deps),
+    ).toBeNull();
+    expect(checkout.calls.clones).toEqual([]);
   });
 
-  it("refuses release and deposit below DEPOSIT_MIN_VERSION, since myst.yml is the author's", async () => {
-    for (const verb of ['release', 'deposit'] as const) {
+  it("refuses the release subcommands below DEPOSIT_MIN_VERSION, since myst.yml is the author's", async () => {
+    {
       const { deps, calls } = fakes();
-      await expect(handOff(ctx(paper('v0.2.0'), [], {}, verb), deps)).rejects.toThrow(
+      await expect(handOff(ctx(paper('v0.2.0'), [], {}, 'release'), deps)).rejects.toThrow(
         DEPOSIT_MIN_VERSION,
       );
       expect(calls.clones).toEqual([]);

@@ -1,5 +1,5 @@
 /**
- * `oak release` on an editor's computer, with a fake `CiBuildSource` (no git or gh): the clone
+ * `oak release deposit` on an editor's computer, with a fake `CiBuildSource` (no git or gh): the clone
  * must be at the tag, the build comes from the tag's own Deposit version run once its build job
  * passed, and the download replaces the build outputs in the paper.
  */

@@ -6,6 +6,7 @@
 import * as msg from './messages.js';
 import { UserError } from './messages.js';
 import { ENGINE_MANAGED_PATHS, GITHUB_REPO, repoFromGithubUrl } from './schema.js';
+import { clonePrefix } from './clean.js';
 import { execFileSync, spawnSync } from 'node:child_process';
 import {
   cpSync,
@@ -55,7 +56,8 @@ function echoChild(tool: string, text: unknown): void {
 
 /**
  * Prints what is running, then erases the line [R85]: cloning or creating a repo takes seconds,
- * and silence reads as a hang. No spinner, since `spawnSync` blocks the event loop. Only on a
+ * and silence reads as a hang. No spinner, since `spawnSync` blocks the event loop; the one
+ * `oak release` shows while it waits (progress.ts) is drawn only between calls. Only on a
  * TTY: a log would keep the half-erased line, and CI prints child output anyway.
  */
 function showWorking(tool: string, args: string[]): () => void {
@@ -303,8 +305,8 @@ export function openDoiPr(
   repoRoot: string,
   opts: { conceptDoi: string },
 ): { url: string; sha: string } {
-  // One branch name for every version: prepare reserves the concept DOI, and the version comes
-  // from the tag at publish. Preparing again force-pushes the same branch.
+  // One branch name for every version: reserve-doi reserves the concept DOI, and the version
+  // comes from the tag at publish. Reserving again force-pushes the same branch.
   const branch = DOI_BRANCH;
   const repo = originRepo(repoRoot);
   const base = repo ? defaultBranch(repo) : 'main';
@@ -436,7 +438,7 @@ export function ghLoggedIn(): boolean {
   }
 }
 
-/** The real {@link CiBuildSource} for `oak release`: git in the paper's clone, gh for the run. */
+/** The real {@link CiBuildSource} for `oak release deposit`: git in the paper's clone, gh for the run. */
 export const realCiBuildSource: CiBuildSource = {
   originRepo,
   tagCommit(paperRoot, tag) {
@@ -485,7 +487,7 @@ function tagExists(repo: string, tag: string): boolean {
 }
 
 /**
- * The real {@link ReleaseSource} for `oak release --repo`: gh with the editor's login, git in the temporary
+ * The real {@link ReleaseSource} for `oak release`: gh with the editor's login, git in the temporary
  * clone. A partial clone (`--filter=blob:none`) fetches only the files it reads.
  */
 export const realReleaseSource: ReleaseSource = {
@@ -495,8 +497,8 @@ export const realReleaseSource: ReleaseSource = {
   vTags(repo) {
     return apiList(`repos/${repo}/git/matching-refs/tags/v`, '.[].ref | ltrimstr("refs/tags/")');
   },
-  clone(repo) {
-    const dir = mkdtempSync(join(tmpdir(), 'oak-release-'));
+  clone(repo, tag) {
+    const dir = mkdtempSync(join(tmpdir(), clonePrefix(repo, tag)));
     try {
       gh(['repo', 'clone', repo, dir, '--', '--filter=blob:none', '--quiet']);
     } catch (e) {
