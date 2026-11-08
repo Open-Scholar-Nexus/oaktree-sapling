@@ -1,0 +1,31 @@
+/* The theme's blue, swapped for the logo's green (#339966). Link colours keep a 4.5:1 contrast. */
+:root {
+  --myst-color-primary: #339966;
+  --myst-color-primary-hover: #267a52;
+  --myst-color-link: #267a52;
+  --myst-color-link-hover: #339966;
+  --myst-color-link-underline: #5cc28f;
+  --myst-color-active: #267a52;
+  --myst-color-active-bg: rgba(51, 153, 102, 0.15);
+  --myst-color-active-surface: #edf7f1;
+  --myst-color-focus-ring: #339966;
+  --myst-color-focus-outline: #b7e0c9;
+  --myst-color-accent-text: #1a4d35;
+  --myst-color-accent-surface: #edf7f1;
+  --myst-color-accent-surface-border: #b7e0c9;
+  --myst-color-accent-surface-text: #1a4d35;
+}
+.dark {
+  --myst-color-link: #5cc28f;
+  --myst-color-link-hover: #8fd6b0;
+  --myst-color-link-underline: #339966;
+  --myst-color-active: #5cc28f;
+  --myst-color-active-bg: rgba(51, 153, 102, 0.2);
+  --myst-color-active-surface: #1e293b;
+  --myst-color-focus-ring: #5cc28f;
+  --myst-color-focus-outline: #5cc28f;
+  --myst-color-accent-text: #d3f0e0;
+  --myst-color-accent-surface: #1a4d354d;
+  --myst-color-accent-surface-border: #267a52;
+  --myst-color-accent-surface-text: #edf7f1;
+}

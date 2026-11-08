@@ -55,6 +55,7 @@ site:
   options:
     logo: brand/sapling.svg
     favicon: brand/sapling-64.png
+    style: brand/colors.css
     logo_text: Oaktree Sapling
     # Keeps the folder in each URL (/guide/journal-yml), which oak's printed links rely on.
     folders: true
