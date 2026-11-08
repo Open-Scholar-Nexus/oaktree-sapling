@@ -254,7 +254,8 @@ export interface ReleaseDeps {
   src: ReleaseSource;
   hasToken(sandbox: boolean): boolean;
   readDepositState(conceptDoi: string, sandbox: boolean): Promise<DepositState>;
-  /** Throws a UserError when the steps cannot run with oak `version`, which myst.yml pins. */
+  /** Throws a UserError when `version`, the oak myst.yml pins, is older than the first that has
+   *  `oak release reserve-doi` and `oak release deposit` (pinned.ts `DEPOSIT_MIN_VERSION`). */
   checkPin(version: string): void;
   /** Reserves the DOI: `oak release reserve-doi` with the pinned oak in `clone`, on the default
    *  branch, which opens the DOI pull request. */

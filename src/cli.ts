@@ -438,6 +438,50 @@ function emit(
   for (const line of (human ?? summarize)(result)) process.stderr.write(line + '\n');
 }
 
+/** The steps of `oak release`, which the paper's workflows run and the pinned oak runs. */
+const RELEASE_STEPS = ['reserve-doi', 'deposit', 'status'] as const;
+
+/** The flags of `oak release` and its steps that take a value. */
+const RELEASE_VALUE_FLAGS = [
+  'repo',
+  'tag',
+  'paper',
+  'myst',
+  'token',
+  'site-url',
+  'instance',
+  'bundle-out',
+];
+
+/** The first word of `argv` that is no flag and no flag's value, with its index, or null. */
+function releaseWord(argv: string[]): { word: string; at: number } | null {
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i]!;
+    if (!arg.startsWith('--')) return { word: arg, at: i };
+    if (RELEASE_VALUE_FLAGS.includes(arg.slice(2))) i++;
+  }
+  return null;
+}
+
+/** Whether `oak release <argv>` runs one of {@link RELEASE_STEPS}. */
+function isReleaseStep(argv: string[]): boolean {
+  const first = releaseWord(argv);
+  return first !== null && (RELEASE_STEPS as readonly string[]).includes(first.word);
+}
+
+/**
+ * `oak release`: {@link cmdReleaseVersion} with a version or no word, else the step its first word
+ * names, with that word left out of its arguments. Documented at DOCS.release.
+ */
+async function cmdRelease(argv: string[]): Promise<number> {
+  const first = releaseWord(argv);
+  const rest = first ? argv.filter((_, i) => i !== first.at) : argv;
+  if (first?.word === 'reserve-doi') return cmdReleaseReserveDoi(rest);
+  if (first?.word === 'deposit') return cmdReleaseDeposit(rest);
+  if (first?.word === 'status') return cmdReleaseStatus(rest);
+  return cmdReleaseVersion(argv);
+}
+
 /** The Zenodo token for the sandbox or production: `--token`, else the environment's [R102]. A
  *  sandbox run never uses the production one [R102]. */
 function zenodoToken(argv: string[], sandbox: boolean): string | undefined {
@@ -488,7 +532,7 @@ async function zenodoStep(
 
 /** `oak release reserve-doi`: reserves the DOI and opens the DOI pull request. Documented at
  *  DOCS.releaseReserveDoi. */
-async function cmdReserveDoi(argv: string[]): Promise<number> {
+async function cmdReleaseReserveDoi(argv: string[]): Promise<number> {
   const step = await zenodoStep(argv, 'release reserve-doi');
   if (typeof step === 'number') return step;
   const { api, mystPath, instanceRoot } = step;
@@ -605,55 +649,11 @@ function platformName(): string {
   return `${process.platform}-${arch}`;
 }
 
-/** The steps of `oak release`, which the paper's workflows run and the pinned oak runs. */
-const RELEASE_STEPS = ['reserve-doi', 'deposit', 'status'] as const;
-
-/** The flags of `oak release` and its steps that take a value. */
-const RELEASE_VALUE_FLAGS = [
-  'repo',
-  'tag',
-  'paper',
-  'myst',
-  'token',
-  'site-url',
-  'instance',
-  'bundle-out',
-];
-
-/** The first word of `argv` that is no flag and no flag's value, with its index, or null. */
-function releaseWord(argv: string[]): { word: string; at: number } | null {
-  for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i]!;
-    if (!arg.startsWith('--')) return { word: arg, at: i };
-    if (RELEASE_VALUE_FLAGS.includes(arg.slice(2))) i++;
-  }
-  return null;
-}
-
-/** Whether `oak release <argv>` runs one of {@link RELEASE_STEPS}. */
-function isReleaseStep(argv: string[]): boolean {
-  const first = releaseWord(argv);
-  return first !== null && (RELEASE_STEPS as readonly string[]).includes(first.word);
-}
-
-/**
- * `oak release`: {@link cmdReleaseRepo} with a version or no word, else the step its first word
- * names, with that word left out of its arguments. Documented at DOCS.release.
- */
-async function cmdRelease(argv: string[]): Promise<number> {
-  const first = releaseWord(argv);
-  const rest = first ? argv.filter((_, i) => i !== first.at) : argv;
-  if (first?.word === 'reserve-doi') return cmdReserveDoi(rest);
-  if (first?.word === 'deposit') return cmdDepositStep(rest);
-  if (first?.word === 'status') return cmdReleaseStatus(rest);
-  return cmdReleaseRepo(argv);
-}
-
 /**
  * `oak release deposit --tag vX`: deposits the tag's build, attaches the bundle to the tag's
  * release, and comments on the commit. Documented at DOCS.releaseDeposit.
  */
-async function cmdDepositStep(argv: string[]): Promise<number> {
+async function cmdReleaseDeposit(argv: string[]): Promise<number> {
   const useLocalBuild = has(argv, 'use-local-build');
   const inActions = Boolean(process.env.GITHUB_ACTIONS);
   if (useLocalBuild && flag(argv, 'repo') !== undefined) {
@@ -815,7 +815,7 @@ const RELEASE_STEP_FLAGS = ['token', 'site-url', 'instance'] as const;
  * terminal: `runRelease` (release.ts) in a temporary clone, with the editor's gh login, with the
  * Zenodo writes handed to the oak the paper pins. Documented at DOCS.release.
  */
-async function cmdReleaseRepo(argv: string[]): Promise<number> {
+async function cmdReleaseVersion(argv: string[]): Promise<number> {
   const gh = await import('./gh.js');
   const release = await import('./release.js');
   const z = await import('./zenodo.js');
@@ -1658,7 +1658,7 @@ async function runPinned(verb: PaperVerb, argv: string[]): Promise<number | null
 
 /** The verbs that run with the oak the paper pins ({@link runPinned}); for `release`, only its
  *  steps. Every other verb runs with this oak. */
-const PAPER_VERBS: readonly string[] = [
+const PINNED_VERBS: readonly string[] = [
   'build',
   'validate',
   'start',
@@ -1686,7 +1686,7 @@ async function main(argv: string[]): Promise<number> {
     const repo = flag(argv, 'repo');
     if (repo !== undefined) return releaseStatusOfRepo(repo, argv.slice(1));
   }
-  if (verb && PAPER_VERBS.includes(verb) && !releaseFlow) {
+  if (verb && PINNED_VERBS.includes(verb) && !releaseFlow) {
     const code = await runPinned(verb as PaperVerb, argv.slice(1));
     if (code !== null) return code;
   }

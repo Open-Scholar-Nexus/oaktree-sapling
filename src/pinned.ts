@@ -1,7 +1,7 @@
 /**
  * pinned.ts: hands `oak build`, `validate`, `start` and the `release` steps to the oak version
  * the paper pins, and `oak bootstrap` to the one `--engine-version` names. `oak release` with a
- * version hands over only its steps (`cmdReleaseRepo` in cli.ts).
+ * version hands over only its steps (`cmdReleaseVersion` in cli.ts).
  *
  * The paper's `myst.yml` names the version and its `pins.yml` the repository, as in CI, so a
  * local run builds with the same oak. Side effects are injected so the tests stay offline.
