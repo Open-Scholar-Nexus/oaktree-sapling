@@ -3,7 +3,9 @@
 
 Oaktree Sapling supports creating drafts on Zenodo. Publishing a paper on Zenodo also gives it a DOI. An editor does it once `main` holds the paper as it should be published, and again for each [new version](#new-version). Since the paper's `myst.yml` needs to contain the DOI assigned by Zenodo, publishing the first version has a preliminary step called "reserving the DOI". 
 
-Oaktree Sapling can publish with one command run on an editor's computer, or with workflows on GitHub. The workflows need the paper repository to have access to [Zenodo tokens](../reference/secrets.md); the command keeps the token on the editor's computer. Until Zenodo checks token scopes, we recommend publishing from the terminal ([why](../reference/secrets.md#zenodo-token-scopes)).
+Oaktree Sapling can publish with one command run on an editor's computer, or with workflows on GitHub. The workflows need the paper repository to have access to [Zenodo tokens](../reference/secrets.md); the command keeps the token on the editor's computer[^current-security].
+
+[^current-security]: Until Zenodo handles token scopes correctly, we recommend publishing from the terminal ([why](../reference/secrets.md#zenodo-token-scopes)).
 
 
 (from-terminal)=

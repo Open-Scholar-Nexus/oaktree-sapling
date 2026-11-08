@@ -5,7 +5,7 @@ Draft deposits on Zenodo and live previews of pull requests on Cloudflare need t
 
 :::{warning} A Zenodo token can do everything its owner can
 :label: zenodo-token-scopes
-Creating a Zenodo token asks which scopes it gets, such as `deposit:write`, but Zenodo records them without checking them. A Zenodo token set on GitHub therefore lets any workflow that reaches it publish, create versions and edit every record of the journal's Zenodo account. Until Zenodo checks token scopes, leave the Zenodo tokens unset and have an editor publish [from the terminal](../guide/publish.md#from-terminal), with the token on their own computer.
+Creating a Zenodo token asks which scopes it gets, such as `deposit:write`, but currently Zenodo does not actually check them. This means that a leaked token can publish, create versions and edit every record of the journal's Zenodo account; while Oaktree Sapling sets up the repo safely, changing configurations could cause a workflow to be merged that exposes a token. Until Zenodo checks token scopes, we suggest leaving the Zenodo tokens unset and having an editor publish [from the terminal](../guide/publish.md#from-terminal), with the token on their own computer.
 :::
 
 `ZENODO_TOKEN`, `ZENODO_TOKEN_SANDBOX`
