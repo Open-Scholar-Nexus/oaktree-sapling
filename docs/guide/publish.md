@@ -73,6 +73,7 @@ A published paper keeps one DOI for all its versions, and each version gets a DO
 
 If [**New version**](#click-new-version) was not clicked, oak refuses before it creates the tag, and links to the paper's Zenodo record.
 
+(with-workflows)=
 ## With the GitHub workflows
 
 The same steps, run one at a time with the paper repository's workflows. Without Zenodo tokens on GitHub, **Reserve DOI** fails, pointing at the terminal, and **Deposit version** builds the tag and ends with a notice.

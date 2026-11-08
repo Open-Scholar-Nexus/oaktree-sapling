@@ -3,7 +3,7 @@ import { compose, type ComposeInput, type ResolvedProject } from '../src/compose
 import { themeZipUrl } from '../src/assets.js';
 
 const ENGINE = '.engine';
-const INSTANCE = '.instance';
+const JOURNAL = '.journal';
 const VERSION = 'v0.3.0';
 const EDITION = 'fixture-edition';
 
@@ -23,7 +23,7 @@ const resolvedProject: ResolvedProject = {
 const base = (over: Partial<ComposeInput> = {}): ComposeInput => ({
   paperRoot: '.',
   engineRoot: ENGINE,
-  instanceRoot: INSTANCE,
+  journalRoot: JOURNAL,
   resolvedProject,
   engineVersion: VERSION,
   edition: EDITION,
@@ -36,15 +36,15 @@ describe('compose: extends chain', () => {
     const r = compose(base());
     expect(r.extendsChain).toEqual([
       `${ENGINE}/paper-base.yml`,
-      `${INSTANCE}/editions/${EDITION}.yml`,
-      `${INSTANCE}/brand/brand.yml`,
+      `${JOURNAL}/editions/${EDITION}.yml`,
+      `${JOURNAL}/brand/brand.yml`,
     ]);
   });
 
-  it('--no-instance builds unbranded, with only paper-base and a warning', () => {
-    const r = compose(base({ instanceRoot: null }));
+  it('--no-journal builds unbranded, with only paper-base and a warning', () => {
+    const r = compose(base({ journalRoot: null }));
     expect(r.extendsChain).toEqual([`${ENGINE}/paper-base.yml`]);
-    expect(r.warnings.join(' ')).toMatch(/no-instance/);
+    expect(r.warnings.join(' ')).toMatch(/no-journal/);
   });
 });
 
@@ -99,17 +99,17 @@ describe('compose: brand paths made absolute [R62]', () => {
     },
   };
 
-  it('rewrites relative site paths to <instanceRoot>/<x>', () => {
+  it('rewrites relative site paths to <journalRoot>/<x>', () => {
     const r = compose(base({ brandAssets }));
     expect(r.ownOverride.site!.options).toMatchObject({
-      logo: `${INSTANCE}/brand/logo.svg`,
-      favicon: `${INSTANCE}/brand/favicon.svg`,
+      logo: `${JOURNAL}/brand/logo.svg`,
+      favicon: `${JOURNAL}/brand/favicon.svg`,
     });
   });
 
   it('puts the typst watermark in project.options.logo, as an absolute path', () => {
     const r = compose(base({ brandAssets }));
-    expect(r.ownOverride.project!.options!.logo).toBe(`${INSTANCE}/brand/logo-watermark.svg`);
+    expect(r.ownOverride.project!.options!.logo).toBe(`${JOURNAL}/brand/logo-watermark.svg`);
     // and it sits beside the typst export entry, not replacing it
     expect(r.ownOverride.project!.exports![0]!.id).toBe('typst-pdf');
   });
@@ -128,7 +128,7 @@ describe('compose: brand paths made absolute [R62]', () => {
   it('sets asset options without a theme too (siteTemplate: null)', () => {
     const r = compose(base({ brandAssets, assetOverrides: { siteTemplate: null } }));
     expect(r.ownOverride.site!.template).toBeUndefined();
-    expect(r.ownOverride.site!.options!.logo).toBe(`${INSTANCE}/brand/logo.svg`);
+    expect(r.ownOverride.site!.options!.logo).toBe(`${JOURNAL}/brand/logo.svg`);
   });
 
   it('sets no asset options without brandAssets (only the template and typst export)', () => {
@@ -137,8 +137,8 @@ describe('compose: brand paths made absolute [R62]', () => {
     expect(r.ownOverride.project!.options).toBeUndefined();
   });
 
-  it('--no-instance sets no asset options', () => {
-    const r = compose(base({ instanceRoot: null, brandAssets }));
+  it('--no-journal sets no asset options', () => {
+    const r = compose(base({ journalRoot: null, brandAssets }));
     expect(r.ownOverride.site?.options).toBeUndefined();
     expect(r.ownOverride.project?.options).toBeUndefined();
   });
@@ -185,7 +185,7 @@ describe('compose: which typst template wins: author, then journal, then oak [R7
 
   it("the journal's template wins over oak's", () => {
     const r = compose(base({ journalTypstTemplate: './typst-template' }));
-    expect(templateOf(r)).toBe(`${INSTANCE}/typst-template`);
+    expect(templateOf(r)).toBe(`${JOURNAL}/typst-template`);
   });
 
   it("the author's template wins over the journal's, with a warning", () => {
@@ -227,7 +227,7 @@ describe('compose: which typst template wins: author, then journal, then oak [R7
     const journal = (v: string) => templateOf(compose(base({ journalTypstTemplate: v })));
 
     it("resolves ./ and ../ against the journal repo's root, where journal.yml is", () => {
-      expect(journal('./typst-template')).toBe(`${INSTANCE}/typst-template`);
+      expect(journal('./typst-template')).toBe(`${JOURNAL}/typst-template`);
       // join() normalises, so `../` leaves the journal repo's root as written
       expect(journal('../shared/typst')).toBe('shared/typst');
     });
@@ -242,8 +242,8 @@ describe('compose: which typst template wins: author, then journal, then oak [R7
       expect(journal('/srv/typst-template')).toBe('/srv/typst-template');
     });
 
-    it('leaves the value alone without a journal repo (--no-instance)', () => {
-      const r = compose(base({ instanceRoot: null, journalTypstTemplate: './typst-template' }));
+    it('leaves the value alone without a journal repo (--no-journal)', () => {
+      const r = compose(base({ journalRoot: null, journalTypstTemplate: './typst-template' }));
       expect(templateOf(r)).toBe('./typst-template');
     });
   });

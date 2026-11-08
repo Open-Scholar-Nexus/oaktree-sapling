@@ -5,8 +5,9 @@
  */
 import * as msg from './messages.js';
 import { UserError } from './messages.js';
-import { ENGINE_MANAGED_PATHS, GITHUB_REPO, repoFromGithubUrl } from './schema.js';
+import { ENGINE_MANAGED_PATHS, GITHUB_REPO, OLD_JOURNAL_KEY, repoFromGithubUrl } from './schema.js';
 import { clonePrefix } from './clean.js';
+import { colocatedPaper } from './projects.js';
 import { execFileSync, spawnSync } from 'node:child_process';
 import {
   cpSync,
@@ -29,6 +30,7 @@ import type { EnvironmentReviewer, Provisioner } from './bootstrap.js';
 import type { UpgradePr } from './upgrade.js';
 import type { ConformanceGh } from './conformance.js';
 import type { CiBuildSource, CiJob, CiRun, ReleaseSource } from './release.js';
+import type { AddPaperGh } from './add-paper.js';
 
 /**
  * git and gh output is captured, so the user can tell what oak did from what a tool it called
@@ -256,23 +258,23 @@ export const realGitContext: GitContext = {
 };
 
 /**
- * Which journal checkout `instanceRoot` is ({@link JournalStamp}); undefined without one.
+ * Which journal checkout `journalRoot` is ({@link JournalStamp}); undefined without one.
  * Untracked files count as uncommitted: `git archive` leaves them out.
  */
 export function journalStamp(
-  instanceRoot: string | null,
+  journalRoot: string | null,
   paperRoot: string,
 ): JournalStamp | undefined {
-  if (instanceRoot === null) return undefined;
-  if (resolve(instanceRoot) === resolve(paperRoot)) return { repo: '.' };
+  if (journalRoot === null) return undefined;
+  if (resolve(journalRoot) === resolve(paperRoot)) return { repo: '.' };
   try {
     // A folder inside a larger repo: HEAD and origin are that repo's.
-    if (git(instanceRoot, ['rev-parse', '--show-prefix'], { quiet: true })) {
+    if (git(journalRoot, ['rev-parse', '--show-prefix'], { quiet: true })) {
       return { repo: null, commit: null };
     }
-    const commit = git(instanceRoot, ['rev-parse', 'HEAD'], { quiet: true });
-    const dirty = git(instanceRoot, ['status', '--porcelain'], { quiet: true });
-    return { repo: locationRepo(originRepo(instanceRoot)), commit: dirty ? null : commit };
+    const commit = git(journalRoot, ['rev-parse', 'HEAD'], { quiet: true });
+    const dirty = git(journalRoot, ['status', '--porcelain'], { quiet: true });
+    return { repo: locationRepo(originRepo(journalRoot)), commit: dirty ? null : commit };
   } catch {
     return { repo: null, commit: null };
   }
@@ -306,8 +308,10 @@ export function openDoiPr(
   opts: { conceptDoi: string },
 ): { url: string; sha: string } {
   // One branch name for every version: reserve-doi reserves the concept DOI, and the version
-  // comes from the tag at publish. Reserving again force-pushes the same branch.
-  const branch = DOI_BRANCH;
+  // comes from the tag at publish. Reserving again force-pushes the same branch. Each co-located
+  // paper has its own concept record, so its own branch.
+  const paper = colocatedPaper(repoRoot);
+  const branch = paper ? `${DOI_BRANCH}-${paper.id}` : DOI_BRANCH;
   const repo = originRepo(repoRoot);
   const base = repo ? defaultBranch(repo) : 'main';
   // The branch starts at HEAD, so HEAD must be on the base, or the pull request would carry
@@ -320,7 +324,12 @@ export function openDoiPr(
   }
   git(repoRoot, ['checkout', '-B', branch]);
   git(repoRoot, ['add', 'myst.yml']);
-  git(repoRoot, [...BOT_ID, 'commit', '-m', `chore: reserve Zenodo DOI ${opts.conceptDoi}`]);
+  git(repoRoot, [
+    ...BOT_ID,
+    'commit',
+    '-m',
+    `chore: reserve Zenodo DOI ${opts.conceptDoi}${paper ? ` for ${paper.id}` : ''}`,
+  ]);
   git(repoRoot, ['push', '-u', 'origin', branch, '--force']);
   const sha = git(repoRoot, ['rev-parse', 'HEAD'], { quiet: true });
   // `--repo`: the git calls use `-C repoRoot`, while `gh` would read the current directory's
@@ -333,9 +342,13 @@ export function openDoiPr(
     '--base',
     base,
     '--title',
-    msg.workflow.doiPrTitle,
+    msg.workflow.doiPrTitle(paper?.id),
     '--body',
-    msg.workflow.doiPrBody(opts.conceptDoi, Boolean(process.env.GITHUB_ACTIONS)),
+    msg.workflow.doiPrBody(
+      opts.conceptDoi,
+      Boolean(process.env.GITHUB_ACTIONS),
+      paper ? `${paper.dir}/myst.yml` : undefined,
+    ),
     '--head',
     branch,
   ];
@@ -419,6 +432,12 @@ export function postCommitComment(repoRoot: string, sha: string, body: string): 
   const repo = originRepo(repoRoot);
   if (!repo) return;
   gh(['api', `repos/${repo}/commits/${sha}/comments`, '-f', `body=${body}`]);
+}
+
+/** The files the checked-out commit changes against its first parent: on a `pull_request` run,
+ *  the merge commit against the base, which needs a checkout with `fetch-depth: 2`. */
+export function changedFromParent(repoRoot: string): string[] {
+  return git(repoRoot, ['diff', '--name-only', 'HEAD^1', 'HEAD']).split('\n').filter(Boolean);
 }
 
 /** Opens a failure issue when publishing fails, labelled for the editors. */
@@ -1094,7 +1113,7 @@ export function cachedJournal(
   paperRoot: string,
   now = Date.now(),
 ): JournalCache {
-  assertRepoName(journalRepo, 'instance_repo in .github/actions/engine/pins.yml');
+  assertRepoName(journalRepo, 'journal_repo in .github/actions/engine/pins.yml');
   const root = join(paperRoot, '_build', 'journal', ...journalRepo.split('/'));
   // Inside .git, so the journal's own files are exactly what was fetched.
   const stamp = join(root, '.git', 'oak-fetched');
@@ -1191,6 +1210,46 @@ function sameTreeAsRemote(repoRoot: string, branch: string): boolean {
     git(repoRoot, ['rev-parse', 'FETCH_HEAD^{tree}'])
   );
 }
+
+/** The git and gh calls of `oak add-paper`, with the author's own gh login. */
+export const realAddPaperGh: AddPaperGh = {
+  authedUser,
+  checkout(repo, branch) {
+    const tmp = mkdtempSync(join(tmpdir(), 'oak-add-paper-'));
+    gh(['repo', 'clone', assertRepoName(repo, '--repo'), tmp, '--', '--depth', '1']);
+    gitRaw(['checkout', '-b', branch], tmp);
+    return tmp;
+  },
+  fork(repo) {
+    // Prints nothing on success; an existing fork is reused.
+    gh(['repo', 'fork', repo, '--clone=false', '--default-branch-only']);
+    return `${authedUser()}/${repo.split('/')[1]}`;
+  },
+  commitAndPush(dir, forkRepo, branch, paths, message) {
+    gitRaw(['add', '--', ...paths], dir);
+    gitRaw(['commit', '-m', message], dir);
+    gitRaw(
+      ['push', `https://github.com/${assertRepoName(forkRepo, 'fork')}.git`, `${branch}:${branch}`],
+      dir,
+    );
+  },
+  openPr(repo, opts) {
+    return gh([
+      'pr',
+      'create',
+      '--repo',
+      repo,
+      '--base',
+      defaultBranch(repo),
+      '--head',
+      opts.head,
+      '--title',
+      opts.title,
+      '--body',
+      opts.body,
+    ]);
+  },
+};
 
 /** A value from a YAML file in the test repo on the default branch, read through the
  *  Contents API, so no clone is needed. null when the file or the value is absent, or the
@@ -1397,7 +1456,11 @@ export const realConformanceGh: ConformanceGh = {
     ]);
   },
   committedJournalRepo(repo) {
-    return committedYamlValue(repo, '.github/actions/engine/pins.yml', ['instance_repo']);
+    const pins = '.github/actions/engine/pins.yml';
+    return (
+      committedYamlValue(repo, pins, ['journal_repo']) ??
+      committedYamlValue(repo, pins, [OLD_JOURNAL_KEY])
+    );
   },
   defaultBranchSha(repo) {
     return gh(['api', `repos/${repo}/git/ref/heads/main`, '--jq', '.object.sha']);

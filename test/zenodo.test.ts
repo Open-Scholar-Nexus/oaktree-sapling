@@ -328,7 +328,7 @@ describe('buildBundle', () => {
 
   it("archives a journal's or author's local template as template.zip", async () => {
     const { paper, engine, tmp } = paperAndEngine();
-    const journalTemplate = join(tmp, 'instance', 'typst-template');
+    const journalTemplate = join(tmp, 'journal', 'typst-template');
     mkdirSync(journalTemplate, { recursive: true });
     writeFileSync(join(journalTemplate, 'template.yml'), 'kind: typst');
     writeFileSync(join(journalTemplate, 'template.typ'), '#let x = 1');
@@ -548,7 +548,7 @@ describe('cmdPrepare', () => {
       return { json: [] }; // no existing deposit
     });
     const api = new ZenodoApi(transport, true, 't');
-    const out = await cmdPrepare({ mystPath, repo: 'o/r', api, instanceRoot: null });
+    const out = await cmdPrepare({ mystPath, repo: 'o/r', api, journalRoot: null });
     expect(out.exitCode).toBe(0);
     expect(out.result.status).toBe('ok');
     expect(out.result.concept_doi).toBe('10.5072/zenodo.5');
@@ -575,7 +575,7 @@ describe('cmdPrepare', () => {
       mystPath: withSandboxDoi,
       repo: 'o/r',
       api: noop,
-      instanceRoot: null,
+      journalRoot: null,
     });
     expect(same.exitCode).toBe(2);
 
@@ -589,7 +589,7 @@ describe('cmdPrepare', () => {
       mystPath: prodPath,
       repo: 'o/r',
       api: prodApi,
-      instanceRoot: null,
+      journalRoot: null,
     });
     expect(up.exitCode).toBe(0);
     expect(up.result.concept_doi).toBe('10.5281/zenodo.8');
@@ -602,7 +602,7 @@ describe('cmdPrepare', () => {
       mystPath: prodDoi,
       repo: 'o/r',
       api: noop,
-      instanceRoot: null,
+      journalRoot: null,
     });
     expect(out.exitCode).toBe(2);
     expect(String(out.result.message)).toContain('refusing to replace it with a sandbox one');
@@ -649,7 +649,7 @@ describe('the Project Website link', () => {
       repo: 'o/r',
       siteUrl,
       api,
-      instanceRoot: null,
+      journalRoot: null,
     });
     expect(out.exitCode).toBe(0);
     return (calls.find((c) => c.method === 'POST')!.opts.json as any).metadata;
@@ -704,7 +704,7 @@ describe('cmdUpload', () => {
       bundleOut: mystPath.replace('myst.yml', '_bundle'),
       api,
       git: fakeGit,
-      instanceRoot: null,
+      journalRoot: null,
       engineRoot: mystPath.replace('myst.yml', ''),
     });
     expect(out.exitCode).toBe(0);
@@ -752,7 +752,7 @@ describe('cmdUpload', () => {
         bundleOut: join(root, '_bundle'),
         api: new ZenodoApi(transport, true, 't'),
         git: fakeGit,
-        instanceRoot: null,
+        journalRoot: null,
         engineRoot: root,
         ...over,
       });
@@ -809,7 +809,7 @@ describe('cmdUpload', () => {
         bundleOut: mystPath.replace('myst.yml', '_bundle'),
         api: new ZenodoApi(transport, true, 't'),
         git: fakeGit,
-        instanceRoot: null,
+        journalRoot: null,
         engineRoot: mystPath.replace('myst.yml', ''),
       });
       expect(out.exitCode).toBe(5);
@@ -858,7 +858,7 @@ describe('cmdUpload', () => {
         bundleOut: mystPath.replace('myst.yml', '_bundle'),
         api: new ZenodoApi(transport, true, 't'),
         git: fakeGit,
-        instanceRoot: null,
+        journalRoot: null,
         engineRoot: mystPath.replace('myst.yml', ''),
       });
       expect(out.exitCode).toBe(0);
@@ -905,7 +905,7 @@ describe('cmdUpload', () => {
         bundleOut: mystPath.replace('myst.yml', '_bundle'),
         api: new ZenodoApi(transport, true, 't'),
         git: fakeGit,
-        instanceRoot: null,
+        journalRoot: null,
         engineRoot: mystPath.replace('myst.yml', ''),
         publish,
       });
@@ -943,7 +943,7 @@ describe('cmdUpload', () => {
       bundleOut: '/tmp/x',
       api: noop,
       git: fakeGit,
-      instanceRoot: null,
+      journalRoot: null,
       engineRoot: mystPath.replace('myst.yml', ''),
     });
     expect(out.exitCode).toBe(2);
@@ -962,7 +962,7 @@ describe('cmdUpload', () => {
       bundleOut: '/tmp/x',
       api: new ZenodoApi(transport, false, 't'),
       git: fakeGit,
-      instanceRoot: null,
+      journalRoot: null,
       engineRoot: mystPath.replace('myst.yml', ''),
     });
     expect(out.exitCode).toBe(2);
@@ -983,7 +983,7 @@ describe('cmdUpload', () => {
       bundleOut: '/tmp/x',
       api: new ZenodoApi(transport, true, 't'),
       git: fakeGit,
-      instanceRoot: null,
+      journalRoot: null,
       engineRoot: mystPath.replace('myst.yml', ''),
     });
     expect(out.exitCode).toBe(2);
@@ -1034,7 +1034,7 @@ describe('deposit integrity ([R107])', () => {
       bundleOut: mystPath.replace('myst.yml', '_bundle'),
       api: new ZenodoApi(transport, true, 't'),
       git: fakeGit,
-      instanceRoot: null,
+      journalRoot: null,
       engineRoot: mystPath.replace('myst.yml', ''),
     });
     expect(out.exitCode).toBe(0);
@@ -1058,7 +1058,7 @@ describe('deposit integrity ([R107])', () => {
       bundleOut: mystPath.replace('myst.yml', '_bundle'),
       api: new ZenodoApi(transport, true, 't'),
       git: fakeGit,
-      instanceRoot: null,
+      journalRoot: null,
       engineRoot: mystPath.replace('myst.yml', ''),
     });
     expect(out.exitCode).toBe(2);
@@ -1100,7 +1100,7 @@ describe('deposit integrity ([R107])', () => {
       bundleOut: mystPath.replace('myst.yml', '_bundle'),
       api: new ZenodoApi(transport, true, 't'),
       git: hollow,
-      instanceRoot: null,
+      journalRoot: null,
       engineRoot: mystPath.replace('myst.yml', ''),
     });
     expect(out.exitCode).toBe(2);
@@ -1180,7 +1180,7 @@ describe('finding the deposit, and the checks before it [R100] [R101]', () => {
       bundleOut: join(root, '_bundle'),
       api: new ZenodoApi(transport, true, 't'),
       git: fakeGit,
-      instanceRoot: null,
+      journalRoot: null,
       engineRoot: root,
     });
     expect(out.result.status).toBe('error');
@@ -1260,7 +1260,7 @@ describe('journal.zip', () => {
     return { api: new ZenodoApi(transport, true, 't'), uploaded, provenance, calls };
   }
 
-  function publish(root: string, git: GitContext, api: ZenodoApi, instanceRoot: string | null) {
+  function publish(root: string, git: GitContext, api: ZenodoApi, journalRoot: string | null) {
     return cmdUpload({
       mystPath: join(root, 'myst.yml'),
       pdf: join(root, 'paper.pdf'),
@@ -1268,12 +1268,12 @@ describe('journal.zip', () => {
       bundleOut: join(root, '_bundle'),
       api,
       git,
-      instanceRoot,
+      journalRoot,
       engineRoot: root,
     });
   }
 
-  it('archives the commit the build recorded, fetched into the --instance clone', async () => {
+  it('archives the commit the build recorded, fetched into the --journal clone', async () => {
     const root = builtPaper(STAMPED);
     const journalRoot = mkdtempSync(join(tmpdir(), 'oak-journal-'));
     const { git, fetched, archived } = recordingGit('o/journal');
@@ -1319,7 +1319,7 @@ describe('journal.zip', () => {
     journal?: unknown;
     origin?: string;
     fetchFails?: boolean;
-    instance?: boolean;
+    withJournal?: boolean;
     says: string;
   }>([
     { why: 'the clone is of another journal', origin: 'o/other', says: 'o/other' },
@@ -1334,19 +1334,19 @@ describe('journal.zip', () => {
       journal: { repo: 'o/journal', commit: '--x' },
       says: 'myst.oak.yml',
     },
-    { why: 'no --instance was given', instance: false, says: `o/journal@${COMMIT}` },
+    { why: 'no --journal was given', withJournal: false, says: `o/journal@${COMMIT}` },
   ])(
     'refuses before any Zenodo write when $why',
     async ({
       journal = STAMPED,
       origin = 'o/journal',
       fetchFails = false,
-      instance = true,
+      withJournal = true,
       says,
     }) => {
       const root = builtPaper(journal);
       const z = zenodo();
-      const journalRoot = instance ? mkdtempSync(join(tmpdir(), 'oak-journal-')) : null;
+      const journalRoot = withJournal ? mkdtempSync(join(tmpdir(), 'oak-journal-')) : null;
       const out = await publish(root, recordingGit(origin, fetchFails).git, z.api, journalRoot);
       expect(out.exitCode).toBe(2);
       expect(String(out.result.message)).toContain(says);

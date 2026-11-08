@@ -11,6 +11,7 @@ import { join, relative } from 'node:path';
 import * as msg from './messages.js';
 import { UserError } from './messages.js';
 import { pollUntil } from './poll.js';
+import { PINS_REL } from './projects.js';
 import { DOI_BRANCH, parseZenodoDoi } from './schema.js';
 import { DERIVED_CONFIG_FILE, parseYaml } from './yaml-io.js';
 import type { DepositState } from './zenodo.js';
@@ -375,6 +376,10 @@ async function releaseFrom(
 
   const tagged = src.tagCommit(clone, tag);
   const head = src.head(clone);
+  const pins = src.fileAt(clone, tagged ?? head.sha, PINS_REL);
+  if (pins !== null && parseYaml(pins, PINS_REL).get('journal_repo') === '.') {
+    throw new UserError(msg.workflow.releaseColocated(repo));
+  }
   const { doi, pin } = committed(src, clone, tagged ?? head.sha);
   const sandbox = doi ? doi.sandbox : input.sandbox;
 

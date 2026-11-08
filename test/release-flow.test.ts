@@ -99,7 +99,8 @@ function harness(w: World, input: Partial<ReleaseInput> = {}) {
     fetch: () => {},
     head: () => w.head,
     tagCommit: (_c, tag) => w.tags[tag] ?? null,
-    fileAt: (_c, ref) => w.files[ref] ?? null,
+    // `files` holds each commit's myst.yml by its sha, and any other file by `<sha>:<path>`.
+    fileAt: (_c, ref, path) => w.files[path === 'myst.yml' ? ref : `${ref}:${path}`] ?? null,
     checkout: (_c, ref) => {
       checkedOut = ref;
       outward.push(`checkout ${ref}`);
@@ -347,6 +348,18 @@ describe('oak release from the terminal: refusals before anything changes', () =
 
   it('no record for the committed DOI', () =>
     refuses(world({ files: { [MAIN]: myst(PROD_DOI) }, zenodo: { kind: 'none' } })));
+
+  it('a co-located journal, whose papers its workflows publish', () =>
+    refuses(
+      world({
+        files: {
+          [MAIN]: myst(PROD_DOI),
+          [`${MAIN}:.github/actions/engine/pins.yml`]: 'journal_repo: .\n',
+        },
+      }),
+      {},
+      'is a co-located journal',
+    ));
 
   it('a repo whose myst.yml names no oak version, which is no oak paper', () =>
     refuses(world({ files: { [MAIN]: myst(PROD_DOI, null) } }), {}, 'is not an oak paper repo'));

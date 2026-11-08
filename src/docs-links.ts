@@ -8,6 +8,8 @@ import { DOCS_BASE } from './assets.js';
 export const DOCS = {
   /** What to do with a journal repo that `oak bootstrap journal` has just created. */
   journalStart: 'start/journal',
+  /** A co-located journal: papers in `papers/<id>/`, submissions, drafts and the registry. */
+  colocated: 'guide/co-located',
   /** Getting an edit from a local clone onto main, and what that triggers. */
   journalPush: 'start/journal#push-your-edits',
   /** Why the journal website 404s for a few minutes after the first push. */

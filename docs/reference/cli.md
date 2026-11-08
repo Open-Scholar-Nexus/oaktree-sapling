@@ -60,6 +60,7 @@ It refuses, before changing anything:
 
 - a word after `release` that is neither a version nor a subcommand;
 - `--tag` and `--use-local-build`, which belong to `oak release deposit`;
+- a [co-located journal](../guide/co-located.md#co-located-publish), whose papers its workflows publish;
 - a repository whose `myst.yml` names no oak version;
 - a pinned version older than `DEPOSIT_MIN_VERSION`, the first whose subcommands never build beside the Zenodo token ([why](#design-paper-ci-deposit-min));
 - `--sandbox` once a production DOI is committed;
@@ -94,6 +95,9 @@ In GitHub Actions, it deposits the build under `_build/`, which the **Deposit ve
 
 Outside GitHub Actions the clone has to be at the tag, with no changes to tracked files. By default the build is the `release-build` artifact of the tag's **Deposit version** run, downloaded with gh once its build job has passed, whatever the deposit job did. The run has to be a run of `.github/workflows/deposit-version.yml` that the push of that tag started, at the tag's commit, and the artifact has to hold `myst.oak.yml`, `_build/exports` and `_build/site/content`. The provenance records when its build job finished as the build time. It refuses while the build job runs, when it failed, and when the run has no build job or its artifact lacks one of those paths.
 
+`--tag <tag>`
+: The version tag the deposit is for: `vX.Y.Z`, or `<paper id>/vX.Y.Z` for the paper in `papers/<paper id>/` of a [co-located journal](../guide/co-located.md). A tag naming a folder that holds no paper is refused.
+
 (use-local-build)=
 `--use-local-build`
 : An escape hatch, not the recommended path. Outside GitHub Actions, it deposits the build under `_build/` instead of the Deposit version run's, after a warning. oak cannot check that this build was made from the tag: it only refuses one whose PDF or pages are older than the tag's commit, as a build left from an earlier tag is. The build is the editor's own, made at the tag with `oak build` in a shell without the Zenodo token, since it runs the paper's code with the editor's permissions: the plugins `myst.yml` lists ([read them first](../guide/checks.md#validate-runs-paper-code)), and any environment `paper-environment.yml` describes, which the editor sets up. The provenance records this computer's platform and the typst on `PATH`; the engine's typst is built for Linux on x86_64, so elsewhere the PDF comes from the system typst and can differ from the CI build.
@@ -121,3 +125,13 @@ It also shows the size of `~/.cache/oak` (`$XDG_CACHE_HOME/oak` when set), which
 
 (conformance)=
 ## conformance
+
+(add-paper-cli)=
+## add-paper
+
+`oak add-paper --repo <owner/journal> --id <paper id> [--edition <id>]` submits a paper to a [co-located journal](../guide/co-located.md#co-located-submit): it forks the repository with your `gh` login, commits the starter manuscript as `papers/<paper id>/` on a branch of the fork, and opens the pull request. `--edition` defaults to the year in the id.
+
+(assemble)=
+## assemble
+
+`oak assemble --builds <dir>` builds a co-located journal's website in the current directory and puts each paper `registry/papers.yml` lists at `/<paper id>/`, from its build in `<dir>/paper-build-<paper id>/`. The **Build paper** workflow runs it on every push to `main`.

@@ -40,7 +40,7 @@ describe('build and validate materialize from the same inputs', () => {
     // cmdValidate must not list paperRoot, engineRoot or assetOverrides itself,
     // since its own list could differ from the build's.
     const call = cli.slice(cli.indexOf('await runValidate('));
-    // Leave out the builder call, where `paperRoot` and `instanceRoot` are its arguments.
+    // Leave out the builder call, where `paperRoot` and `journalRoot` are its arguments.
     const body = call
       .slice(0, call.indexOf('\n      },'))
       .split('\n')
@@ -51,7 +51,7 @@ describe('build and validate materialize from the same inputs', () => {
       'assetOverrides:',
       'baseUrl:',
       'paperRoot,',
-      'instanceRoot,',
+      'journalRoot,',
     ]) {
       expect(
         body,

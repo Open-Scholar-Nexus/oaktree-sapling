@@ -16,7 +16,7 @@ The journal repository holds the journal-level configuration, such as the brandi
 
 So adding a paper means adding a repository. There is no server: each paper's own CI does the work, which is why a published paper keeps building after the journal moves on. The cost is that a change to how papers build has to reach every paper repository, which is what `oak upgrade` is for.
 
-<!-- One repository per paper is the only topology the engine builds today, and it is what this page describes. A co-located tier, where a single repository holds the journal and many papers at once, is designed but not built. It is the part of this model most likely to be revisited. -->
+A journal can also keep everything in one **co-located** repository: the settings, the website, and each paper in a folder `papers/<id>/` that builds in a job of its own, at the engine version it pins. The same workflows run in both layouts, with one paper at the root of a paper repository. [Several papers in one repository](paper-ci.md#design-paper-ci-colocated) covers how they keep one paper's authors from another's; the layout and the one-paper-per-pull-request flow come from the [SciPy Proceedings](https://github.com/scipy-conference/scipy_proceedings) (MIT licence).
 
 (processing-myst)=
 ## Processing MyST markdown
