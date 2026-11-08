@@ -93,6 +93,8 @@ The Zenodo tokens are optional, since Zenodo does not check a token's scopes ([w
 
 Two `oak` versions take part in [`oak release`](#release) from the terminal. The one the editor runs does the GitHub side with the editor's gh login (the DOI pull request, the tag, the wait) and never builds or runs the paper's code. The one the paper pins does the steps that write to Zenodo, read from the commit each works on: `main` for the DOI, the tag for the deposit, the same commit CI's **Deposit version** reads. It merges the DOI pull request only at the commit it pushed in the same run (`--match-head-commit`), after posting the same skipped `Journal checks` status as `reserve-doi.yml`, so it cannot be used to merge other changes past an editor, such as a change to the engine version in `myst.yml`.
 
+The workflows run only the steps. `oak release vX` creates the tag whose push starts **Deposit version**, so inside that run it would wait for itself, and it merges and tags as the editor, which a workflow's token should not do. It hands each step to the pinned oak as a command line (`oak release deposit --tag vX --paper <clone>`), since that oak can be an older or newer program than the one the editor runs.
+
 (design-paper-ci-stage2-inputs)=
 
 ### What Stage 2 takes from the artifact

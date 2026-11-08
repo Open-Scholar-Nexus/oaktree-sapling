@@ -17,7 +17,7 @@ permissions:
   statuses: write # mark the DOI PR's Journal checks as skipped
 
 jobs:
-  prepare:
+  reserve-doi:
     environment: zenodo-prepare # Zenodo tokens; main only
     runs-on: ubuntu-latest
     steps:

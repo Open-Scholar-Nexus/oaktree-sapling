@@ -1656,14 +1656,16 @@ async function runPinned(verb: PaperVerb, argv: string[]): Promise<number | null
   return handOff({ ...ctx, paperRoot }, await handoffDeps(argv));
 }
 
-/** The verbs that run with the oak the paper pins ({@link runPinned}); for `release`, only its
- *  steps. Every other verb runs with this oak. */
-const PINNED_VERBS: readonly string[] = [
-  'build',
-  'validate',
-  'start',
-  'release',
-] satisfies PaperVerb[];
+/**
+ * Whether `oak <verb> <args>` runs with the oak the paper pins ({@link runPinned}): `build`,
+ * `validate`, `start` and the `release` steps. Every other verb runs with this oak, and so does
+ * `oak release vX`, which hands only its steps over, from the clone it makes: with --repo, this
+ * directory may be another paper's clone.
+ */
+function runsPinned(verb: Verb | undefined, args: string[]): verb is PaperVerb {
+  if (verb === 'release') return isReleaseStep(args);
+  return verb === 'build' || verb === 'validate' || verb === 'start';
+}
 
 async function main(argv: string[]): Promise<number> {
   const verb = argv[0] as Verb | undefined;
@@ -1678,16 +1680,13 @@ async function main(argv: string[]): Promise<number> {
     process.stdout.write(msg.version(OAK_VERSION) + '\n');
     return 0;
   }
-  // `oak release` with a version hands only its steps to the pinned oak, from the clone it
-  // makes: with --repo, this directory may be another paper's clone.
-  const releaseFlow = verb === 'release' && !isReleaseStep(argv.slice(1));
+  const args = argv.slice(1);
   // Before the hand-off, so the pinned oak is the one the cloned repo names.
-  if (verb === 'release' && releaseWord(argv.slice(1))?.word === 'status') {
-    const repo = flag(argv, 'repo');
-    if (repo !== undefined) return releaseStatusOfRepo(repo, argv.slice(1));
-  }
-  if (verb && PINNED_VERBS.includes(verb) && !releaseFlow) {
-    const code = await runPinned(verb as PaperVerb, argv.slice(1));
+  const statusRepo =
+    verb === 'release' && releaseWord(args)?.word === 'status' ? flag(args, 'repo') : undefined;
+  if (statusRepo !== undefined) return releaseStatusOfRepo(statusRepo, args);
+  if (runsPinned(verb, args)) {
+    const code = await runPinned(verb, args);
     if (code !== null) return code;
   }
   if (verb === 'build') return cmdBuild(argv.slice(1));

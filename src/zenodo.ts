@@ -346,7 +346,7 @@ function flattenText(node: any, buf: string[]): void {
  * Plain-text paragraphs of a frontmatter part, from the HTML build
  * (`_build/site/content/<page>.json`, `frontmatter.parts.<name>.mdast`). Zenodo renders neither
  * math nor markup, so it is flattened to text. null when the part is absent or nothing was built
- * (as at prepare, which does not build).
+ * (as in reserve-doi, which does not build).
  */
 export function partParagraphs(repoRoot: string, partName: string): string[] | null {
   const contentDir = join(repoRoot, '_build', 'site', 'content');
@@ -887,7 +887,7 @@ export interface PrepareInput {
  * `oak release reserve-doi`: reserves a draft, or reuses one, and writes `project.doi`, `github` and
  * `date` into myst.yml [R22]. The CLI opens the DOI pull request from that write [R3].
  *
- * Preparing again in the same environment is refused. A production prepare may replace a
+ * Reserving again in the same environment is refused. A production reserve-doi may replace a
  * committed sandbox DOI, the planned move from sandbox to production; the reverse is refused
  * [R29].
  */

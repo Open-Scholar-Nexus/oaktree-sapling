@@ -305,8 +305,8 @@ export function openDoiPr(
   repoRoot: string,
   opts: { conceptDoi: string },
 ): { url: string; sha: string } {
-  // One branch name for every version: prepare reserves the concept DOI, and the version comes
-  // from the tag at publish. Preparing again force-pushes the same branch.
+  // One branch name for every version: reserve-doi reserves the concept DOI, and the version
+  // comes from the tag at publish. Reserving again force-pushes the same branch.
   const branch = DOI_BRANCH;
   const repo = originRepo(repoRoot);
   const base = repo ? defaultBranch(repo) : 'main';

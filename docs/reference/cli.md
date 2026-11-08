@@ -48,6 +48,8 @@ It asks once, up front, listing the steps left; `--yes` skips the confirmation p
 
 The token for the steps comes from `--token`, else `ZENODO_TOKEN`, or `ZENODO_TOKEN_SANDBOX` for the sandbox; a sandbox run never uses the production one.
 
+`--repo <owner/name>` means two things. `oak release vX` and `oak release status` clone that repository into a temporary folder and work there. `oak release reserve-doi` and `oak release deposit` work in the clone they run in, and take `--repo` as its name on GitHub.
+
 (release-status)=
 `oak release status`
 : The deposit's state for the committed DOI, and the metadata a deposit would send. `--sandbox` reads the sandbox. `--repo <owner/name>` reads the repository's default branch from a clone in a temporary folder, removed after, with the editor's gh login.
