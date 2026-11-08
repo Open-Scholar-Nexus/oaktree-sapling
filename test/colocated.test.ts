@@ -156,9 +156,17 @@ describe('PAPER_ID: a folder name is one path segment and a tag prefix', () => {
     expect(folderId('other/a')).toBeNull();
   });
 
-  it('colocatedPaper is a folder in papers/', () => {
-    expect(colocatedPaper('/r/papers/a-1')).toEqual({ dir: 'papers/a-1', id: 'a-1' });
-    expect(colocatedPaper('/r')).toBeNull();
+  it('colocatedPaper is a folder in papers/ of a co-located repository', () => {
+    const root = colocatedRepo(['a-2026-one']);
+    expect(colocatedPaper(join(root, 'papers', 'a-2026-one'))).toEqual({
+      dir: 'papers/a-2026-one',
+      id: 'a-2026-one',
+    });
+    expect(colocatedPaper(root)).toBeNull();
+    // A paper repository someone keeps in a folder named papers.
+    const elsewhere = mkdtempSync(join(tmpdir(), 'oak-colo-'));
+    mkdirSync(join(elsewhere, 'papers', 'my-paper'), { recursive: true });
+    expect(colocatedPaper(join(elsewhere, 'papers', 'my-paper'))).toBeNull();
   });
 });
 

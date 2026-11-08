@@ -85,13 +85,16 @@ export function paperDirIn(repoRoot: string, paperRoot: string): string {
 
 /**
  * The co-located paper folder `paperRoot` is, as `papers/<id>` with the id it is named by, or
- * null for a paper at a repository root. Decided by the folder's place in its repository, so it
- * also works on a checkout with no git (the parent is a `papers` folder).
+ * null for a paper at a repository root. Decided by the folder's place in a co-located
+ * repository ({@link isColocated}), so it also works on a checkout with no git, and a paper
+ * repository cloned into a folder named `papers` stays one.
  */
 export function colocatedPaper(paperRoot: string): { dir: string; id: string } | null {
   const abs = resolve(paperRoot);
-  if (basename(dirname(abs)) !== PAPERS_DIR) return null;
+  const parent = dirname(abs);
   const id = basename(abs);
+  if (basename(parent) !== PAPERS_DIR || !PAPER_ID.test(id)) return null;
+  if (!isColocated(dirname(parent))) return null;
   return { dir: posix.join(PAPERS_DIR, id), id };
 }
 
