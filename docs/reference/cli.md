@@ -36,19 +36,42 @@ Takes `--typst-template <dir>`, as [`oak build`](#build) does.
 (release)=
 ## release
 
-`oak release [--repo <owner/name>] <vX.Y.Z>` publishes a version from the terminal ([guide](#from-terminal)). It acts on GitHub as the editor's gh login, in a clone of the repository (if you omit `--repo`, it will attempt to use the current clone's origin) in a temporary folder, removed when the release is done and kept, with its path printed, after a failure or Ctrl-C. Each run picks its steps from what already exists, so running it again after a stop continues:
+`oak release [--repo <owner/name>] <vX.Y.Z>` publishes a version from the terminal ([guide](#from-terminal)). It has three subcommands, [`reserve-doi`](#release-reserve-doi), [`deposit`](#release-deposit) and [`status`](#release-status); the paper's workflows run the first two.
 
-- if `main` has no DOI: runs [`oak release reserve-doi`](#release-reserve-doi), marks the DOI pull request's Journal checks as skipped, and merges it at the commit that run pushed (`gh pr merge --match-head-commit`), with a merge commit, or a squash when the repository allows no merge commits. Then it tags the merge commit. A pull request left open by an earlier run gets a new commit, which is the one merged.
-- if `main` has a DOI and the tag does not exist: tags the head of `main` as shown in the confirmation. It refuses when the newest version on Zenodo is published with another version, since **New version** was not clicked.
-- The tag exists: uses it as it is, once its `myst.yml` holds a DOI, and asks nothing.
+It works in a clone of the repository in a temporary folder, and acts on GitHub as the editor's gh login. Without `--repo`, the repository is the `origin` of the git clone in the current folder. The temporary clone is removed when the release is done. After a failure or Ctrl-C it is kept, and oak prints its path.
 
-Then it waits for the tag's **Deposit version** run: its build job, and its publish job when there is one, to avoid clashing with a concurrent CI deposit. It prints a line, starting with the time, when a state changes and every 5 minutes, and on a terminal it shows a spinner; it waits 10 minutes for the run to start and 45 for it to finish. When the tag's GitHub release already holds the deposit files, it ends there. Otherwise it runs [`oak release deposit`](#release-deposit) with the clone at the tag. Its subcommands, `oak release reserve-doi`, `oak release deposit` and `oak release status`, run with the `oak` version the paper pins at the commit they work on ([which version runs](#pins-local)): `main` for the DOI, the tag for the deposit. It refuses a pinned version older than `DEPOSIT_MIN_VERSION`, the first whose subcommands never build beside the Zenodo token ([why](#design-paper-ci-deposit-min)), before it tags or changes anything.
+Each run does what is not done yet, so running it again after a stop continues:
 
-It asks once, up front, listing the steps left; `--yes` skips the confirmation prompt. `--sandbox` reserves the DOI on the sandbox, and is refused once a production DOI is committed. Without a version it lists the repository's `v*` tags. A word after `release` that is neither a version nor a subcommand is refused, and so are `--tag` and `--use-local-build`, which belong to `oak release deposit`. It refuses in GitHub Actions, where the workflows run its subcommands. It exits 0 when done and when a rerun finds nothing left, 2 when it refuses or a subcommand fails, and 3 when a wait reached its limit: running the same command again continues.
+- `main` has no DOI: runs `oak release reserve-doi`, merges the DOI pull request, and tags the merge commit.
+- `main` has a DOI and the tag does not exist: tags the head of `main`.
+- The tag exists: uses it, and asks nothing.
+
+Then it waits for the tag's **Deposit version** run and runs `oak release deposit` with the clone at the tag. When the tag's GitHub release already holds the deposit files, it deposits nothing and ends.
+
+Before merging the DOI pull request, it marks the pull request's Journal checks as skipped. It merges only the commit `reserve-doi` pushed (`gh pr merge --match-head-commit`), with a merge commit, or a squash when the repository allows no merge commits. A pull request left open by an earlier run gets a new commit, which is the one merged.
+
+While it waits, it prints the run's state when it changes, and again every 5 minutes. On a terminal, a spinner shows that it is still waiting. It waits up to 10 minutes for the run to start and 45 for it to finish. It also waits for the run's publish job, when there is one, so that it never deposits at the same time as CI.
+
+The subcommands run with the `oak` version the paper pins ([which version runs](#pins-local)), read at the commit each works on: `main` for `reserve-doi`, the tag for `deposit`.
+
+Before changing anything, it lists what it will do and asks to confirm; `--yes` skips the question. `--sandbox` reserves the DOI on the Zenodo sandbox. Without a version, it lists the repository's `v*` tags.
+
+It refuses, before changing anything:
+
+- a word after `release` that is neither a version nor a subcommand;
+- `--tag` and `--use-local-build`, which belong to `oak release deposit`;
+- a repository whose `myst.yml` names no oak version;
+- a pinned version older than `DEPOSIT_MIN_VERSION`, the first whose subcommands never build beside the Zenodo token ([why](#design-paper-ci-deposit-min));
+- `--sandbox` once a production DOI is committed;
+- an existing tag whose `myst.yml` holds no DOI;
+- a new tag when the newest version on Zenodo is published with another version, since **New version** was not clicked;
+- running in GitHub Actions, where the workflows run the subcommands.
+
+It exits 0 when done or when a rerun finds nothing left, 2 when it refuses or a subcommand fails, and 3 when a wait reached its limit. After a 3, running the same command again continues.
 
 The token for the subcommands comes from `--token`, else `ZENODO_TOKEN`, or `ZENODO_TOKEN_SANDBOX` for the sandbox; a sandbox run never uses the production one.
 
-`--repo <owner/name>` means two things. `oak release vX` and `oak release status` clone that repository into a temporary folder and work there. `oak release reserve-doi` and `oak release deposit` work in the clone they run in, and take `--repo` as its name on GitHub.
+What `--repo <owner/name>` does depends on the command. `oak release vX` and `oak release status` clone that repository into a temporary folder and work there. `oak release reserve-doi` and `oak release deposit` work in the clone they run in, and take `--repo` as its name on GitHub.
 
 (release-status)=
 `oak release status`
@@ -84,7 +107,7 @@ Outside GitHub Actions the clone has to be at the tag, with no changes to tracke
 (clean)=
 ## clean
 
-`oak clean` lists the folders [`oak release`](#release) left in the temporary folder, such as the clones it keeps after a failure or Ctrl-C, with their size, asks, and removes them. It searches the temporary folder of the shell it runs in (`TMPDIR`), and names it. A folder counts when its name starts with `oak-release-` and it belongs to you; a symlink never counts. It also removes a clone an `oak release` is still using. A successful `oak release` removes the clones kept for the same repository and version, since a clone's folder name holds both.
+`oak clean` lists the folders [`oak release`](#release) left in the temporary folder, such as the clones it keeps after a failure or Ctrl-C, with their size, and removes them after you confirm. It looks in the temporary folder of the shell it runs in (`TMPDIR`), and prints its path. It lists only folders whose name starts with `oak-release-` and that belong to you, and never a symlink. It cannot tell whether an `oak release` is still using a clone, so run it when none is running. A successful `oak release` removes the clones kept for the same repository and version, since a clone's folder name holds both.
 
 It also shows the size of `~/.cache/oak` (`$XDG_CACHE_HOME/oak` when set), which holds the `oak` versions papers pin ([which version runs](#pins-local)). `--cache` removes it too; the next command that needs a version fetches it again.
 

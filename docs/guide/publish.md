@@ -30,7 +30,7 @@ You then [publish the draft on Zenodo](#publish-on-zenodo) and [list the paper o
 
 oak works in a clone in a temporary folder. The clone is removed when the release is done; if the release fails or you interrupt it with Ctrl-C, the clone is kept, and oak prints where; [`oak clean`](#clean) lists and removes kept clones. If it stops for any reason (a wait that took too long, Ctrl-C, a failed step), you can run the same command again: it reads from GitHub and Zenodo what is already done and continues from there.
 
-`oak release` runs its subcommands, the ones that use the Zenodo token, with the `oak` version the paper's `myst.yml` names, as [`oak build` does](pins.md#pins-local).
+`oak release` runs its subcommands (the ones that use the Zenodo token) with the `oak` version the paper's `myst.yml` names, as [`oak build` does](pins.md#pins-local).
 
 [^zenodo-secrets-create]: See [secrets](../reference/secrets.md) for how to create tokens.
 
@@ -128,7 +128,7 @@ In the paper repository, open **Releases** and click **Draft a new release**. Un
 
 Only editors can create `v*` tags. Only tags in that form are supported: the **Deposit version** workflow fails on any other, such as `v1.0.0-rc1`.
 
-The tag starts the **Deposit version** workflow, which builds the paper and, with Zenodo tokens set, fills the draft, attaches the files to the tag's GitHub release and comments the draft's address on the tagged commit. Without tokens, `oak release --repo owner/paper-repo v1.0.0` deposits the existing tag's build from the terminal. Then [publish the draft](#publish-on-zenodo).
+The tag starts the **Deposit version** workflow, which builds the paper and, with Zenodo tokens set, fills the draft, attaches the files to the tag's GitHub release and comments the draft's address on the tagged commit. Without Zenodo tokens on GitHub, run `oak release --repo owner/paper-repo v1.0.0` [from the terminal](#from-terminal), with your token: it finds the tag already there, waits for that build, and deposits it. Then [publish the draft](#publish-on-zenodo).
 
 ## Leaving files out of the deposit
 
