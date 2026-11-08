@@ -5,8 +5,8 @@ version: 1
 # brand assets by path, not URL ([R38], [R192]). Moved here from the website's nexus.yml.
 #
 # Asset paths start at the journal root (`brand/logo.svg`). compose() absolutizes them to
-# `<instanceRoot>/<x>` so they resolve through the extends chain; myst would
-# otherwise resolve them against the PAPER root, where the instance's files don't exist
+# `<journalRoot>/<x>` so they resolve through the extends chain; myst would
+# otherwise resolve them against the PAPER root, where the journal's files don't exist
 # ([R62]). A resolvable favicon is also what keeps the HTML prerender from fatally
 # 500-ing on /favicon.ico ([R61]).
 #

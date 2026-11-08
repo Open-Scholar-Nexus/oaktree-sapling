@@ -79,7 +79,7 @@ describe('every printed string lives in messages.ts', () => {
       })
       .join('\n');
     const strings = code.match(/'[^'\n]*'|`[^`\n]*`|"[^"\n]*"/g) ?? [];
-    const banned = /\[[RS]\d+\]|frozen shim|build_type|instance-config/;
+    const banned = /\[[RS]\d+\]|frozen shim|build_type|\binstance\b/i;
     expect(strings.filter((x) => banned.test(x))).toEqual([]);
   });
 
@@ -97,7 +97,7 @@ describe('every printed string lives in messages.ts', () => {
     const src = readFileSync(join(srcDir, 'messages.ts'), 'utf8');
     for (const pointer of [
       'templates/paper/README.md',
-      'templates/instance/journal.yml',
+      'templates/journal/journal.yml',
       'plugins/gallery.mjs',
     ]) {
       expect(src).toContain(pointer);

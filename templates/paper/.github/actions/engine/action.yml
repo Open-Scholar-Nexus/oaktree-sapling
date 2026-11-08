@@ -1,6 +1,7 @@
 name: engine
 description: >-
-  Check out the engine repository pins.yml names, at the version myst.yml names, and run a verb.
+  Check out the engine repository pins.yml names, at the version the paper's myst.yml names, and
+  run a verb.
 
 inputs:
   args:
@@ -10,7 +11,7 @@ inputs:
     description: "install paper-environment.yml; only for a job holding no secret"
     default: "false"
   paper-dir:
-    description: "the paper's folder, relative to the repository root"
+    description: "the paper's folder, relative to the repository root: . or papers/<id>"
     default: "."
 
 outputs:
@@ -22,15 +23,31 @@ runs:
   using: composite
   steps:
     # The paper's own myst.yml, before extends. Key quoted: yq versions disagree on a bare hyphen.
+    # In a co-located repository a job with no paper of its own (paper-dir .) runs pins.yml's
+    # engine_version. https://scholar.nexus/oaktree-sapling/design/paper-ci#design-paper-ci-colocated
     - id: ref
       shell: bash
       env:
         PAPER_DIR: ${{ inputs.paper-dir }}
       run: |
-        myst="${PAPER_DIR:-.}/myst.yml"
-        ref=$(yq '.project.options["oaktree-sapling"].version // ""' "$myst")
+        # A paper id is one path segment: PAPER_ID in the engine's src/projects.ts.
+        if ! [[ "${PAPER_DIR:-.}" =~ ^(\.|papers/[A-Za-z0-9][A-Za-z0-9_-]{0,99})$ ]]; then
+          echo "::error::paper-dir must be . or papers/<paper id>"
+          exit 1
+        fi
+        # journal_repo: . marks a co-located repository, as isColocated in src/projects.ts.
+        pins=.github/actions/engine/pins.yml
+        if [ "${PAPER_DIR:-.}" = "." ] && [ "$(yq '.journal_repo // ""' "$pins")" = "." ]; then
+          myst=$pins
+          ref=$(yq '.engine_version // ""' "$pins")
+          key=engine_version
+        else
+          myst="${PAPER_DIR:-.}/myst.yml"
+          ref=$(yq '.project.options["oaktree-sapling"].version // ""' "$myst")
+          key=project.options.oaktree-sapling.version
+        fi
         if [ -z "$ref" ] || [ "$ref" = "null" ]; then
-          echo "::error::project.options.oaktree-sapling.version missing from $myst"
+          echo "::error::$key missing from $myst"
           exit 1
         fi
         # Release tags only, on every event: myst.yml is ungated, and a commit or PR ref can be fork code.
@@ -66,7 +83,7 @@ runs:
           exit 1
         fi
         echo "engine=$engine" >> "$GITHUB_OUTPUT"
-        echo "instance=$(yq '.instance_repo // "."' "$pins")" >> "$GITHUB_OUTPUT"
+        echo "journal=$(yq '.journal_repo // ""' "$pins")" >> "$GITHUB_OUTPUT"
 
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
@@ -76,16 +93,16 @@ runs:
 
     # Installing runs package scripts: never set paper-env in a job that holds a secret.
     - uses: mamba-org/setup-micromamba@ce51e99f4bb8a82ab7158c4dc59ef4634c59c4f9 # v3.1.0
-      if: ${{ inputs.paper-env == 'true' && hashFiles('paper-environment.yml') != '' }}
+      if: ${{ inputs.paper-env == 'true' && hashFiles(inputs.paper-dir == '.' && 'paper-environment.yml' || format('{0}/paper-environment.yml', inputs.paper-dir)) != '' }}
       with:
-        environment-file: paper-environment.yml
+        environment-file: ${{ inputs.paper-dir == '.' && 'paper-environment.yml' || format('{0}/paper-environment.yml', inputs.paper-dir) }}
         cache-environment: true
 
     # $ARGS via env, never spliced: a v* tag may hold $( ). Unquoted to word-split; set -f stops globs.
     - id: dispatch
       shell: bash
       env:
-        INSTANCE_REPO: ${{ steps.pins.outputs.instance }}
+        JOURNAL_REPO: ${{ steps.pins.outputs.journal }}
         PAPER_DIR: ${{ inputs.paper-dir }}
         ARGS: ${{ inputs.args }}
       run: |

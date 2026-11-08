@@ -5,7 +5,7 @@
  * Stage 1 runs the pull request's code, so each file is fork-controlled. The names and places
  * are a contract between engine versions: Stage 1 and Stage 2 may run different ones.
  */
-import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join, posix, relative, sep } from 'node:path';
 import * as msg from './messages.js';
 import { UserError } from './messages.js';
@@ -101,6 +101,30 @@ export function eventPrNumber(env: GithubEnv): string | null {
   if (env.GITHUB_EVENT_NAME !== 'pull_request') return null;
   const n = readEvent(env)?.pull_request?.number;
   return typeof n === 'number' ? String(n) : null;
+}
+
+/** The repository a `workflow_run` run's Stage 1 ran from, which GitHub sets and the artifact
+ *  cannot: a fork's own name for a pull request from a fork. Undefined for any other event. */
+export function eventHeadRepo(env: GithubEnv): string | undefined {
+  if (env.GITHUB_EVENT_NAME !== 'workflow_run') return undefined;
+  const name = readEvent(env)?.workflow_run?.head_repository?.full_name;
+  return typeof name === 'string' && name ? name : undefined;
+}
+
+/**
+ * The folders Stage 2 downloaded Stage 1's artifacts into: `dir` itself when it holds one of
+ * `markers` (one artifact downloaded by name), else each folder in it that does (several,
+ * downloaded by pattern, one folder per artifact). Empty when `dir` is absent: a pattern that matched no
+ * artifact downloads nothing.
+ */
+export function artifactDirs(dir: string, markers: readonly string[]): string[] {
+  if (!existsSync(dir)) return [];
+  const marked = (d: string) => markers.some((m) => existsSync(join(d, m)));
+  if (marked(dir)) return [dir];
+  return readdirSync(dir)
+    .sort()
+    .map((name) => join(dir, name))
+    .filter((d) => statSync(d).isDirectory() && marked(d));
 }
 
 /** The commit a `workflow_run` run's Stage 1 built, which GitHub sets and the artifact cannot. */

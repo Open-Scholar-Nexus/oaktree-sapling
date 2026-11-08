@@ -1,6 +1,7 @@
 name: Post checks
 
-# Stage 2 of the journal checks: posts Stage 1's report from the base context, never rebuilding.
+# Stage 2 of the journal checks: posts Stage 1's reports, one per paper, as one result from the
+# base context, never rebuilding.
 # https://scholar.nexus/oaktree-sapling/design/paper-ci#design-paper-ci-stage2-inputs
 
 on:
@@ -26,21 +27,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1; base branch
+      # One folder per paper's artifact; none when the pull request changes no paper.
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: journal-checks
+          pattern: journal-checks*
           path: journal-checks
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ github.token }}
 
-      # The artifact is fork-controlled: post-checks reads pr-number from it and checks that pull
-      # request heads at the commit this run checked. Best-effort:
+      # The artifacts are fork-controlled: post-checks reads pr-number from them and checks that
+      # pull request heads at the commit this run checked, and holds a fork's pull request in a
+      # co-located repository to one paper. Best-effort:
       # https://scholar.nexus/oaktree-sapling/reference/cli#post-checks
       - uses: ./.github/actions/engine
         with:
           args: >-
             post-checks
-            --report journal-checks/report.json
+            --report journal-checks
             --repo ${{ github.repository }}
             --sha ${{ github.event.workflow_run.head_sha }}
             --base ${{ github.event.repository.default_branch }}
