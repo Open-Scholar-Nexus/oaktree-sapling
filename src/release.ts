@@ -379,6 +379,10 @@ async function releaseFrom(
   const sandbox = doi ? doi.sandbox : input.sandbox;
 
   // Every refusal comes before anything is asked or changed.
+  if (!pin)
+    throw new UserError(
+      msg.workflow.releaseNotPaper(repo, tagged ? `at ${tag}` : 'on the default branch'),
+    );
   if (tagged && !doi) throw new UserError(msg.workflow.releaseTagNoDoi(tag, repo));
   if (doi && input.sandbox && !doi.sandbox) {
     throw new UserError(msg.workflow.releaseSandboxWithProdDoi(doi.doi));
@@ -388,7 +392,7 @@ async function releaseFrom(
     return { code: 0, reason: 'already-deposited' };
   }
   // The subcommands run with the pinned oak, so a pin they refuse is refused before the tag.
-  if (pin) deps.checkPin(pin);
+  deps.checkPin(pin);
   if (!deps.hasToken(sandbox)) throw new UserError(msg.workflow.noZenodoToken('release', sandbox));
   if (doi) await assertDraftFor(doi, tag, deps);
 

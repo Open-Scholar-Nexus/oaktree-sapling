@@ -1332,6 +1332,11 @@ export const workflow = {
   releaseClonesRemoved: (dirs: string[]): string =>
     `oak release: removed the ${dirs.length === 1 ? 'clone' : 'clones'} kept by an earlier run: ` +
     dirs.join(', '),
+  /** `where` is `at <tag>` or `on the default branch`. */
+  releaseNotPaper: (repo: string, where: string): string =>
+    `oak release: ${repo} is not an oak paper repo: ${where} it has no myst.yml naming an oak ` +
+    `version (project.options.oaktree-sapling.version). Check --repo, or pass --repo ` +
+    `<owner>/<paper-repo> to publish from any folder: oak clones it into a temporary folder.`,
   releaseTagNoDoi: (tag: string, repo: string): string =>
     `oak release: ${tag} on ${repo} has no Zenodo DOI in its myst.yml, so it was tagged before ` +
     `the DOI pull request was merged. Delete the tag (editors can) or pick another version.`,

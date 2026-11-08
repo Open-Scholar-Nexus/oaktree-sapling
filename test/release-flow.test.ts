@@ -34,8 +34,9 @@ const OLD_DOI_COMMIT = 'e'.repeat(40);
 const PR_URL = 'https://github.com/o/paper/pull/9';
 const RUN_URL = 'https://github.com/o/paper/actions/runs/7';
 
-const myst = (doi?: string) =>
-  `version: 1\nproject:\n  title: Paper\n${doi ? `  doi: ${doi}\n` : ''}`;
+const myst = (doi?: string, oak: string | null = 'v0.4.0-dev.6') =>
+  `version: 1\nproject:\n  title: Paper\n${doi ? `  doi: ${doi}\n` : ''}` +
+  (oak ? `  options:\n    oaktree-sapling:\n      version: ${oak}\n` : '');
 
 /** GitHub and Zenodo as a run finds them; each test sets where the release stands. */
 interface World {
@@ -347,8 +348,11 @@ describe('oak release from the terminal: refusals before anything changes', () =
   it('no record for the committed DOI', () =>
     refuses(world({ files: { [MAIN]: myst(PROD_DOI) }, zenodo: { kind: 'none' } })));
 
-  it('a pinned oak whose steps would refuse, checked at the commit to be tagged', async () => {
-    const pinned = `${myst(PROD_DOI)}  options:\n    oaktree-sapling:\n      version: v0.2.0\n`;
+  it('a repo whose myst.yml names no oak version, which is no oak paper', () =>
+    refuses(world({ files: { [MAIN]: myst(PROD_DOI, null) } }), {}, 'is not an oak paper repo'));
+
+  it('a pinned oak whose subcommands would refuse, checked at the commit to be tagged', async () => {
+    const pinned = myst(PROD_DOI, 'v0.2.0');
     const h = harness(world({ files: { [MAIN]: pinned } }));
     const seen: string[] = [];
     h.deps.checkPin = (version) => {
