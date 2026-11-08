@@ -273,7 +273,11 @@ export function journalStamp(
       return { repo: null, commit: null };
     }
     const commit = git(journalRoot, ['rev-parse', 'HEAD'], { quiet: true });
-    const dirty = git(journalRoot, ['status', '--porcelain'], { quiet: true });
+    // The engine action checks oak out at `.engine/`, inside the checkout of a co-located
+    // repository, which is its own journal.
+    const dirty = git(journalRoot, ['status', '--porcelain', '--', ':(exclude,top).engine'], {
+      quiet: true,
+    });
     return { repo: locationRepo(originRepo(journalRoot)), commit: dirty ? null : commit };
   } catch {
     return { repo: null, commit: null };

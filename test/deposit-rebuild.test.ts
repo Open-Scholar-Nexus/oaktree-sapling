@@ -110,6 +110,21 @@ describe('journalStamp', () => {
     expect(journalStamp(dir, '/paper')).toEqual({ repo: null, commit: null });
   });
 
+  it("names the commit of a co-located repository with CI's engine checkout in it", () => {
+    const repo = repoOf(mkdtempSync(join(tmpdir(), 'oak-stamp-')));
+    writeFileSync(join(repo, 'journal.yml'), 'name: J\n');
+    mkdirSync(join(repo, 'papers', 'a'), { recursive: true });
+    writeFileSync(join(repo, 'papers', 'a', 'myst.yml'), 'version: 1\n');
+    commitAll(repo, 'journal and a paper');
+    const head = execFileSync('git', ['-C', repo, 'rev-parse', 'HEAD'], { encoding: 'utf8' });
+    repoOf(join(repo, '.engine'));
+    writeFileSync(join(repo, '.engine', 'cli.cjs'), '');
+    const paper = join(repo, 'papers', 'a');
+    expect(journalStamp(repo, paper)).toEqual({ repo: null, commit: head.trim() });
+    writeFileSync(join(repo, 'journal.yml'), 'name: K\n');
+    expect(journalStamp(repo, paper)).toEqual({ repo: null, commit: null });
+  });
+
   it('names no commit for a journal folder inside a larger repo', () => {
     const outer = repoOf(mkdtempSync(join(tmpdir(), 'oak-stamp-')));
     mkdirSync(join(outer, 'journal'));
