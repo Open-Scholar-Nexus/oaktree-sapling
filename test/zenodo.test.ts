@@ -208,9 +208,9 @@ describe('buildMetadata', () => {
       project,
       paperId: project.id,
       githubUrl: 'https://github.com/o/r',
-      zenodo: { community: 'neuromatch', description_blurb: 'Made by the Fixture Journal.' },
+      zenodo: { community: 'fixture-community', description_blurb: 'Made by the Fixture Journal.' },
     });
-    expect(md.communities).toEqual([{ identifier: 'neuromatch' }]);
+    expect(md.communities).toEqual([{ identifier: 'fixture-community' }]);
     expect(md.description).toContain('Made by the Fixture Journal.');
   });
 

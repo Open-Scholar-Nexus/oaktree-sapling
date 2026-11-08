@@ -218,7 +218,7 @@ describe('compose: which typst template wins: author, then journal, then oak [R7
   });
 
   it('keeps an unpinned author template', () => {
-    const floating = 'https://github.com/o/isp-lapreprint-typst.git';
+    const floating = 'https://github.com/o/my-lapreprint-typst.git';
     const r = compose(base({ resolvedProject: withAuthorTemplate(floating) }));
     expect(templateOf(r)).toBe(floating); // validate warns about it; compose keeps it
   });

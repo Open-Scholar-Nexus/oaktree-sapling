@@ -1,10 +1,8 @@
 /**
  * gallery.mjs: the journal site's `paper-cards` directive (design §5; [S2]).
  *
- * A port of `impact-scholars.github.io/plugins/paper-gallery.mjs`, re-pointed from
- * `papers.txt` + a hardcoded org constant to the **registry** (`registry/papers.yml`,
- * design §9). Every URL is derived from a registry entry's `location`, never from an org
- * constant, so the same plugin serves any tenant. Title, keywords, edition and DOI come from
+ * Lists the papers in the **registry** (`registry/papers.yml`, design §9). Every URL is
+ * derived from a registry entry's `location`, never from an org constant, so the same plugin serves any tenant. Title, keywords, edition and DOI come from
  * the paper's own `myst.yml`, fetched once per paper per build.
  *
  * This file is ENGINE-owned but is NOT engine TypeScript: myst consumes it at runtime by
