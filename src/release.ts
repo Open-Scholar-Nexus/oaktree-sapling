@@ -270,6 +270,9 @@ export interface ReleaseDeps {
   next(lines: string[]): void;
   /** Writes a subcommand's own output as it is. */
   showLog(text: string): void;
+  /** Removes the clones earlier runs kept for this repo and version (clean.ts
+   *  `removeKeptClones`), and returns their paths. */
+  removeKeptClones(): string[];
 }
 
 /** A subcommand's exit code, its `--json` result (null when it printed none), and the output it
@@ -345,43 +348,49 @@ function guarded(src: ReleaseSource): ReleaseSource {
  * The refusals it can check first (token, Zenodo draft, sandbox against the committed DOI) come
  * before the confirmation and the first write. Returns the {@link ReleaseOutcome}, whose code
  * is 0 done or declined, 1 a bug, 2 a step failed, 3 a wait reached its limit; throws a UserError
- * when it refuses. The clone is removed on 0 and kept, with its path printed, otherwise.
+ * when it refuses. The clone is removed on 0 and kept, with its path printed, otherwise; the
+ * last block printed says what is left to do.
  */
 export async function runRelease(input: ReleaseInput, deps: ReleaseDeps): Promise<ReleaseOutcome> {
   const { repo, tag } = input;
   // A Proxy: every `src` call but `merge` throws a UserError ({@link guarded}).
   const src = guarded(deps.src);
   const clone = src.clone(repo, tag);
-  let code: number | null = null;
-  let refused = false;
+  let outcome: ReleaseOutcome & { next?: string[] };
   try {
-    const outcome = await releaseFrom(clone, input, src, deps);
-    code = outcome.code;
-    return outcome;
+    outcome = await releaseFrom(clone, input, src, deps);
   } catch (e) {
-    if (e instanceof StepFailed) return { code: (code = e.code), reason: 'step-failed' };
     // `main` prints the refusal, so the clone's path goes after it, in the same message.
     if (e instanceof UserError) {
-      refused = true;
       throw new UserError(`${e.message}\n${msg.workflow.releaseCloneKept(clone)}`);
     }
-    if (!(e instanceof WaitTimeout)) throw e;
-    deps.log(e.message);
-    deps.log(msg.workflow.releaseRerun(input.rerun));
-    return { code: (code = 3), reason: 'wait-limit' };
-  } finally {
-    // Kept after a failure, for the editor to look into.
-    if (code === 0) rmSync(clone, { recursive: true, force: true });
-    else if (!refused) deps.log(msg.workflow.releaseCloneKept(clone));
+    if (!(e instanceof StepFailed) && !(e instanceof WaitTimeout)) {
+      deps.log(msg.workflow.releaseCloneKept(clone));
+      throw e;
+    }
+    if (e instanceof WaitTimeout) deps.log(e.message);
+    deps.next(msg.workflow.releaseNextRerun(input.rerun, clone));
+    return e instanceof StepFailed
+      ? { code: e.code, reason: 'step-failed' }
+      : { code: 3, reason: 'wait-limit' };
   }
+  rmSync(clone, { recursive: true, force: true });
+  // The failures those clones were kept for are resolved once the version is deposited.
+  if (DEPOSITED.includes(outcome.reason)) {
+    const removed = deps.removeKeptClones();
+    if (removed.length) deps.log(msg.workflow.releaseClonesRemoved(removed));
+  }
+  if (outcome.next) deps.next(outcome.next);
+  return { code: outcome.code, reason: outcome.reason };
 }
 
+/** The steps of {@link runRelease}; `next` is the block it prints last. */
 async function releaseFrom(
   clone: string,
   input: ReleaseInput,
   src: ReleaseSource,
   deps: ReleaseDeps,
-): Promise<ReleaseOutcome> {
+): Promise<ReleaseOutcome & { next?: string[] }> {
   const { repo, tag, publish } = input;
   const deposited = () => src.releaseAssets(repo, tag).includes(DEPOSITED_ASSET);
 
@@ -423,6 +432,7 @@ async function releaseFrom(
             msg.workflow.releasePlanMerge,
             msg.workflow.releasePlanTagMerge(tag),
           ]),
+      msg.workflow.releasePlanWait(tag, (BUILD_WAIT.tries * BUILD_WAIT.intervalMs) / 60_000),
       msg.workflow.releasePlanDeposit(tag, sandbox, publish),
       msg.workflow.releasePlanAttach(tag),
     ];
@@ -436,14 +446,19 @@ async function releaseFrom(
   const run = await waitForBuild(repo, tag, sha, src, deps);
   if (deposited()) {
     deps.log(msg.workflow.releaseDepositedByCi(tag, run.url));
-    deps.next(msg.workflow.releaseNextByCi);
-    return { code: 0, reason: 'deposited-by-ci' };
+    return { code: 0, reason: 'deposited-by-ci', next: msg.workflow.releaseNextByCi };
   }
   src.fetch(clone);
   src.checkout(clone, `refs/tags/${tag}`);
   deps.status(msg.workflow.releaseDepositing);
   const depositRun = await deps.deposit(clone);
   const result = succeeded('oak release deposit', depositRun, deps);
+  const url = String(result.record_url ?? result.draft_url);
+  // Published by an earlier run: nothing was uploaded, and the files are on the record.
+  if (result.already_published === true) {
+    deps.log(msg.workflow.releaseWasPublished(tag));
+    return { code: 0, reason: 'deposited', next: msg.workflow.releaseNextPublished(url) };
+  }
   const published = result.published === true;
   deps.log(msg.workflow.releaseDeposited(tag, result.deposition_id, published));
   if (deposited()) deps.log(msg.workflow.releaseAttached(tag));
@@ -451,19 +466,17 @@ async function releaseFrom(
     deps.log(msg.workflow.releaseNotAttached(tag));
     deps.showLog(depositRun.log);
   }
-  const url = typeof result.draft_url === 'string' ? result.draft_url : null;
-  if (url)
-    deps.next(
-      published ? msg.workflow.releaseNextPublished(url) : msg.workflow.releaseNextDraft(url),
-    );
-  return { code: 0, reason: 'deposited' };
+  const next = published
+    ? msg.workflow.releaseNextPublished(url)
+    : msg.workflow.releaseNextDraft(url);
+  return { code: 0, reason: 'deposited', next };
 }
 
 /** `run`'s result once it exited 0; else prints its output and throws {@link StepFailed}. */
 function succeeded(name: string, run: SubcommandRun, deps: ReleaseDeps): Record<string, unknown> {
   if (run.code === 0) return run.result ?? {};
   deps.log(msg.workflow.releaseSubcommandFailed(name));
-  deps.showLog(run.log);
+  if (run.log) deps.showLog(run.log);
   throw new StepFailed(exitOf(run.code));
 }
 
@@ -561,7 +574,7 @@ async function waitForBuild(
   src: ReleaseSource,
   deps: ReleaseDeps,
 ): Promise<CiRun> {
-  deps.status(msg.workflow.releaseWaitRun(tag));
+  deps.status(msg.workflow.releaseWaitRun);
   const run = await pollUntil(
     () => depositRunFor(src.pushRuns(repo, sha), tag, sha),
     deps.sleep,
