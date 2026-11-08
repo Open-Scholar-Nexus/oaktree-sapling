@@ -6,6 +6,8 @@ version: 1
 project:
   id: oaktree-sapling-docs
   title: Oaktree Sapling
+  # The sidebar's first entry, the home page.
+  short_title: Home
   description: Documentation for the oaktree-sapling journal engine.
   # `[text](src:path#L1-L9)` links to oak's source at a release tag.
   plugins:
