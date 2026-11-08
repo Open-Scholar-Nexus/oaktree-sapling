@@ -173,6 +173,7 @@ function harness(w: World, input: Partial<ReleaseInput> = {}) {
     status: (text) => void statuses.push(text),
     next: (lines) => void nexts.push(lines),
     showLog: (text) => void shown.push(text),
+    removeKeptClones: () => [],
   };
   const outcome = () =>
     runRelease(
@@ -203,7 +204,7 @@ describe('oak release from the terminal: a first deposit', () => {
       `✓ reserved the DOI ${PROD_DOI} and opened its pull request`,
       `✓ merged the DOI pull request as ${MERGE.slice(0, 7)}: ${PR_URL}`,
       `✓ tagged ${TAG} at ${MERGE.slice(0, 7)}`,
-      `✓ Deposit version built ${TAG}: ${RUN_URL}`,
+      `✓ the Deposit version run built ${TAG}: ${RUN_URL}`,
       `✓ deposited ${TAG} into draft 5`,
       `✓ attached the deposit files to the ${TAG} release`,
     ]);
@@ -297,13 +298,13 @@ describe('oak release from the terminal: a rerun continues where the release sta
     );
     expect(await h.run()).toBe(0);
     expect(h.statuses).toEqual([
-      `waiting for the Deposit version run of ${TAG} to start`,
-      'Deposit version: queued',
-      'Deposit version: build job in progress',
-      'Deposit version: publish job in progress',
+      'Deposit version run: waiting to start',
+      'Deposit version run: queued',
+      'Deposit version run: build job in progress',
+      'Deposit version run: publish job in progress',
       'depositing into the Zenodo draft',
     ]);
-    expect(h.logs).toContain(`✓ Deposit version built ${TAG}: ${RUN_URL}`);
+    expect(h.logs).toContain(`✓ the Deposit version run built ${TAG}: ${RUN_URL}`);
   });
 
   it('published on Zenodo with this version: hands to oak release deposit, which finishes it', async () => {
@@ -421,8 +422,8 @@ describe('oak release from the terminal: the build', () => {
   it('no run within the limit: exit 3 with the command to rerun', async () => {
     const h = harness(tagged({ runAfter: RUN_WAIT.tries }));
     expect(await h.run()).toBe(3);
-    expect(h.logs.join('\n')).toContain('no Deposit version run started for v1.0.0');
-    expect(h.logs.join('\n')).toContain('rerun the same command to continue: oak release …');
+    expect(h.logs.join('\n')).toContain('✗ no Deposit version run started for v1.0.0');
+    expect(h.nexts).toEqual([msg.workflow.releaseNextRerun('oak release …', h.clone())]);
   });
 
   it('a build still running at the limit: exit 3, with its link', async () => {
@@ -435,11 +436,7 @@ describe('oak release from the terminal: the build', () => {
     expect(h.logs.join('\n')).toContain(
       `has not finished after ${(BUILD_WAIT.tries * BUILD_WAIT.intervalMs) / 60_000} minutes`,
     );
-    // Each poll sets the status; progress.ts draws only a change.
-    expect([...new Set(h.statuses)]).toEqual([
-      `waiting for the Deposit version run of ${TAG} to start`,
-      'Deposit version: build job in progress',
-    ]);
+    expect(h.nexts).toEqual([msg.workflow.releaseNextRerun('oak release …', h.clone())]);
   });
 });
 
@@ -462,8 +459,22 @@ describe('oak release from the terminal: how it ended', () => {
     const failed = harness(world(done));
     failed.deps.deposit = async () => ({ code: 2, result: null, log: 'boom\n' });
     expect(await failed.outcome()).toEqual({ code: 2, reason: 'step-failed' });
-    expect(failed.logs).toContain('✗ oak release deposit failed; its output:');
+    expect(failed.logs).toContain('✗ oak release deposit failed');
     expect(failed.shown).toEqual(['boom\n']);
+  });
+
+  it('a version published by an earlier run: says so and links the record', async () => {
+    const h = harness(world(done));
+    h.deps.deposit = async () => ({
+      code: 0,
+      result: { status: 'ok', already_published: true, record_url: 'https://zenodo.org/records/5' },
+      log: '',
+    });
+    expect(await h.run()).toBe(0);
+    expect(h.logs).toContain(
+      `✓ ${TAG} is already published on Zenodo; its files are on the record`,
+    );
+    expect(h.nexts).toEqual([['Done: published on Zenodo:', '  https://zenodo.org/records/5']]);
   });
 
   it('a deposit whose files are not on the release says so, with the subcommand output', async () => {

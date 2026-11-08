@@ -1204,7 +1204,9 @@ export async function cmdStatus(input: StatusInput): Promise<Outcome> {
     return { exitCode: 0, result: out };
   }
   if (isSandboxDoi(conceptDoi) !== sandbox) {
-    out.warning = `DOI prefix vs --sandbox mismatch (doi=${conceptDoi}, sandbox=${sandbox})`;
+    out.warning = sandbox
+      ? `${conceptDoi} is a production DOI; drop --sandbox`
+      : `${conceptDoi} is a sandbox DOI; add --sandbox`;
   }
 
   const latestId = await api.latestVersionDepId(conceptDoi);

@@ -50,7 +50,7 @@ Then it waits for the tag's **Deposit version** run and runs `oak release deposi
 
 Before merging the DOI pull request, it marks the pull request's Journal checks as skipped. It merges only the commit `reserve-doi` pushed (`gh pr merge --match-head-commit`), with a merge commit, or a squash when the repository allows no merge commits. A pull request left open by an earlier run gets a new commit, which is the one merged.
 
-It prints a line, starting with the time, for each step it completes, and ends with what is left to do. While it waits, a terminal shows a spinner with what it waits for; elsewhere it prints the run's state when it changes. The subcommands' own output is shown when one fails, and as it comes with `--verbose`. It waits up to 10 minutes for the run to start and 45 for it to finish. It also waits for the run's publish job, when there is one, so that it never deposits at the same time as CI.
+It prints a line, starting with the time, for each step it completes, and ends with what is left to do. While it waits, a terminal shows a spinner with what it waits for; elsewhere it prints the run's state when it changes. The subcommands' own output is shown when one fails, and live with `--verbose`. It waits up to 10 minutes for the run to start and 45 for it to finish. It also waits for the run's publish job, when there is one, so that it never deposits at the same time as CI.
 
 The subcommands run with the `oak` version the paper pins ([which version runs](#pins-local)), read at the commit each works on: `main` for `reserve-doi`, the tag for `deposit`.
 

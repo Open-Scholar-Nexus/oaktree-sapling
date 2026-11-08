@@ -1329,8 +1329,7 @@ export const workflow = {
     `oak release: the clone is kept for a look at what failed; delete it when done: rm -rf ${dir} ` +
     `(or run oak clean)`,
   releaseClonesRemoved: (dirs: string[]): string =>
-    `oak release: removed the ${dirs.length === 1 ? 'clone' : 'clones'} kept by an earlier run: ` +
-    dirs.join(', '),
+    `✓ removed the ${dirs.length === 1 ? 'clone' : 'clones'} an earlier run kept: ${dirs.join(', ')}`,
   /** `where` is `at <tag>` or `on the default branch`. */
   releaseNotPaper: (repo: string, where: string): string =>
     `oak release: ${repo} is not an oak paper repo: ${where} it has no myst.yml naming an oak ` +
@@ -1368,30 +1367,33 @@ export const workflow = {
     `  deposit the Deposit version build of ${tag} into the Zenodo ` +
     `${sandbox ? 'sandbox ' : ''}draft, ` +
     (publish ? 'and publish it (--publish-without-review)' : 'for you to publish there'),
+  releasePlanWait: (tag: string, minutes: number): string =>
+    `  wait for the Deposit version run to build ${tag} (usually a few minutes; oak waits up to ${minutes})`,
   releasePlanAttach: (tag: string): string =>
     `  attach the deposit files to the ${tag} release and comment on the tagged commit`,
 
-  releaseTagExists: (tag: string, sha: string): string => `✓ ${tag} exists at ${sha.slice(0, 7)}`,
+  releaseTagExists: (tag: string, sha: string): string =>
+    `${tag} is already tagged at ${sha.slice(0, 7)}`,
   releaseAlreadyDeposited: (tag: string): string =>
     `✓ ${tag} is already deposited: its GitHub release holds the deposit files`,
   releaseDepositedByCi: (tag: string, url: string): string =>
     `✓ the Deposit version run deposited ${tag} and attached the files to its release: ${url}`,
   releaseNextByCi: [
-    'Next: check the draft on Zenodo, then click Publish. The Deposit version run commented its ' +
-      'address on the tagged commit.',
+    "Next: check the draft on Zenodo, then click Publish. Its link is in the Deposit version run's " +
+      'comment on the tagged commit.',
   ],
   releaseReserving: 'reserving the DOI on Zenodo',
   releaseReserved: (doi: unknown): string =>
     `✓ reserved the DOI ${String(doi)} and opened its pull request`,
   releaseDepositing: 'depositing into the Zenodo draft',
   releaseDeposited: (tag: string, id: unknown, published: boolean): string =>
-    published
-      ? `✓ deposited and published ${tag}`
-      : `✓ deposited ${tag} into ${id === undefined ? 'the draft' : `draft ${String(id)}`}`,
+    published ? `✓ deposited and published ${tag}` : `✓ deposited ${tag} into draft ${String(id)}`,
+  releaseWasPublished: (tag: string): string =>
+    `✓ ${tag} is already published on Zenodo; its files are on the record`,
   releaseAttached: (tag: string): string => `✓ attached the deposit files to the ${tag} release`,
   releaseNotAttached: (tag: string): string =>
     `! the deposit files are not on the ${tag} release; oak release deposit said:`,
-  releaseSubcommandFailed: (name: string): string => `✗ ${name} failed; its output:`,
+  releaseSubcommandFailed: (name: string): string => `✗ ${name} failed`,
   releaseNextDraft: (url: string): string[] => [
     'Next: check the draft on Zenodo, then click Publish:',
     `  ${url}`,
@@ -1399,19 +1401,22 @@ export const workflow = {
   releaseNextPublished: (url: string): string[] => ['Done: published on Zenodo:', `  ${url}`],
   /** `oak release status`'s summary of zenodo.ts `cmdStatus`'s result; --json has the rest. */
   releaseStatusLines: (r: Record<string, unknown>): string[] => {
-    const doi = String(r.concept_doi ?? '');
+    const warning = typeof r.warning === 'string' ? [r.warning] : [];
+    const doi = typeof r.concept_doi === 'string' ? r.concept_doi : '';
+    if (!doi) {
+      return [
+        `no DOI in ${String(r.myst_path)} yet: run oak release, or merge its DOI pull request`,
+      ];
+    }
     const where = `DOI ${doi}${doi.startsWith('10.5072/') ? ' (sandbox)' : ''}`;
-    const state =
-      r.latest_deposition_id === undefined
-        ? !doi
-          ? `no DOI in ${String(r.myst_path)} yet: run oak release, or merge its DOI pull request`
-          : `${where}: no record on Zenodo`
-        : r.submitted
-          ? `${where}: v${String(r.latest_version)} published: ${String(r.draft_url)}`
-          : `${where}: draft ${String(r.latest_deposition_id)}, not published, holding ` +
-            `${r.latest_version ? `v${String(r.latest_version)}` : 'no version yet'}: ${String(r.draft_url)}`;
-    return [...(typeof r.warning === 'string' ? [r.warning] : []), state];
+    if (r.latest_deposition_id === undefined) return [...warning, `${where}: no record on Zenodo`];
+    const version = r.latest_version ? `v${String(r.latest_version)}` : 'no version yet';
+    const url = String(r.draft_url);
+    if (r.submitted) return [...warning, `${where}: ${version} published: ${url}`];
+    const id = String(r.latest_deposition_id);
+    return [...warning, `${where}: draft ${id}, not published, holding ${version}: ${url}`];
   },
+
   releaseDoiNotPushed:
     'oak release: oak release reserve-doi did not push the zenodo-doi branch, so there is no DOI ' +
     'commit to merge. See its output above, then run this again.',
@@ -1435,28 +1440,26 @@ export const workflow = {
     `oak release: GitHub did not create ${tag} (${why}). Only editors can create v* tags on ` +
     `${repo}; once that is fixed, run this again.`,
 
-  releaseWaitRun: (tag: string): string => `waiting for the Deposit version run of ${tag} to start`,
+  releaseWaitRun: 'Deposit version run: waiting to start',
   releaseNoRunStarted: (tag: string, repo: string): string =>
-    `oak release: no Deposit version run started for ${tag}; check Actions is enabled on ${repo}.`,
+    `✗ no Deposit version run started for ${tag}; check Actions is enabled on ${repo}`,
   /** The state while it is not done. */
   releaseBuildState: (state: BuildState): string =>
     state.phase === 'building'
-      ? `Deposit version: build job ${state.status.replace('_', ' ')}`
+      ? `Deposit version run: build job ${state.status.replace('_', ' ')}`
       : state.phase === 'publishing'
-        ? `Deposit version: publish job ${state.status.replace('_', ' ')}`
-        : 'Deposit version: queued',
-  releaseBuilt: (tag: string, url: string): string => `✓ Deposit version built ${tag}: ${url}`,
+        ? `Deposit version run: publish job ${state.status.replace('_', ' ')}`
+        : 'Deposit version run: queued',
+  releaseBuilt: (tag: string, url: string): string =>
+    `✓ the Deposit version run built ${tag}: ${url}`,
   releaseBuildTimeout: (url: string, minutes: number): string =>
-    `oak release: the Deposit version run has not finished after ${minutes} minutes: ${url}`,
-  releaseRerun: (rerun: string): string =>
-    `oak release: rerun the same command to continue: ${rerun}`,
-  releaseInterrupted: (rerun: string, dir: string | null): string =>
-    `oak release: stopped. Rerun the same command to continue: ${rerun}` +
-    (dir ? `\nThe clone is kept; delete it when done: rm -rf ${dir} (or run oak clean)` : ''),
-  releaseDone: (tag: string, url: string, published: boolean): string =>
-    published
-      ? `✓ deposited and published ${tag}\n\nDone: published on Zenodo:\n  ${url}`
-      : `✓ deposited ${tag}\n\nNext: check the draft on Zenodo, then click Publish:\n  ${url}`,
+    `✗ the Deposit version run has not finished after ${minutes} minutes: ${url}`,
+  releaseStopped: '✗ stopped',
+  releaseNextRerun: (rerun: string, dir: string | null): string[] => [
+    'Next: rerun the same command to continue:',
+    `  ${rerun}`,
+    ...(dir ? [`The clone is kept for a look at what happened: rm -rf ${dir} (or oak clean)`] : []),
+  ],
   releaseAlreadyPublished: (tag: string, url: string): string =>
     `oak release deposit: ${tag} is already published on Zenodo, so nothing was uploaded and no files ` +
     `are attached to the release; the files are on the record: ${url}`,

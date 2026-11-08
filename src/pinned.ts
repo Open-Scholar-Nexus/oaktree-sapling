@@ -93,6 +93,8 @@ export interface HandoffDeps {
   /** Prints the plan and asks; `--yes` accepts it. */
   confirm(plan: string[]): Promise<boolean>;
   log(line: string): void;
+  /** Prints which version runs; {@link HandoffDeps.log} when unset. */
+  logRunning?(line: string): void;
 }
 
 export interface HandoffContext {
@@ -184,7 +186,7 @@ export async function runVersion(
   const cli = join(dir, 'dist', 'cli.cjs');
   if (!existsSync(cli)) throw new UserError(msg.pinned.noBuild(verb, pin, source, dir));
 
-  deps.log(msg.pinned.running(verb, pin, source, dir, ctx.running));
+  (deps.logRunning ?? deps.log)(msg.pinned.running(verb, pin, source, dir, ctx.running));
   const env: NodeJS.ProcessEnv = { ...ctx.env, [USE_RUNNING_ENV]: '1' };
   // As ci/run.sh: the release's typst is built for linux x86_64 only.
   const bin = join(dir, 'bin');
