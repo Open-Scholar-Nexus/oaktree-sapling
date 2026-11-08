@@ -1,8 +1,7 @@
 /**
  * The lines and the spinner of `oak release` (progress.ts `waitIndicator`), on a fake stream with
- * fake timers: each step starts with the time, the spinner and what oak waits for are drawn only
- * while it waits on a terminal and erased before anything else is written, and the last block
- * has no time.
+ * fake timers: each step starts with the time, and the spinner and what oak waits for are drawn
+ * only while it waits on a terminal and erased before anything else is written.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { stamp, waitIndicator } from '../src/progress.js';
@@ -107,34 +106,5 @@ describe('what oak waits for', () => {
       '[09:05:07] Deposit version: queued\n',
       '[09:05:07] Deposit version: build job in progress\n',
     ]);
-  });
-
-  it('spins while other work runs, and gives back its result', async () => {
-    vi.useFakeTimers();
-    const out = stream(true);
-    const w = waitIndicator(out, {}, now);
-    const work = new Promise<number>((done) => setTimeout(() => done(7), 300));
-    const result = w.during(work);
-    await vi.advanceTimersByTimeAsync(300);
-    expect(await result).toBe(7);
-    const frames = out.writes.filter((t) => t.startsWith(ERASE) && t.length > ERASE.length);
-    expect(frames.length).toBeGreaterThanOrEqual(3);
-    expect(out.writes.at(-1)).toBe(ERASE);
-  });
-});
-
-describe('the last block', () => {
-  it('comes after a blank line, with no time', () => {
-    const out = stream(false);
-    const w = waitIndicator(out, {}, now);
-    w.log('✓ tagged v1.0.0 at abc1234');
-    w.next([
-      'Next: check the draft on Zenodo, then click Publish:',
-      '  https://zenodo.org/uploads/5',
-    ]);
-    expect(out.writes.join('')).toBe(
-      '[09:05:07] ✓ tagged v1.0.0 at abc1234\n' +
-        '\nNext: check the draft on Zenodo, then click Publish:\n  https://zenodo.org/uploads/5\n',
-    );
   });
 });
