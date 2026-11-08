@@ -4,10 +4,10 @@
  */
 import { join } from 'node:path';
 
-/** The myst-theme fork release this oak version uses, until upstream book-theme supports the
- *  colours we need. Bump with a release. */
-export const THEME_REPO = 'impact-scholars/myst-theme';
-export const THEME_VERSION = 'v0.2.0';
+/** The myst-theme release this oak version uses, pinned so a new theme never reaches a
+ *  journal before oak's mystmd supports it. Bump with a release. */
+export const THEME_REPO = 'jupyter-book/myst-theme';
+export const THEME_VERSION = 'myst-to-react@1.4.1';
 
 /**
  * Where the docs are published. Everything else names a page in `docs-links.ts`. A printed or
@@ -21,10 +21,10 @@ export function engineTypstTemplate(engineRoot: string): string {
   return join(engineRoot, 'templates', 'typst');
 }
 
-/** The book-theme zip of the pinned fork release. */
+/** The book-theme zip of the pinned release. */
 export function themeZipUrl(
   themeRepo: string = THEME_REPO,
   themeVersion: string = THEME_VERSION,
 ): string {
-  return `https://github.com/${themeRepo}/releases/download/${themeVersion}/book-theme.zip`;
+  return `https://github.com/${themeRepo}/releases/download/${encodeURIComponent(themeVersion)}/book-theme.zip`;
 }
