@@ -88,8 +88,8 @@ export interface HandoffDeps {
   clone(engineRepo: string, tag: string, dest: string): void;
   /** Whether `<binDir>/typst --version` runs on this machine. */
   typstRuns(binDir: string): boolean;
-  /** Runs `node <cli> ...argv` with stdio inherited and returns its exit code. */
-  spawn(cli: string, argv: string[], env: NodeJS.ProcessEnv): number;
+  /** Runs `node <cli> ...argv` and returns its exit code. */
+  spawn(cli: string, argv: string[], env: NodeJS.ProcessEnv): number | Promise<number>;
   /** Prints the plan and asks; `--yes` accepts it. */
   confirm(plan: string[]): Promise<boolean>;
   log(line: string): void;
