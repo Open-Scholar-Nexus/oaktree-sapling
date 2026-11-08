@@ -1,8 +1,9 @@
-@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400&display=swap');
+@import url('https://cdn.jsdelivr.net/npm/@fontsource/montserrat@5.3.0/500.css');
 
-/* The site name in Montserrat, as in the original oaktree logo. */
+/* The site name in Montserrat, the original oaktree logo's font. */
 .myst-home-link span {
   font-family: 'Montserrat', sans-serif;
+  font-weight: 500;
 }
 
 .myst-made-with-myst {
@@ -27,6 +28,8 @@
   --myst-color-accent-surface: #edf7f1;
   --myst-color-accent-surface-border: #b7e0c9;
   --myst-color-accent-surface-text: #1a4d35;
+  /* the popover on a hovered reference */
+  --myst-color-inverse-bg: #1a4d35;
 }
 .dark {
   --myst-color-link: #5cc28f;
@@ -43,4 +46,13 @@
   --myst-color-accent-surface: #1a4d354d;
   --myst-color-accent-surface-border: #267a52;
   --myst-color-accent-surface-text: #edf7f1;
+  /* admonition backgrounds on the theme's warm dark page */
+  --myst-color-info-bg: #292524;
+  --myst-color-success-bg: #292524;
+  --myst-color-warning-bg: #292524;
+  --myst-color-danger-bg: #292524;
+  --myst-color-error-bg: #292524;
+  --myst-color-theorem-bg: #292524;
+  --myst-color-example-bg: #292524;
+  --myst-color-proof-bg: #292524;
 }
