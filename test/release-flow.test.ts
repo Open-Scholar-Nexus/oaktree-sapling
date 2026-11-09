@@ -201,10 +201,11 @@ describe('oak release from the terminal: a first deposit', () => {
     expect(h.plans[0]!.join('\n')).toContain('mark its Journal checks as skipped and merge it');
     expect(existsSync(h.clone())).toBe(false);
     expect(h.logs).toEqual([
-      `✓ reserved the DOI ${PROD_DOI} and opened its pull request`,
+      `✓ reserved the DOI ${PROD_DOI}`,
       `✓ merged the DOI pull request as ${MERGE.slice(0, 7)}: ${PR_URL}`,
       `✓ tagged ${TAG} at ${MERGE.slice(0, 7)}`,
-      `✓ the Deposit version run built ${TAG}: ${RUN_URL}`,
+      `✓ the Deposit version run started: ${RUN_URL}`,
+      `✓ the Deposit version run built ${TAG}`,
       `✓ deposited ${TAG} into draft 5`,
       `✓ attached the deposit files to the ${TAG} release`,
     ]);
@@ -302,9 +303,8 @@ describe('oak release from the terminal: a rerun continues where the release sta
       'Deposit version run: queued',
       'Deposit version run: build job in progress',
       'Deposit version run: publish job in progress',
-      'depositing into the Zenodo draft',
+      'Zenodo: depositing into the draft',
     ]);
-    expect(h.logs).toContain(`✓ the Deposit version run built ${TAG}: ${RUN_URL}`);
   });
 
   it('published on Zenodo with this version: hands to oak release deposit, which finishes it', async () => {
@@ -463,6 +463,40 @@ describe('oak release from the terminal: how it ended', () => {
     expect(failed.shown).toEqual(['boom\n']);
   });
 
+  it("a failed subcommand: its result's message, without its output", async () => {
+    const h = harness(world(done));
+    h.deps.deposit = async () => ({
+      code: 5,
+      result: { status: 'error', message: 'no unsubmitted Zenodo draft' },
+      log: '[upload] noise\n',
+    });
+    expect(await h.run()).toBe(2);
+    expect(h.logs).toContain('✗ oak release deposit failed: no unsubmitted Zenodo draft');
+    expect(h.shown).toEqual([]);
+    expect(h.nexts).toEqual([msg.workflow.releaseNextRerun('oak release …', h.clone())]);
+  });
+
+  it('a subcommand that exits 0 with no result fails, with its output', async () => {
+    const h = harness(world(done));
+    h.deps.deposit = async () => ({ code: 0, result: null, log: 'odd\n' });
+    expect(await h.run()).toBe(1);
+    expect(h.logs).toContain(`✗ oak release deposit failed: ${msg.workflow.releaseNoResult}`);
+    expect(h.shown).toEqual(['odd\n']);
+  });
+
+  it('reserve-doi that opened no pull request: its output, then the refusal', async () => {
+    const h = harness(world());
+    const reserve = h.deps.reserveDoi;
+    h.deps.reserveDoi = async (clone, sb) => {
+      const run = await reserve(clone, sb);
+      h.deps.src.openPr = () => null;
+      return { ...run, log: 'DOI PR not opened (rate limit)\n' };
+    };
+    const err = await h.run().catch((e: unknown) => e);
+    expect((err as Error).message).toContain('has no open pull request');
+    expect(h.shown).toEqual(['DOI PR not opened (rate limit)\n']);
+  });
+
   it('a version published by an earlier run: says so and links the record', async () => {
     const h = harness(world(done));
     h.deps.deposit = async () => ({
@@ -487,7 +521,7 @@ describe('oak release from the terminal: how it ended', () => {
     };
     expect(await h.run()).toBe(0);
     expect(h.logs).toContain(
-      `! the deposit files are not on the ${TAG} release; oak release deposit said:`,
+      `! oak release deposit did not attach the files to the ${TAG} release; its output:`,
     );
     expect(h.shown).toEqual(['[upload] reusing existing draft 5\n']);
   });

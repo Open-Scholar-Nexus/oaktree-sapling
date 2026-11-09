@@ -271,8 +271,8 @@ export interface ReleaseDeps {
   /** Writes a subcommand's own output as it is. */
   showLog(text: string): void;
   /** Removes the clones earlier runs kept for this repo and version (clean.ts
-   *  `removeKeptClones`), and returns their paths. */
-  removeKeptClones(): string[];
+   *  `removeKeptClones`). */
+  removeKeptClones(): void;
 }
 
 /** A subcommand's exit code, its `--json` result (null when it printed none), and the output it
@@ -365,7 +365,7 @@ export async function runRelease(input: ReleaseInput, deps: ReleaseDeps): Promis
       throw new UserError(`${e.message}\n${msg.workflow.releaseCloneKept(clone)}`);
     }
     if (!(e instanceof StepFailed) && !(e instanceof WaitTimeout)) {
-      deps.log(msg.workflow.releaseCloneKept(clone));
+      deps.next([msg.workflow.releaseCloneKept(clone)]);
       throw e;
     }
     if (e instanceof WaitTimeout) deps.log(e.message);
@@ -376,15 +376,12 @@ export async function runRelease(input: ReleaseInput, deps: ReleaseDeps): Promis
   }
   rmSync(clone, { recursive: true, force: true });
   // The failures those clones were kept for are resolved once the version is deposited.
-  if (DEPOSITED.includes(outcome.reason)) {
-    const removed = deps.removeKeptClones();
-    if (removed.length) deps.log(msg.workflow.releaseClonesRemoved(removed));
-  }
+  if (DEPOSITED.includes(outcome.reason)) deps.removeKeptClones();
   if (outcome.next) deps.next(outcome.next);
   return { code: outcome.code, reason: outcome.reason };
 }
 
-/** The steps of {@link runRelease}; `next` is the block it prints last. */
+/** The steps of {@link runRelease}; `next` is the block {@link runRelease} prints last. */
 async function releaseFrom(
   clone: string,
   input: ReleaseInput,
@@ -463,7 +460,7 @@ async function releaseFrom(
   deps.log(msg.workflow.releaseDeposited(tag, result.deposition_id, published));
   if (deposited()) deps.log(msg.workflow.releaseAttached(tag));
   else {
-    deps.log(msg.workflow.releaseNotAttached(tag));
+    deps.log(msg.workflow.releaseNotAttached(tag, depositRun.log !== ''));
     deps.showLog(depositRun.log);
   }
   const next = published
@@ -472,12 +469,21 @@ async function releaseFrom(
   return { code: 0, reason: 'deposited', next };
 }
 
-/** `run`'s result once it exited 0; else prints its output and throws {@link StepFailed}. */
+/** `run`'s result once it exited 0 with one. Else prints why, with its output when its result
+ *  has no message, and throws {@link StepFailed}. */
 function succeeded(name: string, run: SubcommandRun, deps: ReleaseDeps): Record<string, unknown> {
-  if (run.code === 0) return run.result ?? {};
-  deps.log(msg.workflow.releaseSubcommandFailed(name));
-  if (run.log) deps.showLog(run.log);
-  throw new StepFailed(exitOf(run.code));
+  if (run.code === 0 && run.result) return run.result;
+  const why = run.result?.message;
+  const said = typeof why === 'string' ? why : null;
+  deps.log(
+    msg.workflow.releaseSubcommandFailed(
+      name,
+      said ?? (run.code === 0 ? msg.workflow.releaseNoResult : null),
+    ),
+  );
+  if (!said && run.log) deps.showLog(run.log);
+  // A child that exits 0 with no result is a bug in it.
+  throw new StepFailed(run.code === 0 ? 1 : exitOf(run.code));
 }
 
 /**
@@ -493,16 +499,18 @@ async function reserveAndMerge(
 ): Promise<string> {
   const { repo } = input;
   deps.status(msg.workflow.releaseReserving);
-  const reserved = succeeded(
-    'oak release reserve-doi',
-    await deps.reserveDoi(clone, input.sandbox),
-    deps,
-  );
+  const run = await deps.reserveDoi(clone, input.sandbox);
+  const reserved = succeeded('oak release reserve-doi', run, deps);
   deps.log(msg.workflow.releaseReserved(reserved.concept_doi));
+  // Both messages point at its output, which says why.
   const pushed = src.pushedHead(clone, DOI_BRANCH);
-  if (!pushed) throw new UserError(msg.workflow.releaseDoiNotPushed);
-  const pr = src.openPr(repo, DOI_BRANCH);
-  if (!pr) throw new UserError(msg.workflow.releaseNoDoiPr(repo));
+  const pr = pushed ? src.openPr(repo, DOI_BRANCH) : null;
+  if (!pushed || !pr) {
+    deps.showLog(run.log);
+    throw new UserError(
+      pushed ? msg.workflow.releaseNoDoiPr(repo) : msg.workflow.releaseDoiNotPushed,
+    );
+  }
   src.markChecksSkipped(repo, pushed);
   const method = src.allowsMergeCommit(repo) ? 'merge' : 'squash';
   let merged: string;
@@ -581,6 +589,7 @@ async function waitForBuild(
     RUN_WAIT,
   );
   if (!run) throw new WaitTimeout(msg.workflow.releaseNoRunStarted(tag, repo));
+  deps.log(msg.workflow.releaseRunStarted(run.url));
   const done = await pollUntil(
     () => {
       const state = buildState(src.jobs(repo, run.id), run.url);
@@ -598,7 +607,7 @@ async function waitForBuild(
         (BUILD_WAIT.tries * BUILD_WAIT.intervalMs) / 60_000,
       ),
     );
-  deps.log(msg.workflow.releaseBuilt(tag, run.url));
+  deps.log(msg.workflow.releaseBuilt(tag));
   return done;
 }
 

@@ -775,42 +775,45 @@ async function cmdReleaseDeposit(argv: string[]): Promise<number> {
 
   // Published by an earlier run, so no bundle was made here; the files are on the record.
   const already = out.result.already_published === true;
-  if (already) {
-    process.stderr.write(
-      msg.workflow.releaseAlreadyPublished(tag, String(out.result.record_url)) + '\n',
-    );
-  }
+  const published = already || out.result.published === true;
   const url = String(out.result.record_url ?? out.result.draft_url ?? out.result.version_doi);
-  // The last line, as the draft's URL is what the editor needs next.
-  const done = () => {
-    if (!already) {
-      const next = publish
-        ? msg.workflow.releaseNextPublished(url)
-        : msg.workflow.releaseNextDraft(url);
-      const step = msg.workflow.releaseDeposited(tag, out.result.deposition_id, publish);
-      process.stderr.write([step, '', ...next].join('\n') + '\n');
-    }
-    return 0;
+  // With --json, `oak release` prints these lines itself, from the result.
+  const { waitIndicator } = await import('./progress.js');
+  const progress = waitIndicator(process.stderr, process.env);
+  const json = has(argv, 'json');
+  const step = (line: string) => {
+    if (!json) progress.log(line);
   };
+  step(
+    already
+      ? msg.workflow.releaseWasPublished(tag)
+      : msg.workflow.releaseDeposited(tag, out.result.deposition_id, published),
+  );
   if (!gh.ghLoggedIn()) {
     if (!already) {
       process.stderr.write(annotate('warning', msg.workflow.releaseNoGh(tag, bundleOut)) + '\n');
     }
-    return done();
-  }
-  try {
-    if (!already) {
-      const files = readdirSync(bundleOut).map((f) => join(bundleOut, f));
-      gh.uploadReleaseAsset(paperRoot, tag, files);
+  } else {
+    try {
+      if (!already) {
+        const files = readdirSync(bundleOut).map((f) => join(bundleOut, f));
+        gh.uploadReleaseAsset(paperRoot, tag, files);
+        step(msg.workflow.releaseAttached(tag));
+      }
+      const head = sha ?? (await gh.realGitContext.headSha(paperRoot));
+      gh.postCommitComment(paperRoot, head, msg.workflow.releaseCommitComment(url, published));
+    } catch (e) {
+      process.stderr.write(
+        annotate('warning', msg.workflow.releasePostStepsFailed((e as Error).message)) + '\n',
+      );
     }
-    const head = sha ?? (await gh.realGitContext.headSha(paperRoot));
-    gh.postCommitComment(paperRoot, head, msg.workflow.releaseCommitComment(url, publish));
-  } catch (e) {
-    process.stderr.write(
-      annotate('warning', msg.workflow.releasePostStepsFailed((e as Error).message)) + '\n',
+  }
+  if (!json) {
+    progress.next(
+      published ? msg.workflow.releaseNextPublished(url) : msg.workflow.releaseNextDraft(url),
     );
   }
-  return done();
+  return 0;
 }
 
 /** `arg` as one shell word: quoted when it holds anything but plain path and URL characters. */
@@ -922,6 +925,7 @@ async function cmdReleaseVersion(argv: string[]): Promise<number> {
   const verbose = has(argv, 'verbose');
   const { waitIndicator } = await import('./progress.js');
   const progress = waitIndicator(process.stderr, process.env);
+  const confirm = makeConfirm(argv);
   /** Runs the child, with the spinner unless its output shows live (--verbose). */
   const child = (cli: string, args: string[], env: NodeJS.ProcessEnv) => {
     const run = runChild(cli, args, env, verbose);
@@ -939,6 +943,7 @@ async function cmdReleaseVersion(argv: string[]): Promise<number> {
       { ...ctx, paperRoot: clone },
       {
         ...deps,
+        confirm,
         spawn: async (cli, a, env) => (run = await child(cli, a, env)).code,
         log: progress.log,
         logRunning: verbose ? progress.log : () => {},
@@ -948,7 +953,14 @@ async function cmdReleaseVersion(argv: string[]): Promise<number> {
       const env = { ...process.env, [pinned.USE_RUNNING_ENV]: '1' };
       return child(process.argv[1]!, ['release', ...childArgs], env);
     }
-    return run ?? { code, result: null, log: '' };
+    // No run: the editor declined to download the pinned oak.
+    return (
+      run ?? {
+        code,
+        result: { status: 'error', message: msg.workflow.releaseEngineDeclined },
+        log: '',
+      }
+    );
   };
 
   let cloneDir: string | null = null;
@@ -1006,16 +1018,16 @@ async function cmdReleaseVersion(argv: string[]): Promise<number> {
             ],
             clone,
           ),
-        confirm: makeConfirm(argv),
+        confirm,
         sleep: progress.sleep,
         log: progress.log,
         status: progress.status,
         next: progress.next,
-        showLog: (text) => {
-          progress.clear();
-          process.stderr.write(text);
+        showLog: progress.raw,
+        removeKeptClones: () => {
+          const removed = removeKeptClones(tmpdir(), repo, tag, process.getuid?.());
+          if (verbose && removed.length) progress.log(msg.workflow.releaseClonesRemoved(removed));
         },
-        removeKeptClones: () => removeKeptClones(tmpdir(), repo, tag, process.getuid?.()),
       },
     );
   } finally {

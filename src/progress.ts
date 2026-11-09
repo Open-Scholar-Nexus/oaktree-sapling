@@ -7,7 +7,6 @@
  * between waits (gh.ts `showWorking`) and every step start on a clear line.
  */
 
-/** ASCII, so no terminal needs UTF-8 for it. */
 const FRAMES = ['|', '/', '-', '\\'];
 const FRAME_MS = 100;
 /** Back to the start of the line, then erase it. */
@@ -33,6 +32,8 @@ export interface WaitIndicator {
   next(lines: string[]): void;
   /** Erases the spinner if it is drawn, before something else writes to the stream. */
   clear(): void;
+  /** Writes `text` as it is, such as a subcommand's own output. */
+  raw(text: string): void;
 }
 
 /** `[HH:MM:SS] ` in local time, 24-hour, the same in every locale. */
@@ -98,5 +99,9 @@ export function waitIndicator(
       stream.write('\n' + lines.join('\n') + '\n');
     },
     clear,
+    raw(out) {
+      clear();
+      stream.write(out);
+    },
   };
 }
