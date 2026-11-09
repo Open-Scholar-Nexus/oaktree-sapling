@@ -293,11 +293,7 @@ export interface ReleaseOutcome {
 }
 
 /** The reasons that leave the version deposited. */
-export const DEPOSITED: readonly ReleaseReason[] = [
-  'deposited',
-  'already-deposited',
-  'deposited-by-ci',
-];
+const DEPOSITED: readonly ReleaseReason[] = ['deposited', 'already-deposited', 'deposited-by-ci'];
 
 /** A wait that reached its limit; the run exits 3 and a rerun continues. */
 class WaitTimeout extends Error {}
@@ -362,14 +358,14 @@ export async function runRelease(input: ReleaseInput, deps: ReleaseDeps): Promis
   } catch (e) {
     // `main` prints the refusal, so the clone's path goes after it, in the same message.
     if (e instanceof UserError) {
-      throw new UserError(`${e.message}\n${msg.workflow.releaseCloneKept(clone)}`);
+      throw new UserError(`${e.message}\n${msg.workflow.releaseCloneKept(repo, clone)}`);
     }
     if (!(e instanceof StepFailed) && !(e instanceof WaitTimeout)) {
-      deps.next([msg.workflow.releaseCloneKept(clone)]);
+      deps.next([msg.workflow.releaseCloneKept(repo, clone)]);
       throw e;
     }
     if (e instanceof WaitTimeout) deps.log(e.message);
-    deps.next(msg.workflow.releaseNextRerun(input.rerun, clone));
+    deps.next(msg.workflow.releaseNextRerun(input.rerun, repo, clone));
     return e instanceof StepFailed
       ? { code: e.code, reason: 'step-failed' }
       : { code: 3, reason: 'wait-limit' };

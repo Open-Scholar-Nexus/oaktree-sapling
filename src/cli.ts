@@ -933,12 +933,11 @@ async function cmdReleaseVersion(argv: string[]): Promise<number> {
   /** Runs `oak release <args> --json` with the oak the clone pins, or with this oak when that is
    *  the same version, as a child process: oak prints the result itself, from the child's JSON. */
   const runSubcommand = async (args: string[], clone: string): Promise<SubcommandRun> => {
-    const { handOff } = await import('./pinned.js');
     const childArgs = [...args, '--json'];
     const ctx = await handoffContext('release', childArgs);
     const deps = await handoffDeps(argv);
     let run: SubcommandRun | null = null;
-    const code = await handOff(
+    const code = await pinned.handOff(
       { ...ctx, paperRoot: clone },
       {
         ...deps,
@@ -968,7 +967,7 @@ async function cmdReleaseVersion(argv: string[]): Promise<number> {
   };
   const onInterrupt = () => {
     progress.log(msg.workflow.releaseStopped);
-    progress.next(msg.workflow.releaseNextRerun(rerun, cloneDir));
+    progress.next(msg.workflow.releaseNextRerun(rerun, repo, cloneDir));
     // No listener is left, so this ends oak as Ctrl-C would.
     process.kill(process.pid, 'SIGINT');
   };
@@ -1380,12 +1379,10 @@ function makeConfirm(argv: string[], yesAccepts = true): (plan: string[]) => Pro
     try {
       ans = (await rl.question(msg.prompt.proceed)).trim();
     } catch (e) {
+      // Ctrl-C or Ctrl-D at the question: a no.
       if ((e as Error).name !== 'AbortError') throw e;
-      // readline takes Ctrl-C at the question; it stops oak as it does anywhere else. The timer
-      // keeps oak running until the signal arrives.
-      process.stderr.write('\n');
-      process.kill(process.pid, 'SIGINT');
-      return new Promise<boolean>(() => setInterval(() => {}, 60_000));
+      process.stderr.write('\n' + msg.prompt.declined('', yesAccepts) + '\n');
+      return false;
     } finally {
       rl.close();
     }
@@ -1454,7 +1451,8 @@ async function cmdBootstrap(argv: string[]): Promise<number> {
     { engineRepo, version: pinned.engineVersion },
     { kind: 'flag' },
     await handoffContext('bootstrap', argv),
-    await handoffDeps(argv),
+    // The engine repo is the --engine-repo typed here, so --yes accepts it.
+    { ...(await handoffDeps(argv)), confirm: makeConfirm(argv) },
   );
   if (handed !== null) return handed;
   gh.assertRepoName(engineRepo, '--engine-repo');

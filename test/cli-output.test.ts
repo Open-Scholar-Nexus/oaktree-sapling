@@ -762,7 +762,7 @@ describe.skipIf(bundleState() === 'absent')('fetching the pinned oak', () => {
     const { code, stderr } = oak(['build', '--paper', dir, '--yes'], env);
     expect(code).toBe(2);
     expect(stderr).toContain('from someone/fork (engine_repo in pins.yml)');
-    expect(stderr).toContain('--yes does not accept this one');
+    expect(stderr).toContain('--yes does not answer this question');
     expect(existsSync(join(env.XDG_CACHE_HOME, 'oak'))).toBe(false);
     expect(existsSync(ran)).toBe(false);
   });

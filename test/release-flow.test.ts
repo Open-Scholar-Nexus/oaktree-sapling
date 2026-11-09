@@ -242,8 +242,8 @@ describe('oak release from the terminal: a first deposit', () => {
     expect(h.outward.some((c) => c.startsWith('tag '))).toBe(false);
     expect(existsSync(h.clone())).toBe(true);
     // After the refusal, which `main` prints from the message.
-    expect((err as Error).message).toContain(`rm -rf ${h.clone()}`);
-    expect(h.logs.join('\n')).not.toContain('rm -rf');
+    expect((err as Error).message).toContain(msg.workflow.releaseCloneKept(REPO, h.clone()));
+    expect(h.logs.join('\n')).not.toContain(h.clone());
   });
 
   it('tags the merge commit when the default branch moved after the merge, and says what is left out', async () => {
@@ -423,7 +423,7 @@ describe('oak release from the terminal: the build', () => {
     const h = harness(tagged({ runAfter: RUN_WAIT.tries }));
     expect(await h.run()).toBe(3);
     expect(h.logs.join('\n')).toContain('✗ no Deposit version run started for v1.0.0');
-    expect(h.nexts).toEqual([msg.workflow.releaseNextRerun('oak release …', h.clone())]);
+    expect(h.nexts).toEqual([msg.workflow.releaseNextRerun('oak release …', REPO, h.clone())]);
   });
 
   it('a build still running at the limit: exit 3, with its link', async () => {
@@ -436,7 +436,7 @@ describe('oak release from the terminal: the build', () => {
     expect(h.logs.join('\n')).toContain(
       `has not finished after ${(BUILD_WAIT.tries * BUILD_WAIT.intervalMs) / 60_000} minutes`,
     );
-    expect(h.nexts).toEqual([msg.workflow.releaseNextRerun('oak release …', h.clone())]);
+    expect(h.nexts).toEqual([msg.workflow.releaseNextRerun('oak release …', REPO, h.clone())]);
   });
 });
 
@@ -473,7 +473,7 @@ describe('oak release from the terminal: how it ended', () => {
     expect(await h.run()).toBe(2);
     expect(h.logs).toContain('✗ oak release deposit failed: no unsubmitted Zenodo draft');
     expect(h.shown).toEqual([]);
-    expect(h.nexts).toEqual([msg.workflow.releaseNextRerun('oak release …', h.clone())]);
+    expect(h.nexts).toEqual([msg.workflow.releaseNextRerun('oak release …', REPO, h.clone())]);
   });
 
   it('a subcommand that exits 0 with no result fails, with its output', async () => {
@@ -549,7 +549,7 @@ describe('oak release status: its summary', () => {
       `  published: v0.0.2: ${DRAFT_URL}`,
     ]);
     expect(lines({ myst_path: '/p/myst.yml' })).toEqual([
-      'no DOI in /p/myst.yml yet: run oak release, or merge its DOI pull request',
+      'no DOI in myst.yml yet: run oak release, or merge the open DOI pull request',
     ]);
   });
 });

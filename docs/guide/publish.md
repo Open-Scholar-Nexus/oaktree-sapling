@@ -19,7 +19,7 @@ oak release --repo owner/paper-repo v1.0.0
 
 When run inside a clone of the paper repository, `--repo` can be left out. `v1.0.0` is the version, in the form `vMAJOR.MINOR.PATCH`, and becomes the tag; without it, oak lists the repository's tags.
 
-oak lists what it will do on GitHub and Zenodo and asks once (`--yes` skips the confirmation prompt). When publishing the first version, it:
+oak lists what it will do on GitHub and Zenodo and asks once (`--yes` skips the confirmation prompt, except the question about another engine repository). When publishing the first version, it:
 
 1. reserves the DOI: it creates an empty draft on Zenodo and opens a pull request, **Reserve Zenodo DOI**, that writes the DOI into `myst.yml`[^concept-vs-version-doi];
 2. skips that pull request's **Journal checks** ([why](#design-paper-ci-limits)) and merges it;

@@ -248,7 +248,7 @@ export const prompt = {
     'Nothing was created or changed. ' +
     (yesAccepts
       ? 'Re-run with --yes to accept the plan unattended.'
-      : '--yes does not accept this one: re-run in a terminal.'),
+      : '--yes does not answer this question: run oak in a terminal.'),
 
   declined: (answer: string, yesAccepts: boolean): string =>
     `aborted: the plan above was not confirmed (` +
@@ -1329,7 +1329,8 @@ export const workflow = {
   releaseLocalBuildWithRepo:
     'oak release deposit: --use-local-build deposits this clone, at the tag, with its own _build, so it ' +
     'takes no --repo. Run it in the clone, or drop --use-local-build to deposit the CI build.',
-  releaseCloneKept: (dir: string): string => `The clone is kept: rm -rf ${dir} (or oak clean)`,
+  releaseCloneKept: (repo: string, dir: string): string =>
+    `oak's temporary clone of ${repo} is kept at ${dir} to look into; delete it with oak clean`,
   releaseClonesRemoved: (dirs: string[]): string =>
     `✓ removed the ${dirs.length === 1 ? 'clone' : 'clones'} an earlier run kept: ${dirs.join(', ')}`,
   /** `where` is `at <tag>` or `on the default branch`. */
@@ -1410,21 +1411,17 @@ export const workflow = {
     const warning = typeof r.warning === 'string' ? [r.warning] : [];
     const doi = typeof r.concept_doi === 'string' ? r.concept_doi : '';
     if (!doi) {
-      return [
-        `no DOI in ${String(r.myst_path)} yet: run oak release, or merge its DOI pull request`,
-      ];
+      return ['no DOI in myst.yml yet: run oak release, or merge the open DOI pull request'];
     }
     const where = `DOI ${doi}${doi.startsWith('10.5072/') ? ' (sandbox)' : ''}`;
     if (r.latest_deposition_id === undefined) return [...warning, `${where}: no record on Zenodo`];
-    const v = (x: unknown) => (x ? `v${String(x)}` : 'no version');
     const published = r.published_url
-      ? `  published: ${v(r.published_version)}: ${String(r.published_url)}`
+      ? `  published: v${String(r.published_version)}: ${String(r.published_url)}`
       : '  published: nothing yet';
+    const version = r.latest_version ? `: v${String(r.latest_version)}` : ' (no version yet)';
     const draft = r.submitted
       ? []
-      : [
-          `  draft ${String(r.latest_deposition_id)}: ${v(r.latest_version)}: ${String(r.draft_url)}`,
-        ];
+      : [`  draft ${String(r.latest_deposition_id)}${version}: ${String(r.draft_url)}`];
     return [...warning, where, published, ...draft];
   },
 
@@ -1466,10 +1463,10 @@ export const workflow = {
   releaseBuildTimeout: (url: string, minutes: number): string =>
     `✗ the Deposit version run has not finished after ${minutes} minutes: ${url}`,
   releaseStopped: '✗ stopped',
-  releaseNextRerun: (rerun: string, dir: string | null): string[] => [
+  releaseNextRerun: (rerun: string, repo: string, dir: string | null): string[] => [
     'Next: rerun the same command to continue:',
     `  ${rerun}`,
-    ...(dir ? [workflow.releaseCloneKept(dir)] : []),
+    ...(dir ? [workflow.releaseCloneKept(repo, dir)] : []),
   ],
 
   // preview

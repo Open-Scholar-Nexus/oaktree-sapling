@@ -54,7 +54,7 @@ It prints a line, starting with the time, for each step it completes, and ends w
 
 The subcommands run with the `oak` version the paper pins ([which version runs](#pins-local)), read at the commit each works on: `main` for `reserve-doi`, the tag for `deposit`.
 
-Before changing anything, it lists what it will do and asks to confirm; `--yes` skips the question. `--sandbox` reserves the DOI on the Zenodo sandbox. Without a version, it lists the repository's `v*` tags.
+Before changing anything, it lists what it will do and asks to confirm; `--yes` skips the question, except the one about another engine repository ([which version runs](#pins-local)). `--sandbox` reserves the DOI on the Zenodo sandbox. Without a version, it lists the repository's `v*` tags.
 
 It refuses, before changing anything:
 
