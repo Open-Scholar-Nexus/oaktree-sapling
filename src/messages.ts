@@ -1416,11 +1416,16 @@ export const workflow = {
     }
     const where = `DOI ${doi}${doi.startsWith('10.5072/') ? ' (sandbox)' : ''}`;
     if (r.latest_deposition_id === undefined) return [...warning, `${where}: no record on Zenodo`];
-    const version = r.latest_version ? `v${String(r.latest_version)}` : 'no version yet';
-    const url = String(r.draft_url);
-    if (r.submitted) return [...warning, `${where}: ${version} published: ${url}`];
-    const id = String(r.latest_deposition_id);
-    return [...warning, `${where}: draft ${id}, not published, holding ${version}: ${url}`];
+    const v = (x: unknown) => (x ? `v${String(x)}` : 'no version');
+    const published = r.published_url
+      ? `  published: ${v(r.published_version)}: ${String(r.published_url)}`
+      : '  published: nothing yet';
+    const draft = r.submitted
+      ? []
+      : [
+          `  draft ${String(r.latest_deposition_id)}: ${v(r.latest_version)}: ${String(r.draft_url)}`,
+        ];
+    return [...warning, where, published, ...draft];
   },
 
   releaseDoiNotPushed:

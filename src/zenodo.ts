@@ -294,15 +294,19 @@ export class ZenodoApi {
     return (urn && matchRelated(all, urn)) || matchRelated(all, opts.githubUrl) || null;
   }
 
-  /** The newest deposition for a concept DOI (paged, the third lookup [R35.1]). */
-  async latestVersionDepId(conceptDoi: string): Promise<number | null> {
+  /** The depositions of a concept DOI, newest first (paged, the third lookup [R35.1]). */
+  async versionsOf(conceptDoi: string): Promise<Deposition[]> {
     let items = await this.listMyDepositions({ q: `conceptdoi:"${conceptDoi}"` });
     if (items.length === 0) {
       const recordId = parseZenodoDoi(conceptDoi)?.recordId;
       if (recordId) items = await this.listMyDepositions({ q: `conceptrecid:${recordId}` });
     }
-    items.sort((a, b) => String(b.created ?? '').localeCompare(String(a.created ?? '')));
-    return items[0]?.id ?? null;
+    return items.sort((a, b) => String(b.created ?? '').localeCompare(String(a.created ?? '')));
+  }
+
+  /** The newest deposition for a concept DOI ({@link ZenodoApi.versionsOf}). */
+  async latestVersionDepId(conceptDoi: string): Promise<number | null> {
+    return (await this.versionsOf(conceptDoi))[0]?.id ?? null;
   }
 }
 
@@ -1209,12 +1213,16 @@ export async function cmdStatus(input: StatusInput): Promise<Outcome> {
       : `${conceptDoi} is a sandbox DOI; add --sandbox`;
   }
 
-  const latestId = await api.latestVersionDepId(conceptDoi);
-  if (latestId === null) {
+  const versions = await api.versionsOf(conceptDoi);
+  if (versions.length === 0) {
     out.state = 'no record matches';
     return { exitCode: 0, result: out };
   }
-  const dep = await api.getDeposition(latestId);
+  // A draft of the next version leaves the newest published one as the record readers see.
+  const published = versions.find((d) => d.submitted);
+  out.published_version = published?.metadata?.version ?? null;
+  out.published_url = published ? webUrl(published, sandbox) : null;
+  const dep = await api.getDeposition(versions[0]!.id);
   out.latest_deposition_id = dep.id;
   out.submitted = dep.submitted ?? false;
   out.draft_url = webUrl(dep, sandbox);

@@ -75,7 +75,7 @@ What `--repo <owner/name>` does depends on the command. `oak release vX` and `oa
 
 (release-status)=
 `oak release status`
-: The deposit's state for the committed DOI, and the metadata a deposit would send. `--sandbox` reads the sandbox. `--repo <owner/name>` reads the repository's default branch from a clone in a temporary folder, removed after, with the editor's gh login.
+: For the committed DOI, the newest version published on Zenodo and the draft of the next one, if any. `--json` adds the metadata a deposit would send. `--sandbox` reads the sandbox. `--repo <owner/name>` reads the repository's default branch from a clone in a temporary folder, removed after, with the editor's gh login.
 
 (release-reserve-doi)=
 ### oak release reserve-doi
