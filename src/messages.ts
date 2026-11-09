@@ -242,14 +242,18 @@ export const journalInvalid = (file: string, why: string): string =>
 export const prompt = {
   proceed: 'Proceed? [y/N] ',
 
-  nonTty:
+  /** `yesAccepts` is false for the questions --yes does not answer. */
+  nonTty: (yesAccepts: boolean): string =>
     'aborted: stdin is not a TTY, so the plan above could not be confirmed interactively. ' +
-    'Nothing was created or changed. Re-run with --yes to accept the plan unattended.',
+    'Nothing was created or changed. ' +
+    (yesAccepts
+      ? 'Re-run with --yes to accept the plan unattended.'
+      : '--yes does not accept this one: re-run in a terminal.'),
 
-  declined: (answer: string): string =>
+  declined: (answer: string, yesAccepts: boolean): string =>
     `aborted: the plan above was not confirmed (` +
     `${answer ? `answered "${answer}"` : 'no answer; the default is No'}). ` +
-    'Nothing was created or changed. Re-run and answer "y", or pass --yes.',
+    `Nothing was created or changed. Re-run and answer "y"${yesAccepts ? ', or pass --yes' : ''}.`,
 
   /** The `reason` field of an aborted result, for `--json`. */
   abortedNothingCreated: 'the plan above was not confirmed; nothing was created or changed',

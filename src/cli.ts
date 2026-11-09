@@ -925,7 +925,6 @@ async function cmdReleaseVersion(argv: string[]): Promise<number> {
   const verbose = has(argv, 'verbose');
   const { waitIndicator } = await import('./progress.js');
   const progress = waitIndicator(process.stderr, process.env);
-  const confirm = makeConfirm(argv);
   /** Runs the child, with the spinner unless its output shows live (--verbose). */
   const child = (cli: string, args: string[], env: NodeJS.ProcessEnv) => {
     const run = runChild(cli, args, env, verbose);
@@ -943,7 +942,6 @@ async function cmdReleaseVersion(argv: string[]): Promise<number> {
       { ...ctx, paperRoot: clone },
       {
         ...deps,
-        confirm,
         spawn: async (cli, a, env) => (run = await child(cli, a, env)).code,
         log: progress.log,
         logRunning: verbose ? progress.log : () => {},
@@ -1018,7 +1016,7 @@ async function cmdReleaseVersion(argv: string[]): Promise<number> {
             ],
             clone,
           ),
-        confirm,
+        confirm: makeConfirm(argv),
         sleep: progress.sleep,
         log: progress.log,
         status: progress.status,
@@ -1365,28 +1363,39 @@ async function cmdPostChecks(argv: string[]): Promise<number> {
 const ENGINE_REPO_DEFAULT = 'Open-Scholar-Nexus/oaktree-sapling';
 
 /** Prints the plan to stderr, then takes --yes (required without a TTY) or asks. */
-function makeConfirm(argv: string[]): (plan: string[]) => Promise<boolean> {
+function makeConfirm(argv: string[], yesAccepts = true): (plan: string[]) => Promise<boolean> {
   return async (plan) => {
     for (const line of plan) process.stderr.write(line + '\n');
-    if (has(argv, 'yes')) {
+    if (yesAccepts && has(argv, 'yes')) {
       process.stderr.write('\n'); // between the plan and the progress lines
       return true;
     }
     if (!process.stdin.isTTY) {
-      process.stderr.write(msg.prompt.nonTty + '\n');
+      process.stderr.write(msg.prompt.nonTty(yesAccepts) + '\n');
       return false;
     }
     const { createInterface } = await import('node:readline/promises');
     const rl = createInterface({ input: process.stdin, output: process.stderr });
-    const ans = (await rl.question(msg.prompt.proceed)).trim();
-    rl.close();
+    let ans: string;
+    try {
+      ans = (await rl.question(msg.prompt.proceed)).trim();
+    } catch (e) {
+      if ((e as Error).name !== 'AbortError') throw e;
+      // readline takes Ctrl-C at the question; it stops oak as it does anywhere else. The timer
+      // keeps oak running until the signal arrives.
+      process.stderr.write('\n');
+      process.kill(process.pid, 'SIGINT');
+      return new Promise<boolean>(() => setInterval(() => {}, 60_000));
+    } finally {
+      rl.close();
+    }
     if (/^y/i.test(ans)) {
       process.stderr.write('\n');
       return true;
     }
     // Every abort says why: a bare `{"status":"aborted"}` after a prompt that defaults to No
     // reads as oak refusing.
-    process.stderr.write(msg.prompt.declined(ans) + '\n');
+    process.stderr.write(msg.prompt.declined(ans, yesAccepts) + '\n');
     return false;
   };
 }
@@ -1708,7 +1717,8 @@ async function handoffDeps(argv: string[]): Promise<HandoffDeps> {
     },
     spawn: (cli, args, env) =>
       spawnSync(process.execPath, [cli, ...args], { stdio: 'inherit', env }).status ?? 1,
-    confirm: makeConfirm(argv),
+    // Running another repository's code is asked even with --yes.
+    confirm: makeConfirm(argv, false),
     log: (line) => process.stderr.write(line + '\n'),
   };
 }
