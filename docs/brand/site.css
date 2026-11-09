@@ -1,6 +1,5 @@
 @import url('https://cdn.jsdelivr.net/npm/@fontsource/montserrat@5.3.0/500.css');
 
-/* The site name in Montserrat, the original oaktree logo's font. */
 .myst-home-link span {
   font-family: 'Montserrat', sans-serif;
   font-weight: 500;
@@ -10,7 +9,7 @@
   display: none;
 }
 
-/* The theme's blue, swapped for the logo's green (#339966). Link colours keep a 4.5:1 contrast. */
+/* sapling green (#339966). link colors keep 4.5:1 contrast. */
 :root {
   --myst-color-primary: #339966;
   --myst-color-primary-hover: #267a52;
@@ -28,7 +27,6 @@
   --myst-color-accent-surface: #edf7f1;
   --myst-color-accent-surface-border: #b7e0c9;
   --myst-color-accent-surface-text: #1a4d35;
-  /* the popover on a hovered reference */
   --myst-color-inverse-bg: #1a4d35;
 }
 .dark {
@@ -46,7 +44,6 @@
   --myst-color-accent-surface: #1a4d354d;
   --myst-color-accent-surface-border: #267a52;
   --myst-color-accent-surface-text: #edf7f1;
-  /* admonition backgrounds on the theme's warm dark page */
   --myst-color-info-bg: #292524;
   --myst-color-success-bg: #292524;
   --myst-color-warning-bg: #292524;

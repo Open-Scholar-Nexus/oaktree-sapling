@@ -6,8 +6,7 @@ url: https://fixture.example.org
 tier: paper
 
 # The template's placeholder id `oak validate` must reject on real papers (finding 1:
-# the sentinel is instance-defined, not a global constant). A paper once shipped its
-# template's placeholder id by mistake ([R12]).
+# the sentinel is instance-defined, not a global constant).
 id_sentinel: fixture-template-placeholder
 id_pattern: "^fixture-\\d{4}-[a-z0-9-]+$"
 

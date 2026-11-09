@@ -6,7 +6,6 @@ version: 1
 project:
   id: oaktree-sapling-docs
   title: Oaktree Sapling
-  # The sidebar's first entry, the home page.
   short_title: Home
   description: Documentation for the oaktree-sapling journal engine.
   # `[text](src:path#L1-L9)` links to oak's source at a release tag.
@@ -52,7 +51,7 @@ project:
         - file: design/releases.md
 
 site:
-  # The theme oak pins in src/assets.ts; bump the two together.
+  # doc template. pinned in src/assets.ts
   template: https://github.com/jupyter-book/myst-theme/releases/download/myst-to-react%401.4.1/book-theme.zip
   options:
     logo: brand/sapling.svg

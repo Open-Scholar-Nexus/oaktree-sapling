@@ -4,8 +4,7 @@
  */
 import { join } from 'node:path';
 
-/** The myst-theme release this oak version uses, pinned so a new theme never reaches a
- *  journal before oak's mystmd supports it. Bump with a release. */
+/** The myst-theme release this oak version uses, pinned */
 export const THEME_REPO = 'jupyter-book/myst-theme';
 export const THEME_VERSION = 'myst-to-react@1.4.1';
 
