@@ -1,44 +1,13 @@
 /**
- * gallery.mjs: the journal site's `paper-cards` directive (design §5; [S2]).
+ * The journal site's `paper-cards` directive: a card per paper in `registry/papers.yml`, with
+ * title, keywords, edition and DOI from the paper's own `myst.yml`.
  *
- * Lists the papers in the **registry** (`registry/papers.yml`, design §9). Every URL is
- * derived from a registry entry's `location`, never from an org constant, so the same plugin serves any tenant. Title, keywords, edition and DOI come from
- * the paper's own `myst.yml`, fetched once per paper per build.
+ * myst loads this file by URL and imports it from the site repo, so any import must be in the
+ * site scaffold's `package.json` (today only `js-yaml`).
  *
- * This file is ENGINE-owned but is NOT engine TypeScript: myst consumes it at runtime by
- * tag-pinned raw URL (`project.plugins:` accepts remote `.mjs`, myst-cli `config.ts:415-419`),
- * so it never enters `dist/cli.cjs` and `myst.ts` stays the only importer of myst-cli.
- *
- * WHY IT MUST STAY DEPENDENCY-LIGHT: myst downloads a remote plugin into
- * `<project>/_build/cache/config-item-<hash>.mjs` and imports it from there, so every bare
- * import must resolve from the SITE repo's own `node_modules`: the mystmd install (an npx
- * cache) is not on that resolution path. `js-yaml` is therefore declared in the site
- * scaffold's `package.json` and installed by the site workflow. Add nothing else here
- * without adding it there too.
- *
- * FAILURE IS HARD, ON PURPOSE. A registry entry whose `myst.yml` will not fetch is a broken
- * registry: it must be fixed, not papered over. A failed build is not an outage, Pages keeps
- * serving the last successful deploy, so the live journal stays exactly as it was until the
- * entry is corrected. Degrading would publish a visibly broken card to readers and bury the
- * signal in a log nobody reads. Note the division of labour, CORRECTED by a live run ([R80]):
- * the `throw` below covers PER-PAPER failures (it propagates and crashes the build regardless
- * of flags); `--strict` covers errors raised while building a page (a bad DOI, a missing
- * image); and NEITHER covers "the plugin never loaded at all"; myst logs `Unknown plugin` +
- * `unknown directive` and still exits 0, deploying a gallery-less page over a good one. That
- * third case is caught in the site workflow by asserting this plugin's `name` appears in the
- * build log, which is why the name below is load-bearing: do not rename it casually.
- *
- * The THUMBNAIL is the one per-paper failure that degrades: a paper with no
- * `thumbnails/thumbnail.png` (a new paper, a renamed file) gets a card with no image, since
- * one missing picture is no reason to stop publishing the rest of the journal.
- * `thumbnailAvailable` probes the URL with a HEAD request; when it serves an image, the card
- * carries the remote URL and myst downloads it. This transform runs at `stage: 'document'`
- * (`process/mdast.ts:224`), i.e. BEFORE `transformImagesToDisk` (`:438`), so the URL is picked
- * up by `saveImageInStaticFolder` → `downloadAndSaveImage` (`transforms/images.ts:115-117`) and
- * written into the site's public folder under a content hash, so the published site serves its
- * own copy. Left in the card unprobed, a 404 is an
- * error-kind warning (`RuleId.imageDownloads`, `images.ts:82-88`) and `--strict` fails the whole
- * build on it.
+ * A paper whose `myst.yml` won't fetch fails the build; Pages keeps the last deploy. The site
+ * workflow checks the plugin's `name` in the build log, so keep it. A missing thumbnail only
+ * drops the picture; the transform runs at `stage: 'document'` so myst downloads it.
  */
 import { readFileSync } from 'node:fs';
 import yaml from 'js-yaml';
@@ -315,7 +284,7 @@ function paperCardsTransform(opts, utils) {
 const plugin = {
   name: 'Paper Gallery',
   directives: [paperCardsDirective],
-  // `stage: 'document'` is load-bearing, not incidental; see the thumbnail note at the top.
+  // See the header for why `document`.
   transforms: [{ plugin: paperCardsTransform, stage: 'document' }],
 };
 
