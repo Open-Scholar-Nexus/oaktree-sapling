@@ -31,7 +31,7 @@ export function loadRegistry(file = REGISTRY_PATH) {
   }
   const entries = yaml.load(raw) ?? [];
   if (!Array.isArray(entries)) {
-    throw new Error(`paper-cards: "${file}" must be a LIST of registry entries (design §9).`);
+    throw new Error(`paper-cards: "${file}" must be a list of registry entries (design §9).`);
   }
   return entries;
 }
@@ -75,14 +75,9 @@ export function selectEntries(papers, opts = {}) {
 }
 
 /**
- * The three URLs a card is built from. The ONE place [S4]'s shape shows up, and the one
- * place that changes if we ever read a built `myst.json` instead of the raw `myst.yml`.
- *
- * `site_url` is honored when present (custom domains, non-Pages hosting) and otherwise
- * derived from the repository. Raw URLs go through **`HEAD`**, not `main`, so a tenant
- * whose default branch is named otherwise still resolves. The thumbnail path is not a
- * guess: `paper-base.yml` pins `project.thumbnail: thumbnails/thumbnail.png` for every paper.
- * Throws for a relative path, a folder in the journal repo, which the website does not list yet.
+ * A card's site, config and thumbnail URLs. `site_url` wins over the Pages URL. Raw files are
+ * read at `HEAD`, so any default branch works; `paper-base.yml` pins the thumbnail path.
+ * Throws for a relative path, which the website does not list yet.
  */
 export function paperUrls(entry) {
   const id = entry?.id ?? '?';
@@ -122,9 +117,8 @@ export function sandboxDoi(config) {
 }
 
 /**
- * One card node, PURE: (registry entry, that paper's fetched myst config) → mdast. Title,
- * keywords and DOI come from the paper (the registry stays a thin pointer list, [S4]).
- * `opts.thumbnail: false` leaves the image out (see `thumbnailAvailable`).
+ * One card node from a registry entry and the paper's `myst.yml`. `opts.thumbnail: false`
+ * leaves the image out.
  */
 export function cardFrom(entry, config, opts = {}) {
   const { siteUrl, thumbUrl } = paperUrls(entry);
@@ -140,13 +134,8 @@ export function cardFrom(entry, config, opts = {}) {
   if (keywords.length > 0) {
     children.push({ type: 'paragraph', children: [{ type: 'text', value: keywords.join(' | ') }] });
   }
-  // The DOI is TEXT, deliberately not a link. myst converts any `link` whose url is a DOI
-  // into a `cite` node (`myst-cli/transforms/dois.ts:239-242`, no per-node opt-out), which
-  // on a gallery card is wrong twice over: the card would render a citation label plus a
-  // stray bibliography instead of the identifier, and each card would cost a doi.org
-  // metadata fetch per build: rate-limited upstream, and one unreachable DOI fails the
-  // whole journal under `--strict`. Found on the first live run, with a sandbox DOI.
-  // The card itself already links to the paper, whose own page carries a real DOI link.
+  // Text, not a link: myst turns a DOI link into a citation and fetches it from doi.org,
+  // which fails the build under `--strict` when doi.org is unreachable.
   if (doi) {
     children.push({
       type: 'footer',
@@ -156,8 +145,7 @@ export function cardFrom(entry, config, opts = {}) {
   return { type: 'card', url: siteUrl, children };
 }
 
-/** Fetch one paper's myst config. Throws naming BOTH the entry's id and the URL, because the fix
- *  is a registry edit and the editor needs to know which line to edit. */
+/** Fetch one paper's `myst.yml`. Errors name the entry's id and the URL. */
 export async function fetchPaperConfig(entry, fetchImpl = fetch) {
   const { configUrl } = paperUrls(entry);
   let response;

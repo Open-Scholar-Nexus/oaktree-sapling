@@ -337,7 +337,7 @@ describe('loadRegistry', () => {
     const dir = mkdtempSync(join(tmpdir(), 'oak-reg-'));
     const file = join(dir, 'papers.yml');
     writeFileSync(file, 'papers: []\n');
-    expect(() => loadRegistry(file)).toThrow(/must be a LIST/);
+    expect(() => loadRegistry(file)).toThrow(/must be a list/);
   });
 });
 
