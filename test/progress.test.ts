@@ -1,7 +1,7 @@
 /**
  * The lines and the spinner of `oak release` (progress.ts `waitIndicator`), on a fake stream with
- * fake timers: each line starts with the time, and the spinner is drawn only during a sleep on a
- * terminal and erased before anything else is written.
+ * fake timers: each step starts with the time, and the spinner and what oak waits for are drawn
+ * only while it waits on a terminal and erased before anything else is written.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { stamp, waitIndicator } from '../src/progress.js';
@@ -79,5 +79,32 @@ describe('the spinner', () => {
       w.log('oak release: queued');
       expect(out.writes).toEqual(['[09:05:07] oak release: queued\n']);
     }
+  });
+});
+
+describe('what oak waits for', () => {
+  it('follows the spinner on a terminal, and is erased with it', async () => {
+    vi.useFakeTimers();
+    const out = stream(true);
+    const w = waitIndicator(out, {}, now);
+    w.status('Deposit version: build job in progress');
+    expect(out.writes).toEqual([]);
+    const done = w.sleep(200);
+    await vi.advanceTimersByTimeAsync(200);
+    await done;
+    expect(out.writes[0]).toMatch(/^\r\u001b\[K[|/\\-] Deposit version: build job in progress$/);
+    expect(out.writes.at(-1)).toBe(ERASE);
+  });
+
+  it('is logged when it changes, off a terminal', () => {
+    const out = stream(false);
+    const w = waitIndicator(out, {}, now);
+    w.status('Deposit version: queued');
+    w.status('Deposit version: queued');
+    w.status('Deposit version: build job in progress');
+    expect(out.writes).toEqual([
+      '[09:05:07] Deposit version: queued\n',
+      '[09:05:07] Deposit version: build job in progress\n',
+    ]);
   });
 });

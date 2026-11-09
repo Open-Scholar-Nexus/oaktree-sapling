@@ -50,11 +50,11 @@ Then it waits for the tag's **Deposit version** run and runs `oak release deposi
 
 Before merging the DOI pull request, it marks the pull request's Journal checks as skipped. It merges only the commit `reserve-doi` pushed (`gh pr merge --match-head-commit`), with a merge commit, or a squash when the repository allows no merge commits. A pull request left open by an earlier run gets a new commit, which is the one merged.
 
-While it waits, it prints the run's state when it changes, and again every 5 minutes. On a terminal, a spinner shows that it is still waiting. It waits up to 10 minutes for the run to start and 45 for it to finish. It also waits for the run's publish job, when there is one, so that it never deposits at the same time as CI.
+It prints a line, starting with the time, for each step it completes, and ends with what is left to do. While it waits, a terminal shows a spinner with what it waits for; elsewhere it prints the run's state when it changes. The subcommands' own output is shown when one fails; `--verbose` shows it as they run. It waits up to 10 minutes for the run to start and 45 for it to finish. It also waits for the run's publish job, when there is one, so that it never deposits at the same time as CI.
 
 The subcommands run with the `oak` version the paper pins ([which version runs](#pins-local)), read at the commit each works on: `main` for `reserve-doi`, the tag for `deposit`.
 
-Before changing anything, it lists what it will do and asks to confirm; `--yes` skips the question. `--sandbox` reserves the DOI on the Zenodo sandbox. Without a version, it lists the repository's `v*` tags.
+Before changing anything, it lists what it will do and asks to confirm; `--yes` skips the question, except when the paper uses a different engine repository ([which version runs](#pins-local)). `--sandbox` reserves the DOI on the Zenodo sandbox. Without a version, it lists the repository's `v*` tags.
 
 It refuses, before changing anything:
 
@@ -75,7 +75,7 @@ What `--repo <owner/name>` does depends on the command. `oak release vX` and `oa
 
 (release-status)=
 `oak release status`
-: The deposit's state for the committed DOI, and the metadata a deposit would send. `--sandbox` reads the sandbox. `--repo <owner/name>` reads the repository's default branch from a clone in a temporary folder, removed after, with the editor's gh login.
+: For the committed DOI, the newest version published on Zenodo and the draft of the next one, if any. `--json` adds the metadata a deposit would send. `--sandbox` reads the sandbox. `--repo <owner/name>` reads the repository's default branch from a clone in a temporary folder, removed after, with the editor's gh login.
 
 (release-reserve-doi)=
 ### oak release reserve-doi

@@ -716,12 +716,12 @@ describe.skipIf(bundleState() === 'absent')('oak bootstrap hands off to --engine
   });
 });
 
-describe.skipIf(bundleState() === 'absent')('fetching from a non-default engine_repo', () => {
+describe.skipIf(bundleState() === 'absent')('fetching the pinned oak', () => {
   beforeAll(assertBundleNotStale);
 
-  /** A paper pinning `someone/fork` v9.9.9, served from a local mirror whose `dist/cli.cjs`
+  /** A paper pinning v9.9.9 of `engineRepo`, served from a local mirror whose `dist/cli.cjs`
    *  records how it was run. */
-  function forkPaper() {
+  function forkPaper(engineRepo = 'someone/fork') {
     const dir = mkdtempSync(join(tmpdir(), 'oak-pinned-fork-'));
     writeFileSync(
       join(dir, 'myst.yml'),
@@ -730,10 +730,10 @@ describe.skipIf(bundleState() === 'absent')('fetching from a non-default engine_
     mkdirSync(join(dir, '.github', 'actions', 'engine'), { recursive: true });
     writeFileSync(
       join(dir, '.github', 'actions', 'engine', 'pins.yml'),
-      'engine_repo: someone/fork\n',
+      `engine_repo: ${engineRepo}\n`,
     );
     const mirrors = mkdtempSync(join(tmpdir(), 'oak-mirrors-'));
-    const fork = join(mirrors, 'someone', 'fork.git');
+    const fork = join(mirrors, `${engineRepo}.git`);
     mkdirSync(join(fork, 'dist'), { recursive: true });
     writeFileSync(
       join(fork, 'dist', 'cli.cjs'),
@@ -757,27 +757,28 @@ describe.skipIf(bundleState() === 'absent')('fetching from a non-default engine_
     return { dir, env, ran };
   }
 
-  it('refuses without a TTY or --yes, and fetches nothing', () => {
+  it('refuses without a TTY, even with --yes, and fetches nothing', () => {
     const { dir, env, ran } = forkPaper();
-    const { code, stderr } = oak(['build', '--paper', dir], env);
+    const { code, stderr } = oak(['build', '--paper', dir, '--yes'], env);
     expect(code).toBe(2);
     expect(stderr).toContain('from someone/fork (engine_repo in pins.yml)');
-    expect(stderr).toContain('Re-run with --yes');
+    expect(stderr).toContain('This question is asked even with --yes');
     expect(existsSync(join(env.XDG_CACHE_HOME, 'oak'))).toBe(false);
     expect(existsSync(ran)).toBe(false);
   });
 
-  it('with --yes, clones the tag and runs its oak with the same arguments', () => {
-    const { dir, env, ran } = forkPaper();
+  it('from the default engine_repo, clones the tag and runs its oak with the same arguments', () => {
+    const repo = 'Open-Scholar-Nexus/oaktree-sapling';
+    const { dir, env, ran } = forkPaper(repo);
     const { code, stderr } = oak(['build', '--paper', dir, '--yes'], env);
     expect(code).toBe(5);
-    expect(stderr).toContain('oak build: downloading oak v9.9.9 from someone/fork');
-    expect(stderr).toContain('oak build: running oak v9.9.9 from someone/fork');
+    expect(stderr).toContain(`oak build: downloading oak v9.9.9 from ${repo}`);
+    expect(stderr).toContain(`oak build: running oak v9.9.9 from ${repo}`);
     expect(JSON.parse(readFileSync(ran, 'utf8'))).toEqual({
       argv: ['build', '--paper', dir, '--yes'],
       env: '1',
     });
-    expect(existsSync(join(env.XDG_CACHE_HOME, 'oak', 'someone', 'fork', 'v9.9.9'))).toBe(true);
+    expect(existsSync(join(env.XDG_CACHE_HOME, 'oak', ...repo.split('/'), 'v9.9.9'))).toBe(true);
   });
 });
 

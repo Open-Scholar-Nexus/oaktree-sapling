@@ -15,12 +15,12 @@ import {
   watchFile,
 } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import type { ComposeInput } from './compose.js';
 import type { MaterializeInput, StartOpts } from './materialize.js';
 import type { JournalStamp } from './schema.js';
 import type { ZenodoApi } from './zenodo.js';
-import type { ReleaseOutcome } from './release.js';
+import type { ReleaseOutcome, SubcommandRun } from './release.js';
 import type { HandoffContext, HandoffDeps, HandoffVerb, PaperVerb } from './pinned.js';
 import * as msg from './messages.js';
 import { annotate, inCI, UserError } from './messages.js';
@@ -128,7 +128,11 @@ async function resolveInstanceRoot(
   try {
     const cache = cachedJournal(journalRepo, paperRoot);
     const line = msg.build.journalCache(verb, journalRepo, cache);
-    process.stderr.write((cache.state === 'stale' ? annotate('warning', line) : line) + '\n');
+    // The release subcommands name the journal clone only with --verbose, or when it is stale.
+    const quiet = verb.startsWith('release') && cache.state !== 'stale' && !process.env.OAK_VERBOSE;
+    if (!quiet) {
+      process.stderr.write((cache.state === 'stale' ? annotate('warning', line) : line) + '\n');
+    }
     return found(cache.root);
   } catch (err) {
     const why = err instanceof Error ? err.message : String(err);
@@ -621,7 +625,7 @@ async function cmdReleaseStatus(argv: string[]): Promise<number> {
   const z = await import('./zenodo.js');
   const siteUrl = flag(argv, 'site-url') ?? process.env.SITE_URL;
   const out = await z.cmdStatus({ ...setup, siteUrl });
-  emit(argv, out.result);
+  emit(argv, out.result, msg.workflow.releaseStatusLines);
   return out.exitCode;
 }
 
@@ -749,7 +753,8 @@ async function cmdReleaseDeposit(argv: string[]): Promise<number> {
     ...builtHere,
     ...(builtAt !== undefined ? { builtAt } : {}),
   });
-  emit(argv, out.result);
+  // On success the lines below say what happened; the fields are in --json.
+  emit(argv, out.result, (r) => (r.status === 'ok' ? [] : summarize(r)));
   if (out.exitCode !== 0) {
     // In CI nobody watches the run, so the editors get an issue.
     if (inActions && gh.ghLoggedIn()) {
@@ -770,41 +775,79 @@ async function cmdReleaseDeposit(argv: string[]): Promise<number> {
 
   // Published by an earlier run, so no bundle was made here; the files are on the record.
   const already = out.result.already_published === true;
-  if (already) {
-    process.stderr.write(
-      msg.workflow.releaseAlreadyPublished(tag, String(out.result.record_url)) + '\n',
-    );
-  }
+  const published = already || out.result.published === true;
   const url = String(out.result.record_url ?? out.result.draft_url ?? out.result.version_doi);
-  // The last line, as the draft's URL is what the editor needs next.
-  const done = () => {
-    if (!already) process.stderr.write(msg.workflow.releaseDone(tag, url, publish) + '\n');
-    return 0;
+  const { waitIndicator } = await import('./progress.js');
+  const progress = waitIndicator(process.stderr, process.env);
+  const json = has(argv, 'json');
+  const step = (line: string) => {
+    if (!json) progress.log(line);
   };
+  step(
+    already
+      ? msg.workflow.releaseWasPublished(tag)
+      : msg.workflow.releaseDeposited(tag, out.result.deposition_id, published),
+  );
   if (!gh.ghLoggedIn()) {
     if (!already) {
       process.stderr.write(annotate('warning', msg.workflow.releaseNoGh(tag, bundleOut)) + '\n');
     }
-    return done();
-  }
-  try {
-    if (!already) {
-      const files = readdirSync(bundleOut).map((f) => join(bundleOut, f));
-      gh.uploadReleaseAsset(paperRoot, tag, files);
+  } else {
+    try {
+      if (!already) {
+        const files = readdirSync(bundleOut).map((f) => join(bundleOut, f));
+        gh.uploadReleaseAsset(paperRoot, tag, files);
+        step(msg.workflow.releaseAttached(tag));
+      }
+      const head = sha ?? (await gh.realGitContext.headSha(paperRoot));
+      gh.postCommitComment(paperRoot, head, msg.workflow.releaseCommitComment(url, published));
+    } catch (e) {
+      process.stderr.write(
+        annotate('warning', msg.workflow.releasePostStepsFailed((e as Error).message)) + '\n',
+      );
     }
-    const head = sha ?? (await gh.realGitContext.headSha(paperRoot));
-    gh.postCommitComment(paperRoot, head, msg.workflow.releaseCommitComment(url, publish));
-  } catch (e) {
-    process.stderr.write(
-      annotate('warning', msg.workflow.releasePostStepsFailed((e as Error).message)) + '\n',
+  }
+  if (!json) {
+    progress.next(
+      published ? msg.workflow.releaseNextPublished(url) : msg.workflow.releaseNextDraft(url),
     );
   }
-  return done();
+  return 0;
 }
 
 /** `arg` as one shell word: quoted when it holds anything but plain path and URL characters. */
 function shellWord(arg: string): string {
   return /^[\w@%+=:,./-]+$/.test(arg) ? arg : `'${arg.replace(/'/g, `'\\''`)}'`;
+}
+
+/** Runs `node <cli> <args>` and collects its exit code, its stdout as JSON, and its stderr,
+ *  which goes to this stderr live when `verbose`. */
+function runChild(
+  cli: string,
+  args: string[],
+  env: NodeJS.ProcessEnv,
+  verbose: boolean,
+): Promise<SubcommandRun> {
+  return new Promise((done) => {
+    const child = spawn(process.execPath, [cli, ...args], {
+      env,
+      stdio: ['inherit', 'pipe', verbose ? 'inherit' : 'pipe'],
+    });
+    let out = '';
+    let log = '';
+    child.stdout!.on('data', (d: Buffer) => (out += d.toString()));
+    child.stderr?.on('data', (d: Buffer) => (log += d.toString()));
+    child.on('error', (e) => done({ code: 1, result: null, log: `${e.message}\n` }));
+    child.on('close', (code) => {
+      let result: Record<string, unknown> | null = null;
+      try {
+        result = JSON.parse(out) as Record<string, unknown>;
+      } catch {
+        // A refusal before the result prints none.
+      }
+      done({ code: code ?? 1, result, log });
+    });
+  });
 }
 
 /** The flags `oak release` passes on to the subcommands it hands to the pinned oak. */
@@ -820,6 +863,7 @@ async function cmdReleaseVersion(argv: string[]): Promise<number> {
   const release = await import('./release.js');
   const z = await import('./zenodo.js');
   const pinned = await import('./pinned.js');
+  const { removeKeptClones } = await import('./clean.js');
   // Checked first, from the arguments alone.
   const { PAPER_VERSION_TAG } = await import('./schema.js');
   const word = releaseWord(argv)?.word;
@@ -877,17 +921,42 @@ async function cmdReleaseVersion(argv: string[]): Promise<number> {
     ...(has(argv, 'yes') ? ['--yes'] : []),
     ...passOn.map((arg, i) => (passOn[i - 1] === '--token' ? '<token>' : shellWord(arg))),
   ].join(' ');
-  /** Runs a subcommand with the oak the clone pins, or in this process when that is this oak. */
-  const runSubcommand = async (
-    verb: PaperVerb,
-    args: string[],
-    clone: string,
-    here: (args: string[]) => Promise<number>,
-  ): Promise<number> => {
-    const { handOff } = await import('./pinned.js');
-    const ctx = await handoffContext(verb, args);
-    const code = await handOff({ ...ctx, paperRoot: clone }, await handoffDeps(argv));
-    return code ?? here(args);
+  const verbose = has(argv, 'verbose');
+  const { waitIndicator } = await import('./progress.js');
+  const progress = waitIndicator(process.stderr, process.env);
+  /** Runs the child, with the spinner unless its output shows live (--verbose). */
+  const child = (cli: string, args: string[], env: NodeJS.ProcessEnv) => {
+    const run = runChild(cli, args, env, verbose);
+    return verbose ? run : progress.during(run);
+  };
+  /** Runs `oak release <args> --json` with the oak the clone pins, or with this oak when that is
+   *  the same version, as a child process: oak prints the result itself, from the child's JSON. */
+  const runSubcommand = async (args: string[], clone: string): Promise<SubcommandRun> => {
+    const childArgs = [...args, '--json'];
+    const ctx = await handoffContext('release', childArgs);
+    const deps = await handoffDeps(argv);
+    let run: SubcommandRun | null = null;
+    const code = await pinned.handOff(
+      { ...ctx, paperRoot: clone },
+      {
+        ...deps,
+        spawn: async (cli, a, env) => (run = await child(cli, a, env)).code,
+        log: progress.log,
+        logRunning: verbose ? progress.log : () => {},
+      },
+    );
+    if (code === null) {
+      const env = { ...process.env, [pinned.USE_RUNNING_ENV]: '1' };
+      return child(process.argv[1]!, ['release', ...childArgs], env);
+    }
+    // No run: the editor declined to download the pinned oak.
+    return (
+      run ?? {
+        code,
+        result: { status: 'error', message: msg.workflow.releaseEngineDeclined },
+        log: '',
+      }
+    );
   };
 
   let cloneDir: string | null = null;
@@ -895,11 +964,9 @@ async function cmdReleaseVersion(argv: string[]): Promise<number> {
     ...gh.realReleaseSource,
     clone: (r: string, t: string) => (cloneDir = gh.realReleaseSource.clone(r, t)),
   };
-  const { waitIndicator } = await import('./progress.js');
-  const progress = waitIndicator(process.stderr, process.env);
   const onInterrupt = () => {
-    progress.clear();
-    process.stderr.write('\n' + msg.workflow.releaseInterrupted(rerun, cloneDir) + '\n');
+    progress.log(msg.workflow.releaseStopped);
+    progress.next(msg.workflow.releaseNextRerun(rerun, repo, cloneDir));
     // No listener is left, so this ends oak as Ctrl-C would.
     process.kill(process.pid, 'SIGINT');
   };
@@ -921,7 +988,6 @@ async function cmdReleaseVersion(argv: string[]): Promise<number> {
         },
         reserveDoi: (clone, sb) =>
           runSubcommand(
-            'release',
             [
               'reserve-doi',
               '--myst',
@@ -932,11 +998,9 @@ async function cmdReleaseVersion(argv: string[]): Promise<number> {
               ...passOn,
             ],
             clone,
-            cmdRelease,
           ),
         deposit: (clone) =>
           runSubcommand(
-            'release',
             [
               'deposit',
               '--tag',
@@ -949,22 +1013,22 @@ async function cmdReleaseVersion(argv: string[]): Promise<number> {
               ...passOn,
             ],
             clone,
-            cmdRelease,
           ),
         confirm: makeConfirm(argv),
         sleep: progress.sleep,
         log: progress.log,
+        status: progress.status,
+        next: progress.next,
+        showLog: progress.raw,
+        removeKeptClones: () => {
+          const removed = removeKeptClones(tmpdir(), repo, tag, process.getuid?.());
+          if (verbose && removed.length) progress.log(msg.workflow.releaseClonesRemoved(removed));
+        },
       },
     );
   } finally {
     progress.clear();
     process.off('SIGINT', onInterrupt);
-  }
-  // The failures those clones were kept for are resolved once the version is deposited.
-  if (release.DEPOSITED.includes(outcome.reason)) {
-    const { removeKeptClones } = await import('./clean.js');
-    const removed = removeKeptClones(tmpdir(), repo, tag, process.getuid?.());
-    if (removed.length) process.stderr.write(msg.workflow.releaseClonesRemoved(removed) + '\n');
   }
   return outcome.code;
 }
@@ -1297,28 +1361,37 @@ async function cmdPostChecks(argv: string[]): Promise<number> {
 const ENGINE_REPO_DEFAULT = 'Open-Scholar-Nexus/oaktree-sapling';
 
 /** Prints the plan to stderr, then takes --yes (required without a TTY) or asks. */
-function makeConfirm(argv: string[]): (plan: string[]) => Promise<boolean> {
+function makeConfirm(argv: string[], yesAccepts = true): (plan: string[]) => Promise<boolean> {
   return async (plan) => {
     for (const line of plan) process.stderr.write(line + '\n');
-    if (has(argv, 'yes')) {
+    if (yesAccepts && has(argv, 'yes')) {
       process.stderr.write('\n'); // between the plan and the progress lines
       return true;
     }
     if (!process.stdin.isTTY) {
-      process.stderr.write(msg.prompt.nonTty + '\n');
+      process.stderr.write(msg.prompt.nonTty(yesAccepts) + '\n');
       return false;
     }
     const { createInterface } = await import('node:readline/promises');
     const rl = createInterface({ input: process.stdin, output: process.stderr });
-    const ans = (await rl.question(msg.prompt.proceed)).trim();
-    rl.close();
+    let ans: string;
+    try {
+      ans = (await rl.question(msg.prompt.proceed)).trim();
+    } catch (e) {
+      // Ctrl-C or Ctrl-D at the question: a no.
+      if ((e as Error).name !== 'AbortError') throw e;
+      process.stderr.write('\n' + msg.prompt.declined('', yesAccepts) + '\n');
+      return false;
+    } finally {
+      rl.close();
+    }
     if (/^y/i.test(ans)) {
       process.stderr.write('\n');
       return true;
     }
     // Every abort says why: a bare `{"status":"aborted"}` after a prompt that defaults to No
     // reads as oak refusing.
-    process.stderr.write(msg.prompt.declined(ans) + '\n');
+    process.stderr.write(msg.prompt.declined(ans, yesAccepts) + '\n');
     return false;
   };
 }
@@ -1640,7 +1713,8 @@ async function handoffDeps(argv: string[]): Promise<HandoffDeps> {
     },
     spawn: (cli, args, env) =>
       spawnSync(process.execPath, [cli, ...args], { stdio: 'inherit', env }).status ?? 1,
-    confirm: makeConfirm(argv),
+    // Running another repository's code is asked even with --yes.
+    confirm: makeConfirm(argv, false),
     log: (line) => process.stderr.write(line + '\n'),
   };
 }

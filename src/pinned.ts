@@ -88,11 +88,14 @@ export interface HandoffDeps {
   clone(engineRepo: string, tag: string, dest: string): void;
   /** Whether `<binDir>/typst --version` runs on this machine. */
   typstRuns(binDir: string): boolean;
-  /** Runs `node <cli> ...argv` with stdio inherited and returns its exit code. */
-  spawn(cli: string, argv: string[], env: NodeJS.ProcessEnv): number;
-  /** Prints the plan and asks; `--yes` accepts it. */
+  /** Runs `node <cli> ...argv` and returns its exit code. */
+  spawn(cli: string, argv: string[], env: NodeJS.ProcessEnv): number | Promise<number>;
+  /** Asks before fetching oak from an engine repository other than oak's own. It asks even with
+   *  `--yes`, so someone at a terminal has to type yes. */
   confirm(plan: string[]): Promise<boolean>;
   log(line: string): void;
+  /** Prints which version runs; {@link HandoffDeps.log} when unset. */
+  logRunning?(line: string): void;
 }
 
 export interface HandoffContext {
@@ -184,7 +187,10 @@ export async function runVersion(
   const cli = join(dir, 'dist', 'cli.cjs');
   if (!existsSync(cli)) throw new UserError(msg.pinned.noBuild(verb, pin, source, dir));
 
-  deps.log(msg.pinned.running(verb, pin, source, dir, ctx.running));
+  const running = msg.pinned.running(verb, pin, source, dir, ctx.running);
+  // A blank line after it sets the command's own output apart.
+  if (deps.logRunning) deps.logRunning(running);
+  else deps.log(`${running}\n`);
   const env: NodeJS.ProcessEnv = { ...ctx.env, [USE_RUNNING_ENV]: '1' };
   // As ci/run.sh: the release's typst is built for linux x86_64 only.
   const bin = join(dir, 'bin');
