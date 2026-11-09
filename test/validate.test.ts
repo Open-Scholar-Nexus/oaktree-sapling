@@ -191,7 +191,7 @@ describe('isFloatingTemplate: whether a template can change under the same value
   });
 
   it('flags branch-shaped references', () => {
-    expect(isFloatingTemplate('https://github.com/o/isp-lapreprint-typst.git')).toBe(true);
+    expect(isFloatingTemplate('https://github.com/o/my-lapreprint-typst.git')).toBe(true);
     expect(isFloatingTemplate('https://github.com/o/r/archive/refs/heads/main.zip')).toBe(true);
     expect(isFloatingTemplate('https://github.com/o/r/archive/main.zip')).toBe(true);
     expect(isFloatingTemplate('https://github.com/o/r.git#my-branch')).toBe(true);

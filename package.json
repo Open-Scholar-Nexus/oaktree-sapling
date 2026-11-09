@@ -24,8 +24,8 @@
     "format:check": "prettier --check .",
     "bundle": "esbuild src/cli.ts --bundle --platform=node --format=cjs --minify-whitespace --outfile=dist/cli.cjs --define:OAK_VERSION=\\\"${OAK_VERSION:-$npm_package_version-unreleased+$(git rev-parse --short HEAD 2>/dev/null || echo nogit)}\\\"",
     "build:fixture": "node scripts/build-fixture.mjs",
-    "docs": "cd docs && npx -y mystmd@1.10.1 start",
-    "docs:build": "cd docs && npx -y mystmd@1.10.1 build --html --strict",
+    "docs": "cd docs && npx -y mystmd@1.12.0 start",
+    "docs:build": "cd docs && npx -y mystmd@1.12.0 build --html --strict",
     "prepack": "npm run typecheck && npm run bundle"
   },
   "files": [
@@ -45,8 +45,8 @@
     "adm-zip": "^0.5.18",
     "esbuild": "^0.28.1",
     "js-yaml": "^4.1.0",
-    "myst-cli": "^1.10.1",
-    "myst-common": "^1.10.0",
+    "myst-cli": "^1.12.0",
+    "myst-common": "^1.10.2",
     "prettier": "^3.9.6",
     "typescript": "^5.6.0",
     "unist-util-select": "^4.0.3",

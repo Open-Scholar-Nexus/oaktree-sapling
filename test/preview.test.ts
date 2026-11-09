@@ -139,7 +139,7 @@ describe('stripPagesControlFiles removes what would make a static upload run cod
 
 describe('previewBranch keeps the pull request number [R139]', () => {
   const P = 'paper-{repo}-{pr}';
-  const long = 'impact-scholars/karalasingham-2026-nmap-celegans';
+  const long = 'o/lastname-2026-a-long-paper-name';
 
   it('keeps the pull request number with a long paper name', () => {
     // Every paper in a journal shares one Pages project, so the alias, with {pr} in it, is what
@@ -150,8 +150,8 @@ describe('previewBranch keeps the pull request number [R139]', () => {
   });
 
   it('keeps two long names apart once truncated', () => {
-    const a = previewBranch(P, 'o/suheylgulenc-2026-brainwide-intrinsic-timescales', '7');
-    const b = previewBranch(P, 'o/suheylgulenc-2026-brainwide-something-entirely-else', '7');
+    const a = previewBranch(P, 'o/lastname-2026-brainwide-intrinsic-timescales', '7');
+    const b = previewBranch(P, 'o/lastname-2026-brainwide-something-entirely-else', '7');
     expect(a).not.toBe(b);
   });
 
@@ -162,16 +162,14 @@ describe('previewBranch keeps the pull request number [R139]', () => {
   });
 
   it('leaves a name that already fits unchanged', () => {
-    expect(previewBranch(P, 'impact-scholars/geetha-2026-pd', '12')).toBe(
-      'paper-geetha-2026-pd-12',
-    );
+    expect(previewBranch(P, 'o/smith-2026-pd', '12')).toBe('paper-smith-2026-pd-12');
   });
 });
 
 describe('previewBranch', () => {
   it('substitutes {repo}/{pr} and uses the short repo name', () => {
-    expect(previewBranch('paper-{repo}-{pr}', 'impact-scholars/geetha-2026-pd', '9')).toBe(
-      'paper-geetha-2026-pd-9',
+    expect(previewBranch('paper-{repo}-{pr}', 'o/smith-2026-pd', '9')).toBe(
+      'paper-smith-2026-pd-9',
     );
   });
   it('makes a Cloudflare-safe alias and shortens it', () => {

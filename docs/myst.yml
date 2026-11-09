@@ -6,6 +6,7 @@ version: 1
 project:
   id: oaktree-sapling-docs
   title: Oaktree Sapling
+  short_title: Home
   description: Documentation for the oaktree-sapling journal engine.
   # `[text](src:path#L1-L9)` links to oak's source at a release tag.
   plugins:
@@ -50,8 +51,12 @@ project:
         - file: design/releases.md
 
 site:
-  template: book-theme
+  # doc template. pinned in src/assets.ts
+  template: https://github.com/jupyter-book/myst-theme/releases/download/myst-to-react%401.4.1/book-theme.zip
   options:
+    logo: brand/sapling.svg
+    favicon: brand/sapling-64.png
+    style: brand/site.css
     logo_text: Oaktree Sapling
     # Keeps the folder in each URL (/guide/journal-yml), which oak's printed links rely on.
     folders: true

@@ -121,7 +121,7 @@ describe('JournalConfig additive-only ([R197])', () => {
   });
 });
 
-describe('checkIdShape (check A: catches the live geetha bug [R12])', () => {
+describe('checkIdShape (check A: catches the placeholder id a paper shipped [R12])', () => {
   const policy = {
     id_sentinel: 'fixture-template-placeholder',
     id_pattern: '^fixture-\\d{4}-[a-z0-9-]+$',
