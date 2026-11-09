@@ -90,8 +90,8 @@ export interface HandoffDeps {
   typstRuns(binDir: string): boolean;
   /** Runs `node <cli> ...argv` and returns its exit code. */
   spawn(cli: string, argv: string[], env: NodeJS.ProcessEnv): number | Promise<number>;
-  /** Prints the plan and asks, even with `--yes`: it is asked only before running another
-   *  repository's code. */
+  /** Asks before fetching oak from an engine repository other than oak's own. It asks even with
+   *  `--yes`, so someone at a terminal has to type yes. */
   confirm(plan: string[]): Promise<boolean>;
   log(line: string): void;
   /** Prints which version runs; {@link HandoffDeps.log} when unset. */

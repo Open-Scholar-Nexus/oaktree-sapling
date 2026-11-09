@@ -777,7 +777,6 @@ async function cmdReleaseDeposit(argv: string[]): Promise<number> {
   const already = out.result.already_published === true;
   const published = already || out.result.published === true;
   const url = String(out.result.record_url ?? out.result.draft_url ?? out.result.version_doi);
-  // With --json, `oak release` prints these lines itself, from the result.
   const { waitIndicator } = await import('./progress.js');
   const progress = waitIndicator(process.stderr, process.env);
   const json = has(argv, 'json');
@@ -1451,8 +1450,7 @@ async function cmdBootstrap(argv: string[]): Promise<number> {
     { engineRepo, version: pinned.engineVersion },
     { kind: 'flag' },
     await handoffContext('bootstrap', argv),
-    // The engine repo is the --engine-repo typed here, so --yes accepts it.
-    { ...(await handoffDeps(argv)), confirm: makeConfirm(argv) },
+    await handoffDeps(argv),
   );
   if (handed !== null) return handed;
   gh.assertRepoName(engineRepo, '--engine-repo');

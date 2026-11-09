@@ -248,7 +248,7 @@ export const prompt = {
     'Nothing was created or changed. ' +
     (yesAccepts
       ? 'Re-run with --yes to accept the plan unattended.'
-      : '--yes does not answer this question: run oak in a terminal.'),
+      : 'This question is asked even with --yes: run oak in a terminal and answer it.'),
 
   declined: (answer: string, yesAccepts: boolean): string =>
     `aborted: the plan above was not confirmed (` +
