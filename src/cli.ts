@@ -857,7 +857,7 @@ function shellWord(arg: string): string {
 const RELEASE_SUBCOMMAND_FLAGS = ['token', 'site-url', 'journal'] as const;
 
 /**
- * `oak release [--repo owner/paper] vX [--sandbox] [--yes] [--publish-without-review]` from the
+ * `oak release [--repo owner/paper] vX|<id>/vX [--sandbox] [--yes] [--publish-without-review]` from the
  * terminal: `runRelease` (release.ts) in a temporary clone, with the editor's gh login, with the
  * Zenodo writes handed to the oak the paper pins. Documented at DOCS.release.
  */
@@ -866,10 +866,10 @@ async function cmdReleaseVersion(argv: string[]): Promise<number> {
   const release = await import('./release.js');
   const z = await import('./zenodo.js');
   const pinned = await import('./pinned.js');
-  // Checked first, from the arguments alone.
-  const { PAPER_VERSION_TAG } = await import('./schema.js');
+  // Checked first, from the arguments alone; the clone says which form the repo takes.
+  const { parsePaperTag } = await import('./projects.js');
   const word = releaseWord(argv)?.word;
-  if (word !== undefined && !PAPER_VERSION_TAG.test(word)) {
+  if (word !== undefined && !parsePaperTag(word)) {
     process.stderr.write(msg.workflow.releaseUnknownWord(word) + '\n');
     return 2;
   }
@@ -902,7 +902,7 @@ async function cmdReleaseVersion(argv: string[]): Promise<number> {
   const tag = word;
   if (!tag) {
     process.stderr.write(
-      msg.workflow.releaseNoTagList(repo, gh.realReleaseSource.vTags(repo)) + '\n',
+      msg.workflow.releaseNoTagList(repo, gh.realReleaseSource.versionTags(repo)) + '\n',
     );
     return 2;
   }
@@ -923,16 +923,17 @@ async function cmdReleaseVersion(argv: string[]): Promise<number> {
     ...(has(argv, 'yes') ? ['--yes'] : []),
     ...passOn.map((arg, i) => (passOn[i - 1] === '--token' ? '<token>' : shellWord(arg))),
   ].join(' ');
-  /** Runs a subcommand with the oak the clone pins, or in this process when that is this oak. */
+  /** Runs a subcommand with the oak the paper at `paperRoot` in the clone pins, or in this
+   *  process when that is this oak. */
   const runSubcommand = async (
     verb: PaperVerb,
     args: string[],
-    clone: string,
+    paperRoot: string,
     here: (args: string[]) => Promise<number>,
   ): Promise<number> => {
     const { handOff } = await import('./pinned.js');
     const ctx = await handoffContext(verb, args);
-    const code = await handOff({ ...ctx, paperRoot: clone }, await handoffDeps(argv));
+    const code = await handOff({ ...ctx, paperRoot }, await handoffDeps(argv));
     return code ?? here(args);
   };
 
@@ -965,22 +966,22 @@ async function cmdReleaseVersion(argv: string[]): Promise<number> {
         checkPin: (version) => {
           if (!process.env[pinned.USE_RUNNING_ENV]) pinned.assertDepositPin('release', version);
         },
-        reserveDoi: (clone, sb) =>
+        reserveDoi: (paperRoot, sb) =>
           runSubcommand(
             'release',
             [
               'reserve-doi',
               '--myst',
-              join(clone, 'myst.yml'),
+              join(paperRoot, 'myst.yml'),
               '--repo',
               repo,
               ...(sb ? ['--sandbox'] : []),
               ...passOn,
             ],
-            clone,
+            paperRoot,
             cmdRelease,
           ),
-        deposit: (clone) =>
+        deposit: (paperRoot) =>
           runSubcommand(
             'release',
             [
@@ -988,13 +989,13 @@ async function cmdReleaseVersion(argv: string[]): Promise<number> {
               '--tag',
               tag,
               '--paper',
-              clone,
+              paperRoot,
               '--bundle-out',
-              join(clone, '_build', 'bundle'),
+              join(paperRoot, '_build', 'bundle'),
               ...(publish ? ['--publish-without-review'] : []),
               ...passOn,
             ],
-            clone,
+            paperRoot,
             cmdRelease,
           ),
         confirm: makeConfirm(argv),

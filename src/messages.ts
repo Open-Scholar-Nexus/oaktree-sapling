@@ -1468,10 +1468,11 @@ export const workflow = {
 
   // oak release from the terminal (release.ts `runRelease`)
   releaseNoTagList: (repo: string, tags: string[]): string =>
-    `oak release: name the version to publish, as in oak release v1.2.3. ` +
+    `oak release: name the version to publish, as in oak release v1.2.3, or oak release ` +
+    `<paper id>/v1.2.3 for a paper of a co-located journal. ` +
     (tags.length
       ? `Tags on ${repo}: ${tags.slice(-20).join(', ')}${tags.length > 20 ? ` (the last 20 of ${tags.length})` : ''}.`
-      : `${repo} has no v* tags yet.`),
+      : `${repo} has no version tags yet.`),
   releaseNoRepo:
     'oak release: pass --repo owner/name, or run it in a clone of the paper repo, whose origin ' +
     'names the repo.',
@@ -1484,11 +1485,12 @@ export const workflow = {
     'oak release: gh is not logged in. oak release pushes, merges and tags on GitHub as you; ' +
     'run gh auth login, then run this again.',
   releaseUnknownWord: (word: string): string =>
-    `oak release: ${JSON.stringify(word.slice(0, 40))} is neither a version like v1.2.3 nor a ` +
-    `subcommand of oak release (reserve-doi, deposit, status).\n${workflow.releaseUsage}`,
+    `oak release: ${JSON.stringify(word.slice(0, 40))} is neither a version like v1.2.3 or ` +
+    `<paper id>/v1.2.3 nor a subcommand of oak release (reserve-doi, deposit, status).\n${workflow.releaseUsage}`,
   releaseUsage:
-    'oak release: usage: oak release [--repo <owner/repo>] <vX.Y.Z> [...], or one of its subcommands: ' +
-    'oak release reserve-doi [...], oak release deposit --tag <vX.Y.Z> [...], oak release status [...]',
+    'oak release: usage: oak release [--repo <owner/repo>] <vX.Y.Z | paper id/vX.Y.Z> [...], or ' +
+    'one of its subcommands: oak release reserve-doi [...], oak release deposit --tag <vX.Y.Z> ' +
+    '[...], oak release status [...]',
   releaseInActions:
     'oak release: publishing a version runs from the terminal; in GitHub Actions the workflows ' +
     'run its subcommands, oak release reserve-doi and oak release deposit.',
@@ -1511,11 +1513,22 @@ export const workflow = {
   releaseClonesRemoved: (dirs: string[]): string =>
     `oak release: removed the ${dirs.length === 1 ? 'clone' : 'clones'} kept by an earlier run: ` +
     dirs.join(', '),
-  /** `where` is `at <tag>` or `on the default branch`. */
-  releaseColocated: (repo: string): string =>
-    `oak release: ${repo} is a co-located journal, and oak release publishes only the paper of a ` +
-    `paper repository. Publish a paper of ${repo} with its workflows: run Reserve DOI with the ` +
-    `paper's id, merge its pull request, then push the tag <paper id>/vX.Y.Z.`,
+  /** `where` is `at <tag>` or `on the default branch`, as in the messages below. */
+  releaseNeedsPaperId: (repo: string, tag: string, where: string): string =>
+    `oak release: ${repo} is a co-located journal ${where}, so a version names its paper: run ` +
+    `oak release <paper id>/${tag}, with the id of a folder under papers/.`,
+  releaseNotColocated: (repo: string, tag: string, where: string): string =>
+    `oak release: ${tag} names a paper of a co-located journal, but ${repo} is not one ${where} ` +
+    `(its .github/actions/engine/pins.yml has no journal_repo: .). Run oak release ` +
+    `${tag.slice(tag.indexOf('/') + 1)} for the paper of a paper repo.`,
+  releaseNoPaperHere: (repo: string, dir: string, where: string): string =>
+    `oak release: ${repo} has no paper in ${dir} ${where}: no myst.yml there naming an oak ` +
+    `version (project.options.oaktree-sapling.version). Check the paper id in the tag.`,
+  releaseBelowMinEngine: (mystPath: string, pin: string, min: string): string =>
+    `oak release: ${mystPath} pins oak ${pin}, but the workflows need ${min} or newer ` +
+    `(min_engine_version in .github/actions/engine/pins.yml), so the Deposit version build would ` +
+    `fail. Nothing was changed. Run oak upgrade on the paper, merge its pull request, then run ` +
+    `this again.`,
   releaseNotPaper: (repo: string, where: string): string =>
     `oak release: ${repo} is not an oak paper repo: ${where} it has no myst.yml naming an oak ` +
     `version (project.options.oaktree-sapling.version). Check --repo, or pass --repo ` +
@@ -1538,7 +1551,8 @@ export const workflow = {
     `oak release: a GitHub call failed (${why}). Check that gh is logged in with access to the ` +
     `repo, then run this again; it continues where it stopped.`,
 
-  releasePlanHeader: (repo: string): string => `oak release will, on ${repo}:`,
+  releasePlanHeader: (repo: string, id: string | null): string =>
+    `oak release will, on ${repo}${id ? ` for the paper ${id}` : ''}:`,
   releasePlanReserve: (sandbox: boolean, replace: boolean): string =>
     `  reserve a DOI on Zenodo (${sandbox ? 'sandbox' : 'production'}) and ` +
     (replace

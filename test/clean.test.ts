@@ -118,4 +118,17 @@ describe('a successful oak release removes the clones kept for its repo and tag'
     expect(removeKeptClones(dir, 'o/paper', 'v1.0.0', uid)).toEqual([same]);
     expect([otherTag, otherRepo, download].map(existsSync)).toEqual([true, true, true]);
   });
+
+  it("a co-located paper's: its tag's / kept out of the name, and no other repo's or paper's", () => {
+    const dir = tmp();
+    const prefix = clonePrefix('o/journal', 'one/v1.0.0');
+    expect(prefix).toBe('oak-release-o_journal@one@v1.0.0-');
+    const same = clone(dir, prefix + 'abcdef');
+    const otherPaper = clone(dir, clonePrefix('o/journal', 'two/v1.0.0') + 'abcdef');
+    const rootTag = clone(dir, clonePrefix('o/journal', 'v1.0.0') + 'abcdef');
+    // `<owner>_<repo>_<id>` would read as a repo `journal_one`.
+    const otherRepo = clone(dir, clonePrefix('o/journal_one', 'v1.0.0') + 'abcdef');
+    expect(removeKeptClones(dir, 'o/journal', 'one/v1.0.0', uid)).toEqual([same]);
+    expect([otherPaper, rootTag, otherRepo].map(existsSync)).toEqual([true, true, true]);
+  });
 });

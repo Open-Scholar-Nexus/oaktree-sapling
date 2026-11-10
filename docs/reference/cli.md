@@ -54,15 +54,17 @@ While it waits, it prints the run's state when it changes, and again every 5 min
 
 The subcommands run with the `oak` version the paper pins ([which version runs](#pins-local)), read at the commit each works on: `main` for `reserve-doi`, the tag for `deposit`.
 
-Before changing anything, it lists what it will do and asks to confirm; `--yes` skips the question. `--sandbox` reserves the DOI on the Zenodo sandbox. Without a version, it lists the repository's `v*` tags.
+In a [co-located journal](../guide/co-located.md#co-located-publish), the version names its paper, `oak release <paper id>/vX.Y.Z`, and every step is that paper's: its `papers/<paper id>/myst.yml`, its own DOI pull request, the tag `<paper id>/vX.Y.Z`, and the deposit of that folder.
+
+Before changing anything, it lists what it will do and asks to confirm; `--yes` skips the question. `--sandbox` reserves the DOI on the Zenodo sandbox. Without a version, it lists the repository's version tags.
 
 It refuses, before changing anything:
 
 - a word after `release` that is neither a version nor a subcommand;
 - `--tag` and `--use-local-build`, which belong to `oak release deposit`;
-- a [co-located journal](../guide/co-located.md#co-located-publish), whose papers its workflows publish;
-- a repository whose `myst.yml` names no oak version;
-- a pinned version older than `DEPOSIT_MIN_VERSION`, the first whose subcommands never build beside the Zenodo token ([why](#design-paper-ci-deposit-min));
+- `vX.Y.Z` on a co-located journal, and `<paper id>/vX.Y.Z` on a paper repository;
+- a repository whose `myst.yml`, or the named paper's, names no oak version;
+- a pinned version older than `DEPOSIT_MIN_VERSION`, the first whose subcommands never build beside the Zenodo token ([why](#design-paper-ci-deposit-min)), or than the `min_engine_version` in `.github/actions/engine/pins.yml`, which the workflows need;
 - `--sandbox` once a production DOI is committed;
 - an existing tag whose `myst.yml` holds no DOI;
 - a new tag when the newest version on Zenodo is published with another version, since **New version** was not clicked;

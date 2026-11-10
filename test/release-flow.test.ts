@@ -21,6 +21,7 @@ import {
 } from '../src/release.js';
 import type { DepositState } from '../src/zenodo.js';
 import { UserError } from '../src/messages.js';
+import { parsePaperTag } from '../src/projects.js';
 
 const REPO = 'o/paper';
 const TAG = 'v1.0.0';
@@ -57,6 +58,8 @@ interface World {
   ciAttaches: boolean;
   zenodo: DepositState;
   token: boolean;
+  /** The branches the run looked for the DOI commit and its pull request on. */
+  branches: string[];
 }
 
 const built: CiJob[] = [
@@ -79,12 +82,39 @@ function world(over: Partial<World> = {}): World {
     ciAttaches: false,
     zenodo: { kind: 'draft' },
     token: true,
+    branches: [],
     ...over,
   };
 }
 
+/** The co-located paper `papers/one` and its tag. */
+const PAPER_TAG = `one/${TAG}`;
+const PINS = '.github/actions/engine/pins.yml';
+
+/** A co-located journal whose default branch holds `papers/one` with `paperMyst`. */
+function colocated(paperMyst: string, minEngine?: string, over: Partial<World> = {}): World {
+  const pins =
+    `journal_repo: .\nengine_version: v0.4.0-dev.7\n` +
+    (minEngine ? `min_engine_version: ${minEngine}\n` : '');
+  return world({
+    files: { [`${MAIN}:${PINS}`]: pins, [`${MAIN}:papers/one/myst.yml`]: paperMyst },
+    ...over,
+  });
+}
+
 /** The fake, recording each call that changes something, in order. */
 function harness(w: World, input: Partial<ReleaseInput> = {}) {
+  const tag = input.tag ?? TAG;
+  const paperDir = parsePaperTag(tag)!.paperDir;
+  /** The key `files` holds the paper's myst.yml at commit `sha` by. */
+  const mystAt = (sha: string) => (paperDir === '.' ? sha : `${sha}:${paperDir}/myst.yml`);
+  /** Every file of commit `from`, as commit `to`'s. */
+  const copyCommit = (from: string, to: string) => {
+    for (const [key, text] of Object.entries(w.files)) {
+      if (key === from) w.files[to] = text;
+      else if (key.startsWith(`${from}:`)) w.files[to + key.slice(from.length)] = text;
+    }
+  };
   const outward: string[] = [];
   const logs: string[] = [];
   const plans: string[][] = [];
@@ -94,7 +124,7 @@ function harness(w: World, input: Partial<ReleaseInput> = {}) {
   let pushed: string | null = null;
   let checkedOut: string | null = null;
   const src: ReleaseSource = {
-    vTags: () => Object.keys(w.tags),
+    versionTags: () => Object.keys(w.tags),
     clone: () => (clone = mkdtempSync(join(tmpdir(), 'oak-release-test-'))),
     fetch: () => {},
     head: () => w.head,
@@ -105,16 +135,22 @@ function harness(w: World, input: Partial<ReleaseInput> = {}) {
       checkedOut = ref;
       outward.push(`checkout ${ref}`);
     },
-    pushedHead: () => pushed,
-    openPr: () => w.pr,
+    pushedHead: (_c, branch) => {
+      w.branches.push(branch);
+      return pushed;
+    },
+    openPr: (_r, branch) => {
+      w.branches.push(branch);
+      return w.pr;
+    },
     markChecksSkipped: (_r, sha) => void outward.push(`status ${sha}`),
     allowsMergeCommit: () => w.allowMerge,
     merge: (_r, pr, sha, method) => {
       outward.push(`merge #${pr} ${sha} --${method}`);
       if (w.mergeRefused) throw new Error('gh pr merge failed: head branch was modified');
-      w.files[MERGE] = w.files[sha]!;
+      copyCommit(sha, MERGE);
       w.head = { sha: w.pushAfterMerge ?? MERGE, subject: 'Merge' };
-      if (w.pushAfterMerge) w.files[w.pushAfterMerge] = w.files[sha]!;
+      if (w.pushAfterMerge) copyCommit(sha, w.pushAfterMerge);
       return MERGE;
     },
     createTag: (_r, tag, sha) => {
@@ -124,13 +160,13 @@ function harness(w: World, input: Partial<ReleaseInput> = {}) {
     commitsBetween: (_c, from, to) => [`${to.slice(0, 7)} after ${from.slice(0, 7)}`],
     releaseAssets: () => (w.ciAttaches && jobPolls > 0 ? [DEPOSITED_ASSET] : w.assets),
     pushRuns: (_r, sha) =>
-      w.tags[TAG] === sha && polls++ >= w.runAfter
+      w.tags[tag] === sha && polls++ >= w.runAfter
         ? [
             {
               id: 7,
               path: DEPOSIT_WORKFLOW_PATH,
               event: 'push',
-              headBranch: TAG,
+              headBranch: tag,
               headSha: sha,
               url: RUN_URL,
             },
@@ -143,15 +179,17 @@ function harness(w: World, input: Partial<ReleaseInput> = {}) {
     hasToken: () => w.token,
     readDepositState: async () => w.zenodo,
     checkPin: () => {},
-    reserveDoi: async () => {
+    reserveDoi: async (dir) => {
+      expect(dir).toBe(join(clone, paperDir));
       outward.push('prepare');
       pushed = DOI_COMMIT;
-      w.files[DOI_COMMIT] = myst(input.sandbox ? SANDBOX_DOI : PROD_DOI);
+      copyCommit(w.head.sha, DOI_COMMIT);
+      w.files[mystAt(DOI_COMMIT)] = myst(input.sandbox ? SANDBOX_DOI : PROD_DOI);
       w.pr = { number: 9, url: PR_URL };
       return 0;
     },
     deposit: async (dir) => {
-      expect(dir).toBe(clone);
+      expect(dir).toBe(join(clone, paperDir));
       outward.push(`deposit at ${checkedOut}`);
       return 0;
     },
@@ -319,6 +357,45 @@ describe('oak release from the terminal: a rerun continues where the release sta
   });
 });
 
+describe('oak release from the terminal: a paper of a co-located journal', () => {
+  it("reserves on the paper's own DOI branch, merges, tags <id>/vX.Y.Z, deposits the paper folder", async () => {
+    const w = colocated(myst(), 'v0.4.0-dev.6');
+    const h = harness(w, { tag: PAPER_TAG });
+    expect(await h.run()).toBe(0);
+    expect(h.outward).toEqual([
+      'prepare',
+      `status ${DOI_COMMIT}`,
+      `merge #9 ${DOI_COMMIT} --merge`,
+      `tag ${PAPER_TAG} ${MERGE}`,
+      `checkout refs/tags/${PAPER_TAG}`,
+      `deposit at refs/tags/${PAPER_TAG}`,
+    ]);
+    expect(new Set(w.branches)).toEqual(new Set(['zenodo-doi-one']));
+    expect(h.plans[0]![0]).toBe(`oak release will, on ${REPO} for the paper one:`);
+  });
+
+  it('a later version: tags the head and deposits, with the version part checked on Zenodo', async () => {
+    const w = colocated(myst(PROD_DOI), undefined, {
+      zenodo: { kind: 'published', version: '1.0.0', recordUrl: 'https://zenodo.org/records/9' },
+    });
+    const h = harness(w, { tag: PAPER_TAG });
+    expect(await h.run()).toBe(0);
+    expect(h.outward).toEqual([
+      `tag ${PAPER_TAG} ${MAIN}`,
+      `checkout refs/tags/${PAPER_TAG}`,
+      `deposit at refs/tags/${PAPER_TAG}`,
+    ]);
+  });
+
+  it('reads the DOI of the paper the tag names, not of another paper', async () => {
+    const w = colocated(myst());
+    w.files[`${MAIN}:papers/two/myst.yml`] = myst(PROD_DOI);
+    const h = harness(w, { tag: PAPER_TAG });
+    expect(await h.run()).toBe(0);
+    expect(h.outward[0]).toBe('prepare');
+  });
+});
+
 describe('oak release from the terminal: refusals before anything changes', () => {
   const refuses = async (w: World, input: Partial<ReleaseInput> = {}, text?: string) => {
     const h = harness(w, input);
@@ -349,16 +426,24 @@ describe('oak release from the terminal: refusals before anything changes', () =
   it('no record for the committed DOI', () =>
     refuses(world({ files: { [MAIN]: myst(PROD_DOI) }, zenodo: { kind: 'none' } })));
 
-  it('a co-located journal, whose papers its workflows publish', () =>
+  it('a vX.Y.Z tag on a co-located journal, whose versions name their paper', () =>
+    refuses(colocated(myst(PROD_DOI)), {}, `run oak release <paper id>/${TAG}`));
+
+  it('a <paper id>/vX.Y.Z tag on a paper repo', () =>
     refuses(
-      world({
-        files: {
-          [MAIN]: myst(PROD_DOI),
-          [`${MAIN}:.github/actions/engine/pins.yml`]: 'journal_repo: .\n',
-        },
-      }),
-      {},
-      'is a co-located journal',
+      world({ files: { [MAIN]: myst(PROD_DOI) } }),
+      { tag: PAPER_TAG },
+      `Run oak release ${TAG} for the paper of a paper repo`,
+    ));
+
+  it('a <paper id>/vX.Y.Z tag naming no paper of the co-located journal', () =>
+    refuses(colocated(myst(PROD_DOI)), { tag: `two/${TAG}` }, 'has no paper in papers/two'));
+
+  it('a pin below the min_engine_version the workflows need', () =>
+    refuses(
+      colocated(myst(PROD_DOI, 'v0.4.0-dev.6'), 'v0.4.0-dev.7'),
+      { tag: PAPER_TAG },
+      'pins oak v0.4.0-dev.6, but the workflows need v0.4.0-dev.7',
     ));
 
   it('a repo whose myst.yml names no oak version, which is no oak paper', () =>

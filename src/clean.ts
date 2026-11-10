@@ -14,10 +14,13 @@ const MKDTEMP_SUFFIX = 6;
 
 /**
  * The start of the name of the folder `oak release` clones `repo` into for `tag`. GitHub owner
- * names and version tags hold no `_`, so each repo and tag has its own prefix.
+ * names and `vX.Y.Z` tags hold no `_`, and repository names and paper ids no `@`, so each repo
+ * and tag has its own prefix: `<owner>_<repo>_vX.Y.Z`, or `<owner>_<repo>@<id>@vX.Y.Z` for a
+ * co-located paper's `<id>/vX.Y.Z`, whose `/` cannot be in a folder name.
  */
 export function clonePrefix(repo: string, tag: string): string {
-  return `${CLONE_PREFIX}${repo.replace('/', '_')}_${tag}-`;
+  const named = tag.includes('/') ? `@${tag.replace('/', '@')}` : `_${tag}`;
+  return `${CLONE_PREFIX}${repo.replace('/', '_')}${named}-`;
 }
 
 /** The bytes under `path`, counting a symlink as itself and never following one. */

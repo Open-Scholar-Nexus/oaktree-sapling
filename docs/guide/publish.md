@@ -17,7 +17,7 @@ This needs `oak`, [gh](https://cli.github.com) logged in (`gh auth login`) as an
 oak release --repo owner/paper-repo v1.0.0
 ```
 
-When run inside a clone of the paper repository, `--repo` can be left out. `v1.0.0` is the version, in the form `vMAJOR.MINOR.PATCH`, and becomes the tag; without it, oak lists the repository's tags.
+When run inside a clone of the paper repository, `--repo` can be left out. `v1.0.0` is the version, in the form `vMAJOR.MINOR.PATCH`, and becomes the tag; without it, oak lists the repository's tags. In a [co-located journal](co-located.md#co-located-publish), name the paper too: `oak release --repo owner/journal-repo <paper id>/v1.0.0`.
 
 oak lists what it will do on GitHub and Zenodo and asks once (`--yes` skips the confirmation prompt). When publishing the first version, it:
 

@@ -7,7 +7,7 @@ import * as msg from './messages.js';
 import { UserError } from './messages.js';
 import { ENGINE_MANAGED_PATHS, GITHUB_REPO, OLD_JOURNAL_KEY, repoFromGithubUrl } from './schema.js';
 import { clonePrefix } from './clean.js';
-import { colocatedPaper } from './projects.js';
+import { colocatedPaper, parsePaperTag } from './projects.js';
 import { execFileSync, spawnSync } from 'node:child_process';
 import {
   cpSync,
@@ -23,7 +23,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { parseYaml } from './yaml-io.js';
 import type { GitContext } from './zenodo.js';
-import { COMMIT_ID, DOI_BRANCH, locationRepo, type JournalStamp } from './schema.js';
+import { COMMIT_ID, doiBranch, locationRepo, type JournalStamp } from './schema.js';
 import { LABEL_ZENODO_FAILED, type GhPr, type PagesDeployer } from './preview.js';
 import type { CheckRun } from './checks.js';
 import type { EnvironmentReviewer, Provisioner } from './bootstrap.js';
@@ -315,7 +315,7 @@ export function openDoiPr(
   // comes from the tag at publish. Reserving again force-pushes the same branch. Each co-located
   // paper has its own concept record, so its own branch.
   const paper = colocatedPaper(repoRoot);
-  const branch = paper ? `${DOI_BRANCH}-${paper.id}` : DOI_BRANCH;
+  const branch = doiBranch(paper?.id ?? null);
   const repo = originRepo(repoRoot);
   const base = repo ? defaultBranch(repo) : 'main';
   // The branch starts at HEAD, so HEAD must be on the base, or the pull request would carry
@@ -517,8 +517,12 @@ export const realReleaseSource: ReleaseSource = {
   tagCommit: realCiBuildSource.tagCommit,
   pushRuns: realCiBuildSource.pushRuns,
   jobs: realCiBuildSource.jobs,
-  vTags(repo) {
-    return apiList(`repos/${repo}/git/matching-refs/tags/v`, '.[].ref | ltrimstr("refs/tags/")');
+  versionTags(repo) {
+    const tags = apiList(
+      `repos/${repo}/git/matching-refs/tags/`,
+      '.[].ref | ltrimstr("refs/tags/")',
+    );
+    return tags.filter((tag) => parsePaperTag(tag) !== null);
   },
   clone(repo, tag) {
     const dir = mkdtempSync(join(tmpdir(), clonePrefix(repo, tag)));

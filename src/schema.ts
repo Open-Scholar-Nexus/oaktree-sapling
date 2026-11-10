@@ -66,11 +66,17 @@ function engineVersionKey(v: string): number[] | null {
   return m[4] === undefined ? [x, y, z, 1, 0] : [x, y, z, 0, Number(m[4])];
 }
 
-/** A paper's published version: a tag `vMAJOR.MINOR.PATCH`, deposited on Zenodo as
- *  `MAJOR.MINOR.PATCH`. */
 /** The branch the DOI commit is pushed to: `openDoiPr` (gh.ts) pushes it, `oak release` merges it. */
 export const DOI_BRANCH = 'zenodo-doi';
 
+/** The DOI branch of the paper `id` names in a co-located repository, or of the paper at a
+ *  repository root (null). Each co-located paper has its own concept record, so its own branch. */
+export function doiBranch(id: string | null): string {
+  return id ? `${DOI_BRANCH}-${id}` : DOI_BRANCH;
+}
+
+/** A paper's published version: a tag `vMAJOR.MINOR.PATCH`, deposited on Zenodo as
+ *  `MAJOR.MINOR.PATCH`. */
 export const PAPER_VERSION_TAG = /^v[0-9]+\.[0-9]+\.[0-9]+$/;
 
 /**

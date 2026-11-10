@@ -64,7 +64,7 @@ Depositing works as [with the GitHub workflows](publish.md#with-workflows), with
 - **Reserve DOI**: run the workflow with `paper` set to the id. Its pull request writes the DOI into `papers/<id>/myst.yml`.
 - **Tag**: `<id>/v1.0.0` deposits that paper's version, for example `smith-2026-tidal-flats/v1.0.0`.
 
-Each paper has its own Zenodo record. [`oak release vX.Y.Z`](publish.md#from-terminal) publishes only the paper of a paper repository, and refuses a co-located journal. Without a Zenodo token in the repository, an editor deposits a tagged paper from a clone at the tag with [`oak release deposit --tag <id>/vX.Y.Z`](../reference/cli.md#release-deposit).
+Each paper has its own Zenodo record. [From the terminal](publish.md#from-terminal), an editor publishes a paper with `oak release --repo <owner>/<journal-repo> <id>/v1.0.0`, which does all of the above for that paper. It is also how a journal without a Zenodo token in the repository deposits a tagged version.
 
 (co-located-versions)=
 ## Engine versions
