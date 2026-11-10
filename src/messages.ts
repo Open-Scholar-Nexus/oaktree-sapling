@@ -7,12 +7,13 @@
  * only where the page says more than a sentence can.
  *
  * The rules:
- *   1. Every default or resolved value is declared in the plan before the confirm prompt.
- *   2. No design-doc jargon ([S#]/[R#], "frozen shim", "build_type=workflow",
- *      "instance-config"). Enforced by a lint in messages.test.ts.
- *   3. Prose goes to stderr. stdout carries only the JSON of `--json` and the text of
- *      `--help` and `--version`.
- *   4. An error names the file and the fix, and shows no stack trace.
+ *   {COMPLETE-PLAN} Every default or resolved value is declared in the plan before the confirm
+ *     prompt.
+ *   {NO-JARGON} No design-doc jargon ([S#]/[R#], "frozen shim", "build_type=workflow",
+ *     "instance-config"). Enforced by a lint in messages.test.ts.
+ *   {PROSE-TO-STDERR} Prose goes to stderr. stdout carries only the JSON of `--json` and the
+ *     text of `--help` and `--version`.
+ *   {ERROR-NAMES-FIX} An error names the file and the fix, and shows no stack trace.
  *
  * ── Printed text that is NOT in this file ───────────────────────────────────────────────────
  * These ship as files or run inside GitHub Actions, so they cannot import this module:
