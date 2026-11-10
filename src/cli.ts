@@ -1773,7 +1773,7 @@ async function main(argv: string[]): Promise<number> {
   if (verb === 'bootstrap') return cmdBootstrap(argv.slice(1));
   if (verb === 'upgrade') return cmdUpgrade(argv.slice(1));
   if (verb === 'conformance') return cmdConformance(argv.slice(1));
-  // An unknown command is a short error with a suggestion, so the hint stays on screen.
+  // An unknown command is a short error with a suggestion.
   if (verb) process.stderr.write(msg.unknownCommand(verb, nearestVerb(verb)) + '\n');
   else process.stderr.write(msg.usage());
   return 2;
