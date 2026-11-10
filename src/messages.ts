@@ -10,7 +10,8 @@
  *   1. Every default or resolved value is declared in the plan before the confirm prompt.
  *   2. No design-doc jargon ([S#]/[R#], "frozen shim", "build_type=workflow",
  *      "instance-config"). Enforced by a lint in messages.test.ts.
- *   3. Prose goes to stderr; the JSON only with `--json`, on stdout.
+ *   3. Prose goes to stderr. stdout carries only the JSON of `--json` and the text of
+ *      `--help` and `--version`.
  *   4. An error names the file and the fix, and shows no stack trace.
  *
  * ── Printed text that is NOT in this file ───────────────────────────────────────────────────
