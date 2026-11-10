@@ -1178,7 +1178,7 @@ function validateSummary(out: {
   return lines;
 }
 
-/** `oak validate`: oak's own rules (Layer A) and the journal's editorial checks (Layer B), with
+/** `oak validate`: oak's own checks and the journal's editorial checks, with
  *  `--report <path>` writing the JSON post-checks posts. With `--report` it exits 0 once a report
  *  is written, failing or not, since post-checks posts the result.
  *  Documented at DOCS.validate. */
@@ -1344,10 +1344,10 @@ async function cmdPostChecks(argv: string[]): Promise<number> {
   const pr = artifact.readPrNumber(artifactDir, artifact.CHECKS_FILES.pr) ?? undefined;
   if (pr) artifact.verifyPrHead(repo, pr, verifiedHead, (r, n) => gh.realGhPr.prHead(r, n));
 
-  const { cmdPostChecks: run, frozenPathsTouched } = await import('./checks.js');
-  const shimTouched = frozenPathsTouched(gh.changedFiles(repo, base, verifiedHead));
+  const { cmdPostChecks: run, gatedPathsTouched } = await import('./checks.js');
+  const gatedTouched = gatedPathsTouched(gh.changedFiles(repo, base, verifiedHead));
   const out = run(
-    { report, repo, sha, pr, shimTouched },
+    { report, repo, sha, pr, gatedTouched },
     {
       checkRun: gh.realCheckRun,
       sticky: (root, prNum, header, body) => gh.realGhPr.sticky(root, prNum, header, body),

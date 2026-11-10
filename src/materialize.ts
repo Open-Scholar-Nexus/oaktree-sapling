@@ -1,6 +1,6 @@
 /**
  * What `oak build` and `oak validate` share: the myst interface and the two-pass write of
- * `myst.oak.yml`. A module of its own because build also needs validate's `runLayerA` between
+ * `myst.oak.yml`. A module of its own because build also needs validate's `runOakChecks` between
  * the passes, and sharing through build.ts made the two import each other [R82] [R21].
  */
 import { join } from 'node:path';

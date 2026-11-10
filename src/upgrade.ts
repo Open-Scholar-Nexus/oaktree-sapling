@@ -94,7 +94,7 @@ export function readAnswers(repoRoot: string): TemplateAnswers {
 
 /** The template's files under {@link ENGINE_MANAGED_PATHS}. `paper-environment.yml` is gated
  *  but the author's, so like `myst.yml`, `index.md` and `bib.bib` it is never reset. */
-function frozenFiles(templateAtTarget: string): string[] {
+function engineManagedFiles(templateAtTarget: string): string[] {
   const out: string[] = [];
   const walk = (dir: string, prefix: string): void => {
     for (const name of readdirSync(dir).sort()) {
@@ -110,7 +110,7 @@ function frozenFiles(templateAtTarget: string): string[] {
 
 /** Renders one engine-managed file at the target with the repo's settings, keeping its own
  *  CODEOWNERS columns ({@link codeownersOnDisk}). */
-export function renderFrozenFile(
+export function renderEngineManagedFile(
   templateAtTarget: string,
   rel: string,
   answers: TemplateAnswers,
@@ -131,8 +131,8 @@ export function renderFrozenFile(
  * not deleted: they may be the repo's own additions (a `dependabot.yml`), and nothing
  * records which files oak once shipped, so a person decides.
  */
-export function extraFrozenFiles(repoRoot: string, templateAtTarget: string): string[] {
-  const shipped = new Set(frozenFiles(templateAtTarget));
+export function extraEngineManagedFiles(repoRoot: string, templateAtTarget: string): string[] {
+  const shipped = new Set(engineManagedFiles(templateAtTarget));
   const out: string[] = [];
   const walk = (dir: string, prefix: string): void => {
     if (!existsSync(dir)) return;
@@ -158,8 +158,8 @@ export function computeDrift(
 ): string[] {
   const changed: string[] = [];
   const owners = codeownersOnDisk(repoRoot);
-  for (const rel of frozenFiles(templateAtTarget)) {
-    const rendered = renderFrozenFile(templateAtTarget, rel, answers, owners);
+  for (const rel of engineManagedFiles(templateAtTarget)) {
+    const rendered = renderEngineManagedFile(templateAtTarget, rel, answers, owners);
     const onDisk = join(repoRoot, rel);
     if (!existsSync(onDisk) || readFileSync(onDisk, 'utf8') !== rendered) changed.push(rel);
   }
@@ -217,7 +217,7 @@ function resyncFiles(
   for (const rel of drift) {
     const dest = join(repoRoot, rel);
     mkdirSync(dirname(dest), { recursive: true });
-    writeFileSync(dest, renderFrozenFile(templateAtTarget, rel, answers, owners));
+    writeFileSync(dest, renderEngineManagedFile(templateAtTarget, rel, answers, owners));
   }
 }
 
@@ -253,7 +253,7 @@ export async function cmdUpgrade(input: UpgradeInput, deps: UpgradeDeps): Promis
 
   const templateAtTarget = deps.materializeTemplate(answers.engineRepo, target);
   const drift = computeDrift(repoRoot, templateAtTarget, answers);
-  const extra = extraFrozenFiles(repoRoot, templateAtTarget);
+  const extra = extraEngineManagedFiles(repoRoot, templateAtTarget);
   const filesChanged = drift.length > 0;
 
   // The pin and the workflows this run leaves must agree: workflows above the pin call verbs it

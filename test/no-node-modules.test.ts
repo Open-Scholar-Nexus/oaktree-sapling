@@ -44,7 +44,7 @@ function stagePackage(): string {
     if (existsSync(from)) cpSync(from, join(dir, rel), { recursive: true });
   }
   cpSync(fixturePaper, join(dir, 'paper'), { recursive: true });
-  // The journal repo picks the Layer B checks; with `--no-instance` the list is empty, which
+  // The journal repo picks the editorial checks; with `--no-instance` the list is empty, which
   // would pass without loading them.
   cpSync(fixtureInstance, join(dir, 'instance'), { recursive: true });
   return dir;

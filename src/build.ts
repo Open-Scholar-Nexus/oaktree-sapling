@@ -11,7 +11,7 @@
 import { existsSync } from 'node:fs';
 import { type ResolvedProject } from './compose.js';
 import { engineTypstTemplate } from './assets.js';
-import { runLayerA } from './validate.js';
+import { runOakChecks } from './validate.js';
 import {
   materializeDerived,
   type MaterializeInput,
@@ -45,13 +45,13 @@ export async function runBuild(input: RunBuildInput): Promise<RunBuildResult> {
     edge,
   } = input;
 
-  const layerAWarnings: string[] = [];
+  const oakWarnings: string[] = [];
   const { resolvedProject, extendsChain, warnings, typstTemplate } = await materializeDerived(
     input,
     (project, { edition }) => {
       // The structural checks run before the expensive build [R21]; editorial ones are the pull
       // request check's job.
-      const layerA = runLayerA({
+      const oakFindings = runOakChecks({
         paperRoot,
         instanceRoot,
         project,
@@ -62,7 +62,9 @@ export async function runBuild(input: RunBuildInput): Promise<RunBuildResult> {
       // Only structural errors stop the build. An id error (placeholder, invalid, duplicate) is
       // enforced at merge by the Journal checks, so a new repo still builds a preview; it
       // is reported as a warning.
-      const blocking = layerA.filter((f) => f.severity === 'error' && f.klass === 'structural');
+      const blocking = oakFindings.filter(
+        (f) => f.severity === 'error' && f.klass === 'structural',
+      );
       if (blocking.length) {
         throw new Error(
           msg.build.preflightFailed(
@@ -70,8 +72,8 @@ export async function runBuild(input: RunBuildInput): Promise<RunBuildResult> {
           ),
         );
       }
-      layerAWarnings.push(
-        ...layerA
+      oakWarnings.push(
+        ...oakFindings
           .filter(
             (f) => f.severity === 'warn' || (f.severity === 'error' && f.klass !== 'structural'),
           )
@@ -94,7 +96,7 @@ export async function runBuild(input: RunBuildInput): Promise<RunBuildResult> {
   if (baseUrl) process.env.BASE_URL = baseUrl;
   await edge.build(paperRoot, buildOpts, DERIVED_CONFIG_FILE);
 
-  return { resolvedProject, extendsChain, warnings: [...warnings, ...layerAWarnings] };
+  return { resolvedProject, extendsChain, warnings: [...warnings, ...oakWarnings] };
 }
 
 export interface RunStartInput extends MaterializeInput {

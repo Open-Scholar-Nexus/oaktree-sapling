@@ -973,8 +973,8 @@ export const pr = {
   checkRunTitle: (passed: number, failed: number, warnings: number): string =>
     `${passed} passed, ${failed} failed` +
     (warnings ? `, ${warnings} warning${warnings === 1 ? '' : 's'}` : ''),
-  checkRunTitleShimTouched: (title: string): string => `⚠️ CI workflows modified: ${title}`,
-  checkRunTitleShimUnlisted: (title: string): string => `⚠️ CI workflows may be modified: ${title}`,
+  checkRunTitleGatedTouched: (title: string): string => `⚠️ CI workflows modified: ${title}`,
+  checkRunTitleGatedUnlisted: (title: string): string => `⚠️ CI workflows may be modified: ${title}`,
   unknownCheckId: (id: string): string =>
     id.endsWith('.mjs')
       ? `unknown check id "${id}"; a check file's path starts with ./, as in ` +
@@ -1021,17 +1021,17 @@ export const pr = {
   checkTableRow: (id: string, status: string, optional: boolean, detail: string): string =>
     `| ${id} | ${status}${optional ? ' (optional)' : ''} | ${detail} |`,
   checkRunNote: (note: string): string => `> ⚠️ ${note}`,
-  shimMore: (n: number): string => `, +${n} more`,
+  gatedMore: (n: number): string => `, +${n} more`,
 
   /** A pull request that edits the files the checks run from. A warning, never a failure:
    *  upgrade pull requests edit them too. */
-  shimWarning: (shown: string, more: string): string =>
+  gatedWarning: (shown: string, more: string): string =>
     `> ⚠️ **This pull request changes the files that run the checks** (${shown}${more}). ` +
     `The results below come from its own copy of them, so they may not be the journal's ` +
     `checks. Unless this is an oak upgrade, an editor should read those changes before ` +
     `trusting the report.`,
   /** A pull request whose changed files GitHub did not list in full, so gated ones may hide. */
-  shimWarningUnlisted: (paths: string[]): string =>
+  gatedWarningUnlisted: (paths: string[]): string =>
     `> ⚠️ **GitHub did not list every file this pull request changes**, so it may change the ` +
     `files that run the checks (${paths.join(', ')}). An editor should read its changes to ` +
     `those files before trusting the report.`,

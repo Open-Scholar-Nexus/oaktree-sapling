@@ -1,6 +1,6 @@
 name: Deploy preview
 
-# Stage 2 of the preview: deploys Stage 1's artifact from the base context, never rebuilding.
+# Deploys the site build-paper.yml built. It runs this file as it is on the default branch, and never rebuilds.
 # https://scholar.nexus/oaktree-sapling/design/paper-ci#design-paper-ci-stage2-inputs
 
 on:

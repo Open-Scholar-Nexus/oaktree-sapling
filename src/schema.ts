@@ -37,7 +37,7 @@ export function repoFromGithubUrl(url: string): string | null {
  *  (RELEASING.md). It becomes a clone ref, a cache path and a `$GITHUB_OUTPUT` line. The engine
  *  action, `conformance.yml` and `scripts/cut-engine-release.sh` keep shell copies, and
  *  `npm-publish.yml` one of {@link isStableEngineVersion}, held to these by `version rule parity`
- *  in `test/frozen-guards.test.ts`. */
+ *  in `test/workflow-guards.test.ts`. */
 export const ENGINE_VERSION = /^v([0-9]+)\.([0-9]+)\.([0-9]+)(?:-dev\.([0-9]+))?$/;
 
 /** An {@link ENGINE_VERSION} without `-dev.N`: what `releases/latest` and npm carry. */

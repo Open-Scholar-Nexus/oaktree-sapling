@@ -217,9 +217,9 @@ export interface ChecksReport {
  * The sticky comment for a report: the sticky marker, a headline from the Check Run's
  * conclusion and title, the same table, and a footer.
  */
-export function checksComment(report: ChecksReport, shimTouched: string[] | null = []): string {
+export function checksComment(report: ChecksReport, gatedTouched: string[] | null = []): string {
   const { conclusion, title, summary } = report.checkRun;
-  const banner = shimFlagged(shimTouched) ? [shimWarning(shimTouched), ''] : [];
+  const banner = gatedFlagged(gatedTouched) ? [gatedWarning(gatedTouched), ''] : [];
   return [
     messages.stickyMarker(STICKY_CHECKS),
     ...banner,
@@ -234,26 +234,26 @@ export function checksComment(report: ChecksReport, shimTouched: string[] | null
 /** The changed files under {@link GATED_PATHS} [design §6a], or null when the list of changed
  *  files is null. A pull request that changes them can change how the checks run, so post-checks
  *  warns that its report cannot be fully trusted [R83]. */
-export function frozenPathsTouched(changed: string[] | null): string[] | null {
+export function gatedPathsTouched(changed: string[] | null): string[] | null {
   return changed && changed.filter((p) => underPaths(GATED_PATHS, p));
 }
 
 /** Whether post-checks warns: a gated file changed, or the changed files are unknown (null). */
-function shimFlagged(touched: string[] | null): boolean {
+function gatedFlagged(touched: string[] | null): boolean {
   return touched === null || touched.length > 0;
 }
 
 /** The warning for a pull request that edits the gated files, or whose changed files could not
  *  all be listed (null). It never changes the conclusion, since upgrade pull requests edit these
  *  files too. Shown in the comment and the Check Run. */
-export function shimWarning(touched: string[] | null): string {
-  if (touched === null) return messages.pr.shimWarningUnlisted(GATED_PATHS.map((p) => `\`${p}\``));
+export function gatedWarning(touched: string[] | null): string {
+  if (touched === null) return messages.pr.gatedWarningUnlisted(GATED_PATHS.map((p) => `\`${p}\``));
   const shown = touched
     .slice(0, 5)
     .map((f) => `\`${f}\``)
     .join(', ');
-  const more = touched.length > 5 ? messages.pr.shimMore(touched.length - 5) : '';
-  return messages.pr.shimWarning(shown, more);
+  const more = touched.length > 5 ? messages.pr.gatedMore(touched.length - 5) : '';
+  return messages.pr.gatedWarning(shown, more);
 }
 
 /** Injected so tests can use fakes. The real ones are `gh.realCheckRun` and
@@ -281,26 +281,26 @@ export function cmdPostChecks(
     repo: string;
     sha: string;
     pr?: string;
-    shimTouched?: string[] | null;
+    gatedTouched?: string[] | null;
   },
   deps: PostChecksDeps,
 ): PostChecksOutcome {
   const { report, repo, sha, pr } = input;
-  const shimTouched = input.shimTouched === undefined ? [] : input.shimTouched;
+  const gatedTouched = input.gatedTouched === undefined ? [] : input.gatedTouched;
   const warnings: string[] = [];
   let checkRunPosted = false;
   let commentPosted = false;
 
   // Shown on the check itself, but `conclusion` stays: upgrade pull requests edit these files
   // too, and CODEOWNERS is the gate [R83].
-  const checkRunToPost = shimFlagged(shimTouched)
+  const checkRunToPost = gatedFlagged(gatedTouched)
     ? {
         ...report.checkRun,
         title:
-          shimTouched === null
-            ? messages.pr.checkRunTitleShimUnlisted(report.checkRun.title)
-            : messages.pr.checkRunTitleShimTouched(report.checkRun.title),
-        summary: `${shimWarning(shimTouched)}\n\n${report.checkRun.summary}`,
+          gatedTouched === null
+            ? messages.pr.checkRunTitleGatedUnlisted(report.checkRun.title)
+            : messages.pr.checkRunTitleGatedTouched(report.checkRun.title),
+        summary: `${gatedWarning(gatedTouched)}\n\n${report.checkRun.summary}`,
       }
     : report.checkRun;
 
@@ -315,7 +315,7 @@ export function cmdPostChecks(
 
   if (pr) {
     try {
-      deps.sticky('.', pr, STICKY_CHECKS, checksComment(report, shimTouched));
+      deps.sticky('.', pr, STICKY_CHECKS, checksComment(report, gatedTouched));
       commentPosted = true;
     } catch (e) {
       const msg = messages.workflow.postChecksCommentFailed((e as Error).message);

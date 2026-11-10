@@ -1,5 +1,5 @@
 /**
- * The editorial checks (Layer B, from `@curvenote/check-implementations`) over the fixture paper,
+ * The editorial checks from `@curvenote/check-implementations` over the fixture paper,
  * through the bundled CLI. Like integration.test.ts, it runs `node dist/cli.cjs`: the checks
  * read myst's processed project, and myst-cli crashes unbundled on Node 24 [R51]. So this runs
  * what CI runs. Skipped without the bundle.
@@ -53,7 +53,7 @@ function runValidate(paper: string): { exitCode: number; out: any } {
 }
 
 describe.skipIf(bundleState() === 'absent')(
-  'oak validate, curvenote Layer-B checks (bundled)',
+  'oak validate, the curvenote editorial checks (bundled)',
   () => {
     beforeAll(assertBundleNotStale);
     it("passes the fixture paper: the journal's 5 checks pass, exit 0", () => {

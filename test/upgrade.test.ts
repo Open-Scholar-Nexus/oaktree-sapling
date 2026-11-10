@@ -24,7 +24,7 @@ import {
 } from '../src/bootstrap.js';
 import {
   computeDrift,
-  extraFrozenFiles,
+  extraEngineManagedFiles,
   readAnswers,
   cmdUpgrade,
   type UpgradePr,
@@ -176,7 +176,7 @@ describe('an engine-managed file the target no longer ships [R143]', () => {
   it('is not a difference, but is reported', () => {
     const repo = withRetired();
     expect(computeDrift(repo, TEMPLATE_ROOT, readAnswers(repo))).toEqual([]);
-    expect(extraFrozenFiles(repo, TEMPLATE_ROOT)).toEqual(['.github/workflows/retired.yml']);
+    expect(extraEngineManagedFiles(repo, TEMPLATE_ROOT)).toEqual(['.github/workflows/retired.yml']);
   });
 
   it('is reported even when everything else is up to date', async () => {

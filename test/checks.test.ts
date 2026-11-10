@@ -3,7 +3,7 @@ import {
   toCheckRun,
   checksComment,
   cmdPostChecks,
-  frozenPathsTouched,
+  gatedPathsTouched,
   STICKY_CHECKS,
   CheckStatus,
   type EngineCheckResult,
@@ -299,7 +299,7 @@ describe('cmdPostChecks, with fakes for GitHub', () => {
   });
 });
 
-describe('frozenPathsTouched (the gated files)', () => {
+describe('gatedPathsTouched (the gated files)', () => {
   it('matches every gated path, ignores paper content', () => {
     const changed = [
       'index.md',
@@ -311,7 +311,7 @@ describe('frozenPathsTouched (the gated files)', () => {
       'node_modules/bufferutil/index.js',
       '.engine/dist/cli.cjs',
     ];
-    expect(frozenPathsTouched(changed)).toEqual([
+    expect(gatedPathsTouched(changed)).toEqual([
       '.github/workflows/check-paper.yml',
       'CODEOWNERS',
       'paper-environment.yml',
@@ -321,10 +321,10 @@ describe('frozenPathsTouched (the gated files)', () => {
     ]);
   });
   it('a change to content only touches no gated file', () => {
-    expect(frozenPathsTouched(['index.md', 'myst.yml', 'figures/f1.png'])).toEqual([]);
+    expect(gatedPathsTouched(['index.md', 'myst.yml', 'figures/f1.png'])).toEqual([]);
   });
   it('keeps an unknown list unknown, so the warning still shows', () => {
-    expect(frozenPathsTouched(null)).toBeNull();
+    expect(gatedPathsTouched(null)).toBeNull();
   });
   it('matches whole names only', () => {
     for (const p of ['.github', './.github/x', '/CODEOWNERS'])
@@ -353,7 +353,7 @@ describe('editor paths parity', () => {
 });
 
 describe('cmdPostChecks: the gated-files warning', () => {
-  it('with shimTouched: warns in the comment and the Check Run title and summary, with the conclusion unchanged', () => {
+  it('with gatedTouched: warns in the comment and the Check Run title and summary, with the conclusion unchanged', () => {
     const { deps, runs, stickies } = fakePost();
     const out = cmdPostChecks(
       {
@@ -361,7 +361,7 @@ describe('cmdPostChecks: the gated-files warning', () => {
         repo: 'o/r',
         sha: 'abc',
         pr: '7',
-        shimTouched: ['.github/workflows/check-paper.yml'],
+        gatedTouched: ['.github/workflows/check-paper.yml'],
       },
       deps,
     );
@@ -376,14 +376,14 @@ describe('cmdPostChecks: the gated-files warning', () => {
 
   it('with the changed files unknown: warns, naming the gated paths', () => {
     const { deps, runs, stickies } = fakePost();
-    cmdPostChecks({ report: report(), repo: 'o/r', sha: 'abc', pr: '7', shimTouched: null }, deps);
+    cmdPostChecks({ report: report(), repo: 'o/r', sha: 'abc', pr: '7', gatedTouched: null }, deps);
     expect(runs[0]!.run.conclusion).toBe(report().checkRun.conclusion);
     expect(runs[0]!.run.title).toContain('CI workflows may be modified');
     expect(stickies[0]!.body).toContain('GitHub did not list every file');
     expect(stickies[0]!.body).toContain('`paper-environment.yml`');
   });
 
-  it('without shimTouched: posts the report as it is, with no warning', () => {
+  it('without gatedTouched: posts the report as it is, with no warning', () => {
     const { deps, runs, stickies } = fakePost();
     cmdPostChecks({ report: report(), repo: 'o/r', sha: 'abc', pr: '7' }, deps);
     expect(runs[0]!.run.title).toBe(report().checkRun.title);
