@@ -299,7 +299,7 @@ describe('cmdPostChecks, with fakes for GitHub', () => {
   });
 });
 
-describe("gatedPathsTouched: files listed in CODEOWNERS, whose change needs an editor's review", () => {
+describe('gatedPathsTouched: the changed files listed in CODEOWNERS', () => {
   it('matches every gated path, ignores paper content', () => {
     const changed = [
       'index.md',
@@ -353,7 +353,7 @@ describe('editor paths parity', () => {
 });
 
 describe('cmdPostChecks: the gated-files warning', () => {
-  it('with gated files touched: warns in the comment and the Check Run title and summary, leaving the conclusion unchanged', () => {
+  it('with gated files touched: warns in the comment and the Check Run, keeping the conclusion', () => {
     const { deps, runs, stickies } = fakePost();
     const out = cmdPostChecks(
       {

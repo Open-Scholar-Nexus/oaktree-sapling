@@ -389,7 +389,7 @@ describe('runValidate: exit codes with the fixture journal', () => {
     },
   });
 
-  it("an error from oak's checks that skips the editorial checks fails the run without crashing (exit 1)", async () => {
+  it('a structural error skips the editorial checks and fails the run (exit 1)', async () => {
     // A missing index.md is a layout error, so the editorial checks are skipped (the myst stub
     // would throw), and the run resolves with the layout finding.
     const probes: FsProbes = {
@@ -407,7 +407,7 @@ describe('runValidate: exit codes with the fixture journal', () => {
     expect(out.checkRun.conclusion).toBe('failure');
   });
 
-  it('reports an unexpected throw in the editorial checks as an error (exit 1), without crashing', async () => {
+  it('reports a throw in the editorial checks as an error (exit 1)', async () => {
     // oak's checks pass but loading the project throws: the editorial checks report an error, and
     // validate does not crash.
     const out = await runValidate(
@@ -829,7 +829,7 @@ describe('the id policy cannot be turned off by the journal [R119]', () => {
   });
 });
 
-describe("runOakChecks on the paper list: another paper's bad entry warns, the paper's own entry must match", () => {
+describe("runOakChecks on the paper list: others' bad entries warn, the paper's must match", () => {
   const instanceWith = (registry: string): string => {
     const dir = mkdtempSync(join(tmpdir(), 'oak-reg-'));
     writeFileSync(join(dir, 'journal.yml'), 'name: J\nid_pattern: "^j-"\n');

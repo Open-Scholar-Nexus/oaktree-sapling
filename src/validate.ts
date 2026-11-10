@@ -6,7 +6,7 @@
  *   - The editorial checks the journal turns on in `journal.yml` `checks:` (checks.ts).
  *
  * File and myst access is injected so the rules are testable; myst-cli is reached only through
- * myst.ts. `validate` takes the repo to find the paper's own registry entry.
+ * myst.ts. `runValidate` takes `repo` to find the paper's own registry entry.
  */
 import * as msg from './messages.js';
 import { existsSync, readdirSync } from 'node:fs';
@@ -424,8 +424,9 @@ export function runOakChecks(
     /** The composed project before compose's second step [R82]: the author's config with the
      *  `extends:` chain, without the fields that step adds (`output`, `template`,
      *  `site.template`, brand asset paths). `oak build` has this view when it runs these checks
-     *  [R21]. `runOakChecks` reads the author's template separately, since the composed view
-     *  no longer says who set it. */
+     *  [R21]. No check here needs a field the second step adds; one that does should change
+     *  this input. `runOakChecks` reads the author's template separately, since the composed
+     *  view no longer says who set it. */
     project: { id?: string; thumbnail?: string };
     repo: string | null;
     /** oak's checkout, for the [R72] check. Skipped when absent. */

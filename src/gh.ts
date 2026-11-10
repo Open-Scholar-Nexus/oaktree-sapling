@@ -689,8 +689,8 @@ const WRANGLER_VERSION = '4.127.1';
 
 export const realPagesDeployer: PagesDeployer = {
   async deploy(opts) {
-    // stderr passes through to the terminal: the error message is posted publicly by preview.ts,
-    // and wrangler's stderr names the account id [R104].
+    // stderr is not captured: captured text would join the error message preview.ts posts
+    // publicly, and wrangler's stderr names the account id [R104].
     // The empty cwd keeps a `.npmrc` or `node_modules/wrangler` in the paper from choosing the
     // wrangler that runs.
     const cwd = mkdtempSync(join(tmpdir(), 'oak-wrangler-'));
@@ -1196,7 +1196,7 @@ function committedYamlValue(repo: string, file: string, path: string[]): string 
     return null; // no such file / no read access
   }
   if (!content) return null;
-  // GitHub wraps base64 in newlines; Buffer ignores them (also below).
+  // GitHub wraps base64 in newlines; Buffer ignores them.
   const text = Buffer.from(content, 'base64').toString('utf8');
   const value = parseYaml(text, `${repo}:${file}`).getIn(path);
   return value != null ? String(value) : null;

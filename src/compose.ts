@@ -17,7 +17,8 @@ import { readEngineOptions, type JournalStamp } from './schema.js';
 import { engineTypstTemplate, themeZipUrl } from './assets.js';
 
 /**
- * Where the typst PDF is written, relative to the paper root. The value has an extension, so
+ * Where the typst PDF is written, relative to the paper root. It is set so the PDF path does not
+ * depend on the config file's name. The value has an extension, so
  * myst treats it as the output file; an extensionless value is a folder, and a multi-article
  * export would then be named after the config file.
  */
@@ -47,7 +48,7 @@ export function isBrandAssetUrl(value: string): boolean {
  * Whether a journal's `typst_template:` is a path in the journal repo, rather than a myst
  * template name or a URL [R76]. A bare string is ambiguous (`lapreprint-typst` is both a valid
  * name and a valid directory), so only a `./` or `../` value is a path and everything else goes
- * to myst unchanged. A mistyped path therefore fails as a name lookup. `oak validate` warns when
+ * to myst unchanged, so a mistyped `./` path fails as a missing path, never as a template name. `oak validate` warns when
  * a bare value matches a directory in the journal repo.
  */
 export function isInstanceRelativeTemplate(value: string): boolean {

@@ -923,8 +923,8 @@ export async function cmdBootstrapPaper(
   const mode = input.from ? 'ingest' : 'bare';
 
   // `--instance` is required: `pins.yml`'s `instance_repo` is the only record of a paper's
-  // journal, and with `.` the engine action clones nothing. `--instance .` is for a repo that is
-  // its own journal.
+  // journal, and with `.` the engine action clones nothing, so a defaulted `.` would leave CI
+  // with no journal. `--instance .` is for a repo that is its own journal.
   if (!input.instance) {
     return {
       exitCode: 2,

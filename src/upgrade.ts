@@ -2,8 +2,10 @@
  * `oak upgrade`: renders a paper's engine-managed files at a target version from the repo's own
  * settings (`pins.yml`, `CODEOWNERS`), compares them with the files on disk, and opens a pull
  * request that sets the target in `myst.yml` and overwrites the files that differ (CODEOWNERS
- * review applies). `--files-only` leaves the version in `myst.yml` as it is. Every difference is
- * reset to the template; a deliberate edit still shows in the pull request.
+ * review applies). `--files-only` leaves the version in `myst.yml` as it is. Engine-managed files
+ * are never edited by hand, so every difference is reset to the template; a deliberate edit still
+ * shows in the pull request. Nothing records a template version, so the differences come from
+ * rendering the template again.
  *
  * An up-to-date repo gets no pull request. Without `--to`, the target is the newest stable
  * release, and a pin already past it stays. Each target has its own branch, and running again
