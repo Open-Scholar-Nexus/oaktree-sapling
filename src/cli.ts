@@ -1773,13 +1773,9 @@ async function main(argv: string[]): Promise<number> {
   if (verb === 'bootstrap') return cmdBootstrap(argv.slice(1));
   if (verb === 'upgrade') return cmdUpgrade(argv.slice(1));
   if (verb === 'conformance') return cmdConformance(argv.slice(1));
-  // An unknown command is an error with a suggestion: printing usage alone would make a typo
-  // look like a bare `oak`, as if the command ran and did nothing.
-  if (verb) {
-    const near = nearestVerb(verb);
-    process.stderr.write(msg.unknownCommand(verb, near) + '\n');
-  }
-  process.stderr.write(msg.usage());
+  // An unknown command is a short error with a suggestion, so the hint stays on screen.
+  if (verb) process.stderr.write(msg.unknownCommand(verb, nearestVerb(verb)) + '\n');
+  else process.stderr.write(msg.usage());
   return 2;
 }
 

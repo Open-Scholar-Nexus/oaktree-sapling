@@ -194,9 +194,11 @@ export const usage = (): string =>
   `  --json      print the full machine-readable result on stdout instead of a summary\n` +
   `  --verbose   show the raw git/gh commands' output (shown on failure either way)\n`;
 
+const seeHelp = 'run oak --help, or oak with no arguments, for the commands';
+
 /** `near` is the closest command, when one is close enough to suggest. */
 export const unknownCommand = (verb: string, near: string | null): string =>
-  `oak: unknown command '${verb}'${near ? `; did you mean '${near}'?` : ''}\n`;
+  `oak: unknown command '${verb}'${near ? `; did you mean '${near}'?` : ''}\n${seeHelp}`;
 
 export const flagNeedsValue = (name: string): string =>
   `--${name} needs a value. It was passed with none, which usually means an empty shell ` +
@@ -1310,10 +1312,7 @@ export const workflow = {
     'run gh auth login, then run this again.',
   releaseUnknownWord: (word: string): string =>
     `oak release: ${JSON.stringify(word.slice(0, 40))} is neither a version like v1.2.3 nor a ` +
-    `subcommand of oak release (reserve-doi, deposit, status).\n${workflow.releaseUsage}`,
-  releaseUsage:
-    'oak release: usage: oak release [--repo <owner/repo>] <vX.Y.Z> [...], or one of its subcommands: ' +
-    'oak release reserve-doi [...], oak release deposit --tag <vX.Y.Z> [...], oak release status [...]',
+    `subcommand of oak release (reserve-doi, deposit, status).\n${seeHelp}`,
   releaseInActions:
     'oak release: publishing a version runs from the terminal; in GitHub Actions the workflows ' +
     'run its subcommands, oak release reserve-doi and oak release deposit.',
