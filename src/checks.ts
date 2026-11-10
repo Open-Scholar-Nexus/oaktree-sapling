@@ -1,8 +1,8 @@
 /**
  * The editorial checks a journal turns on in `journal.yml` `checks:`, from the MIT-licensed
  * `@curvenote/check-implementations` and `@curvenote/check-definitions` (credited in README.md).
- * The journal picks the set and an author cannot weaken it, which is why MyST's `error_rules`,
- * which the author controls, cannot be the gate.
+ * The journal picks the set and an author cannot weaken it. MyST's `error_rules` are the
+ * author's, so they do not decide whether a paper passes.
  *
  * A journal's own check files run beside them (journal-checks.ts) [R208].
  *
@@ -159,8 +159,8 @@ export function toCheckRun(
   const passed = results.filter((r) => r.status === CheckStatus.pass);
 
   const conclusion: CheckRun['conclusion'] = blocking.length ? 'failure' : 'success';
-  // The one count of a run: `oak validate` prints this title too, and the comment's headline
-  // repeats it. An optional finding is a warning.
+  // `oak validate` prints this title too, and the comment's headline repeats it. An optional
+  // finding counts as a warning.
   const title = messages.pr.checkRunTitle(
     passed.length,
     blocking.length,
@@ -200,8 +200,8 @@ export function toCheckRun(
  * since authors rarely open a Check Run's details. It never reruns validate.
  * ------------------------------------------------------------------------ */
 
-/** The sticky comment's header. Do not rename: posted comments carry it in their upsert key
- *  `<!-- oak-sticky: oak-journal-checks -->`. */
+/** The sticky comment's header. Posted comments carry it in their upsert key
+ *  `<!-- oak-sticky: oak-journal-checks -->`, so renaming it breaks them. */
 export const STICKY_CHECKS = 'oak-journal-checks';
 
 /** The `oak validate --report` payload. post-checks only uses `checkRun`. */
@@ -232,8 +232,9 @@ export function checksComment(report: ChecksReport, gatedTouched: string[] | nul
 }
 
 /** The changed files under {@link GATED_PATHS} [design §6a], or null when the list of changed
- *  files is null. A pull request that changes them can change how the checks run, so post-checks
- *  warns that its report cannot be fully trusted [R83]. */
+ *  files is null. A gated file is one listed in CODEOWNERS, so changing it needs an editor's
+ *  review. It can also change how the checks run, so post-checks warns that the report cannot be
+ *  fully trusted [R83]. */
 export function gatedPathsTouched(changed: string[] | null): string[] | null {
   return changed && changed.filter((p) => underPaths(GATED_PATHS, p));
 }
@@ -243,7 +244,7 @@ function gatedFlagged(touched: string[] | null): boolean {
   return touched === null || touched.length > 0;
 }
 
-/** The warning for a pull request that edits the gated files, or whose changed files could not
+/** The warning for a pull request that changes a gated file, or whose changed files could not
  *  all be listed (null). It never changes the conclusion, since upgrade pull requests edit these
  *  files too. Shown in the comment and the Check Run. */
 export function gatedWarning(touched: string[] | null): string {
@@ -271,9 +272,9 @@ export interface PostChecksOutcome {
 }
 
 /**
- * `oak post-checks`: posts the report's Check Run, and a commit status with the same result, on the pull
- * request's head commit and, given a pull request number, updates the sticky comment. Posting
- * needs `GH_TOKEN`.
+ * `oak post-checks`: posts the report's Check Run, and a commit status with the same result, on
+ * the pull request's head commit and, given a pull request number, updates the sticky comment.
+ * Posting needs `GH_TOKEN`.
  */
 export function cmdPostChecks(
   input: {
@@ -291,8 +292,8 @@ export function cmdPostChecks(
   let checkRunPosted = false;
   let commentPosted = false;
 
-  // Shown on the check itself, but `conclusion` stays: upgrade pull requests edit these files
-  // too, and CODEOWNERS is the gate [R83].
+  // The warning shows on the check itself and `conclusion` is unchanged: upgrade pull requests
+  // change gated files too, and CODEOWNERS is the gate [R83].
   const checkRunToPost = gatedFlagged(gatedTouched)
     ? {
         ...report.checkRun,

@@ -12,13 +12,12 @@
 import { readFileSync } from 'node:fs';
 import yaml from 'js-yaml';
 
-/** The registry, relative to the site build root. Fixed, not an option: [S8] fixed the repo
- *  layout (the site IS the instance-config repo), so a `:registry:` option would be
- *  configurability for a layout that cannot occur. Adding one later stays compatible. */
+/** The paper list, relative to the site build root. The site is the journal repo, so the path
+ *  is fixed [S8]. */
 export const REGISTRY_PATH = 'registry/papers.yml';
 
-/** Read + parse the registry. A missing/malformed registry is fatal: without it the page
- *  would deploy with an empty gallery, which reads as "this journal has no papers". */
+/** Reads the paper list. A missing or malformed list fails the build, so the site never
+ *  deploys an empty gallery. */
 export function loadRegistry(file = REGISTRY_PATH) {
   let raw;
   try {
@@ -39,8 +38,8 @@ export function loadRegistry(file = REGISTRY_PATH) {
 const GITHUB_REPO = /^[A-Za-z0-9][A-Za-z0-9-]{0,38}\/(?!\.\.?$)[A-Za-z0-9._-]{1,100}$/;
 
 /** A registry `location`: `{ repo }` for `owner/name`, `{ path }` for a `./` or `../` folder in
- *  the journal repo, else null. A copy of `parseLocation` in `src/schema.ts`, held to it by
- *  `location rule parity` in `test/gallery.test.ts`. */
+ *  the journal repo, else null. Copies `parseLocation` in `src/schema.ts`; the test
+ *  `location rule parity` in `test/gallery.test.ts` checks they agree. */
 export function parseLocation(value) {
   if (typeof value !== 'string') return null;
   if (/^\.\.?\//.test(value)) return { path: value };
@@ -48,8 +47,9 @@ export function parseLocation(value) {
   return null;
 }
 
-/** The GitHub Pages URL of `owner/name`, the root for a repo named `<owner>.github.io`. A copy
- *  of `pagesUrl` in `src/schema.ts`, held to it by `Pages URL parity` in `test/gallery.test.ts`. */
+/** The GitHub Pages URL of `owner/name`; the site root for a repo named `<owner>.github.io`.
+ *  Copies `pagesUrl` in `src/schema.ts`; the test `Pages URL parity` in `test/gallery.test.ts`
+ *  checks they agree. */
 export function pagesUrl(repo) {
   const [owner, name] = repo.split('/');
   const host = `${owner.toLowerCase()}.github.io`;
@@ -62,12 +62,10 @@ export function editionOf(config) {
 }
 
 /**
- * The papers a `:::{paper-cards}` block shows, in **registry file order**: the editor
- * controls sequence by where they insert the entry, which is the one ordering rule that
- * needs no extra field. `edition` omitted → every registered paper (what the scaffold's
- * single page uses); a fresh journal has exactly one edition, and a tenant who grows a
- * second one adds a page and filters it ([S6]). `papers` pairs each entry with its fetched
- * `myst.yml`, which holds the edition.
+ * The papers a `:::{paper-cards}` block shows, in the order of `registry/papers.yml`, so editors
+ * order the gallery by where they insert an entry. Without `edition`, every registered paper
+ * is shown; a journal with several editions adds a page per edition and filters it [S6].
+ * `papers` pairs each entry with its fetched `myst.yml`, which holds the edition.
  */
 export function selectEntries(papers, opts = {}) {
   const { edition } = opts;
@@ -75,8 +73,8 @@ export function selectEntries(papers, opts = {}) {
 }
 
 /**
- * A card's site, config and thumbnail URLs. `site_url` wins over the Pages URL. Raw files are
- * read at `HEAD`, so any default branch works; `paper-base.yml` pins the thumbnail path.
+ * A card's site, config and thumbnail URLs. `site_url` takes precedence over the Pages URL. Raw
+ * files are read at `HEAD`, so any default branch works; `paper-base.yml` fixes the thumbnail path.
  * Throws for a relative path, which the website does not list yet.
  */
 export function paperUrls(entry) {
@@ -180,8 +178,9 @@ export async function thumbnailAvailable(entry, fetchImpl = fetch) {
   }
 }
 
-/** One fetch per URL per process: a page per edition reads every paper's `myst.yml`. `myst
- *  start` keeps this module loaded across rebuilds, so it shows each paper as it was at start. */
+/** Each URL is fetched once per process, though every edition page reads every paper's
+ *  `myst.yml`. `myst start` keeps this module loaded across rebuilds, so the gallery shows each
+ *  paper as it was at start. */
 const cache = new Map();
 function once(key, load) {
   if (!cache.has(key)) cache.set(key, load());
@@ -249,8 +248,8 @@ const paperCardsDirective = {
     },
   },
   run(data) {
-    // The directive is sync and the edition is in each paper's myst.yml, so
-    // {@link paperCardsTransform} fetches and filters; this placeholder carries the block across.
+    // A directive runs synchronously, but the edition lives in each paper's myst.yml.
+    // This node marks the block; {@link paperCardsTransform} fetches, filters and fills it.
     return [{ type: 'paper-cards-ref', registry: loadRegistry(), edition: data.options?.edition }];
   },
 };

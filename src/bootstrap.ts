@@ -2,7 +2,7 @@
  * `oak bootstrap paper` and `oak bootstrap journal`: sets up a paper repo (new, or from an
  * author's repo with `--from`) or a journal repo from the templates. Every step reads
  * the current state first, so a rerun repairs a partial bootstrap. Content only arrives through a
- * pull request, and a missing secret is listed in the closing runbook rather than set.
+ * pull request, and a missing secret is listed in the closing runbook; oak does not set it.
  */
 import * as msg from './messages.js';
 import { firstLine } from './messages.js';
@@ -274,28 +274,21 @@ export function renderInstanceTemplate(
   return written.sort();
 }
 
-/** The gallery plugin's URL at the release tag. Remote, since a plugin is code and a copy would
- *  go stale; pinned to the tag, so the site takes a newer gallery only when the journal bumps
- *  it. */
+/** The gallery plugin's URL at the release tag. The site loads it from oak's repo, so it takes a
+ *  newer gallery only when the journal bumps the tag. */
 export function galleryPluginUrl(engineRepo: string, engineVersion: string): string {
   return `https://raw.githubusercontent.com/${engineRepo}/${engineVersion}/plugins/gallery.mjs`;
 }
 
 /**
- * Renders the journal website (`templates/site/`) into `destRoot`, in the same repo as
- * the journal's settings for an external journal, so the registry pull request that adds a paper also
- * deploys the site.
+ * Renders the journal website (`templates/site/`) into `destRoot`, the same repo as the
+ * journal's settings for an external journal, so the pull request that adds a paper to the
+ * registry also deploys the site.
  *
  * Written once: the journal owns every byte, `oak upgrade` never touches it and oak never reads
- * it back. Four values are rendered and the rest is copied:
- *
- *   1. the gallery plugin URL (oak's repo and tag),
- *   2. `site.template`, from `themeZipUrl()`,
- *   3. the journal name (myst.yml `project.title` and the `pages/index.md` heading),
- *   4. the `myst-cli` range, into `package.json`, beside `js-yaml`, so the site has one
- *      dependency list. The workflow runs `npm install` and `npx myst`, and is copied.
- *
- * No `project.id` (myst needs none, and ids are for papers).
+ * it back. Four values are rendered and the rest is copied: the gallery plugin URL, `site.template`
+ * (from `themeZipUrl()`), the journal name (myst.yml `project.title` and the `pages/index.md`
+ * heading), and the `myst-cli` range in `package.json`, beside `js-yaml`.
  */
 export function renderSiteTemplate(
   siteRoot: string,
@@ -546,8 +539,8 @@ export interface ResolvedFlags {
 
 /**
  * The plan's opening block: every value the run will use, and whether it came from a flag or a
- * default. `Proceed? [y/N]` is consent only if the defaults are on screen above it, and most end
- * up in files that are awkward to change later.
+ * default. The `Proceed? [y/N]` prompt follows it, so consent covers the defaults, most of which
+ * end up in files that are awkward to change later.
  */
 function declaredValues(v: {
   engineVersion: string;
@@ -619,7 +612,7 @@ export interface BootstrapPaperInput {
   repo: string; // owner/name
   from?: string; // author url (ingest mode); bare when absent
   sourceRef?: string;
-  instance?: string; // owner/instance-config; '.' co-located
+  instance?: string; // owner/name of the journal repo; '.' co-located
   /** The paper's edition in its journal. Required (see cmdBootstrapPaper). */
   edition?: string;
   engineVersion: string;
@@ -658,7 +651,7 @@ export interface StepFailure {
   why: string;
 }
 
-/** Runs one step, recording an error rather than throwing it [R125]. false when it failed. */
+/** Runs one step and records an error [R125]; returns false when it failed. */
 function stepRunner(
   repo: string,
   actions: Record<string, string>,
@@ -930,10 +923,8 @@ export async function cmdBootstrapPaper(
   const mode = input.from ? 'ingest' : 'bare';
 
   // `--instance` is required: `pins.yml`'s `instance_repo` is the only record of a paper's
-  // journal, and with `.` the engine action clones nothing, so `oak validate` and `oak build`
-  // would fail in CI with no journal. `--instance .` stays the explicit choice for a repo
-  // that is its own journal (`oak bootstrap journal --co-located` renders the paper template
-  // itself and does not come through here).
+  // journal, and with `.` the engine action clones nothing. `--instance .` is for a repo that is
+  // its own journal.
   if (!input.instance) {
     return {
       exitCode: 2,
@@ -944,10 +935,8 @@ export async function cmdBootstrapPaper(
       },
     };
   }
-  // `--edition` is required for the same reason: it is written into the paper's myst.yml, and the
-  // journal must already have `editions/<id>.yml` under that name, so a default would only fail
-  // later in CI. (`bootstrap journal` may default it: there the same value names the edition
-  // file it writes.)
+  // `--edition` is required: it is written into the paper's myst.yml and must match an
+  // `editions/<id>.yml` the journal already has.
   if (!input.edition) {
     return {
       exitCode: 2,
@@ -1132,7 +1121,7 @@ export interface BootstrapJournalInput {
   requireChecks: boolean; // add "Journal checks" to protect-main required checks (default true)
   /** External journal only: also write the journal website and turn on Pages. Default true; `--no-site`
    *  gives a settings repo with no website [design §2]. `site: false` with `--co-located`
-   *  is a usage error: that kind never gets a site, so the flag would do nothing. */
+   *  is a usage error: a co-located journal has no site. */
   site?: boolean;
   secrets: SecretInputs;
   /** Where the defaulted values came from, for the plan. */
@@ -1162,7 +1151,7 @@ export async function cmdBootstrapJournal(
 
   const answers: TemplateAnswers = {
     engineRepo: input.engineRepo,
-    instanceRepo: '.', // co-located: this repo IS the instance; external: unused
+    instanceRepo: '.', // co-located: this repo is the journal; unused for an external journal
     owner: owner.ownerToken,
     version: input.engineVersion,
     edition,
@@ -1290,9 +1279,8 @@ export async function cmdBootstrapJournal(
   }
 
   // --- external -------------------------------------------------------------------
-  // No rulesets or branch protection on the journal repo: adding a paper to the registry
-  // is a pull request into a repo only editors can write, and protecting it is the
-  // journal's call, as with `--no-require-checks` for papers. The start/journal docs say so.
+  // The journal repo gets no rulesets or branch protection: only editors can write to it, and
+  // protecting it is the journal's call. The start/journal docs say so.
   const runbook: string[] = [msg.bootstrap.runbookStartHere];
   if (!withSite) {
     const allRunbook = [...contentRunbook, ...runbook];

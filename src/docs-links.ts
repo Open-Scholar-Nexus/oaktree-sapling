@@ -31,7 +31,7 @@ export const DOCS = {
 
   /** The editorial checks a paper is held to. */
   checks: 'guide/checks',
-  /** Adding, removing, and de-fanging checks. */
+  /** Adding, removing, and turning off checks. */
   checksChanging: 'guide/checks#changing-the-set',
   /** A journal's own checks, written as JavaScript files in the journal repository. */
   checksJournal: 'guide/checks#journal-checks',
@@ -56,11 +56,12 @@ export const DOCS = {
   cli: 'reference/cli',
   /** `oak deploy-preview`: a preview URL commented on the PR (or an artifact link). */
   deployPreview: 'reference/cli#deploy-preview',
-  /** `oak build`: the two-pass compose+build of a paper, and its `--exports-only`/`--no-exports` shapes. */
+  /** `oak build`: composing a paper's config in two passes and building it, and its
+   *  `--exports-only` and `--no-exports` forms. */
   build: 'reference/cli#build',
   /** `oak start`: the live dev server, and what it recomposes when `myst.yml` changes. */
   start: 'reference/cli#start',
-  /** `oak validate`: the checks it runs, the verdict it prints, and the `--report` envelope. */
+  /** `oak validate`: the checks it runs, the result it prints, and the `--report` envelope. */
   validate: 'reference/cli#validate',
   /** `oak post-checks`: the Check Run and sticky PR comment it posts from a validate report. */
   postChecks: 'reference/cli#post-checks',

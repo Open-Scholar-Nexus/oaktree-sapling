@@ -1,7 +1,8 @@
 /**
  * The files Stage 1 leaves for Stage 2 and the pull request check before Stage 2 writes to a
- * pull request [R26] [R136]. Each refusal is tested with the input it refuses; the live run
- * cannot produce a forged artifact.
+ * pull request [R26] [R136]. Stage 1 builds a pull request with no secrets; Stage 2 acts on its
+ * result from the base branch (docs/design/paper-ci.md). Each refusal is tested with the input
+ * it refuses; a live run cannot produce a forged artifact.
  */
 import { describe, it, expect } from 'vitest';
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';

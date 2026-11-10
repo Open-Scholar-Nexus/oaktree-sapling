@@ -299,7 +299,7 @@ describe('cmdPostChecks, with fakes for GitHub', () => {
   });
 });
 
-describe('gatedPathsTouched (the gated files)', () => {
+describe("gatedPathsTouched: files listed in CODEOWNERS, whose change needs an editor's review", () => {
   it('matches every gated path, ignores paper content', () => {
     const changed = [
       'index.md',
@@ -353,7 +353,7 @@ describe('editor paths parity', () => {
 });
 
 describe('cmdPostChecks: the gated-files warning', () => {
-  it('with gatedTouched: warns in the comment and the Check Run title and summary, with the conclusion unchanged', () => {
+  it('with gated files touched: warns in the comment and the Check Run title and summary, leaving the conclusion unchanged', () => {
     const { deps, runs, stickies } = fakePost();
     const out = cmdPostChecks(
       {
@@ -383,7 +383,7 @@ describe('cmdPostChecks: the gated-files warning', () => {
     expect(stickies[0]!.body).toContain('`paper-environment.yml`');
   });
 
-  it('without gatedTouched: posts the report as it is, with no warning', () => {
+  it('with no gated files touched: posts the report as it is, with no warning', () => {
     const { deps, runs, stickies } = fakePost();
     cmdPostChecks({ report: report(), repo: 'o/r', sha: 'abc', pr: '7' }, deps);
     expect(runs[0]!.run.title).toBe(report().checkRun.title);

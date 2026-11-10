@@ -59,9 +59,9 @@ export async function runBuild(input: RunBuildInput): Promise<RunBuildResult> {
         engineRoot,
         edition,
       });
-      // Only structural errors stop the build. An id error (placeholder, invalid, duplicate) is
-      // enforced at merge by the Journal checks, so a new repo still builds a preview; it
-      // is reported as a warning.
+      // Only structural errors stop the build. The journal's checks enforce the paper id
+      // (placeholder, invalid, duplicate) at merge, so a new repo still builds a preview and the
+      // id problem is a warning.
       const blocking = oakFindings.filter(
         (f) => f.severity === 'error' && f.klass === 'structural',
       );

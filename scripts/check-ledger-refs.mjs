@@ -2,16 +2,12 @@
 /**
  * Every `[R#]` and `design §N` cited in src/, test/, templates/ and docs/design/ must resolve
  * under `docs/design/`: an `[R#]` to a `(r#)=` target, a `design §N` to a `(design-N)=` one.
- * `[R#]` is the only decision-pointer format; `design §N` locates prose and retires with the
- * brief.
+ * `[R#]` is the decision-pointer format; `design §N` locates prose in the design brief.
  *
- * An id's target moves as the squish proceeds: it starts on `docs/design/record.md` and lands on
- * the feature page that absorbs it. This script does not care which page holds it, only that
- * exactly one does. Superseded by the Layer-3 test, which asserts the same thing against the
- * built `myst.xref.json` and so also catches an anchor that fails to render.
+ * Any page under `docs/design/` may hold an id's target, but exactly one must.
  *
- * `--warn` reports unresolved citations without failing, while `record.md` is absent from the
- * tree. Duplicate ids still fail.
+ * `--warn` reports unresolved citations without failing, since some point into the external
+ * decision record that is not in this tree. Duplicate ids still fail.
  */
 import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve, dirname, sep } from 'node:path';
@@ -19,7 +15,7 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const CITE = /\[R(\d+)\]/g;
-/** `design.md §N` was a live spelling once, so it is matched too rather than slipping past. */
+/** Matches `design §N` and `design.md §N`. */
 const SECTION = /design(?:\.md)? §(\d+[a-z]?)/g;
 
 const DESIGN_DIR = join(ROOT, 'docs/design');

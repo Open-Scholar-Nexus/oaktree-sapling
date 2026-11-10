@@ -223,10 +223,11 @@ async function cmdBuild(argv: string[]): Promise<number> {
 }
 
 /**
- * The build's last steps, run synchronously from the exit handler: drops symlinks from the site,
- * since upload-artifact follows them and would publish a runner file; on a `pull_request` run,
- * leaves the pull request number and the paper folder for Stage 2 (artifact.ts); and records the
- * result.
+ * The build's last steps, run synchronously from the exit handler: drops symlinks from the site
+ * (upload-artifact follows them and would publish a runner file); on a `pull_request` run, leaves
+ * the pull request number and the paper folder for Stage 2; and records the result. Stage 1
+ * builds a pull request with no secrets; Stage 2 acts on its result from the base branch
+ * (docs/design/paper-ci.md, artifact.ts).
  */
 function finishSite(
   paperRoot: string,
@@ -1154,10 +1155,8 @@ async function writeFailureReport(
   return written ? 0 : fallback;
 }
 
-/**
- * The human output of a validate run: the result and every finding. The JSON exists for
- * post-checks, which reads `--report <path>`. Leaving out findings would change the result.
- */
+/** The human output of a validate run: the result and every finding. post-checks reads the JSON
+ *  from `--report <path>`. */
 function validateSummary(out: {
   status: string;
   errors: Array<{ check: string; message: string }>;
@@ -1243,11 +1242,10 @@ async function cmdValidate(argv: string[]): Promise<number> {
       { strict, repo, pathBase: process.env.GITHUB_WORKSPACE ?? paperRoot },
     );
   } catch (err) {
-    // runValidate catches the faults it can name, so anything here is oak's own, and it still
-    // writes a readable report; the `pull_request` job alone would say only "engine crash".
+    // runValidate catches the faults it can name, so anything here is oak's own; the report
+    // stays readable.
     process.stdout.write = realStdoutWrite;
-    // A UserError is a paper to fix: report its sentence only, since a stack in a Check Run
-    // summary gives an author nothing to act on.
+    // A UserError is a paper to fix: its sentence is reported, without a stack.
     const userFault = err instanceof UserError;
     const message = userFault ? (err as Error).message : String((err as Error)?.stack ?? err);
     process.stderr.write(
@@ -1335,7 +1333,7 @@ async function cmdPostChecks(argv: string[]): Promise<number> {
   }
 
   const artifact = await import('./artifact.js');
-  // Stage 1 may run an engine that writes no `paper`; it is read here so a malformed one is refused.
+  // The Stage 1 engine may write no `paper` file; a malformed one is refused here.
   const artifactDir = dirname(resolve(reportPath));
   const paper = artifact.resolvePaperDir(
     flag(argv, 'paper'),
@@ -1389,8 +1387,7 @@ function makeConfirm(argv: string[], yesAccepts = true): (plan: string[]) => Pro
       process.stderr.write('\n');
       return true;
     }
-    // Every abort says why: a bare `{"status":"aborted"}` after a prompt that defaults to No
-    // reads as oak refusing.
+    // Every abort says why.
     process.stderr.write(msg.prompt.declined(ans, yesAccepts) + '\n');
     return false;
   };
@@ -1482,9 +1479,7 @@ async function cmdBootstrap(argv: string[]): Promise<number> {
         from: flag(rest, 'from'),
         sourceRef: flag(rest, 'source-ref'),
         instance,
-        // No default: the paper joins a journal that already has editions, and an invented
-        // `edition` would match none of them, so the paper's CI would fail later on a missing
-        // edition file.
+        // No default: the edition must be one the journal already has.
         edition: flag(rest, 'edition'),
         engineVersion,
         engineRepo,
@@ -1732,9 +1727,9 @@ async function runPinned(verb: PaperVerb, argv: string[]): Promise<number | null
 
 /**
  * Whether `oak <verb> <args>` runs with the oak the paper pins ({@link runPinned}): `build`,
- * `validate`, `start` and the `release` subcommands. Every other verb runs with this oak, and so
- * does `oak release vX`, which hands only its subcommands over, from the clone it makes: with --repo, this
- * directory may be another paper's clone.
+ * `validate`, `start` and the `release` subcommands. Other verbs run with this oak, and so does
+ * `oak release vX`: with `--repo` the current directory may be another paper's clone, so it hands
+ * only its subcommands over, from the clone it makes.
  */
 function runsPinned(verb: Verb | undefined, args: string[]): verb is PaperVerb {
   if (verb === 'release') return isReleaseSubcommand(args);

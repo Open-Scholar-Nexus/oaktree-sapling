@@ -41,7 +41,7 @@ jobs:
   deploy-pages:
     if: ${{ github.event_name != 'pull_request' && needs.build.outputs.placeholder != 'true' }}
     needs: build
-    permissions: # never at workflow level, or build holds them
+    permissions: # set on this job only, so the build job does not get them
       pages: write
       id-token: write
     environment:

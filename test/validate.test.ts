@@ -32,8 +32,8 @@ function edgeReturning(project: unknown, checkResults: unknown[] = []): MystEdge
       return project as never;
     },
     async build() {},
-    // The real edge processes the project with myst and runs the curvenote checks; the fake
-    // returns fixed editorial check results, so the exit codes and how results combine can be tested.
+    // In a real run this processes the project with myst and runs the curvenote checks; this stub
+    // returns fixed editorial check results, so exit codes and result merging can be tested.
     async withProjectSession() {
       return checkResults as never;
     },
@@ -377,8 +377,8 @@ describe('runValidate: exit codes with the fixture journal', () => {
     expect(out.checkRun.conclusion).toBe('success');
   });
 
-  // The edge throws when the editorial checks run, as `processProject` does on a project that cannot be
-  // processed (a missing index.md, say). Validate still reports.
+  // This myst stub throws when the editorial checks run, as `processProject` does on a project that
+  // cannot be processed (a missing index.md, say). Validate still reports.
   const edgeThrowingInEditorialChecks = (project: unknown): MystEdge => ({
     async loadProject() {
       return project as never;
@@ -390,8 +390,8 @@ describe('runValidate: exit codes with the fixture journal', () => {
   });
 
   it("an error from oak's checks that skips the editorial checks fails the run without crashing (exit 1)", async () => {
-    // A missing index.md is a layout error, so the editorial checks are skipped (their edge would throw), and
-    // the run resolves with the layout finding.
+    // A missing index.md is a layout error, so the editorial checks are skipped (the myst stub
+    // would throw), and the run resolves with the layout finding.
     const probes: FsProbes = {
       existsProbe: (p) => p.endsWith('myst.yml'),
       listTree: () => ['myst.yml'],
@@ -429,7 +429,7 @@ describe('runValidate: exit codes with the fixture journal', () => {
     expect(strict.exitCode).toBe(1);
   });
 
-  it('--strict fails the status and Check Run too, not only the exit code [R119]', async () => {
+  it('--strict fails the status and the Check Run as well as the exit code [R119]', async () => {
     // A strict run that exits 1 also reports a failure in its status and Check Run.
     const base = { paperRoot: '/paper', instanceRoot: null, edge: edgeReturning(goodProject) };
     const lax = await runValidate(base, { repo: null }, allTrue);
@@ -685,9 +685,8 @@ describe('splitUnrunnableChecks: a check that cannot run yet is reported, not ru
   });
 
   it('marks it optional even when the journal made it required', () => {
-    // `_build/exports` never exists in CI (check-paper.yml has no build step), so a blocking result
-    // here would fail every pull request of every paper, and only the journal could fix it. It
-    // would also pass locally, where an earlier build left the directory.
+    // `_build/exports` never exists in CI (check-paper.yml has no build step), so the check is
+    // always optional here; locally it can pass after a build.
     const { unrunnable } = splitUnrunnableChecks([{ id: 'exports-exist' }], '/paper', allFalse);
     expect(unrunnable[0]!.optional).toBe(true);
     expect(toCheckRun(unrunnable).conclusion).toBe('success');
@@ -709,19 +708,19 @@ describe('runValidate: when there is nothing to compose [R82]', () => {
     // command do not differ silently [R71].
     expect(out.notes.some((n) => /own myst\.yml ONLY/.test(n))).toBe(true);
     expect(out.checkRun).toBeDefined();
-    // It reaches the pull request too, not just stdout.
+    // The note is in the Check Run summary as well as stdout.
     expect(out.checkRun.summary).toMatch(/⚠️ checked the paper's own myst\.yml ONLY/);
     // Nothing to compose is the user's choice (--no-instance, or a local run), so the note
     // explains and does not block. A failed compose, below, does block.
     expect(out.errors.some((e) => e.check === 'compose')).toBe(false);
   });
 
-  it('a failed compose fails the run, not only a note', async () => {
+  it('a failed compose fails the run', async () => {
     // With oak's checkout and the journal repo both present, a throw means the paper's own
     // config broke compose: a mistyped `edition:`, a missing version key, the [R36] check.
     // `oak build` throws the same way, so this blocks the merge.
     // A real paper root: materializeDerived reads the author's myst.yml from disk, with its
-    // version key, before the edge is used.
+    // version key, before the myst stub is used.
     const paperRoot = mkdtempSync(join(tmpdir(), 'oak-compose-fail-'));
     writeFileSync(
       join(paperRoot, 'myst.yml'),
@@ -830,7 +829,7 @@ describe('the id policy cannot be turned off by the journal [R119]', () => {
   });
 });
 
-describe("the registry in runOakChecks: one bad entry warns, the paper's own entry must match", () => {
+describe("runOakChecks on the paper list: another paper's bad entry warns, the paper's own entry must match", () => {
   const instanceWith = (registry: string): string => {
     const dir = mkdtempSync(join(tmpdir(), 'oak-reg-'));
     writeFileSync(join(dir, 'journal.yml'), 'name: J\nid_pattern: "^j-"\n');

@@ -974,7 +974,8 @@ export const pr = {
     `${passed} passed, ${failed} failed` +
     (warnings ? `, ${warnings} warning${warnings === 1 ? '' : 's'}` : ''),
   checkRunTitleGatedTouched: (title: string): string => `⚠️ CI workflows modified: ${title}`,
-  checkRunTitleGatedUnlisted: (title: string): string => `⚠️ CI workflows may be modified: ${title}`,
+  checkRunTitleGatedUnlisted: (title: string): string =>
+    `⚠️ CI workflows may be modified: ${title}`,
   unknownCheckId: (id: string): string =>
     id.endsWith('.mjs')
       ? `unknown check id "${id}"; a check file's path starts with ./, as in ` +

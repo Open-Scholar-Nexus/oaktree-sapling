@@ -103,7 +103,7 @@ const dep = (over: Partial<Deposition> = {}): Deposition => ({
 
 describe('listMyDepositions pagination', () => {
   it('walks pages until a short page (past the 100 cap)', async () => {
-    // 250 records: full pages of 100, 100, then a short 50 → three requests.
+    // 250 records: full pages of 100, 100, then a short 50, so three requests.
     const all = Array.from({ length: 250 }, (_, i) => dep({ id: i + 1 }));
     const { transport, calls } = fakeTransport(({ opts }) => {
       const page = Number(opts.params?.page);
@@ -566,7 +566,7 @@ describe('cmdPrepare', () => {
     );
   });
 
-  it('refuses a same-env re-prepare but allows sandbox→prod replacement ([R29])', async () => {
+  it('refuses a same-env re-prepare but allows replacing sandbox with production ([R29])', async () => {
     const withSandboxDoi = paperRepo(BARE_MYST + '  doi: 10.5072/zenodo.5\n');
     const noop = new ZenodoApi(fakeTransport(() => ({ json: [] })).transport, true, 't');
 
@@ -595,7 +595,7 @@ describe('cmdPrepare', () => {
     expect(up.result.concept_doi).toBe('10.5281/zenodo.8');
   });
 
-  it('forbids prod→sandbox downgrade ([R29])', async () => {
+  it('forbids replacing production with sandbox ([R29])', async () => {
     const prodDoi = paperRepo(BARE_MYST + '  doi: 10.5281/zenodo.5\n');
     const noop = new ZenodoApi(fakeTransport(() => ({ json: [] })).transport, true, 't');
     const out = await cmdPrepare({
@@ -1133,7 +1133,7 @@ describe('finding the deposit, and the checks before it [R100] [R101]', () => {
   const gh = 'https://github.com/o/r';
 
   it('scans when a targeted query returns rows that do not match', async () => {
-    // A phrase match returns a LONGER urn for a query about a shorter one ([R100]).
+    // A phrase match returns a longer urn for a query about a shorter one ([R100]).
     const nearMiss = dep({
       id: 1,
       metadata: { related_identifiers: [{ identifier: paperUrn('foo-bar-baz') }] },

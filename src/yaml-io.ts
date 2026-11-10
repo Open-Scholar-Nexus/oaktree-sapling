@@ -84,7 +84,7 @@ function yamlRefusal(e: YAMLError, text: string, source: string): string {
     case 'MULTILINE_IMPLICIT_KEY':
       return msg.yamlNotKeyValue(source, line);
     case 'BLOCK_AS_IMPLICIT_KEY':
-      // The same code covers other shapes, which keep the parser's text.
+      // Only a colon inside a value gets the plain cause; other shapes keep the parser's text.
       if ((lines[line - 1] ?? '').slice(col - 1).includes(': ')) {
         return msg.yamlColonInValue(source, line);
       }
@@ -168,9 +168,9 @@ export function readBrandAssetOptions(instanceRoot: string): {
   };
 }
 
-/** Reads `typst_template:` from `<instanceRoot>/journal.yml`: the journal's template, between
- *  the author's and oak's [R76]. It lives in journal.yml, which myst never reads, because
- *  brand.yml is a myst config layer and myst warns about keys it does not know. */
+/** Reads the journal's `typst_template:` from `<instanceRoot>/journal.yml` [R76]. brand.yml is a
+ *  myst config layer and myst warns about unknown keys there, so the setting lives in journal.yml,
+ *  which myst never reads. */
 export function readJournalTypstTemplate(instanceRoot: string): string | undefined {
   return readJournalConfig(instanceRoot)?.typst_template || undefined;
 }

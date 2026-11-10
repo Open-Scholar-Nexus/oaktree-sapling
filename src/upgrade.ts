@@ -1,15 +1,14 @@
 /**
  * `oak upgrade`: renders a paper's engine-managed files at a target version from the repo's own
  * settings (`pins.yml`, `CODEOWNERS`), compares them with the files on disk, and opens a pull
- * request that sets the target in `myst.yml` and overwrites the files that differ, which needs a
- * CODEOWNERS review. `--files-only` leaves the version in `myst.yml` as it is. Engine-managed
- * files are never edited by hand, so any difference is reset to the template; a deliberate edit
- * still shows in the pull request. Nothing records a template version.
+ * request that sets the target in `myst.yml` and overwrites the files that differ (CODEOWNERS
+ * review applies). `--files-only` leaves the version in `myst.yml` as it is. Every difference is
+ * reset to the template; a deliberate edit still shows in the pull request.
  *
- * A repo that is up to date gets no pull request. Without `--to`, the target is the newest stable
- * release, and a pin already past it stays. Each target gets a branch of its own, and running
- * again updates its open pull request. Finding the target, getting the template and opening the
- * pull request are injected, so tests use fakes.
+ * An up-to-date repo gets no pull request. Without `--to`, the target is the newest stable
+ * release, and a pin already past it stays. Each target has its own branch, and running again
+ * updates its open pull request. Finding the target, getting the template and opening the pull
+ * request are injected, so tests use fakes.
  */
 import { existsSync, readFileSync, writeFileSync, mkdirSync, copyFileSync } from 'node:fs';
 import { join, dirname, posix } from 'node:path';
@@ -69,8 +68,7 @@ function codeownersOnDisk(repoRoot: string): Record<string, string> {
 }
 
 export function readAnswers(repoRoot: string): TemplateAnswers {
-  // A missing pins.yml means no oak pin here; cmdUpgrade reports that in a sentence rather than an
-  // ENOENT stack.
+  // A missing pins.yml means no oak pin here; cmdUpgrade reports that in a sentence.
   const pinsPath = join(repoRoot, PINS_REL);
   const pins = existsSync(pinsPath) ? readDoc(pinsPath) : null;
   const engineRepo = String(pins?.get('engine_repo') ?? '');
@@ -128,8 +126,7 @@ export function renderEngineManagedFile(
 
 /**
  * Files under `.github/` that the target template does not ship [R143]. They are reported,
- * not deleted: they may be the repo's own additions (a `dependabot.yml`), and nothing
- * records which files oak once shipped, so a person decides.
+ * not deleted: they may be the repo's own additions (a `dependabot.yml`), so a person decides.
  */
 export function extraEngineManagedFiles(repoRoot: string, templateAtTarget: string): string[] {
   const shipped = new Set(engineManagedFiles(templateAtTarget));
@@ -227,8 +224,8 @@ export async function cmdUpgrade(input: UpgradeInput, deps: UpgradeDeps): Promis
   if (!answers.engineRepo) {
     return err(2, msg.upgrade.notAPaperRepo(PINS_REL));
   }
-  // A target oak picked is printed, as in bootstrap: `--to v1.2.3` is reproducible, "the newest
-  // right now" is not.
+  // A target oak picked is printed, as in bootstrap, since "the newest right now" cannot be
+  // reproduced.
   const targetGiven = Boolean(input.to);
   const target = input.to ?? deps.resolveTarget(answers.engineRepo);
   // The target becomes a clone ref, a branch name and the pin, and the engine action refuses any
@@ -240,8 +237,8 @@ export async function cmdUpgrade(input: UpgradeInput, deps: UpgradeDeps): Promis
     return err(2, msg.upgrade.badPin(answers.version));
   }
 
-  // The newest release never moves a pin back from a newer one. A pin that is not an engine
-  // version runs nowhere, so it moves.
+  // The newest release leaves a newer pin alone. A pin that is not an engine version runs
+  // nowhere, so it moves.
   if (!targetGiven && (compareEngineVersions(answers.version, target) ?? 0) > 0) {
     deps.log(msg.upgrade.pinAhead(answers.version, target, answers.engineRepo));
     return {
@@ -256,8 +253,8 @@ export async function cmdUpgrade(input: UpgradeInput, deps: UpgradeDeps): Promis
   const extra = extraEngineManagedFiles(repoRoot, templateAtTarget);
   const filesChanged = drift.length > 0;
 
-  // The pin and the workflows this run leaves must agree: workflows above the pin call verbs it
-  // lacks, and on GitHub that fails quietly.
+  // The pin and the workflows this run leaves must agree: workflows newer than the pin call
+  // verbs it lacks, and on GitHub that fails quietly.
   const pinAfter = filesOnly ? answers.version : target;
   const minEngine = readMinEngine(templateAtTarget);
   if (minEngine) {

@@ -2,9 +2,8 @@
  * The only module that imports myst-cli, so the rest of oak is testable without it. oak calls
  * myst as a library, not a subprocess [design §7a].
  *
- * `loadConfig` alone does not set the current site and project, which `build` needs for HTML
- * ("No site configuration found"). So each call first runs `findCurrentProjectAndLoad` and
- * `findCurrentSiteAndLoad`, as the myst CLI does.
+ * `loadConfig` does not set the current site and project, which an HTML `build` needs. Each call
+ * first runs `findCurrentProjectAndLoad` and `findCurrentSiteAndLoad`, as the myst CLI does.
  */
 import {
   Session,
@@ -53,7 +52,7 @@ export function createMystEdge(): MystEdge {
       const prev = process.cwd();
       process.chdir(dir);
       try {
-        // As the myst CLI does; without it `build --html` finds no site.
+        // Sets the current project, as the myst CLI does.
         await findCurrentProjectAndLoad(session, dir);
         if (opts.exportsOnly) {
           // Offline: the typst export only, since HTML needs the theme zip from the network.
@@ -68,10 +67,9 @@ export function createMystEdge(): MystEdge {
     },
     async start(dir: string, opts: StartOpts, configFile?: string): Promise<void> {
       const session = sessionFor(configFile);
-      // Permanent, unlike build's: the server keeps running and resolves paths from cwd, and oak
-      // does nothing after this.
+      // The directory stays changed: the server keeps running and resolves paths from cwd.
       process.chdir(dir);
-      // Without these the server has no site to serve.
+      // Sets the current site and project, which the server serves.
       await findCurrentProjectAndLoad(session, dir);
       await findCurrentSiteAndLoad(session, dir);
       await startServer(session, opts);

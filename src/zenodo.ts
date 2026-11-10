@@ -459,8 +459,8 @@ export function buildMetadata(input: MetadataInput): Record<string, unknown> {
     const affs = a.affiliations ?? [];
     if (affs.length) c.affiliation = String(affs[0]);
     const orcid = String(a.orcid ?? '');
-    // Zenodo replaces `name` from the ORCID profile when the ORCID does not resolve, so invalid
-    // and placeholder ORCIDs (the template's 0000-0000-...) are dropped.
+    // Only a well-formed, non-placeholder ORCID (the template's is 0000-0000-...) is sent: Zenodo
+    // replaces `name` from the ORCID profile when the ORCID does not resolve.
     if (orcid && ORCID_RE.test(orcid) && !orcid.startsWith('0000-0000-')) {
       c.orcid = orcid;
     } else if (orcid) {
@@ -553,8 +553,8 @@ const TEMPLATE_YML = 'template.yml';
 
 /**
  * The typst template the build used, read from the derived config `myst.oak.yml` that the build
- * leaves beside `myst.yml` [R71]. The deposit archives what was rendered, so it reads the
- * stamped value and does not work the precedence out again.
+ * leaves beside `myst.yml` [R71]. The deposit archives what was rendered, so it uses the
+ * stamped value.
  *
  * Falls back to the author's `myst.yml` when there is no derived config (the tree was not built
  * here), and to null when neither names one: oak's own template, already in `engine.zip`.
@@ -611,10 +611,10 @@ export function resolveTemplateDir(template: string, paperRoot: string): string 
 }
 
 /**
- * Maps an absolute path that a build on another machine wrote into `myst.oak.yml`, such as the CI
- * build `oak release` downloads, onto this one. That file's first `extends:` entry is the build's
- * `<engine>/paper-base.yml` ({@link extendsChainFor}), which gives the build's engine folder. In
- * CI that is `<workspace>/.engine`, so:
+ * Maps an absolute path that a build on another machine wrote into `myst.oak.yml` (such as the CI
+ * build `oak release` downloads) onto this one. The first `extends:` entry of that file is the
+ * build's `<engine>/paper-base.yml` ({@link extendsChainFor}), which gives the build's engine
+ * folder. In CI that is `<workspace>/.engine`, so:
  *  - `<workspace>/.engine/x` maps to `<engineRoot>/x`;
  *  - `<workspace>/x` maps to `x` in this clone.
  * A relative path, or one that exists here, is returned as it is. Any other path throws a
@@ -648,10 +648,10 @@ function repoRootOf(dir: string): string {
 }
 
 /**
- * The template directory this deposit must archive, or null when nothing needs adding: when the
- * template is inside oak's checkout, already archived as `engine.zip`.
+ * The template directory this deposit must archive, or null when the template is inside oak's
+ * checkout, which `engine.zip` already holds.
  *
- * Otherwise the bytes are in no other file, and without them the PDF behind the DOI could not be
+ * Any other template's bytes are in no other file, and the PDF behind the DOI needs them to be
  * rendered again [design §7] [R66], so a template that cannot be found is an error.
  */
 export function templateArchiveDir(paperRoot: string, engineRoot: string): string | null {
@@ -725,7 +725,7 @@ export async function prepareJournalArchive(
 }
 
 /**
- * What can make a deposit impossible, in one place so a caller can check before writing to
+ * What can make a deposit impossible, in one place so it can be checked before writing to
  * Zenodo [R101]. `oak validate` reports the same clash on the pull request
  * ({@link depositCollisions}). The journal's own check is {@link prepareJournalArchive}, which
  * needs git.
@@ -751,10 +751,11 @@ export function assertBundlePreconditions(repoRoot: string, engineRoot: string):
  * `engine.zip` is a `git archive` of oak at its pinned release [R66], which carries
  * `bin/typst`, `dist/cli.cjs` and `templates/typst/`: everything but node needed to render the
  * PDF again, on linux x86_64. `journal.zip` is a `git archive` of `journal`, the journal commit
- * the build used, unless `source.zip` holds it ({@link prepareJournalArchive}). `template.zip` holds a template that is not
- * oak's own [R76]; see {@link templateArchiveDir}. `myst.oak.yml` records what the build
- * resolved; its paths are the build machine's. `engineZip` is an `engine.zip` that
- * {@link prepareEngineArchive} already made; without it the engine is archived here.
+ * the build used, unless `source.zip` holds it ({@link prepareJournalArchive}). `template.zip`
+ * holds a template that is not oak's own [R76]; see {@link templateArchiveDir}. `myst.oak.yml`
+ * records what the build resolved; its paths are the build machine's. `engineZip` is an
+ * `engine.zip` that {@link prepareEngineArchive} already made; without it the engine is archived
+ * here.
  */
 export async function buildBundle(
   out: string,
@@ -914,7 +915,7 @@ export async function cmdPrepare(input: PrepareInput): Promise<Outcome> {
     // A sandbox DOI and a production prepare: replacing it is allowed [R29].
   }
 
-  const doc2 = readDoc(mystPath); // fresh Document for the working-tree write (preserves comments)
+  const doc2 = readDoc(mystPath); // a fresh document keeps the file's comments
   if (!doc2.getIn(['project', 'date'])) {
     doc2.setIn(['project', 'date'], new Date().toISOString().slice(0, 10));
   }

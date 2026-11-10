@@ -188,11 +188,10 @@ export async function runVersion(
   if (!existsSync(cli)) throw new UserError(msg.pinned.noBuild(verb, pin, source, dir));
 
   const running = msg.pinned.running(verb, pin, source, dir, ctx.running);
-  // A blank line after it sets the command's own output apart.
   if (deps.logRunning) deps.logRunning(running);
   else deps.log(`${running}\n`);
   const env: NodeJS.ProcessEnv = { ...ctx.env, [USE_RUNNING_ENV]: '1' };
-  // As ci/run.sh: the release's typst is built for linux x86_64 only.
+  // The release's typst is built for linux x86_64 only; `ci/run.sh` makes the same check.
   const bin = join(dir, 'bin');
   if (deps.typstRuns(bin)) env.PATH = env.PATH ? bin + delimiter + env.PATH : bin;
   return deps.spawn(cli, [verb, ...ctx.argv], env);
