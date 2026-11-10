@@ -48,6 +48,7 @@
  * a journal's check files from the files.
  */
 
+import { DOCS_BASE } from './assets.js';
 import { DOCS, docsUrl } from './docs-links.js';
 import type { JournalCache } from './gh.js';
 import type { HandoffVerb, PinnedEngine, PinSource } from './pinned.js';
@@ -194,7 +195,7 @@ export const usage = (): string =>
   `  --json      print the full machine-readable result on stdout instead of a summary\n` +
   `  --verbose   show the raw git/gh commands' output (shown on failure either way)\n`;
 
-const seeHelp = 'run oak --help, or oak with no arguments, for the commands';
+const seeHelp = `run oak --help, or see the docs at ${DOCS_BASE} for usage`;
 
 /** `near` is the closest command, when one is close enough to suggest. */
 export const unknownCommand = (verb: string, near: string | null): string =>
