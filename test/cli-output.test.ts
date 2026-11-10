@@ -65,6 +65,7 @@ describe.skipIf(bundleState() === 'absent')(
       expect(code).toBe(2);
       expect(stderr).toContain("oak: unknown command 'bootstrp'");
       expect(stderr).toContain("did you mean 'bootstrap'");
+      expect(stderr).toContain('run oak --help');
     });
 
     it('says nothing about near misses when nothing is near', () => {
@@ -932,7 +933,7 @@ describe.skipIf(bundleState() === 'absent')(
         const r = oak(['release', word, '--tag', 'v1.0.0'], noTokens);
         expect(r.code, word).toBe(2);
         expect(r.stderr, word).toContain('is neither a version like v1.2.3 nor a subcommand');
-        expect(r.stderr, word).toContain('oak release: usage:');
+        expect(r.stderr, word).toContain('run oak --help');
       }
     });
 
@@ -949,7 +950,7 @@ describe.skipIf(bundleState() === 'absent')(
       expect(version.stderr).toContain('publishing a version runs from the terminal');
       const typo = oak(['release', 'reserv-doi'], noTokens, true);
       expect(typo.code).toBe(2);
-      expect(typo.stderr).toContain('oak release: usage:');
+      expect(typo.stderr).toContain('run oak --help');
     });
 
     it('the flow refuses --use-local-build and --tag, which belong to oak release deposit', () => {

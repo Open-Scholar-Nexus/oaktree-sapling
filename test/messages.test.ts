@@ -67,8 +67,8 @@ describe('every printed string lives in messages.ts', () => {
     });
   }
 
-  it('no design-doc jargon is printed (rule 2)', () => {
-    // Enforces rule 2 of the messages.ts header. Comments are removed first, or a
+  it('no design-doc jargon is printed {NO-JARGON}', () => {
+    // Enforces {NO-JARGON} of the messages.ts header. Comments are removed first, or a
     // string match could span a comment and report its `[R#]`.
     const src = readFileSync(join(srcDir, 'messages.ts'), 'utf8');
     const code = src
