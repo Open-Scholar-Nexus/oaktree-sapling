@@ -1,12 +1,10 @@
 /**
- * The strings oak prints for people, grouped by where they appear: the output helpers, then
- * usage, the confirm prompt, bootstrap, upgrade, clean, build and start, the pinned oak version,
- * validate, what lands on a pull request, and the verbs the workflows run.
+ * The strings oak prints for people, grouped by the command that prints them.
  *
  * Fixed strings are consts, parameterised ones functions. Keep the `${…}` holes and the
  * `oak <verb>:` prefixes, which say which command spoke; some tests assert on fragments. Nothing
- * here does work beyond choosing a phrasing, and the one import is the docs link table. A link
- * is `docsUrl(DOCS.<topic>)`, never a URL, and only where the page says more than a sentence can.
+ * here does work beyond choosing a phrasing. A link is `docsUrl(DOCS.<topic>)`, never a URL, and
+ * only where the page says more than a sentence can.
  *
  * The rules:
  *   1. Every default or resolved value is declared in the plan before the confirm prompt.
@@ -55,7 +53,7 @@ import type { HandoffVerb, PinnedEngine, PinSource } from './pinned.js';
 import type { BuildState } from './release.js';
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════
- * Output plumbing: not prose, but it decides HOW the prose is printed.
+ * Output helpers: how the text is printed.
  * ═════════════════════════════════════════════════════════════════════════════════════════ */
 
 /** An age for a person: minutes under an hour, hours under two days, then days. */
@@ -115,10 +113,8 @@ export function firstLine(e: unknown): string {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════
- * Usage: the first screen a new user sees.
- * ═══════════════════════════════════════════════════════════════════════════════════════════
- * It opens with what oak is and where to start.
- */
+ * Usage: what `oak --help` and a bare `oak` print.
+ * ═════════════════════════════════════════════════════════════════════════════════════════ */
 export const usage = (): string =>
   `oak: a mystmd-based engine for running a small journal. It sets up the journal\n` +
   `(its branding, editions and list of papers) and the repos its papers live in, then\n` +
@@ -661,8 +657,7 @@ export const build = {
     `--paper <path to the paper>.\n` +
     `What this repo is for: ${docsUrl(DOCS.journalStart)}`,
 
-  /** The paper's `project.options.oaktree-sapling` version or edition is missing. It names the
-   *  file and the fix, since the reader is looking at a paper that used to work. */
+  /** The paper's `project.options.oaktree-sapling` version or edition is missing. */
   missingEngineCoordinate: (field: 'version' | 'edition', mystPath: string): string =>
     `oak: ${mystPath} has no engine ${field}. Add the \`${field}:\` line back under ` +
     `\`project.options.oaktree-sapling\` (\`oak bootstrap paper\` writes ` +
@@ -827,8 +822,7 @@ export const pinned = {
 };
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════
- * oak validate: oak's own findings (Layer A) and the notes about how a run happened.
- * The editorial (Layer B) check messages come from the curvenote catalog, not from us.
+ * oak validate: oak's own findings and the notes on how a run happened.
  * ═════════════════════════════════════════════════════════════════════════════════════════ */
 
 export const validate = {
@@ -866,7 +860,7 @@ export const validate = {
   brandWatermarkUnresolved: (logo: string): string =>
     `brand typst watermark "${logo}" does not resolve to a file`,
 
-  // ── how the run happened (notes: they explain, they never gate) ────────────────────────
+  // ── how the run happened: notes, which never fail the check ───────────────────────────
   noteUncomposed:
     "checked the paper's own myst.yml ONLY: the journal's settings were not available to this " +
     'run, so whatever the journal, its edition or its branding add (the cover image, the PDF ' +
@@ -937,7 +931,7 @@ export const validate = {
     `every deposit itself; the release would refuse to publish. Rename them: ` +
     `${reserved.join(', ')} are the engine's.`,
 
-  // ── the extends layers must not race each other ────────────────────────────────────────
+  // ── the extends layers must not declare the same key ───────────────────────────────────
   layerExtendsUnreadable: (refs: string): string =>
     `extends layers point at ${refs}, which cannot be read from this checkout, so the keys ` +
     'they declare could not be checked for clashes; extend a local path, or move those keys ' +
@@ -1061,8 +1055,7 @@ export const pr = {
 };
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════
- * The workflow-run verbs (release / preview / post-checks / conformance).
- * Mostly read in a CI log, but every one of them can be typed by hand.
+ * oak release, and the verbs the workflows run: preview, post-checks, conformance.
  * ═════════════════════════════════════════════════════════════════════════════════════════ */
 
 export const workflow = {
@@ -1090,7 +1083,7 @@ export const workflow = {
     `the build artifact names the paper ${artifact} but --paper is ${flagged}; refusing to ` +
     `post for either. Check the paper-dir the workflow passes.`,
 
-  // the pull request check before Stage 2 writes to a pull request
+  // the check on a pull request before a workflow posts to it
   prCheckNoRepo: (pr: string): string =>
     `cannot check pull request #${pr}: no repo. Pass --repo <owner/name> or set GITHUB_REPOSITORY.`,
   prCheckNoHead: (pr: string): string =>
@@ -1451,7 +1444,7 @@ export const workflow = {
   releaseWaitRun: 'Deposit version run: waiting to start',
   releaseNoRunStarted: (tag: string, repo: string): string =>
     `✗ no Deposit version run started for ${tag}; check Actions is enabled on ${repo}`,
-  /** The state while it is not done. */
+  /** The Deposit version run's state while it runs. */
   releaseBuildState: (state: BuildState): string =>
     state.phase === 'building'
       ? `Deposit version run: build job ${state.status.replace('_', ' ')}`
