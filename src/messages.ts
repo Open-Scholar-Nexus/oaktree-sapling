@@ -2,7 +2,7 @@
  * The strings oak prints for people, grouped by the command that prints them.
  *
  * Fixed strings are consts, parameterised ones functions. Keep the `${…}` holes and the
- * `oak <verb>:` prefixes, which say which command spoke; some tests assert on fragments. Nothing
+ * `oak <command>:` prefixes, which say which command spoke; some tests assert on fragments. Nothing
  * here does work beyond choosing a phrasing. A link is `docsUrl(DOCS.<topic>)`, never a URL, and
  * only where the page says more than a sentence can.
  *
@@ -15,8 +15,8 @@
  *     text of `--help` and `--version`.
  *   {ERROR-NAMES-FIX} An error names the file and the fix, and shows no stack trace.
  *
- * ── Printed text that is NOT in this file ───────────────────────────────────────────────────
- * These ship as files or run inside GitHub Actions, so they cannot import this module:
+ * Printed text outside this file, which ships as files or runs inside GitHub Actions, where it
+ * cannot import this module:
  *
  *   templates/paper/README.md ............... what an author reads first in their repo
  *   templates/paper/myst.yml ................ the commented starter config (CHANGE-ME lines)
@@ -54,9 +54,7 @@ import type { JournalCache } from './gh.js';
 import type { HandoffVerb, PinnedEngine, PinSource } from './pinned.js';
 import type { BuildState } from './release.js';
 
-/* ═══════════════════════════════════════════════════════════════════════════════════════════
- * Output helpers: how the text is printed.
- * ═════════════════════════════════════════════════════════════════════════════════════════ */
+// ── Output helpers ──
 
 /** An age for a person: minutes under an hour, hours under two days, then days. */
 export function age(ms: number): string {
@@ -114,9 +112,7 @@ export function firstLine(e: unknown): string {
   return line ?? 'unreadable';
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════════════════════
- * Usage: what `oak --help` and a bare `oak` print.
- * ═════════════════════════════════════════════════════════════════════════════════════════ */
+// ── oak --help ──
 export const usage = (): string =>
   `oak: a mystmd-based engine for running a small journal. It sets up the journal\n` +
   `(its branding, editions and list of papers) and the repos its papers live in, then\n` +
@@ -143,7 +139,7 @@ export const usage = (): string =>
   `                        [--private] [--no-require-checks] [--yes]\n` +
   `      --instance    the journal repo this paper belongs to ('.' only if the journal\n` +
   `                    settings live in this same repo); --edition names one of its editions\n` +
-  `  Both bootstrap verbs: --engine-version naming another oak version runs that version's\n` +
+  `  Both bootstrap subcommands: --engine-version naming another oak version runs that version's\n` +
   `  bootstrap, fetched once into ~/.cache/oak.\n` +
   `  oak upgrade (--repo <owner/name> | --paper <dir>) [--to <tag>] [--files-only] [--yes]\n` +
   `                    move a paper repo to a newer engine version, as a pull request\n` +
@@ -236,9 +232,7 @@ export const yamlNotKeyValue = (file: string, line: number): string =>
 export const journalInvalid = (file: string, why: string): string =>
   `${file} has a setting oak cannot read (${why}). Fix it in the journal repo and run again.`;
 
-/* ═══════════════════════════════════════════════════════════════════════════════════════════
- * The confirm prompt: every plan ends here.
- * ═════════════════════════════════════════════════════════════════════════════════════════ */
+// ── The confirm prompt ──
 
 export const prompt = {
   proceed: 'Proceed? [y/N] ',
@@ -262,9 +256,7 @@ export const prompt = {
     'the plan above was not confirmed; nothing was changed and no pull request was opened',
 };
 
-/* ═══════════════════════════════════════════════════════════════════════════════════════════
- * oak bootstrap
- * ═════════════════════════════════════════════════════════════════════════════════════════ */
+// ── oak bootstrap ──
 
 /**
  * The plan's opening block: every value the run will use, one row per flag, with `(default)`
@@ -314,7 +306,7 @@ export const declared = {
 };
 
 export const bootstrap = {
-  // ── refusals, before anything is created ───────────────────────────────────────────────
+  // refusals, before anything is created
   instanceRequired:
     'oak bootstrap paper: --instance <owner/journal-repo> is required. It names the ' +
     'journal this paper belongs to and is written into .github/actions/engine/pins.yml, ' +
@@ -346,7 +338,7 @@ export const bootstrap = {
     'oak bootstrap: gh is installed but no account is logged in. Run `gh auth login` and ' +
     're-run this command; it creates and configures GitHub repos through that login.',
 
-  // ── the plan ───────────────────────────────────────────────────────────────────────────
+  // the plan
   paperPlanHeader: (mode: 'ingest' | 'bare', repo: string): string =>
     `bootstrap paper (${mode === 'ingest' ? "importing an author's repo" : 'new, empty paper'}): ${repo}`,
   journalPlanHeader: (external: boolean, repo: string): string =>
@@ -405,17 +397,17 @@ export const bootstrap = {
     `  ○ turn on GitHub Pages for the journal website (${siteUrl}) and link it from the repo page`,
   planNoSite: '  ○ no journal website (--no-site)',
 
-  // ── the issue labels oak creates, shown in the repo's labels list ──────────────────────
+  // the issue labels oak creates, shown in the repo's labels list
   labelZenodoFailed: 'A Zenodo publish run failed and needs editor attention',
 
-  // ── the repo descriptions, shown on GitHub ─────────────────────────────────────────────
+  // the repo descriptions, shown on GitHub
   descriptionPaper: 'A paper, created by `oak bootstrap paper`',
   descriptionJournal:
     'Journal settings, branding and paper list, created by `oak bootstrap journal`',
   descriptionCoLocated:
     'Journal and paper in one repo, created by `oak bootstrap journal --co-located`',
 
-  // ── the running log ────────────────────────────────────────────────────────────────────
+  // the running log
   logCreated: (repo: string): string => `  ✓ created ${repo}`,
   logCreatedPublic: (repo: string): string => `  ✓ created ${repo} (public)`,
   logMadePublic:
@@ -459,14 +451,14 @@ export const bootstrap = {
     `  ! this run is incomplete; failed steps: ${steps}. What to do about each is in the ` +
     'runbook above.',
 
-  // ── the pull request that `--from` opens ───────────────────────────────────────────────
+  // the pull request that `--from` opens
   ingestCommitMessage: (from: string): string =>
     `Submission from ${from}\n\nOriginal repo: ${from}`,
   ingestPrTitle: (owner: string): string => `Submission: ${owner}`,
   ingestPrBody: (from: string): string =>
     `Original repo: ${from}\n\n---\n\n*Opened by \`oak bootstrap paper --from\`.*`,
 
-  // ── the runbook (what to do once the command has finished) ─────────────────────────────
+  // the runbook (what to do once the command has finished)
   runbookSecrets: (repo: string, missing: string): string =>
     `Set the remaining secrets on their environments at https://github.com/${repo}/settings/environments : ` +
     missing +
@@ -508,9 +500,7 @@ export const bootstrap = {
     'finishes (Actions tab).',
 };
 
-/* ═══════════════════════════════════════════════════════════════════════════════════════════
- * oak upgrade
- * ═════════════════════════════════════════════════════════════════════════════════════════ */
+// ── oak upgrade ──
 
 export const upgrade = {
   missingTarget: 'oak upgrade: pass --paper <dir> or --repo <owner/name>',
@@ -587,9 +577,7 @@ export const upgrade = {
   prBodyFooter: '_Opened by `oak upgrade`. Review the preview build before merging._',
 };
 
-/* ═══════════════════════════════════════════════════════════════════════════════════════════
- * oak clean
- * ═════════════════════════════════════════════════════════════════════════════════════════ */
+// ── oak clean ──
 
 /** A size for a person, in kB, MB or GB. */
 export function bytes(n: number): string {
@@ -611,11 +599,9 @@ export const clean = {
     `${cache ? ' and the pinned oak versions' : ''}, ${bytes(n)}`,
 };
 
-/* ═══════════════════════════════════════════════════════════════════════════════════════════
- * oak build / oak start
- * ═════════════════════════════════════════════════════════════════════════════════════════ */
+// ── oak build, oak start ──
 
-/** The verbs that find a journal repo the way `oak build` does. */
+/** The commands that find a journal repo the way `oak build` does. */
 export type JournalVerb =
   | 'build'
   | 'start'
@@ -625,7 +611,7 @@ export type JournalVerb =
   | 'release status'
   | 'deploy-preview';
 
-/** What `--no-instance` gives each verb, for {@link build.noInstance}. */
+/** What `--no-instance` gives each command, for {@link build.noInstance}. */
 const WITHOUT_JOURNAL: Record<JournalVerb, string> = {
   build: 'an unbranded build',
   start: 'an unbranded preview',
@@ -823,9 +809,7 @@ export const pinned = {
     `${source.kind === 'paper' ? 'pin a release tag in myst.yml' : 'name a release tag'}.`,
 };
 
-/* ═══════════════════════════════════════════════════════════════════════════════════════════
- * oak validate: oak's own findings and the notes on how a run happened.
- * ═════════════════════════════════════════════════════════════════════════════════════════ */
+// ── oak validate ──
 
 export const validate = {
   /** `oak validate` in the journal repo, as {@link build.inJournalRepo}. */
@@ -838,13 +822,13 @@ export const validate = {
   verdict: (pass: boolean, counts: string[]): string =>
     `oak validate: ${pass ? 'PASS' : 'FAIL'}${counts.length ? ' (' + counts.join(', ') + ')' : ''}`,
 
-  // ── layout / identity ──────────────────────────────────────────────────────────────────
+  // layout / identity
   missingFile: (file: string): string => `missing required file "${file}" at the paper root`,
   strayMystYml: (path: string): string =>
     `extra myst.yml at "${path}": a paper repo has one, at its root`,
   idMissing: 'project.id is missing',
 
-  // ── brand ──────────────────────────────────────────────────────────────────────────────
+  // brand
   brandNoFavicon:
     'brand declares no favicon, so browser tabs show a default icon; set ' +
     '`favicon` in brand.yml (' +
@@ -862,13 +846,13 @@ export const validate = {
   brandWatermarkUnresolved: (logo: string): string =>
     `brand typst watermark "${logo}" does not resolve to a file`,
 
-  // ── how the run happened: notes, which never fail the check ───────────────────────────
+  // how the run happened: notes, which never fail the check
   noteUncomposed:
     "checked the paper's own myst.yml ONLY: the journal's settings were not available to this " +
     'run, so whatever the journal, its edition or its branding add (the cover image, the PDF ' +
     'export) was not checked here.',
 
-  // ── the paper's id (checked against the journal's policy) ──────────────────────────────
+  // the paper's id (checked against the journal's policy)
   journalMissing: (instanceRoot: string): string =>
     `no journal.yml in ${instanceRoot}, so the journal's own rules (the paper id policy and the ` +
     `editorial checks) could not be loaded and nothing was enforced. Point --instance at the ` +
@@ -906,7 +890,7 @@ export const validate = {
     `registry/papers.yml entry "${label}" is not a valid entry, so the id checks skipped it: ` +
     docsUrl(DOCS.fileRegistry),
 
-  // ── thumbnail / typst template hygiene ─────────────────────────────────────────────────
+  // thumbnail / typst template hygiene
   thumbnailUnresolved: (thumbnail: string): string =>
     `thumbnail "${thumbnail}" does not resolve to a file under the paper root; the ` +
     `paper will ship with NO thumbnail (a declared thumbnail disables myst's ` +
@@ -927,13 +911,13 @@ export const validate = {
     `directory, write "./${journalTemplate}"; only ./ and ../ values are treated as paths. ` +
     `See ${docsUrl(DOCS.typstTemplate)}`,
 
-  // ── the deposit folder ─────────────────────────────────────────────────────────────────
+  // the deposit folder
   depositCollision: (names: string[], reserved: string[]): string =>
     `deposit/ holds ${names.map((n) => `"${n}"`).join(', ')}, which the engine writes into ` +
     `every deposit itself; the release would refuse to publish. Rename them: ` +
     `${reserved.join(', ')} are the engine's.`,
 
-  // ── the extends layers must not declare the same key ───────────────────────────────────
+  // the extends layers must not declare the same key
   layerExtendsUnreadable: (refs: string): string =>
     `extends layers point at ${refs}, which cannot be read from this checkout, so the keys ` +
     'they declare could not be checked for clashes; extend a local path, or move those keys ' +
@@ -941,7 +925,7 @@ export const validate = {
   layersOverlap: (clashes: string): string =>
     `extends layers declare overlapping keys: ${clashes}; move each key to one layer.`,
 
-  // ── a run that could not compose ───────────────────────────────────────────────────────
+  // a run that could not compose
   noteComposeFailed: (failure: string): string =>
     `checked the paper's own myst.yml ONLY: it could not be combined with the journal's ` +
     `settings (${failure}), so anything the journal or its edition adds was not checked.`,
@@ -955,10 +939,7 @@ export const validate = {
   needsBuildArtifacts: 'requires build artifacts; run `oak build` first',
 };
 
-/* ═══════════════════════════════════════════════════════════════════════════════════════════
- * What an author reads on their pull request: the comments and the Check Run. These are the
- * bodies; {@link stickyMarker} goes above them.
- * ═════════════════════════════════════════════════════════════════════════════════════════ */
+// ── Pull request comments and the Check Run ──
 
 /** The hidden first line of a comment oak edits in place. `realGhPr.sticky` (gh.ts) finds the
  *  comment by it, so it must not change. */
@@ -1011,7 +992,7 @@ export const pr = {
     `the check's options are wrong: ${problems.join('; ')}. Fix them in journal.yml: ` +
     `${docsUrl(DOCS.checksChanging)}`,
 
-  // ── the journal's check files; the row already names the file ─────────────────────────────
+  // the journal's check files; the row already names the file
   checkFileOutside:
     `the check file is outside the journal repository; write a path that starts with ./ and ` +
     `stays inside it: ${docsUrl(DOCS.checksJournal)}`,
@@ -1056,9 +1037,7 @@ export const pr = {
     `those files before trusting the report.`,
 };
 
-/* ═══════════════════════════════════════════════════════════════════════════════════════════
- * oak release, and the verbs the workflows run: preview, post-checks, conformance.
- * ═════════════════════════════════════════════════════════════════════════════════════════ */
+// ── oak release, oak deploy-preview, oak post-checks, oak conformance ──
 
 export const workflow = {
   // release reserve-doi and status
@@ -1538,10 +1517,6 @@ export const workflow = {
    *  secrets. */
   wranglerFailed: 'wrangler could not deploy the preview; see the workflow log for its output',
 };
-
-/* ═══════════════════════════════════════════════════════════════════════════════════════════
- * Last resort
- * ═════════════════════════════════════════════════════════════════════════════════════════ */
 
 /** A bug in oak: say so, then show the stack. */
 export const engineCrash = (stack: string): string =>
