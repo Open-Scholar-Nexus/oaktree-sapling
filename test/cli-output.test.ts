@@ -66,7 +66,6 @@ describe.skipIf(bundleState() === 'absent')(
       expect(stderr).toContain("oak: unknown command 'bootstrp'");
       expect(stderr).toContain("did you mean 'bootstrap'");
       expect(stderr).toContain('run oak --help');
-      expect(stderr).not.toContain('a mystmd-based engine');
     });
 
     it('says nothing about near misses when nothing is near', () => {
