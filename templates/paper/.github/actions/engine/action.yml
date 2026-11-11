@@ -41,8 +41,7 @@ runs:
           echo "::error::engine version '$ref' in $myst is not a release tag; pin one, like v1.2.3"
           exit 1
         fi
-        # min_engine_version refuses engines that trust the pull request number in a fork's
-        # artifact.
+        # min_engine_version refuses engines incompatible with these workflows.
         min=$(yq '.min_engine_version // ""' .github/actions/engine/pins.yml)
         if [ -n "$min" ] && ! [[ "$min" =~ $version ]]; then
           echo "::error::min_engine_version in pins.yml is not a release tag like v1.2.3"

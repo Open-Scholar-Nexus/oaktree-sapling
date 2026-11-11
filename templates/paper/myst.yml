@@ -25,7 +25,7 @@ project:
   - bib.bib
   options:
     # Written by `oak bootstrap` and `oak upgrade`.
-    # Names the engine version and the edition this paper belongs to.
+    # The engine version and the edition this paper belongs to.
     oaktree-sapling:
       version: CHANGE-ME-engine-version
       edition: CHANGE-ME-edition
