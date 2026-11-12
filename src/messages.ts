@@ -1512,7 +1512,6 @@ export const workflow = {
   /** Printed while a git/gh call is in flight, then erased; see gh.ts `showWorking`. */
   working: (what: string): string => `  … ${what}`,
 
-  // the wrangler deploy (gh.ts)
   /** Thrown by `realGhPr.sticky` (gh.ts) when it cannot tell which repo to post to. */
   noOriginRepo: (repoRoot: string): string =>
     `no github.com origin remote in ${repoRoot}, so there is no repo to post to`,
@@ -1520,6 +1519,7 @@ export const workflow = {
   doiPrDiverged: (head: string, base: string): string =>
     `${head} carries commits that are not on ${base}, so the DOI pull request would not be ` +
     `the one-file change it claims to be. Run oak release reserve-doi on ${base}.`,
+  // the wrangler deploy (gh.ts)
   wranglerNoUrl: 'wrangler did not report a *.pages.dev deployment URL',
   /** No detail from wrangler: this reaches a public pull request comment, and wrangler's output
    *  names the account id. The details stay in the workflow log, where Actions redacts
