@@ -1,11 +1,18 @@
 # Writing
 
-LLMs are not
-Prose here covers the docs, code comments, oak's messages and PR descriptions; `STYLE.md` covers the code itself. The one rule (my best attempt at it so far): make it clear, concise and helpful to the person reading it. Or put another way: would the reader miss this sentence if it were gone, and can they understand it the first time they read it?
+This covers docs, code comments, oak's messages, PR descriptions, and all prose; `STYLE.md` covers code.
 
-The rest of this file lists the patterns I keep editing out of LLM drafts, a pattern only when it showed up across several of them, so it works best as instructions you give an LLM before it drafts. Most of them are ways a sentence breaks the rule above. Use it if it helps; I point agents at it to get better baselines and reviews.
+LLMs are not great (yet?) at prose. This is problematic, especially for a package aimed at not-exactly-technical-experts; their explanations are hard to read, they rely on assumptions (which are not the same I and you would make), often present weird quirks (LLM-isms), and sometimes miss the point entirely. This file exists to attempt to guide them into avoiding the common errors they make.
+
+My attempt at a general rule: make it clear, concise and helpful to the person reading it. Or put another way: would the reader miss this sentence if it were gone, and can they understand it the first time they read it?
+
+Unfortunately, this guidance has not been enough, so the rest of this file lists the patterns I keep editing out of LLM drafts. Most of them are ways a sentence breaks the rule above. "Patterns" are considered as such when they show up across multiple times. In my experience, it works best as instructions you give an LLM before it drafts. Use it if it helps; I point agents at this to get better baselines and reviews.
 
 I know of [Vale](https://vale.sh) with [vale-ai-tells](https://github.com/tbhb/vale-ai-tells), which flags some of these patterns mechanically. If it's useful to you, consider running it once for a mechanical pass.
+
+The rest of this file is LLM-maintained, with my occasional review.
+
+Please review your contributions!
 
 
 ## What each section is for
