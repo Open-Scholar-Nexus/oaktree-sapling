@@ -1,22 +1,24 @@
 # Releasing oaktree-sapling
 
-A paper's CI runs oak from a checkout of this repository at the version the paper pins, and installs nothing, so the build has to be in the checkout. `scripts/cut-engine-release.sh` puts it there: it commits `dist/cli.cjs` and `bin/typst` to a new commit off HEAD, tags that commit and creates the GitHub release. [How oaktree-sapling is released](https://scholar.nexus/oaktree-sapling/design/releases) has the details.
+This covers releasing the engine. Publishing a paper version is `oak release` ([guide](https://scholar.nexus/oaktree-sapling/guide/publish)).
+
+A paper's CI runs oak from a checkout of this repository at the version the paper pins, and installs nothing, so `dist/cli.cjs` has to be in the checkout. `scripts/cut-engine-release.sh` puts it there: it commits `dist/cli.cjs` and `bin/typst` to a new commit off HEAD, tags that commit and creates the GitHub release. [How oaktree-sapling is released](https://scholar.nexus/oaktree-sapling/design/releases) has the details.
 
 ## Testing a change locally
 
-Build it from your working tree with `npm run bundle` and run `dist/cli.cjs`. Outside a release the bundle reports package.json's version with `-unreleased+<commit>` added (`0.2.0-unreleased+c174a72`), which matches no pin: `oak bootstrap` needs `--engine-version` to know what to pin, and `oak build`, `validate` and `start` run the version the paper pins unless you set `OAK_USE_RUNNING=1`.
+Build it from your working tree with `npm run bundle` and run `dist/cli.cjs`. Outside a release the bundle reports package.json's version with `-unreleased+<commit>` added (`0.2.0-unreleased+c174a72`), which matches no pin. So `oak bootstrap` needs `--engine-version` to know what to pin, and `oak build`, `validate` and `start` run the version the paper pins. To run your bundle in their place, set `OAK_USE_RUNNING=1`.
 
 ## Testing a change in CI
 
-A local build does not test the composite action's `if:` and `hashFiles` conditions, secrets passed through a step's `env:`, or previews on fork PRs. To test those, make a pre-release named `vX.Y.Z-dev.N` and pin it in the test paper repository. A version with a `-` in it becomes a GitHub pre-release, which keeps it out of `releases/latest`. The release script, conformance and a paper's CI accept no suffix other than `-dev.N`.
+Running `dist/cli.cjs` locally does not test the composite action's `if:` and `hashFiles` conditions, secrets passed through a step's `env:`, or previews on fork PRs. To test those, make a pre-release named `vX.Y.Z-dev.N` and pin it in the test paper repository, the one the `CONFORMANCE_TEST_REPO` variable names (see [Conformance](#conformance)). A version with a `-` in it becomes a GitHub pre-release, which keeps it out of `releases/latest`. The release script, `conformance.yml` and a paper's CI accept no suffix other than `-dev.N`.
 
 ```bash
 # builds oak and typst, tests them, commits both to a new tagged commit, pushes the tag and creates the GitHub release
-scripts/cut-engine-release.sh v0.0.0-dev.25   # needs node, npm and an authenticated gh
-# or from Actions: cut-engine-release > Run workflow, with version v0.0.0-dev.25 (ref defaults to the branch it runs from)
+scripts/cut-engine-release.sh v0.3.0-dev.16   # needs node, npm and an authenticated gh
+# or from Actions: cut-engine-release > Run workflow, with version v0.3.0-dev.16 (ref defaults to the branch it runs from)
 
 # then pin it in the test paper's myst.yml and run its CI
-#   project.options.oaktree-sapling.version: v0.0.0-dev.25
+#   project.options.oaktree-sapling.version: v0.3.0-dev.16
 ```
 
 ## Before releasing
@@ -27,20 +29,20 @@ The script stops before pushing anything if the version is malformed, the tag al
 
 ## After a stable release
 
-A stable `vX.Y.Z` is `latest` as soon as it is released, and conformance runs after ([why](https://scholar.nexus/oaktree-sapling/design/releases#r114)). Before announcing the version, wait until the release's `conformance.json` says `ok`: a green run can also be inconclusive or not run. If it fails, delete the release or release a newer one.
+A stable `vX.Y.Z` is `latest` as soon as it is released, and conformance (below) runs after ([why](https://scholar.nexus/oaktree-sapling/design/releases#r114)). Before announcing the version, wait until the release's `conformance.json` says `ok`: a green run can also be inconclusive or not run. If it fails, delete the release or release a newer one.
 
 ## Conformance
 
-`conformance.yml` tests a release on the test paper repository named by the `CONFORMANCE_TEST_REPO` variable, with `oak conformance` ([what it runs](https://scholar.nexus/oaktree-sapling/reference/cli#conformance)), and uploads the result to the release as `conformance.json`. A run on a release the test repository already pins ends green with a `NOT RUN` warning and uploads nothing; to test again, cut a new tag. It starts on the newest release after every successful `cut-engine-release` run from `main`, and can be started by hand from Actions with a tag, or with no tag to only reset the test repository.
+`conformance.yml` tests a release on the test paper repository named by the `CONFORMANCE_TEST_REPO` variable, with `oak conformance` ([what it runs](https://scholar.nexus/oaktree-sapling/reference/cli#conformance)), and uploads the result to the release as `conformance.json`. A run on a release the test repository already pins ends green with a `NOT RUN` warning and uploads nothing. To test again, cut a new tag. It starts on the newest release after every successful `cut-engine-release` run from `main`, and can be started by hand from Actions with a tag, or with no tag to only reset the test repository.
 
 It reads two secrets from the `conformance` environment: `CONFORMANCE_PAT`, a fine-grained token for the test repository, and `CONFORMANCE_FORK_PAT`, for the account that owns the fork named by the `CONFORMANCE_FORK_REPO` variable. With that variable unset, the fork preview is not tested. The environment admits only `main` and `staging`, with no required reviewer. The test repository keeps its own Cloudflare and Zenodo (sandbox only) secrets.
 
-To test a change to conformance before merging it, push its branch to `staging`, cut a dev release from `staging`, and start conformance on `staging` with that tag. A cut from `staging` starts no run on its own, since that run would use `main`'s code.
+To test a change to conformance before merging it, push its branch to `staging`, cut a dev release from `staging`, and start conformance on `staging` with that tag. A `cut-engine-release` run from `staging` starts no conformance run on its own, since that run would use `main`'s code.
 
 ```bash
 git push -f origin my-branch:staging
 gh workflow run cut-engine-release.yml --ref staging -f version=v0.3.0-dev.16
-# once the cut finishes
+# once cut-engine-release finishes
 gh workflow run conformance.yml --ref staging -f tag=v0.3.0-dev.16
 ```
 
@@ -65,4 +67,4 @@ Edit `typst.version` and make a release ([why](https://scholar.nexus/oaktree-sap
 
 The package is published from a stable release tag by `npm-publish.yml` (Actions > npm-publish > Run workflow, with the tag): `vX.Y.Z` goes to the `latest` dist-tag once its `conformance.json` says `ok`, and the workflow refuses any other tag. Dev releases stay on GitHub. The package version is the tag without the `v`. It uses npm trusted publishing and runs in the `npm` environment. `prepack` runs the typecheck and the bundle first.
 
-What ships is the `files` list in `package.json`: `dist/cli.cjs`, `templates/` (with `!templates/*/README.md` leaving out each template's README), `ci/`, `plugins/`, `paper-base.yml` and `typst.version`.
+The `files` list in `package.json` sets what ships: `dist/cli.cjs`, `templates/` (with `!templates/*/README.md` leaving out each template's README), `ci/`, `plugins/`, `paper-base.yml` and `typst.version`.

@@ -1,17 +1,21 @@
 # oaktree-sapling
 
-A journal engine for small publications built on [MyST](https://mystmd.org), GitHub and Zenodo.
-
-One repo holds the journal: its settings, branding, editions and the list of published papers.
-Each paper gets a repo of its own, with CI that builds a website and a PDF, runs the journal's checks on every pull request, publishes a preview, and deposits the final version to Zenodo for a DOI. `oak` is the command line tool that sets those repos up and does the work inside them.
-
-Papers refer to the engine by a single version coordinate, so a journal upgrades by changing one line rather than by copying workflow files around.
+A toolkit to create free, simple journals run on GitHub, hosted on Zenodo and built with MystMD. Each paper lives in its own repository, whose CI builds it into a website and a PDF; a separate journal repository holds the settings every paper build reads: the journal's name, its branding, the editorial checks a submission has to pass, and the list of what has been published. Publishing a version deposits it to Zenodo for a DOI, and the `oak` command-line tool sets it all up and runs it.
 
 The documentation is at [scholar.nexus/oaktree-sapling](https://scholar.nexus/oaktree-sapling).
 
 ## Status
 
-Pre-1.0 and in active development. Every command is implemented and the CI is being tested end to end against real GitHub, Cloudflare and Zenodo, but interfaces may still change between 0.x versions and the documentation is incomplete. Its original design served Neuromatch Impact Scholars Program 2025, but is being heavily revised to become suitable to more tenants.
+Pre-1.0 and in active development. Documentation work is ongoing. Its original design served Neuromatch Impact Scholars Program 2025, but is being heavily revised to become suitable to more tenants, testable, extensible, versioned, etc.
+
+## Features
+
+- A website and a PDF for every paper, built by the paper repository's own CI, with the journal's branding on both.
+- Editorial checks on every pull request, such as an abstract or an ORCID for every author, from the MIT-licensed [`@curvenote/check-implementations`](https://www.npmjs.com/package/@curvenote/check-implementations) and [`@curvenote/check-definitions`](https://www.npmjs.com/package/@curvenote/check-definitions). A journal can add checks of its own in JavaScript.
+- A live preview link on each pull request, through Cloudflare Pages (optional).
+- Publishing on Zenodo with a DOI, from a terminal or from the workflows.
+- A journal website on GitHub Pages, listing the published papers.
+- Each paper pins an engine version, and `oak upgrade` moves it to a newer one as a pull request.
 
 ## Install
 
@@ -20,43 +24,13 @@ npm install -g oaktree-sapling
 oak
 ```
 
-`oak` with no arguments prints the full usage. To run a single command without installing, such as a bootstrap, use `npx oaktree-sapling@latest <command>`; without `@latest`, npx may reuse an older copy it cached.
+`oak` with no arguments prints the full usage, and the [CLI reference](https://scholar.nexus/oaktree-sapling/reference/cli) covers each command. To run a single command without installing, such as a bootstrap, use `npx oaktree-sapling@latest <command>`; without `@latest`, npx may reuse an older copy it cached.
 
-## Commands
-
-Setting up repos:
-
-- `oak bootstrap journal`: create the journal repo (settings, branding, paper list)
-- `oak bootstrap paper`: create a paper repo pointing at a journal
-- `oak upgrade`: move a paper repo to a newer engine version, as a pull request
-
-Working on a paper:
-
-- `oak validate`: run the journal's checks over a manuscript
-- `oak build`: build the paper's website and PDF into `_build/`
-- `oak start`: preview it in a browser with the journal's settings applied
-
-The rest (`post-checks`, `deploy-preview`, `deposit`, `release`, `conformance`) are run by the generated workflows and are rarely typed by hand. A journal that does not store its Zenodo token on GitHub runs `deposit` and `release` from a clone of the paper repository.
-
-## What runs from the npm package
-
-`oak bootstrap` and `oak upgrade` run from the package. `oak build`, `oak validate` and `oak start` run the version the paper pins, downloaded into `~/.cache/oak` the first time ([details](https://scholar.nexus/oaktree-sapling/guide/pins#pins-local)). The workflow commands run in CI from a checkout of the release tag.
-
-`oak build` needs [typst](https://github.com/typst/typst) on your `PATH` for the PDF, unless the downloaded version's `bin/typst` (linux x86_64) runs on your machine.
-
-## Editorial checks
-
-`oak validate` runs two kinds of check. The engine's own invariants are built in. The editorial checks a journal selects (authors exist, have ORCIDs, have valid CRediT roles, abstract exists, keywords defined) come from the MIT-licensed [`@curvenote/check-implementations`](https://www.npmjs.com/package/@curvenote/check-implementations) and [`@curvenote/check-definitions`](https://www.npmjs.com/package/@curvenote/check-definitions). The engine supplies the runner and the GitHub Check Run reporter.
+`oak build` needs [typst](https://github.com/typst/typst) on your `PATH` for the PDF.
 
 ## Development
 
-```
-npm install
-npm test
-npm run typecheck
-```
-
-`NOTES.md` has the module map and the build internals. `RELEASING.md` explains how releases are cut and why the built bundle is committed at the tag. `STYLE.md` and `WRITING.md` are the conventions a change is reviewed against, for code and for prose.
+See `CONTRIBUTING.md`.
 
 ## License
 
