@@ -43,7 +43,6 @@ describe('the release a repo gets by default', () => {
   });
 
   it('reads only a 404 as "no stable release"; other failures throw', () => {
-    // A network or auth failure must not be reported as a missing release.
     const body = resolverBody();
     expect(body).toMatch(/HTTP 404/);
     expect(body).toMatch(/throw e;/);
