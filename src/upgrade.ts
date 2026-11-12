@@ -23,6 +23,7 @@ import {
   type TemplateAnswers,
 } from './bootstrap.js';
 import * as msg from './messages.js';
+import { firstLine } from './messages.js';
 import { err, type Outcome } from './result.js';
 import {
   compareEngineVersions,
@@ -182,8 +183,9 @@ export interface UpgradePr {
 }
 
 export interface UpgradeDeps {
-  /** The latest release tag of `engineRepo`, used when `--to` is absent. */
-  resolveTarget(engineRepo: string): string;
+  /** The latest stable release tag of `engineRepo`, used when `--to` is absent; null when there
+   *  is none. Throws when the lookup fails. */
+  resolveTarget(engineRepo: string): string | null;
   /** Gets `templates/paper/` of `engineRepo` at `tag`; returns its path. */
   materializeTemplate(engineRepo: string, tag: string): string;
   pr: UpgradePr;
@@ -229,7 +231,17 @@ export async function cmdUpgrade(input: UpgradeInput, deps: UpgradeDeps): Promis
   // A target oak picked is printed, as in bootstrap, since "the newest right now" cannot be
   // reproduced.
   const targetGiven = Boolean(input.to);
-  const target = input.to ?? deps.resolveTarget(answers.engineRepo);
+  let target = input.to;
+  if (target === undefined) {
+    let latest: string | null;
+    try {
+      latest = deps.resolveTarget(answers.engineRepo);
+    } catch (e) {
+      return err(2, msg.upgrade.releaseLookupFailed(answers.engineRepo, firstLine(e)));
+    }
+    if (latest === null) return err(2, msg.upgrade.noStableRelease(answers.engineRepo));
+    target = latest;
+  }
   // The target becomes a clone ref, a branch name and the pin, and the engine action refuses any
   // pin that is not an engine version.
   if (!ENGINE_VERSION.test(target)) {

@@ -42,9 +42,16 @@ describe('the release a repo gets by default', () => {
     expect(body).not.toContain('--limit');
   });
 
+  it('reads only a 404 as "no stable release"; other failures throw', () => {
+    // A network or auth failure must not be reported as a missing release.
+    const body = resolverBody();
+    expect(body).toMatch(/HTTP 404/);
+    expect(body).toMatch(/throw e;/);
+  });
+
   it('tells a repo with only pre-releases how to name one', () => {
     // "no releases" would contradict the releases page.
-    const m = msg.workflow.noStableRelease('me/engine');
+    const m = msg.upgrade.noStableRelease('me/engine');
     expect(m).not.toMatch(/no releases found/);
     expect(m).toMatch(/pre-release/);
     expect(m).toMatch(/--to <tag>/);
