@@ -16,8 +16,7 @@ Conventions for the engine's code. For comments, messages and other prose, see `
 
 ## Messages
 
-- Links are `docsUrl(DOCS.<topic>)`, never a raw URL.
-- Keep `${…}` holes and `oak <verb>:` prefixes; tests assert on fragments.
+The rules for what a message contains are in the header of `src/messages.ts`. If you're adding or changing a message, you may want to read it first, and `WRITING.md`'s "In oak's output" for how it should read.
 
 ## Reading files
 
@@ -40,6 +39,10 @@ Verbs are loaded with `await import()`, so an invocation loads only the modules 
 ## YAML
 
 Round-trip through the `yaml` Document API, never a textual patch or `sed`. This preserves the author's key order and comments.
+
+## Workflows
+
+Pin each GitHub Action to a full commit SHA, with its version in a comment: `actions/checkout@<sha> # v7.0.1`.
 
 ## Enforcement
 

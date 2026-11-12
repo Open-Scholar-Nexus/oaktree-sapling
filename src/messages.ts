@@ -4,7 +4,8 @@
  * Fixed strings are consts, parameterised ones functions. Keep the `${…}` holes and the
  * `oak <command>:` prefixes, which say which command spoke; some tests assert on fragments. Nothing
  * here does work beyond choosing a phrasing. A link is `docsUrl(DOCS.<topic>)`, never a URL, and
- * only where the page says more than a sentence can.
+ * only where the page says more than a sentence can. If you're adding or changing a message, you
+ * may want to read "In oak's output" in WRITING.md first, for how it should read.
  *
  * The rules:
  *   {COMPLETE-PLAN} Every default or resolved value is declared in the plan before the confirm

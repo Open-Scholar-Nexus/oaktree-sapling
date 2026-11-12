@@ -1,8 +1,14 @@
 # Writing
 
+Prose here covers the docs, code comments, oak's messages and PR descriptions. Write it for someone reading it once: say what the thing does, once, in plain words, and stop. `STYLE.md` covers the code itself.
+
+The rest of this file is optional help. It lists the patterns I kept editing out of LLM drafts, a pattern only when it showed up across several of them, so it works best as instructions you give an LLM before it drafts. Use it if it helps.
+
+<!-- Previous intro, kept for comparison:
 Prose rules, for the docs, code comments and anything else made of sentences. `STYLE.md` covers the code itself.
 
 These are derived from edits to LLM drafts, not introspected: a pattern that shows up across several of those diffs lands here, and anything else is taste and stays out.
+-->
 
 ## What each section is for
 
@@ -73,7 +79,7 @@ Keep a negation that corrects an assumption the reader is likely to arrive with,
 
 ### Say it once, at the shortest length that still carries the mechanism
 
-The failure is not long sentences, it is a point made three times: stated, restated as a summary, then again as a consequence. Keep the statement that carries the mechanism and delete the others. A bulleted list whose lead-in already said the same thing in prose is the common case.
+A point often gets made three times: stated, restated as a summary, then again as a consequence. Keep the statement that carries the mechanism and delete the others. A bulleted list whose lead-in already said the same thing in prose is the common case.
 
 ### No fact that goes stale the moment something is added
 
@@ -88,7 +94,7 @@ Dated liveness claims are the same defect. "Certified live 2026-09-05" cannot be
 
 ### Do not cite what the reader cannot open
 
-A pointer to a private notebook, a home directory or a repo nobody outside has access to gives the reader nothing to open. Carry the substance across, which is the claim plus its date, and drop the path.
+A pointer to a private notebook, a home directory or a repo nobody outside has access to gives the reader nothing to open. Carry the claim across and drop the path.
 
 ### Describe the thing as it is, not relative to what it replaced
 
@@ -119,6 +125,26 @@ Good:  "the rejection shows only when someone runs it"
 
 The same goes for coined terms. A private word that stands for a concept, then recurs across the page, makes every later sentence depend on having read the one that coined it. A main concept can have a term if the page defines the term once, near the top, where the reader looks for definitions ("launchers" in `docs/design/paper-ci.md`). Everything else is said in full each time.
 
+### Lead with what holds
+
+When a page explains how an edge case is handled, open with what is guaranteed, then give the case as an example. Opening with the problem reads like an open bug.
+
+```
+Bad:   "The build and deposit jobs can run at different journal commits, so ..."
+Good:  "journal.zip holds the journal commit the build used, so it matches the PDF
+        even when the journal has changed since."
+```
+
+### A heading names the subject
+
+A heading says what the section is about, not what to conclude from it. A heading that makes a claim has to be re-read once the section has made the argument properly.
+
+```
+Bad:   "The thing you must remember"
+Bad:   "The engine does not render anything"
+Good:  "Processing MyST markdown"
+```
+
 ### Do not imply a decision that has not been made
 
 Where a choice is still open the text says so. A definite article is a claim.
@@ -129,7 +155,7 @@ Where a choice is still open the text says so. A definite article is a claim.
 
 A design page describes what constrains behaviour now. A bug that was fixed, a run that passed, a sweep that finished: those are deleted.
 
-The ref check is the only thing here a machine checks. The rest is convention that review applies.
+The ref check is the only thing here a machine checks.
 
 ## In code
 
@@ -150,7 +176,7 @@ Every module opens with a short block comment: what the module does, then option
 
 - A comment stating a **constraint, invariant, or ratified decision**, citing the reference the reader can open (below) rather than restating it.
 - A comment saying **why this is not the obvious approach**: a dead end, named.
-- A comment saying **why this looks wrong but is not**. It guards against a plausible wrong edit, so it reads as narration and is the one most likely to be deleted by mistake. Keep it.
+- A comment saying **why this looks wrong but is not**. It guards against a plausible wrong edit. It can read like narration, so it is easy to delete by mistake.
 
 **Go:**
 
@@ -167,7 +193,7 @@ When in doubt, cut. A three-line justification is a one-line constraint plus its
 Cite the one the reader *of this file* can open:
 
 - `[R#]` for engine internals (see *Design pages*, above).
-- a `DOCS.*` symbol for a verb's **observable behaviour**. If the sentence stays true reading only what the CLI does, it is user docs, not a source comment. Cite the symbol, never a raw `docs/` path or URL: symbols are tested to resolve, raw paths are not, and a page that does not exist yet is not a link to make.
+- a `DOCS.*` symbol for a verb's **observable behaviour**. If the sentence stays true reading only what the CLI does, it is user docs, not a source comment. Cite the symbol, never a raw `docs/` path or URL: `test/docs-links.test.ts` checks that every symbol resolves, raw paths are unchecked, and a page that does not exist yet is not a link to make.
 - where neither resolves, the one line must be self-contained.
 
 ```ts
@@ -180,15 +206,13 @@ Files seeded into paper or journal repos carry **no** `[R#]`, since their reader
 
 ### JSDoc
 
-Every export gets one: contract first (what it returns, what it throws), in a line or two. A constraint stated in a JSDoc is still one line plus its `[R#]`. Cross-reference other symbols with `{@link Name}`, not a bare mention.
+An export gets one when its name and signature do not say what it returns or throws: the contract, in a line or two. A constraint stated in a JSDoc is still one line plus its `[R#]`. Cross-reference other symbols with `{@link Name}`, not a bare mention.
 
 ## In oak's output
 
-Every string `oak` prints, including from the workflows it seeds.
+How a string `oak` prints should read. What a message must contain, such as the plan before the confirm prompt and the `oak <verb>:` prefix, is in the header of `src/messages.ts`, with a list of the printed text that lives outside that file. If you're adding or changing a message, you may want to read that header first.
 
 - Name the tools doing the work: mystmd, gh, git, Cloudflare, Zenodo. `oak` is the engine.
-- Every default or auto-resolved value appears in the plan, on a row labelled by the flag that sets it, marked `(default)` when no flag did.
-- An error names the file and the fix, starts with `oak <verb>:`, and never shows a stack.
 - A refusal or an after-run note says what to do in one line. Anything more is a docs link.
 - Short beats complete. If a clause survives deletion, delete it.
 - No filler ("Oops", "Sorry", "Unfortunately"), no exclamation marks, no emoji outside PR comments.
@@ -197,9 +221,9 @@ Every string `oak` prints, including from the workflows it seeds.
 
 Staging area. Nothing here is in force, and nothing here should be raised in review. A candidate is promoted when there are edits behind it, not when it sounds right.
 
-- `[unverified]` **A heading states the subject, not a claim.** "There is no central website" became "Repository layout", and "The engine does not render anything" became "Processing MyST markdown". A heading that argues has to be re-read once the section has made the argument properly.
 - **Name what a reference points to.** "Two values a fork controls go through it" drew "which values?", and "these two things" drew "unclear why you're saying these". Name the values, not their count.
 - **State a rule as a rule.** "A guard is only known to close a finding once its input has been run through it" is neither an instruction nor a fact. Write the rule: "A guard that answers a finding is tested with that finding's own input."
+- `[unverified]` **Make the subject the thing the sentence is about.** "A failed lookup is undefined too: the notice it feeds is advice, and the pin does not depend on it" is about what `newerRelease` returns, but its subject is the lookup, so the reader has to rebuild the claim. It became "else undefined, also when the lookup fails".
 - `[unverified]` **Do not signpost what the page is about to do.** "It covers the three things the rest of the section assumes you already know" was cut whole, and the sections covered them anyway.
 - `[unverified]` **Repeat the noun when a pronoun could point at two things.** A pronoun is fine when only one noun fits. "GitHub holds the checks on a pull request a workflow opens, and approving them does not run the preview, so close and reopen it to run both, then merge it" asks the reader to work out *them*, *it* and *both*. Name the pull request, and name the checks and the preview.
 - `[unverified]` **One word, one meaning per page.** When a word already means one thing on a page, say the second thing in full. `docs/design/releases.md` uses "the build" for `dist/cli.cjs` ("the build has to be in the checkout") and for building a paper ("the journal commit the build used"). Write `dist/cli.cjs` for the first and keep "build" for the second.
