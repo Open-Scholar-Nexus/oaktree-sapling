@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   checkLayout,
-  runLayerA,
+  runOakChecks,
   splitUnrunnableChecks,
   checkBrandFavicon,
   checkBrandWatermark,
@@ -32,8 +32,8 @@ function edgeReturning(project: unknown, checkResults: unknown[] = []): MystEdge
       return project as never;
     },
     async build() {},
-    // The real edge processes the project with myst and runs the curvenote checks; the fake
-    // returns fixed Layer B results, so the exit codes and how results combine can be tested.
+    // In a real run this processes the project with myst and runs the curvenote checks; this stub
+    // returns fixed editorial check results, so exit codes and result merging can be tested.
     async withProjectSession() {
       return checkResults as never;
     },
@@ -301,7 +301,7 @@ describe('runValidate: exit codes with the fixture journal', () => {
     expect(out.checkRun.conclusion).toBe('failure');
   });
 
-  it('a bad id still runs Layer B and still fails the run (exit 1)', async () => {
+  it('a bad id still runs the editorial checks and still fails the run (exit 1)', async () => {
     // An id error is `identity`, not `structural`, so myst still processes the paper and the
     // author gets every finding at once.
     const bad = { id: 'fixture-template-placeholder', authors: [], abstract: '', keywords: [] };
@@ -317,14 +317,14 @@ describe('runValidate: exit codes with the fixture journal', () => {
       allTrue,
     );
     expect(out.exitCode).toBe(1);
-    // Layer B ran despite the bad id,
+    // The editorial checks ran despite the bad id,
     expect(out.checks.some((c) => c.id === 'abstract-exists')).toBe(true);
     // and the id error still fails the Check Run.
     expect(out.errors.find((e) => e.check === 'id-shape')?.klass).toBe('identity');
     expect(out.checkRun.conclusion).toBe('failure');
   });
 
-  it('fails on a reserved deposit/ name, and Layer B still runs [R28]', async () => {
+  it('fails on a reserved deposit/ name, and the editorial checks still run [R28]', async () => {
     const out = await runValidate(
       {
         paperRoot: '/paper',
@@ -377,9 +377,9 @@ describe('runValidate: exit codes with the fixture journal', () => {
     expect(out.checkRun.conclusion).toBe('success');
   });
 
-  // The edge throws when Layer B runs, as `processProject` does on a project that cannot be
-  // processed (a missing index.md, say). Validate still reports.
-  const edgeThrowingInLayerB = (project: unknown): MystEdge => ({
+  // This myst stub throws when the editorial checks run, as `processProject` does on a project that
+  // cannot be processed (a missing index.md, say). Validate still reports.
+  const edgeThrowingInEditorialChecks = (project: unknown): MystEdge => ({
     async loadProject() {
       return project as never;
     },
@@ -389,15 +389,15 @@ describe('runValidate: exit codes with the fixture journal', () => {
     },
   });
 
-  it('a Layer A error that stops Layer B fails the run without crashing (exit 1)', async () => {
-    // A missing index.md is a layout error, so Layer B is skipped (its edge would throw), and
-    // the run resolves with the layout finding.
+  it('a structural error skips the editorial checks and fails the run (exit 1)', async () => {
+    // A missing index.md is a layout error, so the editorial checks are skipped (the myst stub
+    // would throw), and the run resolves with the layout finding.
     const probes: FsProbes = {
       existsProbe: (p) => p.endsWith('myst.yml'),
       listTree: () => ['myst.yml'],
     };
     const out = await runValidate(
-      { paperRoot: '/paper', instanceRoot, edge: edgeThrowingInLayerB(goodProject) },
+      { paperRoot: '/paper', instanceRoot, edge: edgeThrowingInEditorialChecks(goodProject) },
       { repo: 'open-scholar-nexus/fixture-sample-paper' },
       probes,
     );
@@ -407,11 +407,11 @@ describe('runValidate: exit codes with the fixture journal', () => {
     expect(out.checkRun.conclusion).toBe('failure');
   });
 
-  it('reports an unexpected Layer B throw as an error (exit 1), without crashing', async () => {
-    // Layer A passes but loading the project throws: the editorial checks report an error, and
+  it('reports a throw in the editorial checks as an error (exit 1)', async () => {
+    // oak's checks pass but loading the project throws: the editorial checks report an error, and
     // validate does not crash.
     const out = await runValidate(
-      { paperRoot: '/paper', instanceRoot, edge: edgeThrowingInLayerB(goodProject) },
+      { paperRoot: '/paper', instanceRoot, edge: edgeThrowingInEditorialChecks(goodProject) },
       { repo: 'open-scholar-nexus/fixture-sample-paper' },
       allTrue,
     );
@@ -429,7 +429,7 @@ describe('runValidate: exit codes with the fixture journal', () => {
     expect(strict.exitCode).toBe(1);
   });
 
-  it('--strict fails the status and Check Run too, not only the exit code [R119]', async () => {
+  it('--strict fails the status and the Check Run as well as the exit code [R119]', async () => {
     // A strict run that exits 1 also reports a failure in its status and Check Run.
     const base = { paperRoot: '/paper', instanceRoot: null, edge: edgeReturning(goodProject) };
     const lax = await runValidate(base, { repo: null }, allTrue);
@@ -538,7 +538,7 @@ describe("a layer's own extends: is followed [R119]", () => {
     return { engineRoot, instanceRoot };
   }
   const findings = (roots: { engineRoot: string; instanceRoot: string }) =>
-    runLayerA(
+    runOakChecks(
       {
         paperRoot: '/paper',
         instanceRoot: roots.instanceRoot,
@@ -623,7 +623,7 @@ describe("the author's template is read from their myst.yml, not from the compos
   };
   const journalInstance = () => {
     // `allTrue` says every path exists, so the journal repo must really hold the files
-    // runLayerA reads (journal.yml and the registry), or the read throws first.
+    // runOakChecks reads (journal.yml and the registry), or the read throws first.
     const dir = tmpDir({ 'journal.yml': 'name: J\ntypst_template: ./journal-template\n' });
     mkdirSync(join(dir, 'registry'), { recursive: true });
     writeFileSync(join(dir, 'registry', 'papers.yml'), '[]\n');
@@ -632,7 +632,7 @@ describe("the author's template is read from their myst.yml, not from the compos
 
   it('does not report template-override when the paper declares no template', () => {
     const paperRoot = tmpDir({ 'myst.yml': 'version: 1\nproject:\n  id: j-2026-x\n' });
-    const findings = runLayerA(
+    const findings = runOakChecks(
       { paperRoot, instanceRoot: journalInstance(), project: composedProject, repo: null },
       allTrue,
     );
@@ -644,7 +644,7 @@ describe("the author's template is read from their myst.yml, not from the compos
       'myst.yml':
         'version: 1\nproject:\n  id: j-2026-x\n  exports:\n    - format: typst\n      id: typst-pdf\n      template: ./mine\n',
     });
-    const findings = runLayerA(
+    const findings = runOakChecks(
       { paperRoot, instanceRoot: journalInstance(), project: composedProject, repo: null },
       allTrue,
     );
@@ -656,7 +656,7 @@ describe("the author's template is read from their myst.yml, not from the compos
       'myst.yml':
         'version: 1\nproject:\n  id: j-2026-x\n  options:\n    oaktree-sapling:\n      journal: { repo: "." }\n',
     });
-    const findings = runLayerA(
+    const findings = runOakChecks(
       { paperRoot, instanceRoot: journalInstance(), project: composedProject, repo: null },
       allTrue,
     );
@@ -685,9 +685,8 @@ describe('splitUnrunnableChecks: a check that cannot run yet is reported, not ru
   });
 
   it('marks it optional even when the journal made it required', () => {
-    // `_build/exports` never exists in CI (check-paper.yml has no build step), so a blocking result
-    // here would fail every pull request of every paper, and only the journal could fix it. It
-    // would also pass locally, where an earlier build left the directory.
+    // `_build/exports` never exists in CI (check-paper.yml has no build step), so the check is
+    // always optional here; locally it can pass after a build.
     const { unrunnable } = splitUnrunnableChecks([{ id: 'exports-exist' }], '/paper', allFalse);
     expect(unrunnable[0]!.optional).toBe(true);
     expect(toCheckRun(unrunnable).conclusion).toBe('success');
@@ -709,19 +708,19 @@ describe('runValidate: when there is nothing to compose [R82]', () => {
     // command do not differ silently [R71].
     expect(out.notes.some((n) => /own myst\.yml ONLY/.test(n))).toBe(true);
     expect(out.checkRun).toBeDefined();
-    // It reaches the pull request too, not just stdout.
+    // The note is in the Check Run summary as well as stdout.
     expect(out.checkRun.summary).toMatch(/⚠️ checked the paper's own myst\.yml ONLY/);
     // Nothing to compose is the user's choice (--no-instance, or a local run), so the note
     // explains and does not block. A failed compose, below, does block.
     expect(out.errors.some((e) => e.check === 'compose')).toBe(false);
   });
 
-  it('a failed compose fails the run, not only a note', async () => {
+  it('a failed compose fails the run', async () => {
     // With oak's checkout and the journal repo both present, a throw means the paper's own
     // config broke compose: a mistyped `edition:`, a missing version key, the [R36] check.
     // `oak build` throws the same way, so this blocks the merge.
     // A real paper root: materializeDerived reads the author's myst.yml from disk, with its
-    // version key, before the edge is used.
+    // version key, before the myst stub is used.
     const paperRoot = mkdtempSync(join(tmpdir(), 'oak-compose-fail-'));
     writeFileSync(
       join(paperRoot, 'myst.yml'),
@@ -744,7 +743,7 @@ describe('runValidate: when there is nothing to compose [R82]', () => {
     );
     const compose = out.errors.find((e) => e.check === 'compose');
     expect(compose?.severity).toBe('error');
-    expect(compose?.klass).toBe('config'); // not `structural`, so Layer B still runs
+    expect(compose?.klass).toBe('config'); // not `structural`, so the editorial checks still run
     expect(compose?.message).toMatch(/editions\/typo\.yml/);
     expect(out.status).toBe('error');
     expect(out.exitCode).toBe(1);
@@ -761,8 +760,8 @@ describe('a journal.yml that cannot be read fails the run [R116]', () => {
     existsProbe: (p: string) => !p.endsWith('journal.yml') && !p.endsWith('papers.yml'),
     listTree: () => [],
   };
-  const layerA = (instanceRoot: string | null, probes: FsProbes) =>
-    runLayerA(
+  const oakFindings = (instanceRoot: string | null, probes: FsProbes) =>
+    runOakChecks(
       {
         paperRoot: '/paper',
         instanceRoot,
@@ -775,14 +774,14 @@ describe('a journal.yml that cannot be read fails the run [R116]', () => {
     );
 
   it('fails when the journal repo has no journal.yml', () => {
-    const f = layerA('/instance', noJournal).find((x) => x.check === 'journal-config');
+    const f = oakFindings('/instance', noJournal).find((x) => x.check === 'journal-config');
     expect(f, 'a missing journal.yml must be reported').toBeTruthy();
     expect(f!.severity).toBe('error');
   });
 
   it('says nothing with --no-instance', () => {
     // --no-instance is the user's choice, not a broken journal repo.
-    expect(layerA(null, noJournal).some((x) => x.check === 'journal-config')).toBe(false);
+    expect(oakFindings(null, noJournal).some((x) => x.check === 'journal-config')).toBe(false);
   });
 });
 
@@ -794,12 +793,12 @@ describe('the id policy cannot be turned off by the journal [R119]', () => {
       listTree: () => [],
     } satisfies FsProbes;
   };
-  const layerA = (id: string, root: string | null, probes: FsProbes) =>
-    runLayerA({ paperRoot: '/paper', instanceRoot: root, project: { id }, repo: null }, probes);
+  const oakFindings = (id: string, root: string | null, probes: FsProbes) =>
+    runOakChecks({ paperRoot: '/paper', instanceRoot: root, project: { id }, repo: null }, probes);
 
   it('warns when the journal declares no id_pattern', () => {
     const dir = mkdtempSync(join(tmpdir(), 'oak-idpolicy-'));
-    const found = layerA('anything-at-all', dir, journalOf('name: J\n', dir)).find(
+    const found = oakFindings('anything-at-all', dir, journalOf('name: J\n', dir)).find(
       (f) => f.check === 'id-policy',
     );
     expect(found?.severity).toBe('warn');
@@ -808,27 +807,29 @@ describe('the id policy cannot be turned off by the journal [R119]', () => {
   it('says nothing when the journal declares one', () => {
     const dir = mkdtempSync(join(tmpdir(), 'oak-idpolicy-'));
     const probes = journalOf('name: J\nid_pattern: "^p-"\n', dir);
-    expect(layerA('p-x', dir, probes).some((f) => f.check === 'id-policy')).toBe(false);
+    expect(oakFindings('p-x', dir, probes).some((f) => f.check === 'id-policy')).toBe(false);
   });
 
   it('says nothing without a journal repo, which holds the policy [R116]', () => {
     const dir = mkdtempSync(join(tmpdir(), 'oak-idpolicy-'));
     const probes = journalOf('name: J\n', dir);
-    expect(layerA('anything-at-all', null, probes).some((f) => f.check === 'id-policy')).toBe(
+    expect(oakFindings('anything-at-all', null, probes).some((f) => f.check === 'id-policy')).toBe(
       false,
     );
   });
 
   it('still rejects the placeholder id with both keys deleted', () => {
     const dir = mkdtempSync(join(tmpdir(), 'oak-idpolicy-'));
-    const found = layerA('CHANGE-ME-template-placeholder', dir, journalOf('name: J\n', dir)).find(
-      (f) => f.check === 'id-shape',
-    );
+    const found = oakFindings(
+      'CHANGE-ME-template-placeholder',
+      dir,
+      journalOf('name: J\n', dir),
+    ).find((f) => f.check === 'id-shape');
     expect(found?.severity).toBe('error');
   });
 });
 
-describe("the registry in runLayerA: one bad entry warns, the paper's own entry must match", () => {
+describe("runOakChecks on the paper list: others' bad entries warn, the paper's must match", () => {
   const instanceWith = (registry: string): string => {
     const dir = mkdtempSync(join(tmpdir(), 'oak-reg-'));
     writeFileSync(join(dir, 'journal.yml'), 'name: J\nid_pattern: "^j-"\n');
@@ -837,7 +838,7 @@ describe("the registry in runLayerA: one bad entry warns, the paper's own entry 
     return dir;
   };
   const run = (registry: string, id: string) =>
-    runLayerA(
+    runOakChecks(
       {
         paperRoot: mkdtempSync(join(tmpdir(), 'oak-paper-')),
         instanceRoot: instanceWith(registry),

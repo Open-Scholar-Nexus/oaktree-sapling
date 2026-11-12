@@ -24,15 +24,17 @@ import { pollUntil as poll, type PollOpts } from './poll.js';
  *  requests from the fork, whose branch names it does not know. */
 export const CONFORMANCE_LABEL = 'conformance';
 
-/** Prefix of the branches a run creates in the test repo. */
+/** Prefix of the throwaway branches a run creates in the test repo. "cert" is short for
+ *  certify: it marks everything a run creates (`cert-*` branches, `*-cert-*` tags) so `reset` can
+ *  find and remove it. */
 export const CERT_BRANCH_PREFIX = 'cert-';
 
-/** Marks a run's throwaway tags (`reset` removes `*-cert-*`). The deposit tag cannot use it:
+/** Infix of a run's throwaway tags, which `reset` removes. The deposit tag has no marker:
  *  `oak release deposit` needs a plain `vX.Y.Z` (see `CERT_DEPOSIT_TAG`). */
 export const CERT_TAG_MARKER = '-cert-';
 
-/** The deposit tag. `oak release deposit` takes only `vX.Y.Z`, so a reserved version that cannot clash
- *  with the test repo's real ones is pushed, published, checked and deleted, every run.
+/** The deposit tag. `oak release deposit` takes only `vX.Y.Z`, so every run pushes, publishes,
+ *  checks and deletes a reserved version that cannot clash with the test repo's real ones.
  *  The deposit draft is keyed by the repo, not the tag, so reusing the version is fine. */
 export const CERT_DEPOSIT_TAG = 'v0.0.0';
 
@@ -154,8 +156,8 @@ export interface ResetInput {
 
 /**
  * Removes what earlier runs left in the test repo. Closes labelled pull requests first,
- * so the list is clean even if a branch deletion is refused, then deletes `cert-*` branches and
- * `*-cert-*` tags. Anything already gone is skipped.
+ * so the list is clean even if a branch deletion is refused, then deletes the run's test
+ * branches and tags. Anything already gone is skipped.
  */
 export async function cmdConformanceReset(input: ResetInput, deps: ResetDeps): Promise<Outcome> {
   const { gh, log } = deps;
@@ -179,8 +181,8 @@ export async function cmdConformanceReset(input: ResetInput, deps: ResetDeps): P
     }
   }
 
-  // The `*-cert-*` tags plus the deposit tag, which has no marker. `listTags` matches
-  // substrings, so `v0.0.0` also catches old `v0.0.0-cert-*` tags; the Set removes duplicates.
+  // The test tags plus the deposit tag, which has no marker. `listTags` matches substrings, so
+  // `v0.0.0` also lists the `v0.0.0-cert-*` test tags; the Set removes duplicates.
   const certTags = new Set([
     ...gh.listTags(repo, CERT_TAG_MARKER),
     ...gh.listTags(repo, CERT_DEPOSIT_TAG),
@@ -188,7 +190,7 @@ export async function cmdConformanceReset(input: ResetInput, deps: ResetDeps): P
   const deletedTags: string[] = [];
   for (const tag of certTags) {
     // A crashed run can leave a release on the deposit tag. Deleting the release also deletes the
-    // tag, so the following `deleteTag` finds nothing, which is fine.
+    // tag; `deleteTag` accepts a tag that is already gone.
     gh.deleteRelease(repo, tag);
     gh.deleteTag(repo, tag);
     deletedTags.push(tag);
@@ -209,7 +211,7 @@ export async function cmdConformanceReset(input: ResetInput, deps: ResetDeps): P
  * ======================================================================================== */
 
 /** How long to wait for real runs. A Build paper run plus a Pages deploy takes minutes. Tests pass a
- *  `sleep` that does nothing. */
+ *  `sleep` that returns at once. */
 const POLL = { tries: 80, intervalMs: 15_000 };
 
 /** Retries for a URL check: a fresh preview or Pages site can fail briefly after a deploy. */
@@ -217,8 +219,8 @@ const PROBE = { tries: 6, intervalMs: 5_000 };
 
 /**
  * A failure that is not oak's: a third party being down or slow (Cloudflare, Pages, Zenodo, the
- * GitHub API), or a timeout. The result is inconclusive rather than failed, so a failed run
- * always means oak is at fault.
+ * GitHub API), or a timeout. The run reports "inconclusive" (exit 3), so a "failed" run always
+ * means oak is at fault.
  */
 export class ThirdPartyError extends Error {
   constructor(message: string) {
@@ -250,11 +252,10 @@ async function pollUntil<T>(
 
 /**
  * A `gh` failure because GitHub could not serve the request (a rate limit, a 5xx, a dropped
- * connection, as gh.ts's `run` formats them) [R113]. A third party's bad day, not oak's.
+ * connection, as gh.ts's `run` formats them) [R113]. These are not oak's fault.
  *
- * A 401 or 403 that is not a rate limit is oak's: GitHub refused the request, meaning a missing
- * scope or `permissions:` block, or a call that does not apply. Counting those as third-party
- * once hid a bug in this code [R150].
+ * A 401 or 403 that is not a rate limit counts as oak's fault: GitHub refused the request, which
+ * means a missing scope or `permissions:` block, or a call that does not apply [R150].
  */
 function isGitHubApiFault(err: unknown): boolean {
   const m = err instanceof Error ? err.message : String(err);
@@ -347,10 +348,10 @@ export async function cmdConformanceRun(input: RunInput, deps: ConformanceDeps):
   const skipped: string[] = [];
   let forkResult: Record<string, unknown> = {};
   try {
-    // 1. Start clean: remove what earlier runs left.
+    // Start clean: remove what earlier runs left.
     await cmdConformanceReset({ repo }, { gh, log });
 
-    // 2. Move onto the release through `oak upgrade`, so the upgrade itself is tested.
+    // Move onto the release through `oak upgrade`, so the upgrade itself is tested.
     const up = await installEngine(repo, tag);
     // Exit 4, so the workflow keeps the release's earlier result [R111].
     if (up.upToDate) {
@@ -371,8 +372,7 @@ export async function cmdConformanceRun(input: RunInput, deps: ConformanceDeps):
     gh.labelPr(repo, prNumber, CONFORMANCE_LABEL);
     log(`upgrade PR #${prNumber}: ${up.prUrl}`);
 
-    // 3. Wait for the required Journal checks on the pull request, which also tests check-paper and
-    //    post-checks.
+    // The required Journal checks on the pull request also test check-paper and post-checks.
     const prSha = gh.prHeadSha(repo, prNumber);
     await pollUntil(
       `PR #${prNumber} Journal checks`,
@@ -381,7 +381,7 @@ export async function cmdConformanceRun(input: RunInput, deps: ConformanceDeps):
       { ...POLL, settled: settled(prSha) },
     );
 
-    // 4. Merge, which is the push to main under test.
+    // The merge is the push to main under test.
     const mergeSha = gh.mergePr(repo, prNumber);
     log(`merged PR #${prNumber} → ${mergeSha}`);
 
@@ -395,7 +395,6 @@ export async function cmdConformanceRun(input: RunInput, deps: ConformanceDeps):
     }
     log(`test repo pinned to ${pinned}`);
 
-    // 5. Build paper (build and Pages deploy) succeeded on the merge commit.
     await pollUntil(
       'Build paper (push→main)',
       () =>
@@ -407,12 +406,12 @@ export async function cmdConformanceRun(input: RunInput, deps: ConformanceDeps):
       { sleep, log },
     );
 
-    // 6. Pages serves the site, beyond the deploy job passing.
+    // A passing deploy job does not prove the site is up, so request it.
     const siteUrl = pagesUrl(repo);
     await assertServes200({ probe, sleep }, siteUrl, 'Pages');
     log(`Pages 200: ${siteUrl}`);
 
-    // 7. The Journal checks Check Run was posted on main, so post-checks ran.
+    // The Journal checks Check Run on main shows post-checks ran.
     await pollUntil(
       'Journal checks Check Run (push→main)',
       () => checkOutcome(gh.checkRunsForCommit(repo, mergeSha), 'Journal checks'),
@@ -429,7 +428,7 @@ export async function cmdConformanceRun(input: RunInput, deps: ConformanceDeps):
     gh.labelPr(repo, previewPr.number, CONFORMANCE_LABEL);
     log(`same-repo preview PR #${previewPr.number} (${branch})`);
 
-    // The `pull_request` job: Build paper builds without secrets.
+    // The `pull_request` job: Build paper builds without secrets (Stage 1).
     await pollUntil(
       `Build paper (PR #${previewPr.number} build)`,
       () =>
@@ -441,8 +440,8 @@ export async function cmdConformanceRun(input: RunInput, deps: ConformanceDeps):
       { sleep, log },
     );
 
-    // The `workflow_run` job: the preview comment. That it exists shows the build and the
-    // deploy, split across the two jobs, both ran.
+    // The `workflow_run` job (Stage 2) posts the preview comment; its existence shows the build
+    // and the deploy, split across the two jobs, both ran.
     const previewBody = await pollUntil(
       `preview sticky comment on PR #${previewPr.number}`,
       () =>
@@ -452,7 +451,7 @@ export async function cmdConformanceRun(input: RunInput, deps: ConformanceDeps):
       { ...POLL, settled: settled(previewPr.headSha) },
     );
 
-    // The preview serves 200, beyond the comment existing.
+    // The comment can exist while the preview is down, so request the preview.
     const previewUrl = extractPreviewUrl(previewBody);
     if (!previewUrl)
       throw new Error(
@@ -473,7 +472,7 @@ export async function cmdConformanceRun(input: RunInput, deps: ConformanceDeps):
     // deposit by the release's file names.
     phase = 'deposit';
 
-    // 1. The test repo's myst.yml must carry a sandbox DOI (10.5072/zenodo.<id>).
+    // The test repo's myst.yml must carry a sandbox DOI (10.5072/zenodo.<id>).
     const doi = gh.committedDoi(repo);
     if (!doi || parseZenodoDoi(doi)?.sandbox !== true) {
       throw new Error(
@@ -483,16 +482,14 @@ export async function cmdConformanceRun(input: RunInput, deps: ConformanceDeps):
     }
     log(`test repo sandbox DOI: ${doi}`);
 
-    // 2. Push the deposit tag at main's head. Delete a stale one first (after a crash), so the
-    //    push and the release creation start clean.
+    // Push the deposit tag at main's head, after deleting a stale one a crash left.
     const depositTag = CERT_DEPOSIT_TAG;
-    gh.deleteRelease(repo, depositTag); // --cleanup-tag also drops the tag; tolerant of absence
-    gh.deleteTag(repo, depositTag); // belt-and-suspenders if a bare tag (no Release) lingered
+    gh.deleteRelease(repo, depositTag); // also drops the tag; accepts a missing release
+    gh.deleteTag(repo, depositTag); // removes a tag that has no release
     const tagSha = gh.defaultBranchSha(repo);
     gh.pushTag(repo, depositTag, tagSha);
     log(`pushed deposit tag ${depositTag} → ${tagSha}`);
 
-    // 3. Wait for the publish run for the tag to succeed.
     await pollUntil(
       `Deposit version success for ${depositTag}`,
       () =>
@@ -504,8 +501,8 @@ export async function cmdConformanceRun(input: RunInput, deps: ConformanceDeps):
       { sleep, log },
     );
 
-    // 4. The deposit files are on the tag's release, with journal.zip when the journal is a repo
-    //    of its own. Without a Zenodo token this checks names, not contents [R24].
+    // The deposit files are on the tag's release, with journal.zip when the journal is a repo of
+    // its own. Without a Zenodo token this checks names, not contents [R24].
     const releaseAssets = gh.releaseAssets(repo, depositTag);
     const journalRepo = gh.committedJournalRepo(repo);
     const expected =
@@ -521,9 +518,8 @@ export async function cmdConformanceRun(input: RunInput, deps: ConformanceDeps):
     }
     log(`deposit bundle on Release ${depositTag}: ${releaseAssets.join(', ')}`);
 
-    // 5. On success, delete the release and with it the tag.
     gh.deleteRelease(repo, depositTag);
-    gh.deleteTag(repo, depositTag); // tolerated no-op if the Release cleanup already removed it
+    gh.deleteTag(repo, depositTag); // accepts a tag the release deletion already removed
     log(`deposit CERTIFIED for ${tag}`);
 
     // ---- A pull request from a fork (optional) ----
@@ -583,8 +579,8 @@ export async function cmdConformanceRun(input: RunInput, deps: ConformanceDeps):
       paths.push('preview-fork');
       forkResult = { forkPr: forkPr.number, forkPreviewUrl };
     } else {
-      // In the result, not only the log: passing three paths must not read the same as passing
-      // four [R113].
+      // Listed in the result as well as the log, so a run that skipped a path is distinguishable
+      // from one that passed it [R113].
       skipped.push('preview-fork');
       log(
         'fork preview phase SKIPPED (no fork configured; set CONFORMANCE_FORK_REPO/PAT to enable)',
@@ -624,8 +620,8 @@ export async function cmdConformanceRun(input: RunInput, deps: ConformanceDeps):
     log(`engine ${tag}: paper-CI FAILED at ${phase}: ${message}`);
     return { exitCode: 1, result: { status: 'failed', tag, path: phase, repo, failure: message } };
   } finally {
-    // Always clean up. Guarded, so a cleanup error never hides the result; the run logs and URLs
-    // stay for debugging.
+    // Always clean up. A cleanup error is logged and does not replace the result; the run logs and
+    // URLs stay for debugging.
     try {
       await cmdConformanceReset({ repo }, { gh, log });
     } catch (e) {

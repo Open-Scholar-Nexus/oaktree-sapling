@@ -105,10 +105,10 @@ export function depositRunFor(runs: CiRun[], tag: string, sha: string): CiRun | 
 
 /**
  * Downloads the tag's build into `paperRoot`, replacing {@link RELEASE_BUILD_PATHS} there, and
- * returns its run and when its build job finished. Throws a UserError while the build job runs,
- * when it did not succeed, when there is no run or no build job, and when the artifact lacks a
- * path, before anything in `paperRoot` is replaced. Only the build job is read, so a paper still
- * carrying a publish job beside it works too.
+ * returns its run and when its build job finished. Throws a UserError, before anything in
+ * `paperRoot` is replaced, while the build job runs, when it did not succeed, when there is no
+ * run or build job, and when the artifact lacks a path. Only the build job is read, so a paper
+ * with an older publish job beside it works too.
  */
 export function fetchCiBuild(
   paperRoot: string,
@@ -306,7 +306,7 @@ class StepFailed extends Error {
 }
 
 /** A pinned step's exit code as `oak release` reports it: 0 and 1 (a bug) as they are, any other
- *  failure 2, so a step's own 3 is never taken for a wait that reached its limit. */
+ *  failure 2. Exit 3 is reserved for a wait that reached its limit. */
 function exitOf(code: number): number {
   if (code === 0 || code === 1) return code;
   return 2;
@@ -341,11 +341,11 @@ function guarded(src: ReleaseSource): ReleaseSource {
  * 2. No tag, and `myst.yml` on the default branch has a DOI: tag the branch head, then as 1.
  * 3. No tag and no DOI: reserve the DOI, which pushes {@link DOI_BRANCH} and opens its pull
  *    request; merge it at the commit pushed, tag the merge commit, then as 1.
- * The refusals it can check first (token, Zenodo draft, sandbox against the committed DOI) come
- * before the confirmation and the first write. Returns the {@link ReleaseOutcome}, whose code
- * is 0 done or declined, 1 a bug, 2 a step failed, 3 a wait reached its limit; throws a UserError
- * when it refuses. The clone is removed on 0 and kept, with its path printed, otherwise; the
- * last block printed says what is left to do.
+ * Checks that need no write (token, Zenodo draft, sandbox against the committed DOI) run before
+ * the confirmation and the first write. Returns the {@link ReleaseOutcome}, whose code
+ * is 0 done or declined, 1 a bug, 2 a step failed, 3 a wait reached its limit; throws a
+ * UserError when it refuses. The clone is removed on 0 and kept, with its path printed, on any
+ * other code; the last block printed says what is left to do.
  */
 export async function runRelease(input: ReleaseInput, deps: ReleaseDeps): Promise<ReleaseOutcome> {
   const { repo, tag } = input;
@@ -478,13 +478,14 @@ function succeeded(name: string, run: SubcommandRun, deps: ReleaseDeps): Record<
     ),
   );
   if (!said && run.log) deps.showLog(run.log);
-  // A child that exits 0 with no result is a bug in it.
+  // A step that exits 0 with no result is a bug in that step.
   throw new StepFailed(run.code === 0 ? 1 : exitOf(run.code));
 }
 
 /**
- * Reserves the DOI and merges its pull request at the commit this run pushed. It runs on every
- * first-deposit run, so a pull request left open by an earlier run gets this run's commit.
+ * Reserves the DOI and merges its pull request at the commit this run pushed. Every first-deposit
+ * run reserves again, so a pull request left open by an earlier run is updated to this run's
+ * commit.
  * Returns the merge commit; throws {@link StepFailed} when the reserve step fails.
  */
 async function reserveAndMerge(

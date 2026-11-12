@@ -1,5 +1,5 @@
 /**
- * The editorial checks (Layer B, from `@curvenote/check-implementations`) over the fixture paper,
+ * The editorial checks from `@curvenote/check-implementations` over the fixture paper,
  * through the bundled CLI. Like integration.test.ts, it runs `node dist/cli.cjs`: the checks
  * read myst's processed project, and myst-cli crashes unbundled on Node 24 [R51]. So this runs
  * what CI runs. Skipped without the bundle.
@@ -53,10 +53,10 @@ function runValidate(paper: string): { exitCode: number; out: any } {
 }
 
 describe.skipIf(bundleState() === 'absent')(
-  'oak validate, curvenote Layer-B checks (bundled)',
+  'oak validate, the curvenote editorial checks (bundled)',
   () => {
     beforeAll(assertBundleNotStale);
-    it("passes the fixture paper: the journal's 5 checks pass, exit 0", () => {
+    it("passes the fixture paper: the journal's checks pass, exit 0", () => {
       const { exitCode, out } = runValidate(fixturePaper);
       expect(exitCode).toBe(0);
       expect(out.status).toBe('ok');
@@ -235,13 +235,10 @@ describe.skipIf(bundleState() === 'absent')('the COMPOSED view reaches the check
   }, 60_000);
 });
 
-/* --------------------------------------------------------------------------
- * Finding the journal repo [R38], and the report written when validate cannot run. With
- * `instance_repo: .` the engine action passes no `--instance`, so validate looks for a
- * journal.yml beside the paper; when it finds none, it still writes a report.
- * ------------------------------------------------------------------------ */
+// Finding the journal repo [R38]. With `instance_repo: .` the action passes no `--instance`, so
+// validate looks for a journal.yml beside the paper; with none, it still writes a report.
 describe.skipIf(bundleState() === 'absent')(
-  'oak validate, instance resolution + crash reporting',
+  'oak validate, finding the journal repo and reporting a crash',
   () => {
     beforeAll(assertBundleNotStale);
 
@@ -294,7 +291,7 @@ describe.skipIf(bundleState() === 'absent')(
       expect(r.status).toBe(0);
       const out = JSON.parse(r.stdout);
       expect(out.checkRun.conclusion).toBe('success');
-      // Composed with the journal.yml beside the paper: its five checks ran.
+      // Composed with the journal.yml beside the paper: its checks ran.
       const ids = new Set(out.checks.map((c: any) => c.id));
       expect(ids.has('abstract-exists')).toBe(true);
       // It did not fall back to the author's config alone.
@@ -315,10 +312,8 @@ describe.skipIf(bundleState() === 'absent')(
   },
 );
 
-/* --------------------------------------------------------------------------
- * The journal's check files [R208], through the bundle: the two worked examples from
- * `test/journal-checks/`, listed beside the catalog checks in a copy of the fixture journal.
- * ------------------------------------------------------------------------ */
+// The journal's check files [R208]: the two examples in `test/journal-checks/`, listed beside the
+// catalog checks in a copy of the fixture journal.
 describe.skipIf(bundleState() === 'absent')("oak validate, the journal's check files", () => {
   beforeAll(assertBundleNotStale);
 

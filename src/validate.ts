@@ -1,12 +1,12 @@
 /**
- * `oak validate`, in two layers:
- *   A. oak's own rules: the paper id ([R12]), the layout ([R46] [R50]), the brand favicon and
- *      watermark ([R61] [R62]), the thumbnail ([R81]) and the `deposit/` names ([R28]). `oak
- *      build` runs these first too [R21].
- *   B. The editorial checks the journal turns on in `journal.yml` `checks:` (checks.ts).
+ * `oak validate` runs two sets of checks:
+ *   - oak's checks: the paper id ([R12]), the layout ([R46] [R50]), the brand favicon and
+ *     watermark ([R61] [R62]), the thumbnail ([R81]) and the `deposit/` names ([R28]). `oak
+ *     build` runs these first too [R21].
+ *   - The editorial checks the journal turns on in `journal.yml` `checks:` (checks.ts).
  *
- * File and myst access is injected so the rules are testable; myst-cli comes in only through
- * myst.ts. The caller passes the repo, used to find the paper's own registry entry.
+ * File and myst access is injected so the rules are testable; myst-cli is reached only through
+ * myst.ts. `runValidate` takes `repo` to find the paper's own registry entry.
  */
 import * as msg from './messages.js';
 import { existsSync, readdirSync } from 'node:fs';
@@ -67,7 +67,7 @@ export interface NamedFinding {
   klass: FindingKlass;
 }
 
-/* ---- Layer A checks (pure) ---------------------------------------------- */
+/* ---- oak's checks (pure) ----------------------------------------------- */
 
 /** index.md and myst.yml at the paper root, and no other myst.yml under it [R50]. Returns the
  *  problems; empty means clean. */
@@ -415,18 +415,18 @@ export function expandLayers(
   return { layers, unreadable };
 }
 
-/* ---- Layer A aggregate --------------------------------------------------- */
+/* ---- all of oak's checks ------------------------------------------------- */
 
-export function runLayerA(
+export function runOakChecks(
   input: {
     paperRoot: string;
     instanceRoot: string | null;
-    /** The composed project from pass 1 [R82]: the author's config with the `extends:` chain,
-     *  without compose's pass-2 additions (`output`, `template`, `site.template`, brand asset
-     *  paths). Pass 1 is what `oak build` has when it runs these checks, between the passes
-     *  [R21]; Layer B reads the pass-2 file. No check here needs a pass-2 field yet; one that
-     *  does should change this, rather than read the derived file. The author's template is
-     *  read separately (below), since the composed view no longer says who set it. */
+    /** The composed project before compose's second step [R82]: the author's config with the
+     *  `extends:` chain, without the fields that step adds (`output`, `template`,
+     *  `site.template`, brand asset paths). `oak build` has this view when it runs these checks
+     *  [R21]. No check here needs a field the second step adds; one that does should change
+     *  this input. `runOakChecks` reads the author's template separately, since the composed
+     *  view no longer says who set it. */
     project: { id?: string; thumbnail?: string };
     repo: string | null;
     /** oak's checkout, for the [R72] check. Skipped when absent. */
@@ -448,7 +448,7 @@ export function runLayerA(
     findings.push({ check: 'registry-entry', severity: 'warn', message, klass: 'config' });
   }
 
-  // No journal settings is not a pass: every id rule and Layer B check would do nothing [R116].
+  // No journal settings is not a pass: every id rule and editorial check would do nothing [R116].
   if (loaded === null) {
     findings.push({
       check: 'journal-config',
@@ -566,10 +566,9 @@ export function runLayerA(
     checkBrandWatermark({ instanceRoot, logo: brand.project.logo }, probes),
   );
 
-  // The author's template is read from their own myst.yml, not `project` [R82]: the composed
-  // export carries compose's choice, so `template-override` would fire on every paper. As with
-  // brand assets [R68] and the journal's template [R76], a value whose source matters is read
-  // outside the merge.
+  // The author's template is read from their own myst.yml [R82]: the composed export carries
+  // compose's choice, which would always look like an override. As with brand assets [R68] and
+  // the journal's template [R76], a value whose source matters is read outside the merge.
   findings.push(
     ...checkTemplates(
       {
@@ -584,7 +583,7 @@ export function runLayerA(
   return findings;
 }
 
-/* ---- Layer B preconditions ---------------------------------------------- */
+/* ---- before the editorial checks ----------------------------------------- */
 
 /** The one catalog check that needs build output, not only a loaded project. */
 const EXPORTS_EXIST = 'exports-exist';
@@ -595,8 +594,8 @@ const EXPORTS_EXIST = 'exports-exist';
  * Each becomes an `error` result ("could not run"; `CheckStatus` has no skip) marked `optional`,
  * so it never blocks a merge whatever the journal set [R82].
  *
- * Building first is not an option: `check-paper.yml` runs apart from `build-paper.yml`, so it would either tie
- * the merge to the build or build every pull request twice.
+ * `check-paper.yml` runs apart from `build-paper.yml`, so these checks cannot rely on a build
+ * having happened.
  */
 export function splitUnrunnableChecks(
   journalChecks: JournalCheck[],
@@ -660,7 +659,7 @@ export async function runValidate(
 
   // Validates the config `oak build` reads [R71]: the author's myst.yml merged with paper-base
   // and the journal's settings [R82]. The thumbnail and the typst export come from paper-base,
-  // so Layer A checks them only after the merge [R81]. A bare local run or `--no-instance` has
+  // so oak checks them only after the merge [R81]. A bare local run or `--no-instance` has
   // no journal to merge, and validates the author's myst.yml as it is [R193].
   let project: { id?: string; exports?: Array<Record<string, unknown>>; thumbnail?: string };
   let configFile: string | undefined;
@@ -691,8 +690,8 @@ export async function runValidate(
   }
   project ??= (await input.edge.loadProject(input.paperRoot)) as typeof project;
 
-  // Layer A: engine invariants
-  const layerA = runLayerA(
+  // oak's own checks
+  const oakFindings = runOakChecks(
     {
       paperRoot: input.paperRoot,
       instanceRoot: input.instanceRoot,
@@ -703,30 +702,29 @@ export async function runValidate(
     },
     probes,
   );
-  // Recorded as `config`: it blocks the merge and Layer B still runs, so the author sees every
-  // finding at once. Without a compose, Layer B reads the author's own config, so some of its
+  // Recorded as `config`: it blocks the merge, and the editorial checks still run so the author
+  // sees every finding at once. Without a compose they read the author's own config, so some
   // results may not apply; the note says so.
   if (composeFailure) {
-    layerA.push({
+    oakFindings.push({
       check: 'compose',
       severity: 'error',
       message: msg.validate.composeFailed(composeFailure),
       klass: 'config',
     });
   }
-  const errors = layerA.filter((f) => f.severity === 'error');
-  const warnings = layerA.filter((f) => f.severity === 'warn');
+  const errors = oakFindings.filter((f) => f.severity === 'error');
+  const warnings = oakFindings.filter((f) => f.severity === 'warn');
 
-  // Layer B: the journal's editorial checks (@curvenote/check-implementations and the journal's
-  // check files [R208]). They read the myst store, so they run in a processed project session,
-  // on the derived config with its pass-2 additions [R82]. When Layer A finds a structural error
-  // myst cannot process the project, so Layer B is skipped. `runChecks` turns a check that
-  // throws into its own error row; a project myst cannot load becomes one check error here.
-  // Layer A already blocked on missing journal settings [R116]; the default keeps the shape.
+  // The journal's editorial checks (@curvenote/check-implementations and the journal's check
+  // files [R208]). They read the myst store, so they run in a processed project session on the
+  // composed config [R82]. After a structural error myst cannot process the project, so they are
+  // skipped. `runChecks` turns a check that throws into its own error row; a project myst cannot
+  // load becomes one check error here. oak's checks already block on missing journal settings
+  // [R116]; the empty default only keeps the result's shape.
   const journal = loadJournal(input.instanceRoot, probes) ?? emptyJournal();
   let checks: EngineCheckResult[] = [];
-  // Only structural errors stop myst processing. A bad id does not, so the editorial checks
-  // still run and the author sees every finding at once.
+  // Only structural errors stop myst processing; after a bad id the editorial checks still run.
   const structuralErrors = errors.filter((f) => f.klass === 'structural');
   // Checks whose precondition is unmet are reported, not run [R82]; see splitUnrunnableChecks.
   const { runnable, unrunnable } = splitUnrunnableChecks(
@@ -758,27 +756,24 @@ export async function runValidate(
     }
   }
 
-  // The Check Run's results: Layer A findings (errors block, warnings are optional) and Layer B's.
-  const layerAResults: EngineCheckResult[] = layerA.map((f) => ({
+  // The Check Run's results: oak's findings (errors block, warnings are optional) and the
+  // editorial checks' results.
+  const oakResults: EngineCheckResult[] = oakFindings.map((f) => ({
     id: f.check,
     status: CheckStatus.fail,
     message: f.message,
     // --strict blocks warnings, so they gate the Check Run too ([R119]).
     optional: opts.strict ? false : f.severity === 'warn',
   }));
-  // Make curvenote's absolute paths relative to the checkout root, so GitHub can resolve them;
-  // the paper root by default, which is the repo root for a single-paper repo.
-  const checkRun = toCheckRun(
-    [...layerAResults, ...checks],
-    opts.pathBase ?? input.paperRoot,
-    notes,
-  );
+  // Curvenote reports absolute paths; they are made relative to the checkout root, so GitHub can
+  // resolve them. That is the paper root by default, the repo root for a single-paper repo.
+  const checkRun = toCheckRun([...oakResults, ...checks], opts.pathBase ?? input.paperRoot, notes);
 
   const blockingCheckFail = checks.some(
     (c) => (c.status === CheckStatus.fail || c.status === CheckStatus.error) && !c.optional,
   );
   const hasError = errors.length > 0 || blockingCheckFail;
-  // --strict warnings block the verdict and the Check Run, not just the exit code ([R119]).
+  // With --strict, warnings fail the Check Run as well as the exit code ([R119]).
   const failed = hasError || (opts.strict && warnings.length > 0);
   const exitCode = failed ? 1 : 0;
 

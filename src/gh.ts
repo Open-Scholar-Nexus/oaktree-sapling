@@ -31,10 +31,9 @@ import type { ConformanceGh } from './conformance.js';
 import type { CiBuildSource, CiJob, CiRun, ReleaseSource } from './release.js';
 
 /**
- * git and gh output is captured, so the user can tell what oak did from what a tool it called
- * printed ("Cloning into '/tmp/oak-seed-...'"). It stays quiet on success; on failure the
- * captured text is replayed with the tool's name on every line.
- * `--verbose` (`OAK_VERBOSE`) replays it on success too; CI always does for logs.
+ * git and gh output is captured, so oak's own lines stay apart from what the tools print
+ * ("Cloning into '/tmp/oak-seed-...'"). On failure it is replayed with the tool's name on every
+ * line; `--verbose` (`OAK_VERBOSE`) and CI replay it on success too.
  */
 function verboseChildren(): boolean {
   return Boolean(process.env.OAK_VERBOSE || process.env.CI);
@@ -55,10 +54,9 @@ function echoChild(tool: string, text: unknown): void {
 }
 
 /**
- * Prints what is running, then erases the line [R85]: cloning or creating a repo takes seconds,
- * and silence reads as a hang. No spinner, since `spawnSync` blocks the event loop; the one
- * `oak release` shows while it waits (progress.ts) is drawn only between calls. Only on a
- * TTY: a log would keep the half-erased line, and CI prints child output anyway.
+ * Prints what is running, then erases the line [R85]: cloning or creating a repo takes seconds.
+ * There is no spinner because `spawnSync` blocks the event loop (progress.ts draws one between
+ * calls). Only on a TTY: a log would keep the half-erased line, and CI prints child output.
  */
 function showWorking(tool: string, args: string[]): () => void {
   if (!process.stderr.isTTY || verboseChildren()) return () => {};
@@ -196,10 +194,10 @@ export function assertRepoName(repo: string, source: string): string {
 }
 
 /**
- * Both reach `git fetch` as positional arguments, which git still parses as options, so a ref
- * of `--upload-pack=<command>` runs the command [R103]. Only the two supported transports pass;
- * screening for `-` would miss `ext::`, which does the same. Credentials in the URL are refused,
- * since `--from` is copied into a public commit message.
+ * The ingest source URL and ref reach `git fetch` as positional arguments, which git parses as
+ * options: a ref of `--upload-pack=<command>` runs the command [R103]. Only the two supported
+ * transports pass, which also excludes `ext::`. Credentials in the URL are refused, since
+ * `--from` is copied into a public commit message.
  */
 const INGEST_REF = /^[A-Za-z0-9_][A-Za-z0-9._/-]*$/;
 
@@ -358,10 +356,10 @@ export const doiPrStatus = {
 } as const;
 
 /**
- * Posts a passing `Journal checks` commit status on `sha`, the commit {@link openDoiPr} pushed,
- * which changes only myst.yml. GitHub does not run the checks on a pull request a workflow opens,
- * so without this status the merge rule blocks it. A commit pushed to the branch later has no
- * `Journal checks` status until the checks run on it.
+ * Posts a passing `Journal checks` commit status on `sha`, the commit {@link openDoiPr} pushed
+ * (it changes only myst.yml). GitHub does not run the checks on a pull request a workflow opens,
+ * and the merge rule requires this status. A later commit on the branch has no status until the
+ * checks run on it.
  */
 export function markDoiPrChecksSkipped(repo: string, sha: string): void {
   gh(['api', '--method', 'POST', `repos/${repo}/statuses/${sha}`, '--input', '-'], {
@@ -691,9 +689,10 @@ const WRANGLER_VERSION = '4.127.1';
 
 export const realPagesDeployer: PagesDeployer = {
   async deploy(opts) {
-    // stderr is passed through, not captured: captured stderr joins the error message, which
-    // preview.ts posts publicly, and wrangler's names the account id [R104]. An empty cwd, so a
-    // `.npmrc` or `node_modules/wrangler` in the paper cannot pick which wrangler runs.
+    // stderr is not captured: captured text would join the error message preview.ts posts
+    // publicly, and wrangler's stderr names the account id [R104].
+    // The empty cwd keeps a `.npmrc` or `node_modules/wrangler` in the paper from choosing the
+    // wrangler that runs.
     const cwd = mkdtempSync(join(tmpdir(), 'oak-wrangler-'));
     let out: string;
     try {
@@ -730,11 +729,8 @@ export const realPagesDeployer: PagesDeployer = {
   },
 };
 
-/* --------------------------------------------------------------------------
- * For checks.ts: posting the journal check results as a Check Run, with a summary table and
- * inline annotations, and as a commit status of the same name. Needs `checks: write` and
- * `statuses: write`, so only the trusted `workflow_run` job.
- * ------------------------------------------------------------------------ */
+// For checks.ts: posts the journal check results as a Check Run and a commit status of the same
+// name. Needs `checks: write` and `statuses: write`, so only the `workflow_run` job runs it.
 
 export interface CheckRunPoster {
   create(repo: string, headSha: string, name: string, run: CheckRun): void;
@@ -793,10 +789,8 @@ export const realCheckRun: CheckRunPoster = {
   },
 };
 
-/* --------------------------------------------------------------------------
- * For bootstrap.ts: creating and setting up repos through `gh api` and `git`. Every
- * change reads the current state first, so a rerun is safe.
- * ------------------------------------------------------------------------ */
+// For bootstrap.ts: creates and sets up repos through `gh api` and `git`. Each change reads the
+// current state first, so a rerun is safe.
 
 export const realProvisioner: Provisioner = {
   ownerType(owner) {
@@ -1017,8 +1011,7 @@ export const realProvisioner: Provisioner = {
     const args = ['label', 'create', name, '--repo', repo, '--force'];
     if (opts.color) args.push('--color', opts.color);
     if (opts.description) args.push('--description', opts.description);
-    // `--force` covers an existing label, so any error is real, and the step runner records it
-    // [R127].
+    // `--force` updates a label that already exists, so an error here is a real failure [R127].
     gh(args);
   },
   setSecret(repo, env, name, value) {
@@ -1203,7 +1196,7 @@ function committedYamlValue(repo: string, file: string, path: string[]): string 
     return null; // no such file / no read access
   }
   if (!content) return null;
-  // GitHub wraps the base64 in newlines; Buffer ignores them.
+  // GitHub wraps base64 in newlines; Buffer ignores them.
   const text = Buffer.from(content, 'base64').toString('utf8');
   const value = parseYaml(text, `${repo}:${file}`).getIn(path);
   return value != null ? String(value) : null;
@@ -1344,7 +1337,7 @@ export const realConformanceGh: ConformanceGh = {
       content: string;
       sha: string;
     };
-    const current = Buffer.from(meta.content, 'base64').toString('utf8'); // GitHub wraps base64 in \n; Buffer ignores them
+    const current = Buffer.from(meta.content, 'base64').toString('utf8');
     const updated = Buffer.from(`${current}\n% conformance ${marker}\n`, 'utf8').toString('base64');
     gh([
       'api',
@@ -1474,7 +1467,6 @@ export const realConformanceGh: ConformanceGh = {
         '{content: .content, sha: .sha}',
       ]),
     ) as { content: string; sha: string };
-    // GitHub wraps base64 in \n; Buffer ignores them.
     const doc = parseYaml(
       Buffer.from(meta.content, 'base64').toString('utf8'),
       `${forkRepo}:myst.yml@${branch}`,

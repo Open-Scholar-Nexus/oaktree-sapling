@@ -1,6 +1,6 @@
 name: Check paper
 
-# Stage 1 of the journal checks: validates with no secrets; post-checks.yml posts the report.
+# Runs the journal checks with no secrets; post-checks.yml posts the report.
 # https://scholar.nexus/oaktree-sapling/design/paper-ci#design-paper-ci-two-stages
 
 on:

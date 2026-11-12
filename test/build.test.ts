@@ -289,7 +289,7 @@ describe('runStart: compose, then hand off to myst', () => {
     expect(doc.getIn(['project', 'exports', 0, 'output'])).toBe(TYPST_OUTPUT);
   });
 
-  it('does not stop a preview on Layer A findings, as a build does', async () => {
+  it("does not stop a preview on oak's findings, as a build does", async () => {
     // A new repo has the placeholder id, and that does not stop a preview. (index.md is
     // absent here, which does block `oak build`.)
     const paperRoot = mkdtempSync(join(tmpdir(), 'oak-start-'));

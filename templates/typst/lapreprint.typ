@@ -24,7 +24,7 @@
   // A DOI link, shown in the header on the first page. Should be just the DOI, e.g. `10.10123/123456` ,not a URL
   doi: none,
   heading-numbering: "1.a.i",
-  // Show an Open Access badge on the first page, and support open science, default is true, because that is what the default should be.
+  // Show an Open Access badge on the first page, and support open science. Default is true.
   open-access: true,
   // A list of keywords to display after the abstract
   keywords: (),
@@ -143,7 +143,6 @@
       // First-level headings are centered smallcaps.
       // We don't want to number of the acknowledgment section.
       #let is-ack = it.body in ([Acknowledgment], [Acknowledgement])
-      // #set align(center)
       #set text(if is-ack { 10pt } else { 12pt })
       #show: smallcaps
       #v(20pt, weak: true)

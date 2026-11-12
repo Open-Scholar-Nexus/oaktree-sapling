@@ -37,7 +37,7 @@ export function repoFromGithubUrl(url: string): string | null {
  *  (RELEASING.md). It becomes a clone ref, a cache path and a `$GITHUB_OUTPUT` line. The engine
  *  action, `conformance.yml` and `scripts/cut-engine-release.sh` keep shell copies, and
  *  `npm-publish.yml` one of {@link isStableEngineVersion}, held to these by `version rule parity`
- *  in `test/frozen-guards.test.ts`. */
+ *  in `test/workflow-guards.test.ts`. */
 export const ENGINE_VERSION = /^v([0-9]+)\.([0-9]+)\.([0-9]+)(?:-dev\.([0-9]+))?$/;
 
 /** An {@link ENGINE_VERSION} without `-dev.N`: what `releases/latest` and npm carry. */
@@ -101,8 +101,8 @@ export const GATED_PATHS = [
   '.engine/',
 ] as const;
 
-/** The {@link GATED_PATHS} oak ships and resets, all but `paper-environment.yml`, which is the
- *  author's. */
+/** The {@link GATED_PATHS} oak writes and resets in a paper repo. `paper-environment.yml` is the
+ *  author's file and is not listed. */
 export const ENGINE_MANAGED_PATHS = ['.github/', 'CODEOWNERS'] as const;
 
 /** Whether the repo-relative `path` is one of `paths`, or inside one of their folders. */
@@ -175,7 +175,7 @@ export function readEngineOptions(
 }
 
 /* --------------------------------------------------------------------------
- * 2. journal.yml: the instance manifest (engine-owned, additive-only)
+ * 2. journal.yml: the journal's settings
  * ------------------------------------------------------------------------ */
 
 export const PreviewConfig = z
@@ -302,9 +302,9 @@ export type Registry = z.infer<typeof Registry>;
 
 export const Pins = z
   .object({
-    /** owner/repo the engine is checked out from; only the *ref* floats. */
+    /** owner/repo the engine is checked out from; only the ref floats. */
     engine_repo: z.string().min(1),
-    /** owner/repo of instance-config; '.' or omitted when co-located (repo=journal). */
+    /** owner/repo of the journal repo; '.' or omitted when the paper repo is its own journal. */
     instance_repo: z.string().default('.'),
   })
   .loose();
@@ -317,13 +317,14 @@ export type Pins = z.infer<typeof Pins>;
 export type IdCheckResult =
   { ok: true } | { ok: false; severity: 'error' | 'warn'; message: string };
 
-/** The id oak's own paper template ships. It is always rejected: a journal's `id_sentinel` adds
- *  to it and cannot turn it off [R119]. A test keeps it in step with `templates/paper/myst.yml`. */
+/** The placeholder id oak's paper template ships. It is always rejected; a journal's
+ *  `id_sentinel` adds a second placeholder [R119]. A test keeps it in step with
+ *  `templates/paper/myst.yml`. */
 export const ENGINE_ID_SENTINEL = 'CHANGE-ME-template-placeholder';
 
 /**
- * Check A: the placeholder id and the id pattern. Needs only the paper's id and the journal's
- * settings, and fails everywhere [R12].
+ * Rejects a placeholder id or one that does not match the journal's id pattern. It needs only the
+ * paper's id and the journal's settings, so it is an error everywhere [R12].
  */
 export function checkIdShape(
   id: string,
@@ -350,7 +351,7 @@ export function checkIdShape(
 }
 
 /**
- * Check B: the id is unique in the registry. Fails when the registry is present, and only warns
+ * Checks that the id is unique in the registry. Fails when the registry is present, and only warns
  * without one, as in a bare local validate [R193]. `self` excludes the paper's own entry, by repo.
  */
 export function checkIdUniqueness(
@@ -390,8 +391,8 @@ export function checkIdUniqueness(
   return { ok: true };
 }
 
-/** Check C: the paper's own registry entries carry its id, so check B tests the id the paper
- *  has. `own` holds the entries whose location is the paper's repo. */
+/** Checks that the paper's own registry entries carry its id, so {@link checkIdUniqueness} tests
+ *  the id the paper has. `own` holds the entries whose location is the paper's repo. */
 export function checkOwnEntryId(id: string, own: RegistryEntry[]): IdCheckResult {
   const stale = own.find((e) => e.id !== id);
   if (!stale) return { ok: true };

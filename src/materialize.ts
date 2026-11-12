@@ -1,7 +1,7 @@
 /**
  * What `oak build` and `oak validate` share: the myst interface and the two-pass write of
- * `myst.oak.yml`. A module of its own because build also needs validate's `runLayerA` between
- * the passes, and sharing through build.ts made the two import each other [R82] [R21].
+ * `myst.oak.yml`. It lives apart from build.ts because build also runs validate's `runOakChecks`
+ * between the passes, and validate imports this module [R82] [R21].
  */
 import { join } from 'node:path';
 import type { ISession } from 'myst-cli';
@@ -99,7 +99,7 @@ export interface MaterializeResult {
  * it.
  *
  * `preflight` runs between the passes and may throw; `oak build` uses it to stop a broken paper
- * before compose [R21], so a paper broken in both ways reports the same error as before.
+ * before compose [R21].
  */
 export async function materializeDerived(
   input: MaterializeInput,
@@ -121,8 +121,8 @@ export async function materializeDerived(
   const derivedPath = join(paperRoot, DERIVED_CONFIG_FILE);
   const doc = readDoc(authorPath);
 
-  // The version and edition, read before the merge [design §6a]. The path names the file in the
-  // error.
+  // The version and edition, read before the merge [design §6a]. `authorPath` names the file in
+  // the error.
   const { version: engineVersion, edition } = readEngineCoordinateRaw(doc, authorPath);
   // Refused as the engine action refuses it, also when OAK_USE_RUNNING skips `handOff`.
   if (!ENGINE_VERSION.test(engineVersion)) {
@@ -165,8 +165,8 @@ export async function materializeDerived(
     journal: journalStamp,
   });
 
-  // Pass 2 sets the export's `template` and `output` [R71-out]. Without it, myst would take the
-  // output path from the file that declares the export, a path the build never writes.
+  // Pass 2 sets the export's `template` and `output` [R71-out]. `output` fixes the PDF path;
+  // the default derives it from the file declaring the export, a path the build never writes.
   applyOwnOverride(doc, result.ownOverride);
   writeDerivedDoc(derivedPath, doc);
 

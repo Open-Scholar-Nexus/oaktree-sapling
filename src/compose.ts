@@ -3,10 +3,10 @@
  * (local paths, no network) and the additions matched to the oak version. It is pure: reading
  * config, writing files and building happen at the CLI edge, so tests need no toolchain.
  *
- * MyST merges `exports` by id, whole entries only, and the base config wins [R52]. The derived
- * config's base is predictable, while the order between `extends:` entries is not, since they
- * load in parallel. So compose's additions go into the base as `ownOverride`, and its typst
- * export is complete: the edition's `articles` plus oak's `template:`.
+ * MyST merges `exports` by id, whole entries only, and the base config wins [R52]. Entries in
+ * `extends:` load in parallel, so their order is unpredictable. compose's additions therefore go
+ * into the base as `ownOverride`, and its typst export is complete: the edition's `articles`
+ * plus oak's `template:`.
  *
  * The CLI runs it in two passes: write the chain and resolve the project, then write
  * `ownOverride` over it and build. Neither write is committed.
@@ -17,22 +17,21 @@ import { readEngineOptions, type JournalStamp } from './schema.js';
 import { engineTypstTemplate, themeZipUrl } from './assets.js';
 
 /**
- * Where the typst PDF is written, relative to the paper root. Without it, myst derives the path
- * from the file that declares the export, here the derived config, so renaming that file moved
- * every paper's PDF. The extension matters: with one, myst treats the value as the file; without,
- * as a folder, and a multi-article export would still be named after the config.
+ * Where the typst PDF is written, relative to the paper root. It is set so the PDF path does not
+ * depend on the config file's name. The value has an extension, so
+ * myst treats it as the output file; an extensionless value is a folder, and a multi-article
+ * export would then be named after the config file.
  */
 export const TYPST_OUTPUT = '_build/exports/paper.pdf';
 
 /** The id of the typst export `paper-base.yml` declares, which the PDF download points at. */
 export const TYPST_EXPORT_ID = 'typst-pdf';
 
-/** Brand fields holding a path. They are written from the journal repo root, which is where
- *  myst resolves them on the journal website, so compose makes them absolute against
- *  `<instanceRoot>` for a paper, whose root is elsewhere [R62]. By
- *  namespace: `site.options.*` for the HTML theme (logo, logo_dark, favicon, style), and
- *  `project.options.logo` for the PDF watermark, which oak's template has no default for. One
- *  definition, so yaml-io and compose agree. */
+/** Brand fields holding a path. They are written relative to the journal repo root, where myst
+ *  resolves them on the journal website; compose makes them absolute against `<instanceRoot>`
+ *  for a paper, whose root is elsewhere [R62]. `site.options.*` holds the HTML theme fields
+ *  (logo, logo_dark, favicon, style); `project.options.logo` is the PDF watermark, which oak's
+ *  template has no default for. yaml-io and compose share this list. */
 export const BRAND_ASSET_KEYS = {
   site: ['logo', 'logo_dark', 'favicon', 'style'],
   project: ['logo'],
@@ -48,10 +47,9 @@ export function isBrandAssetUrl(value: string): boolean {
 /**
  * Whether a journal's `typst_template:` is a path in the journal repo, rather than a myst
  * template name or a URL [R76]. A bare string is ambiguous (`lapreprint-typst` is both a valid
- * name and a valid directory), and the brand-asset rule would take it for a path, so this rule is
- * explicit: only a `./` or `../` value is a path, and everything else goes to myst unchanged.
- * Checking the disk instead would turn a mistyped path into a name lookup. `oak validate` warns
- * when a bare value matches a directory in the journal repo.
+ * name and a valid directory), so only a `./` or `../` value is a path and everything else goes
+ * to myst unchanged, so a mistyped `./` path fails as a missing path, never as a template name.
+ * `oak validate` warns when a bare value matches a directory in the journal repo.
  */
 export function isInstanceRelativeTemplate(value: string): boolean {
   return /^\.\.?\//.test(value);
@@ -219,8 +217,8 @@ export function compose(input: ComposeInput): ComposeResult {
 
   // Typst export: set `output:` and `template:` (precedence below [R76]). MyST merges exports
   // whole, so the entry is complete: the resolved export (with the edition's `articles`) plus
-  // both fields. Declaring them in paper-base would let a multi-article paper's own entry drop
-  // them [R52] [R53].
+  // both fields. A paper-base declaration would be dropped by a multi-article paper's own entry
+  // [R52] [R53].
   const typst = (resolvedProject.exports ?? []).find(
     (e) => e['format'] === 'typst' || e['id'] === TYPST_EXPORT_ID,
   );

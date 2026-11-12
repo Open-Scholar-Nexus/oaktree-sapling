@@ -1,8 +1,9 @@
 /**
  * `oak deploy-preview` [R16] [R26] [R27]. It never fails the run [R16]: missing secrets, a
  * Cloudflare outage or a bad journal.yml all fall back to a comment linking the build artifact.
- * It runs in the trusted `workflow_run` job, which can write to the pull request. Cloudflare,
- * git and gh are injected; the real ones are in gh.ts.
+ * It is Stage 2: it runs in the trusted `workflow_run` job, which can write to the pull request,
+ * and acts on what Stage 1 built. Stage 1 builds the pull request with no secrets
+ * (docs/design/paper-ci.md). Cloudflare, git and gh are injected; the real ones are in gh.ts.
  */
 import { existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
@@ -41,8 +42,7 @@ export interface GhPr {
  * ------------------------------------------------------------------------ */
 
 export const STICKY_PREVIEW = 'oak-preview';
-/** Here rather than beside its issue, so `oak bootstrap` creates the label `openFailureIssue`
- *  uses [R127]. */
+/** The label `openFailureIssue` uses; defined here so `oak bootstrap` can create it [R127]. */
 export const LABEL_ZENODO_FAILED = 'zenodo-publish-failed';
 
 /* --------------------------------------------------------------------------
@@ -102,9 +102,10 @@ const slug = (x: string): string =>
     .replace(/[^a-z0-9-]+/g, '-')
     .replace(/^-+|-+$/g, '');
 
-/** `{repo}`/`{pr}` → a Cloudflare-Pages branch alias (lowercase `[a-z0-9-]`, ≤28 chars).
- *  Spend the budget on `{repo}` last so a long name cannot truncate away `{pr}`, and hash a
- *  truncated name so two papers sharing one Pages project stay distinct ([R139]). */
+/** Expands `{repo}` and `{pr}` into a Cloudflare Pages branch alias (lowercase `[a-z0-9-]`, at
+ *  most 28 characters). `{repo}` takes the remaining length last, so a long name never cuts off
+ *  `{pr}`, and a truncated name is hashed so papers sharing one Pages project stay distinct
+ *  ([R139]). */
 export function previewBranch(pattern: string, repo: string, pr: string): string {
   const shortRepo = repo.includes('/') ? repo.slice(repo.indexOf('/') + 1) : repo;
   const withPr = pattern.replaceAll('{pr}', pr);
@@ -196,7 +197,7 @@ export async function cmdDeployPreview(
   deps: PreviewDeps,
 ): Promise<Outcome> {
   const { siteDir, repoRoot, instanceRoot, repo, serverUrl, cf } = input;
-  // Both files leave the site before anything else, so neither is served.
+  // The `.pr-number` and `.paper` files leave the site before anything else, so neither is served.
   const pr = takePrNumber(siteDir);
   const paper = resolvePaperDir(input.paper, takePaperDir(siteDir));
   if (!pr) {

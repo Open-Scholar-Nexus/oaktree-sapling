@@ -1,7 +1,8 @@
 /**
  * deploy-preview, with fakes for Cloudflare, git and gh: a failed Cloudflare deploy falls back
  * to an artifact link [R16], `.pr-number` is removed before serving [R26], and Cloudflare
- * settings come from journal.yml [R27].
+ * settings come from journal.yml [R27]. Stage 1 builds a pull request with no secrets; Stage 2
+ * acts on its result from the base branch (docs/design/paper-ci.md).
  */
 import { describe, it, expect } from 'vitest';
 import { mkdtempSync, writeFileSync, existsSync, mkdirSync, readdirSync } from 'node:fs';

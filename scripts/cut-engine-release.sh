@@ -32,7 +32,7 @@ if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
 fi
 src_sha="$(git rev-parse HEAD)"
 
-# The tests render with the typst that ships [R34] [R66].
+# The tests render with the typst binary that ships in the release [R34] [R66].
 typst_version="$(tr -d '[:space:]' < typst.version)"
 typst_asset="typst-x86_64-unknown-linux-musl"
 echo "fetching typst ${typst_version} (${typst_asset})"
@@ -54,7 +54,7 @@ npm run bundle
 npm test
 npm run build:fixture
 
-# Env vars rather than `git config`, which would stay in a local clone's config.
+# Set through env vars, so a local clone's git config is left unchanged.
 export GIT_AUTHOR_NAME="${GIT_AUTHOR_NAME:-oak-release-bot}"
 export GIT_AUTHOR_EMAIL="${GIT_AUTHOR_EMAIL:-oak-release-bot@users.noreply.github.com}"
 export GIT_COMMITTER_NAME="$GIT_AUTHOR_NAME"

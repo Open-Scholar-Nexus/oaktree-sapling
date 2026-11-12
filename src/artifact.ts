@@ -1,6 +1,7 @@
 /**
  * artifact.ts: the files Stage 1 leaves beside its output for Stage 2, and the pull request check
- * Stage 2 runs before writing to a pull request [R26] [R136].
+ * Stage 2 runs before writing to a pull request [R26] [R136]. Stage 1 builds a pull request with
+ * no secrets; Stage 2 acts on its result from the base branch (docs/design/paper-ci.md).
  *
  * Stage 1 runs the pull request's code, so each file is fork-controlled. The names and places
  * are a contract between engine versions: Stage 1 and Stage 2 may run different ones.
@@ -30,8 +31,8 @@ export function assertPaperDir(p: string): string {
   return p;
 }
 
-/** The PR number in `dir/<name>`, or null when absent or blank (a push). A malformed file was
- *  tampered with, so it throws [R136]. */
+/** The PR number in `dir/<name>`, or null when absent or blank (a push). A malformed file
+ *  throws, since the fork controls it [R136]. */
 export function readPrNumber(dir: string, name: string = CHECKS_FILES.pr): string | null {
   const f = join(dir, name);
   if (!existsSync(f)) return null;

@@ -1,14 +1,12 @@
 #!/usr/bin/env node
 /**
- * build-fixture.mjs: one-command local build of the fixture paper through the real
- * bundled CLI, using the in-engine typst template (engine/templates/typst) offline.
+ * Builds the test paper in test/fixture-paper to a PDF with the bundled CLI (dist/cli.cjs)
+ * and the typst template in templates/typst, offline.
  *
- *   npm run build:fixture              # PDF via the engine's local template
- *   npm run build:fixture -- --keep    # print + keep the temp dir
+ *   npm run build:fixture              # build the PDF
+ *   npm run build:fixture -- --keep    # keep the temp dir
  *
- * Copies the fixture to a temp dir first so the committed fixture is never mutated by
- * the two-pass working-tree injection. This is the "test with a local template" path:
- * no network for the PDF; the engine template is used by path.
+ * The paper is copied to a temp dir first, because the build writes into the paper folder.
  */
 import { mkdtempSync, copyFileSync, existsSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -38,22 +36,21 @@ execFileSync(
     tmp,
     '--instance',
     join(engineDir, 'test', 'fixture-instance'),
-    '--exports-only', // offline PDF canary via the in-engine template (HTML needs a network theme zip)
+    '--exports-only', // PDF only: the HTML export needs a theme downloaded from the network
   ],
   // The fixture pins another version, so this oak builds it itself (handOff in src/pinned.ts).
   { stdio: 'inherit', env: { ...process.env, OAK_USE_RUNNING: '1' } },
 );
 
-// Just report what was produced: the exact pinned path (compose TYPST_OUTPUT) is asserted by
-// the integration test, which can import the constant; this plain .mjs cannot, so it globs
-// rather than duplicate the literal.
+// Finds the PDF by extension. The exact output path (TYPST_OUTPUT) is asserted in
+// test/integration.test.ts, which can import the constant; this plain .mjs cannot.
 const exportsDir = join(tmp, '_build', 'exports');
 const pdf = existsSync(exportsDir)
   ? readdirSync(exportsDir, { recursive: true })
       .map(String)
       .find((f) => f.endsWith('.pdf'))
   : undefined;
-// A release gate, not a report: exiting 0 with no PDF is the green-but-empty class ([R67]).
+// A release gate: a build that exits 0 without a PDF fails here [R67].
 if (!pdf) {
   console.error('\nPDF: not produced; the build exited 0 without rendering one');
   process.exit(1);

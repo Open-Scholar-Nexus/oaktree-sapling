@@ -24,9 +24,8 @@ project:
   bibliography:
   - bib.bib
   options:
-    # written by `oak bootstrap` and `oak upgrade`.
-    # this is what tells oaktree-sapling where to look for
-    # your journal's configuration
+    # Written by `oak bootstrap` and `oak upgrade`.
+    # The engine version and the edition this paper belongs to.
     oaktree-sapling:
       version: CHANGE-ME-engine-version
       edition: CHANGE-ME-edition
