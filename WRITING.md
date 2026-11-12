@@ -1,19 +1,12 @@
 # Writing
 
-This covers docs, code comments, oak's messages, PR descriptions, and all prose; `STYLE.md` covers code.
+This covers docs, code comments, oak's messages, PR descriptions, and all prose. `STYLE.md` covers code. For oak's messages, the header of `src/messages.ts` says what a message must contain (such as the plan before the confirm prompt and the `oak <verb>:` prefix) and lists the printed text that lives outside that file; the "In oak's output" section below says how a message should read.
 
-LLMs are not great (yet?) at prose. This is problematic, especially for a package aimed at not-exactly-technical-experts; their explanations are hard to read, they rely on assumptions (which are not the same I and you would make), often present weird quirks (LLM-isms), and sometimes miss the point entirely. This file exists to attempt to guide them into avoiding the common errors they make.
+The docs are for readers who are not technical experts.
 
 My attempt at a general rule: make it clear, concise and helpful to the person reading it. Or put another way: would the reader miss this sentence if it were gone, and can they understand it the first time they read it?
 
-Unfortunately, this guidance has not been enough, so the rest of this file lists the patterns I keep editing out of LLM drafts. Most of them are ways a sentence breaks the rule above. "Patterns" are considered as such when they show up across multiple times. In my experience, it works best as instructions you give an LLM before it drafts. Use it if it helps; I point agents at this to get better baselines and reviews.
-
-I know of [Vale](https://vale.sh) with [vale-ai-tells](https://github.com/tbhb/vale-ai-tells), which flags some of these patterns mechanically. If it's useful to you, consider running it once for a mechanical pass.
-
-The rest of this file is LLM-maintained, with my occasional review.
-
-Please review your contributions!
-
+The rest of this file lists the patterns I keep editing out of LLM drafts. Most of them are ways a sentence breaks the rule above. "Patterns" are considered as such when they show up across multiple times. This list is LLM-maintained, with my occasional review.
 
 ## What each section is for
 
@@ -28,10 +21,6 @@ Please review your contributions!
 ### No em or en dashes
 
 Use a period, semicolon, colon, comma or parentheses.
-
-### British spelling
-
-Colour, behaviour.
 
 ### Do not hard-wrap prose
 
@@ -215,7 +204,7 @@ An export gets one when its name and signature do not say what it returns or thr
 
 ## In oak's output
 
-How a string `oak` prints should read. What a message must contain, such as the plan before the confirm prompt and the `oak <verb>:` prefix, is in the header of `src/messages.ts`, with a list of the printed text that lives outside that file. If you're adding or changing a message, you may want to read that header first.
+How a string `oak` prints should read. What it must contain is in the header of `src/messages.ts` (see the top of this file).
 
 - Name the tools doing the work: mystmd, gh, git, Cloudflare, Zenodo. `oak` is the engine.
 - A refusal or an after-run note says what to do in one line. Anything more is a docs link.
