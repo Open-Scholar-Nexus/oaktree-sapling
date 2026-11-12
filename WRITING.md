@@ -1,14 +1,12 @@
 # Writing
 
-Prose here covers the docs, code comments, oak's messages and PR descriptions. Write it for someone reading it once: say what the thing does, once, in plain words, and stop. `STYLE.md` covers the code itself.
+LLMs are not
+Prose here covers the docs, code comments, oak's messages and PR descriptions; `STYLE.md` covers the code itself. The one rule (my best attempt at it so far): make it clear, concise and helpful to the person reading it. Or put another way: would the reader miss this sentence if it were gone, and can they understand it the first time they read it?
 
-The rest of this file is optional help. It lists the patterns I kept editing out of LLM drafts, a pattern only when it showed up across several of them, so it works best as instructions you give an LLM before it drafts. Use it if it helps.
+The rest of this file lists the patterns I keep editing out of LLM drafts, a pattern only when it showed up across several of them, so it works best as instructions you give an LLM before it drafts. Most of them are ways a sentence breaks the rule above. Use it if it helps; I point agents at it to get better baselines and reviews.
 
-<!-- Previous intro, kept for comparison:
-Prose rules, for the docs, code comments and anything else made of sentences. `STYLE.md` covers the code itself.
+I know of [Vale](https://vale.sh) with [vale-ai-tells](https://github.com/tbhb/vale-ai-tells), which flags some of these patterns mechanically. If it's useful to you, consider running it once for a mechanical pass.
 
-These are derived from edits to LLM drafts, not introspected: a pattern that shows up across several of those diffs lands here, and anything else is taste and stays out.
--->
 
 ## What each section is for
 
@@ -75,7 +73,7 @@ Good:  "A journal is spread across repositories: one holding the settings
         every paper reads, and one per paper."
 ```
 
-Keep a negation that corrects an assumption the reader is likely to arrive with, and follow it with what happens instead: "There is no server: each paper's own CI does the work."
+Keep a negation that corrects an assumption the reader is likely to arrive with, and follow it with what happens instead: "There is no server: each paper's own CI builds, checks and publishes it."
 
 ### Say it once, at the shortest length that still carries the mechanism
 
@@ -172,17 +170,17 @@ Every module opens with a short block comment: what the module does, then option
 
 ### Comments
 
-**Keep**, each in one line:
+Keep, each in one line:
 
-- A comment stating a **constraint, invariant, or ratified decision**, citing the reference the reader can open (below) rather than restating it.
-- A comment saying **why this is not the obvious approach**: a dead end, named.
-- A comment saying **why this looks wrong but is not**. It guards against a plausible wrong edit. It can read like narration, so it is easy to delete by mistake.
+- A comment stating a constraint, invariant, or ratified decision, citing the reference the reader can open (below) rather than restating it.
+- A comment saying why this is not the obvious approach: a dead end, named.
+- A comment saying why this looks wrong but is not. It guards against a plausible wrong edit. It can read like narration, so it is easy to delete by mistake.
 
-**Go:**
+Go:
 
-- A comment **narrating the next line**.
-- A comment describing **what the code used to do** (see *Describe the thing as it is*, above).
-- A **long rationale**: it becomes a link or an `[R#]`, never a paragraph.
+- A comment narrating the next line.
+- A comment describing what the code used to do (see *Describe the thing as it is*, above).
+- A long rationale: it becomes a link or an `[R#]`, never a paragraph.
 
 Name what a comment refers to: `{@link applyProvisioning}`, or a test by its name and file (`template disjointness invariant` in `test/template.test.ts`), not "the caller" or "the packaging test". A name can be searched and followed. "The caller" is fine only when there are many.
 
@@ -193,7 +191,7 @@ When in doubt, cut. A three-line justification is a one-line constraint plus its
 Cite the one the reader *of this file* can open:
 
 - `[R#]` for engine internals (see *Design pages*, above).
-- a `DOCS.*` symbol for a verb's **observable behaviour**. If the sentence stays true reading only what the CLI does, it is user docs, not a source comment. Cite the symbol, never a raw `docs/` path or URL: `test/docs-links.test.ts` checks that every symbol resolves, raw paths are unchecked, and a page that does not exist yet is not a link to make.
+- a `DOCS.*` symbol for a verb's observable behaviour. If the sentence stays true reading only what the CLI does, it is user docs, not a source comment. Cite the symbol, never a raw `docs/` path or URL: `test/docs-links.test.ts` checks that every symbol resolves, raw paths are unchecked, and a page that does not exist yet is not a link to make.
 - where neither resolves, the one line must be self-contained.
 
 ```ts
@@ -202,7 +200,7 @@ Cite the one the reader *of this file* can open:
 // GOOD: The author's config is read, never written [R71].
 ```
 
-Files seeded into paper or journal repos carry **no** `[R#]`, since their readers cannot resolve one; they cite the docs URL instead.
+Files seeded into paper or journal repos carry no `[R#]`, since their readers cannot resolve one; they cite the docs URL instead.
 
 ### JSDoc
 
