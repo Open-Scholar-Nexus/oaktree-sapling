@@ -14,7 +14,7 @@ The journal repository holds the journal-level configuration, such as the brandi
 
 [^files]: See [Files](../reference/files.md) for details on each.
 
-So adding a paper means adding a repository. There is no server: each paper's own CI does the work, which is why a published paper keeps building after the journal moves on. The cost is that a change to how papers build has to reach every paper repository, which is what `oak upgrade` is for.
+So adding a paper means adding a repository. There is no server: each paper's own CI builds, checks and publishes it, which is why a published paper keeps building after the journal moves on. The cost is that a change to how papers build has to reach every paper repository, which is what `oak upgrade` is for.
 
 <!-- One repository per paper is the only topology the engine builds today, and it is what this page describes. A co-located tier, where a single repository holds the journal and many papers at once, is designed but not built. It is the part of this model most likely to be revisited. -->
 
