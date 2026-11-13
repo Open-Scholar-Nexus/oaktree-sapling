@@ -140,7 +140,7 @@ export interface ComposeInput {
 
 export interface OwnOverride {
   /** Merged into the base `project`. `options` carries the PDF watermark (`logo`) and the
-   *  `oaktree-sapling` key with the journal stamp, set key by key so the author's other options
+   *  `oaktree-sapling` key with the {@link JournalStamp}, set key by key so the author's other options
    *  survive; `downloads` is appended to the author's. */
   project?: {
     exports?: Array<Record<string, unknown>>;
@@ -276,7 +276,7 @@ export function compose(input: ComposeInput): ComposeResult {
     }
   }
 
-  // The journal stamp, for the deposit [R66]. MyST merges `project.options` one key deep, so an
+  // The {@link JournalStamp}, for the deposit [R66]. MyST merges `project.options` one key deep, so an
   // `oaktree-sapling` object replaces another whole: this one keeps the coordinates checked above.
   if (input.journal) {
     ownOverride.project = {

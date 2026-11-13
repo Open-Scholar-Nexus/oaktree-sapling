@@ -22,8 +22,8 @@ export const DERIVED_CONFIG_FILE = 'myst.oak.yml';
 const JOURNAL_KEY = ['project', 'options', 'oaktree-sapling', 'journal'];
 
 /**
- * The journal stamp oak wrote into `<paperRoot>/myst.oak.yml`: the stamp, null when the build
- * had no journal, undefined when there is no derived config or the value is not a valid stamp.
+ * The {@link JournalStamp} oak wrote into `<paperRoot>/myst.oak.yml`: null when the build had
+ * no journal, undefined when there is no derived config or the value is not a valid one.
  * Parsed with the schema: in CI the file comes from the build job's artifact.
  */
 export function readJournalStamp(paperRoot: string): JournalStamp | null | undefined {
@@ -171,7 +171,7 @@ export function readJournalTypstTemplate(instanceRoot: string): string | undefin
 }
 
 /** Reads the author's own typst `template:` from `<paperRoot>/myst.yml`. The composed config
- *  cannot say who set it, since compose always stamps one [R82], so the override check
+ *  cannot say who set it, since compose always sets one [R82], so the override check
  *  [R76] reads it here. Undefined when absent or unreadable; that is another check's finding. */
 export function readAuthorTypstTemplate(paperRoot: string): string | undefined {
   const authorPath = join(paperRoot, 'myst.yml');
@@ -200,7 +200,7 @@ export function setExtends(doc: Document, chain: string[]): void {
 }
 
 /** Pass 2: merges compose's additions: `project.exports`, `project.downloads`, `site.template`,
- *  the brand assets under `site.options`, and the watermark and journal stamp under
+ *  the brand assets under `site.options`, and the watermark and {@link JournalStamp} under
  *  `project.options` [R62]. Keys are set one by one so the author's other options survive; a
  *  download is appended unless the author declares its id. */
 export function applyOwnOverride(doc: Document, override: OwnOverride): void {

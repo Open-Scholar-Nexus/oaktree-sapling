@@ -1,7 +1,7 @@
 /**
  * `oak validate` runs two sets of checks:
  *   - oak's checks ({@link runOakChecks}): the journal's settings and registry, the paper id, the
- *     layout, the thumbnail, the `deposit/` names [R28], the journal stamp, the journal layers
+ *     layout, the thumbnail, the `deposit/` names [R28], the {@link JournalStamp}, the journal layers
  *     [R72], the brand favicon and watermark [R62], and the typst templates [R76]. `oak build`
  *     runs these first too.
  *   - The editorial checks the journal turns on in `journal.yml` `checks:` (checks.ts).

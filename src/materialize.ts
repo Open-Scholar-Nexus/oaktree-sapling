@@ -134,7 +134,7 @@ export async function materializeDerived(
   // precedence over the edition unpredictable [R72].
   const { extendsChain } = extendsChainFor({ engineRoot, instanceRoot, edition });
   setExtends(doc, extendsChain);
-  // The journal stamp is oak's to write; `oak validate` warns about an author's.
+  // The {@link JournalStamp} is oak's to write; `oak validate` warns about an author's.
   dropJournalStamp(doc);
   writeDerivedDoc(derivedPath, doc);
 
