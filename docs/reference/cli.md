@@ -191,7 +191,7 @@ Without a token flag, bootstrap uses the environment variable with the secret's 
 (upgrade)=
 ## upgrade
 
-`oak upgrade` moves a paper repository to a newer `oak` release, through a pull request. A paper keeps the version its `myst.yml` names until an editor runs `oak upgrade`. A new release of `oak` never reaches a paper by itself. A change to the journal repository does: each paper reads it on its next run ([when](../guide/journal-settings.md)).
+`oak upgrade` moves a paper repository to a newer `oak` release, through a pull request. A paper keeps the version its `myst.yml` names until an editor runs `oak upgrade`. A change to the journal repository needs no upgrade: each paper reads it on its next run ([when](../guide/journal-settings.md)).
 
 It fills in the release's `.github/` folder and `CODEOWNERS` with the repository's own values from `pins.yml` and `CODEOWNERS`, and compares them with the repository's files. It then opens a pull request that sets the version in `myst.yml` and replaces each file that differs. Code owners added to `CODEOWNERS` are kept. A file under `.github/` that the release no longer has is listed, and left in place.
 
