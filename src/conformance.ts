@@ -477,7 +477,7 @@ export async function cmdConformanceRun(input: RunInput, deps: ConformanceDeps):
     if (!doi || parseZenodoDoi(doi)?.sandbox !== true) {
       throw new Error(
         `the deposit test needs a committed sandbox DOI on the test repo (found ${doi ?? 'none'}); ` +
-          `prepare-from-scratch coverage is deferred.`,
+          `run oak release reserve-doi --sandbox there and merge its pull request.`,
       );
     }
     log(`test repo sandbox DOI: ${doi}`);

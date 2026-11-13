@@ -17,7 +17,7 @@ import { z } from 'zod';
 export const EDITION_ID = z
   .string()
   .min(1)
-  .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/, 'must be a plain name (letters, digits, . _ -)');
+  .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/, msg.schema.editionId);
 
 /** `owner/name` with GitHub's characters and lengths. The name is never `.` or `..`, so it is
  *  safe as a path segment. */
@@ -153,7 +153,7 @@ export const OaktreeSaplingOptions = z
   .object({
     /** An {@link ENGINE_VERSION}, at or above pins.yml's `min_engine_version`. The engine
      *  action's `ref` step refuses anything else [R41]. */
-    version: z.string().regex(ENGINE_VERSION, 'must be a release tag like v1.2.3 or v1.2.3-dev.4'),
+    version: z.string().regex(ENGINE_VERSION, msg.schema.engineVersion),
     /** Selects `editions/<edition>.yml`. */
     edition: EDITION_ID,
     /** Written by oak into `myst.oak.yml` only ({@link JournalStamp}). */

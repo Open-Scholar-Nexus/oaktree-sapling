@@ -196,7 +196,7 @@ describe('compose: which typst template wins: author, then journal, then oak [R7
       }),
     );
     expect(templateOf(r)).toBe('./my-template');
-    expect(r.warnings.join(' ')).toMatch(/author template overrides the journal's/);
+    expect(r.warnings.join(' ')).toMatch(/overriding the journal's/);
   });
 
   it("the author's template, with no journal template, wins without a warning", () => {

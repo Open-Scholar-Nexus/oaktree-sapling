@@ -319,7 +319,7 @@ export function openDoiPr(
   }
   git(repoRoot, ['checkout', '-B', branch]);
   git(repoRoot, ['add', 'myst.yml']);
-  git(repoRoot, [...BOT_ID, 'commit', '-m', `chore: reserve Zenodo DOI ${opts.conceptDoi}`]);
+  git(repoRoot, [...BOT_ID, 'commit', '-m', msg.workflow.doiCommitMessage(opts.conceptDoi)]);
   git(repoRoot, ['push', '-u', 'origin', branch, '--force']);
   const sha = git(repoRoot, ['rev-parse', 'HEAD'], { quiet: true });
   // `--repo`: the git calls use `-C repoRoot`, while `gh` would read the current directory's
@@ -408,7 +408,7 @@ export function uploadReleaseAsset(repoRoot: string, tag: string, files: string[
   try {
     gh([...base, 'view', tag], { quiet: true });
   } catch {
-    gh([...base, 'create', tag, '--title', tag, '--notes', 'Automated deposit bundle.']);
+    gh([...base, 'create', tag, '--title', tag, '--notes', msg.workflow.releaseNotes]);
   }
   gh([...base, 'upload', tag, ...files, '--clobber']);
 }
@@ -1345,7 +1345,7 @@ export const realConformanceGh: ConformanceGh = {
       'PUT',
       `repos/${repo}/contents/index.md`,
       '-f',
-      `message=conformance preview probe ${marker}`,
+      `message=${msg.conformance.previewCommit(marker)}`,
       '-f',
       `content=${updated}`,
       '-f',
@@ -1364,9 +1364,9 @@ export const realConformanceGh: ConformanceGh = {
       '--head',
       branch,
       '--title',
-      `conformance preview ${marker}`,
+      msg.conformance.previewPrTitle(marker),
       '--body',
-      'Automated conformance preview probe; opened and closed by the harness.',
+      msg.conformance.previewPrBody,
     ]);
     const number = Number(url.split('/').pop());
     const headSha = gh(['api', `repos/${repo}/git/ref/heads/${branch}`, '--jq', '.object.sha']);
@@ -1479,7 +1479,7 @@ export const realConformanceGh: ConformanceGh = {
       'PUT',
       `repos/${forkRepo}/contents/myst.yml`,
       '-f',
-      `message=conformance fork preview ${marker} (pin engine ${tag})`,
+      `message=${msg.conformance.forkPreviewCommit(marker, tag)}`,
       '-f',
       `content=${updated}`,
       '-f',
@@ -1500,9 +1500,9 @@ export const realConformanceGh: ConformanceGh = {
       '--head',
       `${forkOwner}:${branch}`,
       '--title',
-      `conformance fork preview ${marker}`,
+      msg.conformance.forkPreviewPrTitle(marker),
       '--body',
-      'Automated conformance fork-PR preview probe; opened and closed by the harness.',
+      msg.conformance.forkPreviewPrBody,
     ]);
     const number = Number(url.split('/').pop());
     // Read the fork branch's head again: the PUT moved it.

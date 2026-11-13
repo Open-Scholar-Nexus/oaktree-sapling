@@ -42,6 +42,7 @@ import {
   type ZenodoConfig,
 } from './schema.js';
 import * as msg from './messages.js';
+import { annotate } from './messages.js';
 import { err, ok, type Outcome } from './result.js';
 
 export const ZENODO_PROD = 'https://zenodo.org/api';
@@ -464,7 +465,9 @@ export function buildMetadata(input: MetadataInput): Record<string, unknown> {
     if (orcid && ORCID_RE.test(orcid) && !orcid.startsWith('0000-0000-')) {
       c.orcid = orcid;
     } else if (orcid) {
-      process.stderr.write(`[warn] skipping invalid/placeholder ORCID for ${a.name}: ${orcid}\n`);
+      process.stderr.write(
+        annotate('warning', msg.workflow.orcidSkipped(String(a.name), orcid)) + '\n',
+      );
     }
     creators.push(c);
   }
@@ -478,18 +481,21 @@ export function buildMetadata(input: MetadataInput): Record<string, unknown> {
   if (zenodo.description_blurb) desc.push(`<p>${escapeHtml(zenodo.description_blurb)}</p>`);
   if (extraDescParas) desc.push(...extraDescParas.map((p) => `<p>${escapeHtml(p)}</p>`));
   const yt = youtubeUrl(project);
-  if (yt) desc.push(`<p>Seminar Recording: <a href="${escapeHtml(yt)}">Watch on YouTube</a></p>`);
+  const label = msg.zenodoRecord;
+  if (yt) {
+    desc.push(`<p>${label.recording}: <a href="${escapeHtml(yt)}">${label.watchRecording}</a></p>`);
+  }
   if (siteUrl) {
     const href = escapeHtml(siteUrl);
-    desc.push(`<p>Project Website: <a href="${href}">${href}</a></p>`);
+    desc.push(`<p>${label.website}: <a href="${href}">${href}</a></p>`);
   }
-  desc.push(`<p>Repository: <a href="${githubUrl}">${githubUrl}</a></p>`);
+  desc.push(`<p>${label.repository}: <a href="${githubUrl}">${githubUrl}</a></p>`);
   const venue = project.venue;
   if (venue) {
     const v = typeof venue === 'string' ? venue : (venue.title ?? String(venue));
-    desc.push(`<p>Venue: ${v}</p>`);
+    desc.push(`<p>${label.venue}: ${v}</p>`);
   }
-  if (project.funding) desc.push(`<p>Funding: ${project.funding}</p>`);
+  if (project.funding) desc.push(`<p>${label.funding}: ${project.funding}</p>`);
 
   const related: Array<Record<string, string>> = [
     { identifier: githubUrl, relation: 'isVersionOf', scheme: 'url' },
@@ -933,11 +939,7 @@ export async function cmdPrepare(input: PrepareInput): Promise<Outcome> {
     process.stderr.write(`[prepare] reusing draft ${existing.id}\n`);
     dep = await api.updateMetadata(existing.id, md);
   } else if (existing) {
-    return err(
-      3,
-      `Published deposit already exists (${existing.id}); refusing to create a parallel concept. ` +
-        `Add its DOI to myst.yml manually.`,
-    );
+    return err(3, msg.workflow.prepareDepositPublished(existing.id));
   } else {
     dep = await api.createDeposition(md);
   }
@@ -1195,18 +1197,18 @@ export async function cmdStatus(input: StatusInput): Promise<Outcome> {
   };
 
   if (!conceptDoi) {
-    out.state = 'no doi yet: prepare not run or PR not merged';
+    out.state = msg.workflow.statusNoDoi;
     return { exitCode: 0, result: out };
   }
   if (isSandboxDoi(conceptDoi) !== sandbox) {
     out.warning = sandbox
-      ? `${conceptDoi} is a production DOI; drop --sandbox`
-      : `${conceptDoi} is a sandbox DOI; add --sandbox`;
+      ? msg.workflow.statusDoiIsProduction(conceptDoi)
+      : msg.workflow.statusDoiIsSandbox(conceptDoi);
   }
 
   const versions = await api.versionsOf(conceptDoi);
   if (versions.length === 0) {
-    out.state = 'no record matches';
+    out.state = msg.workflow.statusNoRecord;
     return { exitCode: 0, result: out };
   }
   // A draft of the next version leaves the newest published one as the record readers see.

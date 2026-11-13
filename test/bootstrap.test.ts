@@ -492,7 +492,7 @@ describe('cmdBootstrapPaper', () => {
     expect(out.exitCode).toBe(2);
     expect(out.result.status).toBe('error');
     expect(String(out.result.error)).toContain('--instance');
-    expect(String(out.result.error)).toContain('pins.yml');
+    expect(String(out.result.error)).toContain('--instance .');
     // Nothing was touched: the check precedes every effect.
     expect(calls.createRepo).toHaveLength(0);
     expect(calls.seedBranch).toHaveLength(0);

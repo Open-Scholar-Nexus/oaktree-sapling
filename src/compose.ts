@@ -176,10 +176,7 @@ export function extendsChainFor(input: {
   const warnings: string[] = [];
   const extendsChain: string[] = [`${engineRoot}/paper-base.yml`];
   if (instanceRoot === null) {
-    warnings.push(
-      '--no-instance: building unbranded (no edition/brand). Not CI-faithful; ' +
-        'brand assets (logo, watermark) and edition frontmatter are absent.',
-    );
+    warnings.push(msg.build.noInstanceWarning);
   } else {
     extendsChain.push(`${instanceRoot}/editions/${edition}.yml`);
     extendsChain.push(`${instanceRoot}/brand/brand.yml`);
@@ -237,21 +234,16 @@ export function compose(input: ComposeInput): ComposeResult {
     // A paper overriding the journal's template is allowed, but must show in the pull request;
     // `oak validate` reports it there too.
     if (authorTemplate && journalTemplate && !assetOverrides.typstTemplate) {
-      warnings.push(
-        `author template overrides the journal's: this paper declares its own typst ` +
-          `template ("${authorTemplate}") in place of the journal's ("${input.journalTypstTemplate}").`,
-      );
+      warnings.push(msg.validate.templateOverride(authorTemplate, input.journalTypstTemplate));
     }
 
     ownOverride.project = { exports: [{ ...typst, template, output: TYPST_OUTPUT }] };
     // Offered only when the PDF can be served: `oak start` builds none (DOCS.start).
     if (input.pdfDownload !== false) {
-      ownOverride.project.downloads = [{ id: TYPST_EXPORT_ID, title: 'PDF export' }];
+      ownOverride.project.downloads = [{ id: TYPST_EXPORT_ID, title: msg.build.pdfDownloadTitle }];
     }
   } else {
-    warnings.push(
-      'no typst export found in the resolved config; PDF export + Zenodo deposit will be skipped',
-    );
+    warnings.push(msg.build.noTypstExport);
   }
 
   // oak's pinned book-theme ({@link themeZipUrl}). `siteTemplate: null` leaves MyST's default

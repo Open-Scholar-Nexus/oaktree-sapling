@@ -1037,7 +1037,7 @@ export async function cmdBootstrapPaper(
   let mainSeeded = mainThere;
   if (!mainThere) {
     mainSeeded = step('main', () => {
-      prov.seedBranch(repo, 'main', seedDir, 'startpoint');
+      prov.seedBranch(repo, 'main', seedDir, msg.bootstrap.seedCommitMessage);
       actions.main = 'seeded';
       log(msg.bootstrap.logSeeded);
     });
@@ -1249,7 +1249,7 @@ export async function cmdBootstrapJournal(
 
   if (!mainThere) {
     step('main', () => {
-      prov.seedBranch(repo, 'main', seedDir, 'startpoint');
+      prov.seedBranch(repo, 'main', seedDir, msg.bootstrap.seedCommitMessage);
       actions.main = 'seeded';
       log(msg.bootstrap.logSeeded);
     });

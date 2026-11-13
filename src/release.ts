@@ -393,10 +393,7 @@ async function releaseFrom(
   const sandbox = doi ? doi.sandbox : input.sandbox;
 
   // Every refusal comes before anything is asked or changed.
-  if (!pin)
-    throw new UserError(
-      msg.workflow.releaseNotPaper(repo, tagged ? `at ${tag}` : 'on the default branch'),
-    );
+  if (!pin) throw new UserError(msg.workflow.releaseNotPaper(repo, tagged ? tag : null));
   if (tagged && !doi) throw new UserError(msg.workflow.releaseTagNoDoi(tag, repo));
   if (doi && input.sandbox && !doi.sandbox) {
     throw new UserError(msg.workflow.releaseSandboxWithProdDoi(doi.doi));
