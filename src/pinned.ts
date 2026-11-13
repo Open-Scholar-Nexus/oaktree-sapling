@@ -1,7 +1,7 @@
 /**
  * pinned.ts: hands `oak build`, `validate`, `start` and the `release` subcommands to the oak
- * version the paper pins, and `oak bootstrap` to the one `--engine-version` names. `oak release` with a
- * version hands over only its subcommands (`cmdReleaseVersion` in cli.ts).
+ * version the paper pins, and `oak bootstrap` to the one `--engine-version` names. `oak release`
+ * with a version hands over only its subcommands (`cmdReleaseVersion` in cli.ts).
  *
  * The paper's `myst.yml` names the version and its `pins.yml` the repository, as in CI, so a
  * local run builds with the same oak. Side effects are injected so the tests stay offline.
@@ -116,9 +116,9 @@ export interface HandoffContext {
  *  the deposit, so they never run from the npm package, which has no git history. */
 const DEPOSIT_VERBS: HandoffVerb[] = ['release'];
 
-/** The first oak with the `oak release` steps, which never build beside the token, and the
- *  `min_engine_version` of templates/paper/.github/actions/engine/pins.yml. myst.yml, where the
- *  pin lives, is the author's file, so a pin below it is refused for {@link DEPOSIT_VERBS}. */
+/** The first oak whose `oak release` steps never build beside the Zenodo token, and the
+ *  `min_engine_version` in templates/paper/.github/actions/engine/pins.yml. The pin is in the
+ *  author's `myst.yml`, so {@link DEPOSIT_VERBS} refuse a pin below this one. */
 export const DEPOSIT_MIN_VERSION = 'v0.4.0-dev.6';
 
 /** Throws a {@link UserError} when `version` is below {@link DEPOSIT_MIN_VERSION}, or is no

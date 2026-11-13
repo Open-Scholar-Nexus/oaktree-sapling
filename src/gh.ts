@@ -1,7 +1,7 @@
 /**
  * Everything oak does through `git` and `gh`, so the other modules can be tested without either:
- * the real implementations of their injected interfaces, plus the DOI pull request [R3], the
- * release assets [R24], the commit comment and the failure issue.
+ * the real implementations of their injected interfaces, plus the DOI pull request, the release
+ * assets, the commit comment and the failure issue.
  */
 import * as msg from './messages.js';
 import { UserError } from './messages.js';
@@ -54,7 +54,7 @@ function echoChild(tool: string, text: unknown): void {
 }
 
 /**
- * Prints what is running, then erases the line [R85]: cloning or creating a repo takes seconds.
+ * Prints what is running, then erases the line: cloning or creating a repo takes seconds.
  * There is no spinner because `spawnSync` blocks the event loop (progress.ts draws one between
  * calls). Only on a TTY: a log would keep the half-erased line, and CI prints child output.
  */
@@ -121,7 +121,7 @@ function gitRaw(args: string[], cwd?: string): string {
 /**
  * Takes the {@link ENGINE_MANAGED_PATHS} in the git work tree at `dir` from `ref`, staged. A
  * folder is deleted first: `git checkout <ref> -- <folder>` keeps files `ref` lacks, so an
- * author's file there would reach a branch pushed to the base repo with our credentials [R121].
+ * author's file there would reach a branch pushed to the base repo with our credentials.
  */
 export function takeEngineManagedPaths(dir: string, ref: string): void {
   for (const path of ENGINE_MANAGED_PATHS) {
@@ -145,7 +145,7 @@ function gh(args: string[], opts: { input?: string; cwd?: string; quiet?: boolea
  *  404, so every ref delete passes this to {@link ghOk}. */
 export const ABSENT_REF = /Reference does not exist/i;
 
-/** The answer when approving a run that needs no approval [R150]. */
+/** The answer when approving a run that needs no approval. */
 export const NOT_GATED = /not waiting for approval/i;
 
 /**
@@ -177,7 +177,8 @@ function ghOkAs(token: string, args: string[], alsoAbsent?: RegExp): boolean {
 }
 
 /** The non-empty lines `jq` prints over every page of the GitHub list endpoint `path`. `--jq`
- *  runs on each page alone, so print one line per item and take the last from the joined lines. */
+ *  runs on each page alone, so `jq` prints one line per item, and a pick across items (such as
+ *  the last) is made on the returned lines. */
 export function apiList(path: string, jq: string): string[] {
   return gh(['api', path, '--paginate', '--jq', jq])
     .split('\n')
@@ -195,8 +196,8 @@ export function assertRepoName(repo: string, source: string): string {
 
 /**
  * The ingest source URL and ref reach `git fetch` as positional arguments, which git parses as
- * options: a ref of `--upload-pack=<command>` runs the command [R103]. Only the two supported
- * transports pass, which also excludes `ext::`. Credentials in the URL are refused, since
+ * options: a ref of `--upload-pack=<command>` runs the command. Only an https or ssh github.com
+ * URL passes, which also excludes `ext::`. Credentials in the URL are refused, since
  * `--from` is copied into a public commit message.
  */
 const INGEST_REF = /^[A-Za-z0-9_][A-Za-z0-9._/-]*$/;
@@ -239,7 +240,7 @@ export const realGitContext: GitContext = {
     return originRepo(repoRoot);
   },
   async reviewPr(repoRoot, sha) {
-    // The tagged commit's pull request, from the API [R35.2].
+    // The tagged commit's pull request, from the API.
     const repo = originRepo(repoRoot);
     if (!repo) return null;
     try {
@@ -296,7 +297,7 @@ export function originRepo(repoRoot: string): string | null {
 }
 
 /**
- * Opens the DOI pull request for the myst.yml write [R3]: a branch, a commit of myst.yml only,
+ * Opens the DOI pull request for the myst.yml write: a branch, a commit of myst.yml only,
  * a push and `gh pr create`. Returns its URL and the pushed commit. Needs `gh` with a token.
  */
 export function openDoiPr(
@@ -340,8 +341,8 @@ export function openDoiPr(
   try {
     return { url: gh(create), sha };
   } catch (e) {
-    // Preparing again is allowed [design §13], and `gh pr create` refuses a second pull request
-    // for a branch, so return the open one.
+    // Reserving again before the DOI pull request merges reuses the draft, and `gh pr create`
+    // refuses a second pull request for a branch, so return the open one.
     const existing = openPrUrl(repo, branch);
     if (existing) return { url: existing, sha };
     throw e;
@@ -398,7 +399,7 @@ function openPrUrl(repo: string | null, branch: string): string | null {
   }
 }
 
-/** Attaches the deposit files to the tag's GitHub release [R24]: they outlast the 30-day
+/** Attaches the deposit files to the tag's GitHub release: they outlast the 30-day
  *  artifact retention, and the deposited bytes sit next to the tag. */
 export function uploadReleaseAsset(repoRoot: string, tag: string, files: string[]): void {
   const repo = originRepo(repoRoot);
@@ -412,7 +413,7 @@ export function uploadReleaseAsset(repoRoot: string, tag: string, files: string[
   gh([...base, 'upload', tag, ...files, '--clobber']);
 }
 
-/** A comment on the tagged commit when publishing succeeds. */
+/** A comment on the tagged commit after a deposit, published or draft. */
 export function postCommitComment(repoRoot: string, sha: string, body: string): void {
   const repo = originRepo(repoRoot);
   if (!repo) return;
@@ -637,8 +638,8 @@ export const realReleaseSource: ReleaseSource = {
  * For preview.ts: deploy-preview
  * ------------------------------------------------------------------------ */
 
-/** The real pull request calls for `cmdDeployPreview`. A sticky comment carries a hidden HTML
- *  marker, so a rerun edits it in place. */
+/** The real pull request calls for `cmdDeployPreview` and `cmdPostChecks`. A sticky comment
+ *  carries a hidden HTML marker, so a rerun edits it in place. */
 export const realGhPr: GhPr = {
   sticky(repoRoot, prNumber, header, body) {
     // Throws on failure, so post-checks never reports a comment it did not post.
@@ -680,17 +681,16 @@ export const realGhPr: GhPr = {
   },
 };
 
-/** Pinned [R109]. */
+/** Pinned: wrangler runs in the job holding the Cloudflare token. */
 const WRANGLER_VERSION = '4.127.1';
 
 /** The real Cloudflare Pages deployer for `cmdDeployPreview`: a wrangler direct upload, with the
  *  deployment URL read from its output. Any failure throws, and `cmdDeployPreview` falls back to
- *  an artifact link [R16]. */
-
+ *  an artifact link. */
 export const realPagesDeployer: PagesDeployer = {
   async deploy(opts) {
     // stderr is not captured: captured text would join the error message preview.ts posts
-    // publicly, and wrangler's stderr names the account id [R104].
+    // publicly, and wrangler's stderr names the account id.
     // The empty cwd keeps a `.npmrc` or `node_modules/wrangler` in the paper from choosing the
     // wrangler that runs.
     const cwd = mkdtempSync(join(tmpdir(), 'oak-wrangler-'));
@@ -741,10 +741,10 @@ export const COMPARE_FILES_MAX = 300;
 
 /**
  * Files changed between `base` and `head`, from the compare API, or null when the list may be
- * incomplete: the lookup failed, or it reached {@link COMPARE_FILES_MAX}, past which a pull
- * request can push a gated file. post-checks passes `head` from
+ * incomplete: the lookup failed, or it reached {@link COMPARE_FILES_MAX}, and a gated file
+ * could be among the files left out. `cmdPostChecks` passes `head` from
  * `github.event.workflow_run.head_sha`, which GitHub sets and the fork's artifact cannot. Never
- * throws, so the gated-files warning never fails the post.
+ * throws: a failed lookup costs only the gated-files warning, never the posted results.
  */
 export function changedFiles(repo: string, base: string, head: string): string[] | null {
   try {
@@ -1011,11 +1011,11 @@ export const realProvisioner: Provisioner = {
     const args = ['label', 'create', name, '--repo', repo, '--force'];
     if (opts.color) args.push('--color', opts.color);
     if (opts.description) args.push('--description', opts.description);
-    // `--force` updates a label that already exists, so an error here is a real failure [R127].
+    // `--force` updates a label that already exists, so an error here is a real failure.
     gh(args);
   },
   setSecret(repo, env, name, value) {
-    // stdin: argv is world-readable in /proc [R104].
+    // stdin: argv is world-readable in /proc.
     gh(['secret', 'set', name, '--repo', repo, '--env', env], { input: value });
   },
   secretNames(repo, env) {
@@ -1039,7 +1039,7 @@ export const realProvisioner: Provisioner = {
 };
 
 /* --------------------------------------------------------------------------
- * For upgrade.ts: the target version, the template, the upgrade pull request
+ * The gh login, clones, the newest release and the upgrade pull request
  * ------------------------------------------------------------------------ */
 
 /** The authenticated gh user login (`gh api user`). */
@@ -1047,7 +1047,7 @@ export function authedUser(): string {
   return gh(['api', 'user', '--jq', '.login']);
 }
 
-/** `oak bootstrap`'s check that gh is installed and logged in, reported as a sentence [R110]. */
+/** `oak bootstrap`'s check that gh is installed and logged in, reported as a sentence. */
 export function assertGhReady(): void {
   try {
     gh(['--version'], { quiet: true });
@@ -1108,7 +1108,7 @@ export function cachedJournal(
   mkdirSync(dirname(root), { recursive: true });
   const tmp = mkdtempSync(join(dirname(root), '.clone-'));
   try {
-    // Plain git: journal repos are public [R189], and an author may have no gh login.
+    // Plain git: journal repos are public, and an author may have no gh login.
     run('git', ['clone', '--depth', '1', '--quiet', `https://github.com/${journalRepo}.git`, tmp]);
   } catch (err) {
     rmSync(tmp, { recursive: true, force: true });
@@ -1139,8 +1139,8 @@ export function cloneEngineTag(engineRepo: string, tag: string, dest: string): v
   run('git', ['clone', '--depth', '1', '--quiet', '--branch', tag, '--', url, dest]);
 }
 
-/** Shallow-clones `engineRepo` at `tag` and returns its `templates/paper/` path: `oak upgrade`
- *  resets only the paper's gated files, and the journal repo is never reset. */
+/** Shallow-clones `engineRepo` at `tag` and returns its `templates/paper/` path, from which
+ *  `oak upgrade` renders the paper's engine-managed files. */
 export function materializeTemplate(engineRepo: string, tag: string): string {
   const tmp = mkdtempSync(join(tmpdir(), 'oak-tmpl-'));
   gh(['repo', 'clone', engineRepo, tmp, '--', '--depth', '1', '--branch', tag]);
@@ -1523,7 +1523,7 @@ export const realConformanceGh: ConformanceGh = {
   },
   approveWorkflowRun(repo, runId) {
     // First-time-contributor approval is on the test repo, so it uses the main token. Fork runs
-    // are not always held [R150].
+    // are not always held.
     ghOk(
       ['api', '-X', 'POST', `repos/${repo}/actions/runs/${runId}/approve`],
       undefined,

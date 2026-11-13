@@ -1,7 +1,7 @@
 /**
- * The Zenodo side of the `oak release` steps (reserve-doi, deposit, status). Each command returns one
- * JSON result with a `status` field. A draft is reused when one exists, the committed DOI picks
- * the endpoint for an upload, and an upload overwrites the metadata [R22].
+ * The Zenodo side of the `oak release` steps (reserve-doi, deposit, status). Each command returns
+ * one JSON result with a `status` field. A draft is reused when one exists, the committed DOI
+ * picks the endpoint for an upload, and an upload overwrites the metadata.
  *
  * The Zenodo transport and the git and gh side are injected; the real ones are
  * `createFetchTransport()` and gh.ts. The abstract comes from the HTML build's JSON, so this
@@ -79,8 +79,8 @@ export const RESERVED_DEPOSIT_NAMES = [
   JOURNAL_BUNDLE_NAME,
 ];
 
-/** The reserved names a `deposit/` folder uses. The one statement of the [R28] rule: `oak
- *  validate` reports it on the pull request, `oak release` refuses on it [R101]. */
+/** The reserved names a `deposit/` folder uses [R28]. `oak validate` reports them on the pull
+ *  request and `oak release` refuses them, both through this function. */
 export function depositCollisions(names: string[]): string[] {
   return names.filter((n) => RESERVED_DEPOSIT_NAMES.includes(n));
 }
@@ -92,7 +92,7 @@ function isSandboxDoi(doi: string): boolean {
   return doi.startsWith(zenodoDoiPrefix(true));
 }
 
-/** The paper's identity on Zenodo [R7] [design §9]: a URN independent of where the paper lives,
+/** The paper's identity on Zenodo: a URN independent of where the paper lives,
  *  stored as a related identifier so it survives the GitHub URL changing. */
 export function paperUrn(id: string): string {
   return `urn:oaktree-sapling:${id}`;
@@ -123,8 +123,8 @@ export interface ZenodoTransport {
   ): Promise<TransportResponse>;
 }
 
-/** The real transport, using `fetch`. The token goes as a query parameter; a non-2xx logs the
- *  body to stderr. */
+/** The real transport, using `fetch`. `params` go in the query string, the client's token among
+ *  them; a non-2xx logs the start of the body to stderr. */
 export function createFetchTransport(): ZenodoTransport {
   return {
     async request(method, url, opts) {
@@ -169,16 +169,16 @@ export interface GitContext {
   fetchCommit(repoRoot: string, commit: string): Promise<void>;
   /** owner/repo from <root>'s origin remote, or null. */
   originRepo(repoRoot: string): Promise<string | null>;
-  /** The pull request that introduced <sha>, via `gh api` [R35.2]; null when there is none or
+  /** The pull request that introduced <sha>, via `gh api`; null when there is none or
    *  gh is unavailable. */
   reviewPr(repoRoot: string, sha: string): Promise<string | null>;
 }
 
 /* --------------------------------------------------------------------------
- * Zenodo API (every lookup pages through all results [R20] [R35.1])
+ * Zenodo API (every lookup pages through all results)
  * ------------------------------------------------------------------------ */
 
-// Depositions are loosely typed: Zenodo owns the shape, we read a few fields by name.
+// Depositions are loosely typed: Zenodo owns the shape, oak reads a few fields by name.
 export type Deposition = Record<string, any>;
 
 export class ZenodoError extends Error {
@@ -192,7 +192,7 @@ export class ZenodoError extends Error {
 }
 
 export class ZenodoApi {
-  /** The API host, derived from `sandbox` so the two cannot disagree [R107]. */
+  /** The API host, derived from `sandbox` so the two cannot disagree. */
   readonly api: string;
 
   constructor(
@@ -215,7 +215,7 @@ export class ZenodoApi {
     return res;
   }
 
-  /** Lists depositions page by page (`size=100`) until a short page [R20]. */
+  /** Lists depositions page by page (`size=100`) until a short page. */
   async listMyDepositions(opts: { q?: string } = {}): Promise<Deposition[]> {
     const size = 100;
     const out: Deposition[] = [];
@@ -260,7 +260,7 @@ export class ZenodoApi {
   async uploadFile(bucketUrl: string, name: string, data: Uint8Array): Promise<void> {
     // The bucket PUT takes a bare URL (outside `/api`), so it skips `call`'s path join. The name
     // comes from the author, so it is encoded: a raw `?` would end the path and append to the
-    // query string that carries the token [R107].
+    // query string that carries the token.
     const res = await this.t.request('PUT', `${bucketUrl}/${encodeURIComponent(name)}`, {
       params: { access_token: this.token },
       body: data,
@@ -270,9 +270,9 @@ export class ZenodoApi {
   }
 
   /**
-   * Finds the deposition by id, then by GitHub URL [R7]: targeted `q` queries first (each paged),
+   * Finds the deposition by id, then by GitHub URL: targeted `q` queries first (each paged),
    * then a full scan when neither found the identifier. The scan depends on a match, not on rows
-   * coming back, since `q` matches phrases and a near miss returns rows [R100].
+   * coming back, since `q` matches phrases and a near miss returns rows.
    */
   async findDeposit(opts: { paperId?: string; githubUrl: string }): Promise<Deposition | null> {
     const urn = opts.paperId ? paperUrn(opts.paperId) : null;
@@ -294,7 +294,7 @@ export class ZenodoApi {
     return (urn && matchRelated(all, urn)) || matchRelated(all, opts.githubUrl) || null;
   }
 
-  /** The depositions of a concept DOI, newest first (paged, the third lookup [R35.1]). */
+  /** The depositions of a concept DOI, newest first, paged. */
   async versionsOf(conceptDoi: string): Promise<Deposition[]> {
     let items = await this.listMyDepositions({ q: `conceptdoi:"${conceptDoi}"` });
     if (items.length === 0) {
@@ -392,7 +392,7 @@ export function partParagraphs(repoRoot: string, partName: string): string[] | n
 }
 
 /** Whether the HTML build left content JSON here. Without it the parts {@link partParagraphs}
- *  reads were never produced, which differs from a paper that declares none [R107]. */
+ *  reads were never produced, which differs from a paper that declares none. */
 export function hasBuildContent(repoRoot: string): boolean {
   return existsSync(join(repoRoot, '_build', 'site', 'content'));
 }
@@ -403,7 +403,7 @@ export const zenodoExtraParagraphs = (repoRoot: string): string[] | null =>
   partParagraphs(repoRoot, ZENODO_EXTRA_PART);
 
 /* --------------------------------------------------------------------------
- * Metadata (the journal's parts come from journal.yml [R19])
+ * Metadata (the journal's parts come from journal.yml)
  * ------------------------------------------------------------------------ */
 
 function escapeHtml(s: string): string {
@@ -438,7 +438,7 @@ export interface MetadataInput {
 /**
  * Builds the deposition metadata from a myst project and the journal's `zenodo:` settings. The
  * description is HTML paragraphs (abstract, journal paragraph, extra part, links), and the
- * identity URN sits beside the GitHub URL [R7].
+ * identity URN sits beside the GitHub URL.
  */
 export function buildMetadata(input: MetadataInput): Record<string, unknown> {
   const {
@@ -474,7 +474,7 @@ export function buildMetadata(input: MetadataInput): Record<string, unknown> {
 
   const desc: string[] = [];
   if (abstractParas) desc.push(...abstractParas.map((p) => `<p>${escapeHtml(p)}</p>`));
-  // The journal's optional paragraph [R19].
+  // The journal's optional paragraph.
   if (zenodo.description_blurb) desc.push(`<p>${escapeHtml(zenodo.description_blurb)}</p>`);
   if (extraDescParas) desc.push(...extraDescParas.map((p) => `<p>${escapeHtml(p)}</p>`));
   const yt = youtubeUrl(project);
@@ -494,7 +494,7 @@ export function buildMetadata(input: MetadataInput): Record<string, unknown> {
   const related: Array<Record<string, string>> = [
     { identifier: githubUrl, relation: 'isVersionOf', scheme: 'url' },
   ];
-  // The identity URN [R7], which survives a repo move.
+  // The identity URN, which survives a repo move.
   if (paperId)
     related.push({ identifier: paperUrn(paperId), relation: 'isVersionOf', scheme: 'urn' });
   if (siteUrl) related.push({ identifier: siteUrl, relation: 'isIdenticalTo', scheme: 'url' });
@@ -510,7 +510,7 @@ export function buildMetadata(input: MetadataInput): Record<string, unknown> {
     related_identifiers: related,
     access_right: 'open',
   };
-  // The journal's optional community [R19].
+  // The journal's optional community.
   if (zenodo.community) md.communities = [{ identifier: zenodo.community }];
   if (keywords.length) md.keywords = keywords;
   if (version !== undefined) md.version = version;
@@ -536,8 +536,8 @@ export interface BundleProvenance {
   journal_repo: string | null;
   journal_commit: string | null;
   built_at: string | null;
-  // What it takes to render the deposit again [R66]: engine.zip carries everything but
-  // node, so this platform and node.
+  // engine.zip renders the deposit again with node, on this platform [R66]; `typst_version` is
+  // the typst that rendered it.
   platform: string;
   typst_version: string | null;
 }
@@ -548,13 +548,13 @@ export interface BundleProvenance {
 
 export class TemplateArchiveError extends Error {}
 
-/** The file that marks a directory as a myst template [R107]. */
+/** The file that marks a directory as a myst template. */
 const TEMPLATE_YML = 'template.yml';
 
 /**
  * The typst template the build used, read from the derived config `myst.oak.yml` that the build
- * leaves beside `myst.yml` [R71]. The deposit archives what was rendered, so it uses the
- * stamped value.
+ * leaves beside `myst.yml` [R71]. The deposit archives what was rendered, so it reads the value
+ * the build wrote.
  *
  * Falls back to the author's `myst.yml` when there is no derived config (the tree was not built
  * here), and to null when neither names one: oak's own template, already in `engine.zip`.
@@ -582,7 +582,7 @@ export function readStampedTemplate(paperRoot: string): string | null {
 export function resolveTemplateDir(template: string, paperRoot: string): string {
   const buildTemplates = join(paperRoot, '_build', 'templates');
 
-  // Local: a directory with a `template.yml`, as myst requires [R107], or a file inside one.
+  // Local: a directory with a `template.yml`, as myst requires, or a file inside one.
   // Relative to the paper root, where myst resolved it.
   const local = isAbsolute(template) ? template : join(paperRoot, template);
   if (existsSync(local)) {
@@ -595,8 +595,8 @@ export function resolveTemplateDir(template: string, paperRoot: string): string 
   }
 
   // A name, in one of myst's three shapes: `x` → typst/myst/x, `a/b` → typst/a/b,
-  // `typst/a/b` → itself. The stamped value is written by the build, which runs paper code, so
-  // a name has to stay under `_build/templates`.
+  // `typst/a/b` → itself. The value in myst.oak.yml is written by the build, which runs paper
+  // code, so a name has to stay under `_build/templates`.
   const parts = template.split('/');
   if (parts.some((p) => p === '' || p === '..')) {
     throw new TemplateArchiveError(msg.workflow.depositTemplateBadName(template));
@@ -652,7 +652,7 @@ function repoRootOf(dir: string): string {
  * checkout, which `engine.zip` already holds.
  *
  * Any other template's bytes are in no other file, and the PDF behind the DOI needs them to be
- * rendered again [design §7] [R66], so a template that cannot be found is an error.
+ * rendered again [R66], so a template that cannot be found is an error.
  */
 export function templateArchiveDir(paperRoot: string, engineRoot: string): string | null {
   const stamped = readStampedTemplate(paperRoot);
@@ -685,11 +685,10 @@ export interface JournalArchive {
 }
 
 /**
- * The journal commit this deposit records, read from the stamp the build left in
- * `myst.oak.yml`: the journal is fetched at its default branch on every run, so the deposit's
- * checkout can be at a later commit than the build's, and the commit is fetched into it. `paper`
- * when the paper repo is its own journal; null when built with `--no-instance`. Run before
- * anything is written to Zenodo [R101].
+ * The journal commit the build used, read from `myst.oak.yml` by {@link readJournalStamp} and
+ * fetched into `instanceRoot`, so `journal.zip` matches the PDF even when the journal has changed
+ * since. `paper` when the paper repo is its own journal; null when built with `--no-instance`.
+ * Run before anything is written to Zenodo.
  *
  * Throws {@link JournalArchiveError} when the build used a journal this deposit cannot archive.
  */
@@ -725,10 +724,10 @@ export async function prepareJournalArchive(
 }
 
 /**
- * What can make a deposit impossible, in one place so it can be checked before writing to
- * Zenodo [R101]. `oak validate` reports the same clash on the pull request
- * ({@link depositCollisions}). The journal's own check is {@link prepareJournalArchive}, which
- * needs git.
+ * Throws when the deposit cannot be assembled: a `deposit/` name clash or a template it cannot
+ * archive. Run before anything is written to Zenodo. `oak validate` reports the same clash on the
+ * pull request ({@link depositCollisions}); the journal's own check is
+ * {@link prepareJournalArchive}, which needs git.
  */
 export function assertBundlePreconditions(repoRoot: string, engineRoot: string): void {
   const depositDir = join(repoRoot, 'deposit');
@@ -746,16 +745,9 @@ export function assertBundlePreconditions(repoRoot: string, engineRoot: string):
 
 /**
  * Assembles the deposit: oak's fixed files plus every file in the paper's `deposit/` folder, as
- * they are [R28]; a clash with a fixed name is an error. Returns the paths, sorted.
- *
- * `engine.zip` is a `git archive` of oak at its pinned release [R66], which carries
- * `bin/typst`, `dist/cli.cjs` and `templates/typst/`: everything but node needed to render the
- * PDF again, on linux x86_64. `journal.zip` is a `git archive` of `journal`, the journal commit
- * the build used, unless `source.zip` holds it ({@link prepareJournalArchive}). `template.zip`
- * holds a template that is not oak's own [R76]; see {@link templateArchiveDir}. `myst.oak.yml`
- * records what the build resolved; its paths are the build machine's. `engineZip` is an
- * `engine.zip` that {@link prepareEngineArchive} already made; without it the engine is archived
- * here.
+ * they are [R28]; a clash with a fixed name is an error. Returns the paths, sorted. What each
+ * fixed file holds is in [R66]. `engineZip` is an `engine.zip` that {@link prepareEngineArchive}
+ * already made; without it the engine is archived here.
  */
 export async function buildBundle(
   out: string,
@@ -808,15 +800,15 @@ export async function buildBundle(
 
 export class BundleCollisionError extends Error {}
 
-/** oak's checkout could not produce an `engine.zip` that renders on its own [R107]. */
+/** oak's checkout could not produce an `engine.zip` that renders on its own. */
 export class EngineArchiveError extends Error {}
 
 /** What `engine.zip` must carry to render the PDF again [R66]. Both are committed only at
- *  release tags, so any other ref archives a zip without them [R107]. */
+ *  release tags, so any other ref archives a zip without them. */
 const ENGINE_ARCHIVE_REQUIRED = ['dist/cli.cjs', 'bin/typst'];
 
 /** Archives oak's checkout at `engineRoot` to `outZip` as `engine.zip`, refusing one that
- *  cannot render the PDF it is deposited beside [R107]. */
+ *  cannot render the PDF it is deposited beside. */
 export async function prepareEngineArchive(
   engineRoot: string,
   git: GitContext,
@@ -840,7 +832,7 @@ function assertEngineArchive(zipPath: string): void {
 }
 
 /* --------------------------------------------------------------------------
- * journal.yml `zenodo:` settings [R19]
+ * journal.yml `zenodo:` settings
  * ------------------------------------------------------------------------ */
 
 /** Reads the journal's `zenodo:` block from `<instanceRoot>/journal.yml`. A new journal, or a
@@ -889,12 +881,11 @@ export interface PrepareInput {
 }
 
 /**
- * `oak release reserve-doi`: reserves a draft, or reuses one, and writes `project.doi`, `github` and
- * `date` into myst.yml [R22]. The CLI opens the DOI pull request from that write [R3].
+ * `oak release reserve-doi`: reserves a draft, or reuses one, and writes `project.doi`, `github`
+ * and `date` into myst.yml. The CLI opens the DOI pull request from that write.
  *
  * Reserving again in the same environment is refused. A production reserve-doi may replace a
- * committed sandbox DOI, the planned move from sandbox to production; the reverse is refused
- * [R29].
+ * committed sandbox DOI, the planned move from sandbox to production; the reverse is refused.
  */
 export async function cmdPrepare(input: PrepareInput): Promise<Outcome> {
   const { mystPath, repo, api, instanceRoot } = input;
@@ -912,7 +903,7 @@ export async function cmdPrepare(input: PrepareInput): Promise<Outcome> {
     if (!existingSandbox && sandbox) {
       return err(2, msg.workflow.prepareNoDowngrade(existingDoi));
     }
-    // A sandbox DOI and a production prepare: replacing it is allowed [R29].
+    // A sandbox DOI and a production reserve-doi: replacing it is allowed.
   }
 
   const doc2 = readDoc(mystPath); // a fresh document keeps the file's comments
@@ -996,7 +987,7 @@ function readTypstVersion(engineRoot: string): string | null {
 /**
  * The core of `oak release deposit`: fills the reserved draft with the final
  * metadata and files and leaves it unsubmitted, or publishes it with `publish`. The committed
- * DOI's prefix picks sandbox or production [R4], and an `api` for the other one is refused.
+ * DOI's prefix picks sandbox or production, and an `api` for the other one is refused.
  */
 export async function cmdUpload(input: UploadInput): Promise<Outcome> {
   const work = mkdtempSync(join(tmpdir(), 'oak-engine-'));
@@ -1035,7 +1026,7 @@ async function fillDraft(input: UploadInput, engineZip: string): Promise<Outcome
 
   const sha = await git.headSha(repoRoot);
 
-  // Checked before anything is written to Zenodo, and reported in the result [R101].
+  // Checked before anything is written to Zenodo, and reported in the result.
   let journal: JournalArchive | null;
   try {
     assertBundlePreconditions(repoRoot, engineRoot);
@@ -1053,8 +1044,7 @@ async function fillDraft(input: UploadInput, engineZip: string): Promise<Outcome
     throw e;
   }
 
-  // An upload overwrites the metadata [R22], including the abstract the HTML build supplies
-  // [R107].
+  // An upload overwrites the metadata, including the abstract the HTML build supplies.
   if (!hasBuildContent(repoRoot)) {
     return err(2, msg.workflow.uploadNoBuildContent);
   }

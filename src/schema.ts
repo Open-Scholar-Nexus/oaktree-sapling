@@ -1,9 +1,9 @@
 /**
  * The data oak owns, as zod schemas: the `oaktree-sapling` key in a paper's `project.options`,
  * `journal.yml`, `registry/papers.yml` and `pins.yml`. The rest of the myst config is myst's to
- * check (through loadConfig) [R185]. Unknown keys are ignored (`.loose()`), so a newer journal
- * field cannot break a paper pinned to an older oak [R197]. `oak validate`,
- * compose and the JSON Schema export (`toJsonSchemas`) all use these.
+ * check (through loadConfig). Unknown keys are ignored (`.loose()`), so a newer journal field
+ * cannot break a paper pinned to an older oak. `oak validate` and compose use these, and
+ * {@link toJsonSchemas} exports them as JSON Schema.
  */
 import * as msg from './messages.js';
 import { z } from 'zod';
@@ -12,7 +12,7 @@ import { z } from 'zod';
  * 1. The engine coordinate: project.options["oaktree-sapling"]
  * ------------------------------------------------------------------------ */
 
-/** An edition id. It names a file (`editions/<id>.yml`), so it may not carry a path [R141]. A
+/** An edition id. It names a file (`editions/<id>.yml`), so it may not carry a path. A
  *  fork pull request controls it. */
 export const EDITION_ID = z
   .string()
@@ -66,11 +66,11 @@ function engineVersionKey(v: string): number[] | null {
   return m[4] === undefined ? [x, y, z, 1, 0] : [x, y, z, 0, Number(m[4])];
 }
 
-/** A paper's published version: a tag `vMAJOR.MINOR.PATCH`, deposited on Zenodo as
- *  `MAJOR.MINOR.PATCH`. */
 /** The branch the DOI commit is pushed to: `openDoiPr` (gh.ts) pushes it, `oak release` merges it. */
 export const DOI_BRANCH = 'zenodo-doi';
 
+/** A paper's published version: a tag `vMAJOR.MINOR.PATCH`, deposited on Zenodo as
+ *  `MAJOR.MINOR.PATCH`. */
 export const PAPER_VERSION_TAG = /^v[0-9]+\.[0-9]+\.[0-9]+$/;
 
 /**
@@ -154,7 +154,7 @@ export const OaktreeSaplingOptions = z
     /** An {@link ENGINE_VERSION}, at or above pins.yml's `min_engine_version`. The engine
      *  action's `ref` step refuses anything else [R41]. */
     version: z.string().regex(ENGINE_VERSION, 'must be a release tag like v1.2.3 or v1.2.3-dev.4'),
-    /** Selects `editions/<edition>.yml` [R195]. */
+    /** Selects `editions/<edition>.yml`. */
     edition: EDITION_ID,
     /** Written by oak into `myst.oak.yml` only ({@link JournalStamp}). */
     journal: JournalStamp.optional(),
@@ -180,11 +180,10 @@ export function readEngineOptions(
 
 export const PreviewConfig = z
   .object({
-    /** 'artifact' links the build artifact instead, for a journal without Cloudflare secrets
-     *  [R6]. */
+    /** 'artifact' links the build artifact instead, for a journal without Cloudflare secrets. */
     provider: z.enum(['cloudflare', 'artifact']).default('artifact'),
     cf_project_name: z.string().optional(),
-    /** Preview branch naming; `{repo}` / `{pr}` placeholders ([R27]). */
+    /** Preview branch naming; `{repo}` / `{pr}` placeholders. */
     branch_pattern: z.string().default('paper-{repo}-{pr}'),
   })
   .loose();
@@ -192,9 +191,9 @@ export type PreviewConfig = z.infer<typeof PreviewConfig>;
 
 export const ZenodoConfig = z
   .object({
-    /** Optional Zenodo community identifier; a new journal has none [R19]. */
+    /** Optional Zenodo community identifier; a new journal has none. */
     community: z.string().optional(),
-    /** Optional paragraph appended to every deposit's description [R19]. */
+    /** Optional paragraph appended to every deposit's description. */
     description_blurb: z.string().optional(),
   })
   .loose();
@@ -217,13 +216,12 @@ export const JournalConfig = z
   .object({
     name: z.string().min(1),
     url: z.string().optional(),
-    /** Only 'paper' is built. The field exists so a journal-level instance is detected, not
-     *  assumed [design §9]. */
+    /** Accepted for the seeded `journal.yml`; nothing reads it yet. Only papers are built. */
     tier: z.enum(['paper', 'edition', 'journal']).default('paper'),
     /** The template's placeholder `id:`, which `oak validate` rejects on a real paper. Set per
      *  journal. */
     id_sentinel: z.string().optional(),
-    /** Anchored regex a paper `id:` must match [R7]. */
+    /** Anchored regex a paper `id:` must match. */
     id_pattern: z.string().optional(),
     /** The journal's typst template [R76]: a name, a path (only a `./` or `../` value, relative
      *  to the journal repo) or a URL. The author's own template outranks it, with a
@@ -241,8 +239,8 @@ export type JournalConfig = z.infer<typeof JournalConfig>;
  * 3. registry/papers.yml: the paper registry
  *
  * Two coordinates:
- *   - id       → the deposit and dedup key, myst's project.id [R7]
- *   - location → where the paper lives, read by {@link parseLocation} [design §9]
+ *   - id       → the deposit and dedup key, myst's project.id
+ *   - location → where the paper lives, read by {@link parseLocation}
  * An entry may carry `slug`, `edition` and `doi`; nothing reads them. The website reads the
  * edition and the DOI from the paper's own `myst.yml`.
  * ------------------------------------------------------------------------ */
@@ -285,7 +283,7 @@ export const RegistryEntry = z
     /**
      * Where the paper is published, when that is not its GitHub Pages URL ({@link pagesUrl}),
      * which the gallery otherwise derives from the location. Display data such as the title is
-     * still fetched from the paper, never stored here [R197].
+     * still fetched from the paper, never stored here.
      */
     site_url: z.string().optional(),
   })
@@ -311,20 +309,20 @@ export const Pins = z
 export type Pins = z.infer<typeof Pins>;
 
 /* --------------------------------------------------------------------------
- * 5. Paper-id checks [R193]
+ * 5. Paper-id checks
  * ------------------------------------------------------------------------ */
 
 export type IdCheckResult =
   { ok: true } | { ok: false; severity: 'error' | 'warn'; message: string };
 
 /** The placeholder id oak's paper template ships. It is always rejected; a journal's
- *  `id_sentinel` adds a second placeholder [R119]. A test keeps it in step with
- *  `templates/paper/myst.yml`. */
+ *  `id_sentinel` adds a second placeholder. `is the id the paper template actually ships` in
+ *  `test/schema.test.ts` keeps it in step with `templates/paper/myst.yml`. */
 export const ENGINE_ID_SENTINEL = 'CHANGE-ME-template-placeholder';
 
 /**
  * Rejects a placeholder id or one that does not match the journal's id pattern. It needs only the
- * paper's id and the journal's settings, so it is an error everywhere [R12].
+ * paper's id and the journal's settings, so it is an error everywhere.
  */
 export function checkIdShape(
   id: string,
@@ -352,7 +350,7 @@ export function checkIdShape(
 
 /**
  * Checks that the id is unique in the registry. Fails when the registry is present, and only warns
- * without one, as in a bare local validate [R193]. `self` excludes the paper's own entry, by repo.
+ * without one, as in a bare local validate. `self` excludes the paper's own entry, by repo.
  */
 export function checkIdUniqueness(
   id: string,

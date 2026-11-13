@@ -8,9 +8,9 @@
  * Every run works on its own branches, pull requests and a throwaway tag. `reset` removes them,
  * so each run starts clean, and it is idempotent.
  *
- * GitHub calls are injected (`ConformanceGh`; the real one is in gh.ts) so tests run offline.
- * This holds only a token for the test repo; the Cloudflare and Zenodo secrets stay in the
- * test repo and are used by its own runs.
+ * GitHub calls are injected (`ConformanceGh`; the real one is in gh.ts). It holds a token for the
+ * test repo and, for the fork preview, one for the fork; the Cloudflare and Zenodo secrets stay
+ * in the test repo and are used by its own runs.
  */
 import { STICKY_PREVIEW } from './preview.js';
 import type { Outcome } from './result.js';
@@ -171,7 +171,7 @@ export async function cmdConformanceReset(input: ResetInput, deps: ResetDeps): P
   }
 
   // The run's `oak upgrade` opens `oak/upgrade-<tag>`; deleting it lets the same release be tested
-  // again [R117]. Deleting a branch closes its pull request.
+  // again. Deleting a branch closes its pull request.
   const deletedBranches: string[] = [];
   for (const prefix of [CERT_BRANCH_PREFIX, UPGRADE_BRANCH_PREFIX]) {
     for (const branch of gh.listBranches(repo, prefix)) {
@@ -232,7 +232,7 @@ export class ThirdPartyError extends Error {
 /**
  * Calls `attempt` until it returns a value; `null` means keep waiting, and a throw is a real
  * failure (a run that finished and failed). A timeout blames a third party, unless `settled`
- * says every run has finished: then the result is missing, which is a failure [R113].
+ * says every run has finished: then the result is missing, which is a failure.
  */
 async function pollUntil<T>(
   label: string,
@@ -252,10 +252,10 @@ async function pollUntil<T>(
 
 /**
  * A `gh` failure because GitHub could not serve the request (a rate limit, a 5xx, a dropped
- * connection, as gh.ts's `run` formats them) [R113]. These are not oak's fault.
+ * connection, as gh.ts's `run` formats them). These are not oak's fault.
  *
  * A 401 or 403 that is not a rate limit counts as oak's fault: GitHub refused the request, which
- * means a missing scope or `permissions:` block, or a call that does not apply [R150].
+ * means a missing scope or `permissions:` block, or a call that does not apply.
  */
 function isGitHubApiFault(err: unknown): boolean {
   const m = err instanceof Error ? err.message : String(err);
@@ -267,7 +267,7 @@ function isGitHubApiFault(err: unknown): boolean {
 }
 
 /**
- * Checks that a URL serves 200, retrying a network error, 429 or 5xx with backoff. If those
+ * Checks that a URL serves 200, retrying a network error, 429 or 5xx at a fixed interval. If those
  * persist the result is inconclusive (`ThirdPartyError`); any other 4xx (a 404: nothing was
  * deployed) is a failure.
  */
@@ -317,7 +317,7 @@ export interface RunInput {
   runId?: string; // namespaces the cert-<runId> preview branch; defaults to a timestamp
 }
 
-/** The preview comment's marker. preview.ts owns it; keep them in step. */
+/** The preview comment's marker, built from preview.ts's `STICKY_PREVIEW`. */
 const PREVIEW_STICKY_MARK = stickyMarker(STICKY_PREVIEW);
 
 /** The `*.pages.dev` URL in a preview comment, or null when the comment fell back to an
@@ -343,7 +343,7 @@ export async function cmdConformanceRun(input: RunInput, deps: ConformanceDeps):
     return runs.length > 0 && runs.every((r) => r.status === 'completed');
   };
   let phase = 'install';
-  // The paths that passed, added as each phase passes (the fork phase adds its own).
+  // The paths reported on success; the fork phase adds its own when it passes.
   const paths: string[] = ['push-main', 'preview-same-repo', 'deposit'];
   const skipped: string[] = [];
   let forkResult: Record<string, unknown> = {};
@@ -386,7 +386,7 @@ export async function cmdConformanceRun(input: RunInput, deps: ConformanceDeps):
     log(`merged PR #${prNumber} → ${mergeSha}`);
 
     // The pin is written by the upgrade under test, so check it: a bug there would pass this
-    // release while the test repo ran another [R113].
+    // release while the test repo ran another.
     const pinned = gh.committedEngineVersion(repo);
     if (pinned !== tag) {
       throw new Error(
@@ -466,7 +466,7 @@ export async function cmdConformanceRun(input: RunInput, deps: ConformanceDeps):
     log(`same-repo preview CERTIFIED for ${tag}`);
 
     // ---- The deposit: deposit-version.yml and `oak release deposit` ----
-    // The tag push, the publish run, and the deposit files on the tag's release [R24].
+    // The tag push, the publish run, and the deposit files on the tag's release.
     // Reserving a DOI is not tested: the test repo already has a sandbox DOI and `oak release
     // reserve-doi` refuses when one is set. This holds no Zenodo token, so it checks the
     // deposit by the release's file names.
@@ -502,7 +502,7 @@ export async function cmdConformanceRun(input: RunInput, deps: ConformanceDeps):
     );
 
     // The deposit files are on the tag's release, with journal.zip when the journal is a repo of
-    // its own. Without a Zenodo token this checks names, not contents [R24].
+    // its own. Without a Zenodo token this checks names, not contents.
     const releaseAssets = gh.releaseAssets(repo, depositTag);
     const journalRepo = gh.committedJournalRepo(repo);
     const expected =
@@ -580,7 +580,7 @@ export async function cmdConformanceRun(input: RunInput, deps: ConformanceDeps):
       forkResult = { forkPr: forkPr.number, forkPreviewUrl };
     } else {
       // Listed in the result as well as the log, so a run that skipped a path is distinguishable
-      // from one that passed it [R113].
+      // from one that passed it.
       skipped.push('preview-fork');
       log(
         'fork preview phase SKIPPED (no fork configured; set CONFORMANCE_FORK_REPO/PAT to enable)',
@@ -607,8 +607,8 @@ export async function cmdConformanceRun(input: RunInput, deps: ConformanceDeps):
       },
     };
   } catch (err) {
-    // A `ThirdPartyError` (an outage or timeout) is inconclusive (exit 3), never a failure;
-    // anything else is a failure (exit 1).
+    // An outage or timeout (a `ThirdPartyError`, or a fault {@link isGitHubApiFault} matches) is
+    // inconclusive, exit 3; anything else is a failure, exit 1.
     const message = err instanceof Error ? err.message : String(err);
     if (err instanceof ThirdPartyError || isGitHubApiFault(err)) {
       log(`engine ${tag}: paper-CI INCONCLUSIVE at ${phase}: ${message}`);

@@ -349,7 +349,7 @@ function guarded(src: ReleaseSource): ReleaseSource {
  */
 export async function runRelease(input: ReleaseInput, deps: ReleaseDeps): Promise<ReleaseOutcome> {
   const { repo, tag } = input;
-  // A Proxy: every `src` call but `merge` throws a UserError ({@link guarded}).
+  // Every `src` call but `merge` turns a failure into a UserError ({@link guarded}).
   const src = guarded(deps.src);
   const clone = src.clone(repo, tag);
   let outcome: ReleaseOutcome & { next?: string[] };
@@ -430,7 +430,7 @@ async function releaseFrom(
       msg.workflow.releasePlanAttach(tag),
     ];
     if (!(await deps.confirm(plan))) return { code: 0, reason: 'declined' };
-    // A later version tags the head the confirmation showed.
+    // With a DOI committed, the tag goes on the head the plan showed; else on the DOI merge.
     sha = doi ? head.sha : await reserveAndMerge(clone, input, src, deps);
     src.createTag(repo, tag, sha);
     deps.log(msg.workflow.releaseTagged(tag, sha));
@@ -550,8 +550,9 @@ function committed(
   return { doi: { doi, sandbox: parsed.sandbox }, pin };
 }
 
-/** Refuses when Zenodo holds no draft for `tag`: no record, or the newest version published with
- *  another version. Published with this version passes; `oak release deposit` finishes it. */
+/** Refuses when the DOI has no record on Zenodo, or its newest version is published as another
+ *  version. A draft passes, and so does a record published as `tag`, which `oak release deposit`
+ *  then finishes. */
 async function assertDraftFor(doi: CommittedDoi, tag: string, deps: ReleaseDeps): Promise<void> {
   let state: DepositState;
   try {

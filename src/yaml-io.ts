@@ -1,6 +1,6 @@
 /**
  * Reads and writes myst config through the `yaml` Document API, which keeps the author's keys,
- * order and comments; never a text patch [R3].
+ * order and comments.
  */
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -13,8 +13,8 @@ import { firstLine, UserError } from './messages.js';
 /**
  * The derived config oak builds from [R71]: the author's `myst.yml` plus the `extends:` chain
  * and compose's additions. It sits at the paper root because myst resolves `toc`,
- * `bibliography`, plugins and brand assets relative to the config. It is not deleted after a
- * build, since myst exits the process on success [R67.3]; the paper template gitignores it.
+ * `bibliography`, plugins and brand assets relative to the config. `oak build`, `oak start` and
+ * `oak validate` write it, through `materializeDerived` (materialize.ts).
  */
 export const DERIVED_CONFIG_FILE = 'myst.oak.yml';
 
@@ -120,7 +120,7 @@ export function writeDerivedDoc(path: string, doc: Document): void {
 }
 
 /** Reads the version and edition from the author's myst.yml before any merge, as the engine
- *  action does, so it works before the journal is resolved [design §6a]. A missing value is the
+ *  action does, so it works before the journal is resolved. A missing value is the
  *  author's to fix, so it throws a {@link UserError} naming the file. */
 export function readEngineCoordinateRaw(
   doc: Document,
@@ -135,7 +135,7 @@ export function readEngineCoordinateRaw(
     throw new UserError(msg.build.missingEngineCoordinate('edition', mystPath));
   }
   // Checked here too: this value picks a file in `extendsChainFor` before anything validates the
-  // merged config [R141].
+  // merged config.
   if (!EDITION_ID.safeParse(edition).success) {
     throw new UserError(msg.build.badEdition(edition, mystPath));
   }
@@ -205,9 +205,9 @@ export function setExtends(doc: Document, chain: string[]): void {
 }
 
 /** Pass 2: merges compose's additions: `project.exports`, `project.downloads`, `site.template`,
- *  and single asset keys under `site.options` and `project.options` [R62]. Keys are set one by
- *  one so the author's other options, and the `oaktree-sapling` key, survive; a download is
- *  appended unless the author declares its id. */
+ *  the brand assets under `site.options`, and the watermark and journal stamp under
+ *  `project.options` [R62]. Keys are set one by one so the author's other options survive; a
+ *  download is appended unless the author declares its id. */
 export function applyOwnOverride(doc: Document, override: OwnOverride): void {
   if (override.project?.exports) {
     doc.setIn(['project', 'exports'], override.project.exports);

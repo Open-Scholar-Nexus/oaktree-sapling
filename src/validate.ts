@@ -1,8 +1,9 @@
 /**
  * `oak validate` runs two sets of checks:
- *   - oak's checks: the paper id ([R12]), the layout ([R46] [R50]), the brand favicon and
- *     watermark ([R61] [R62]), the thumbnail ([R81]) and the `deposit/` names ([R28]). `oak
- *     build` runs these first too [R21].
+ *   - oak's checks ({@link runOakChecks}): the journal's settings and registry, the paper id, the
+ *     layout, the thumbnail, the `deposit/` names [R28], the journal stamp, the journal layers
+ *     [R72], the brand favicon and watermark [R62], and the typst templates [R76]. `oak build`
+ *     runs these first too.
  *   - The editorial checks the journal turns on in `journal.yml` `checks:` (checks.ts).
  *
  * File and myst access is injected so the rules are testable; myst-cli is reached only through
@@ -54,10 +55,10 @@ const realFs: FsProbes = {
   listTree: (dir) => (existsSync(dir) ? readdirSync(dir, { recursive: true }).map(String) : []),
 };
 
-/** What a finding blocks. `structural` (no index.md, a stray myst.yml) blocks the build;
- *  `identity` (the id), `brand` and `config` only block the merge, through the Journal checks,
- *  so a new paper with a placeholder id still builds. `config` covers keys that overlap between
- *  journal layers [R72], which make results unpredictable rather than impossible. */
+/** What a finding blocks. A `structural` error (no index.md, a stray myst.yml) blocks the
+ *  build. An `identity` (the id) or `config` (the journal's settings and how the paper's config
+ *  is assembled) error only blocks the merge, through the Journal checks, so a new paper with a
+ *  placeholder id still builds. `brand` findings are warnings. */
 export type FindingKlass = 'structural' | 'identity' | 'brand' | 'config';
 
 export interface NamedFinding {
@@ -69,7 +70,7 @@ export interface NamedFinding {
 
 /* ---- oak's checks (pure) ----------------------------------------------- */
 
-/** index.md and myst.yml at the paper root, and no other myst.yml under it [R50]. Returns the
+/** index.md and myst.yml at the paper root, and no other myst.yml under it. Returns the
  *  problems; empty means clean. */
 export function checkLayout(
   paperRoot: string,
@@ -101,7 +102,7 @@ export function checkLayout(
   return out;
 }
 
-/** Warns when the brand has no favicon that resolves [R61]: the site still renders, with a
+/** Warns when the brand has no favicon that resolves: the site still renders, with a
  *  default icon. A URL resolves for HTML, so it passes. */
 export function checkBrandFavicon(
   input: { instanceRoot: string | null; favicon?: string },
@@ -123,7 +124,7 @@ export function checkBrandFavicon(
 }
 
 /** Warns when the brand's PDF watermark (`project.options.logo`) is absent, a URL (typst cannot
- *  fetch) or a local file that does not resolve [R62] [R68]. */
+ *  fetch) or a local file that does not resolve [R62]. */
 export function checkBrandWatermark(
   input: { instanceRoot: string | null; logo?: string },
   probes: FsProbes,
@@ -155,7 +156,7 @@ export function checkBrandWatermark(
  * the paper): a wrong path means no thumbnail at all and a blank gallery card.
  *
  * myst resolves it against the paper's source folder, not the layer that set it, so it is
- * checked against the paper root and needs no rewriting, unlike brand assets [R62] [R68] or
+ * checked against the paper root and needs no rewriting, unlike brand assets [R62] or
  * templates [R76]. When unset, the fallback works again; a URL passes, since myst downloads it
  * [R80].
  */
@@ -203,11 +204,11 @@ export function checkDepositNames(input: { paperRoot: string }, probes: FsProbes
 
 /**
  * Whether a template reference floats: names something whose bytes can change while the
- * reference stays the same, like a branch URL [R5]. Remote is fine when pinned. Floating only
+ * reference stays the same, like a branch URL. Remote is fine when pinned. Floating only
  * warns: the deposit keeps the resolved template, so a DOI stays reproducible, and only the live
  * site may render differently later; a floating template is normal while developing one.
  *
- * Warns only on forms that clearly float, so a pin we cannot see (a versioned zip URL) passes.
+ * Warns only on forms that clearly float, so a pin oak cannot see (a versioned zip URL) passes.
  */
 export function isFloatingTemplate(value: string): boolean {
   if (isBrandAssetUrl(value)) {
@@ -220,7 +221,7 @@ export function isFloatingTemplate(value: string): boolean {
   }
   // A local path is committed and reviewed, so it does not float.
   if (isAbsolute(value) || isInstanceRelativeTemplate(value)) return false;
-  // A bare template name resolves against the live template API, so it floats [design §7].
+  // A bare template name resolves against the live template API, so it floats.
   return true;
 }
 
@@ -270,13 +271,12 @@ export function checkTemplates(
 /* ---- journal repo readers ----------------------------------------- */
 
 /** A journal with no settings, so a run without a readable `journal.yml` keeps its shape while
- *  the [R116] finding blocks. */
+ *  the `journal-config` finding blocks. */
 function emptyJournal(): JournalConfig {
   return JournalConfig.parse({ name: 'unknown' });
 }
 
-/** null means the journal repo has no `journal.yml`: broken, unlike `--no-instance`
- *  [R116]. */
+/** null means the journal repo has no `journal.yml`: broken, unlike `--no-instance`. */
 function loadJournal(instanceRoot: string | null, probes: FsProbes): JournalConfig | null {
   if (instanceRoot) {
     if (!probes.existsProbe(join(instanceRoot, 'journal.yml'))) return null;
@@ -319,8 +319,8 @@ function findSelf(registry: Registry | null, repo: string | null): RegistryEntry
 /**
  * The keys one layer declares. `site.options` and `project.options` merge field by field, so two
  * layers may set different keys inside them, and those are compared at the leaf
- * (`site.options.logo`) [R68]. Everything else merges at the top-level key (`exports` whole, by
- * id [R52] [R53]), so is compared there (`project.venue`).
+ * (`site.options.logo`). Everything else merges at the top-level key (`exports` whole, by
+ * id [R52]), so is compared there (`project.venue`).
  */
 export function declaredKeys(config: unknown): string[] {
   const out: string[] = [];
@@ -385,7 +385,7 @@ function extendsRefs(config: unknown): string[] {
 }
 
 /**
- * Each layer plus everything its own `extends:` pulls in [R119]. A nested layer merges into the
+ * Each layer plus everything its own `extends:` pulls in. A nested layer merges into the
  * same result, so its keys count as the parent's (named `<parent> -> <ref>`). A reference this
  * cannot follow is returned in `unreadable`, since the check is unsound without it.
  */
@@ -423,8 +423,8 @@ export function runOakChecks(
     instanceRoot: string | null;
     /** The composed project before compose's second step [R82]: the author's config with the
      *  `extends:` chain, without the fields that step adds (`output`, `template`,
-     *  `site.template`, brand asset paths). `oak build` has this view when it runs these checks
-     *  [R21]. No check here needs a field the second step adds; one that does should change
+     *  `site.template`, brand asset paths). `oak build` has this view when it runs these checks.
+     *  No check here needs a field the second step adds; one that does should change
      *  this input. `runOakChecks` reads the author's template separately, since the composed
      *  view no longer says who set it. */
     project: { id?: string; thumbnail?: string };
@@ -448,7 +448,7 @@ export function runOakChecks(
     findings.push({ check: 'registry-entry', severity: 'warn', message, klass: 'config' });
   }
 
-  // No journal settings is not a pass: every id rule and editorial check would do nothing [R116].
+  // No journal settings is not a pass: every id rule and editorial check would do nothing.
   if (loaded === null) {
     findings.push({
       check: 'journal-config',
@@ -460,7 +460,7 @@ export function runOakChecks(
   const journal = loaded ?? emptyJournal();
 
   // Both id keys are optional. The placeholder id is oak's (ENGINE_ID_SENTINEL); the pattern is
-  // the journal's, so a missing one is reported rather than filled in [R119].
+  // the journal's to set, so oak reports a missing one.
   if (instanceRoot && loaded && !loaded.id_pattern) {
     findings.push({
       check: 'id-policy',
@@ -526,7 +526,7 @@ export function runOakChecks(
     });
   }
 
-  // [R72]: the three extends layers must own disjoint keys, or precedence is a race.
+  // The extends layers must own disjoint keys, or precedence is a race [R72].
   if (engineRoot && instanceRoot && edition) {
     const { layers, unreadable } = expandLayers(
       [
@@ -567,7 +567,7 @@ export function runOakChecks(
   );
 
   // The author's template is read from their own myst.yml [R82]: the composed export carries
-  // compose's choice, which would always look like an override. As with brand assets [R68] and
+  // compose's choice, which would always look like an override. As with brand assets [R62] and
   // the journal's template [R76], a value whose source matters is read outside the merge.
   findings.push(
     ...checkTemplates(
@@ -593,9 +593,6 @@ const EXPORTS_EXIST = 'exports-exist';
  * which looks for the built PDF. `oak validate` does not build, so it would fail on every paper.
  * Each becomes an `error` result ("could not run"; `CheckStatus` has no skip) marked `optional`,
  * so it never blocks a merge whatever the journal set [R82].
- *
- * `check-paper.yml` runs apart from `build-paper.yml`, so these checks cannot rely on a build
- * having happened.
  */
 export function splitUnrunnableChecks(
   journalChecks: JournalCheck[],
@@ -659,8 +656,8 @@ export async function runValidate(
 
   // Validates the config `oak build` reads [R71]: the author's myst.yml merged with paper-base
   // and the journal's settings [R82]. The thumbnail and the typst export come from paper-base,
-  // so oak checks them only after the merge [R81]. A bare local run or `--no-instance` has
-  // no journal to merge, and validates the author's myst.yml as it is [R193].
+  // so oak checks them only after the merge. A bare local run or `--no-instance` has
+  // no journal to merge, and validates the author's myst.yml as it is.
   let project: { id?: string; exports?: Array<Record<string, unknown>>; thumbnail?: string };
   let configFile: string | undefined;
   let composeFailure: string | undefined;
@@ -679,9 +676,9 @@ export async function runValidate(
       configFile = DERIVED_CONFIG_FILE;
     } catch (e) {
       // With oak's checkout and a journal present, a failed compose is the paper's own mistake
-      // (a wrong `edition:`, a missing version, the [R36] check), and `oak build` would fail the
-      // same way, so it blocks the merge; having nothing to compose only adds a note. Caught, so
-      // the rest of the report still runs.
+      // (a wrong `edition:`, a missing version, an edition config overriding the version), and
+      // `oak build` would fail the same way, so it blocks the merge; having nothing to compose
+      // only adds a note. Caught, so the rest of the report still runs.
       composeFailure = (e as Error).message;
       notes.push(msg.validate.noteComposeFailed(composeFailure));
     }
@@ -720,11 +717,10 @@ export async function runValidate(
   // files [R208]). They read the myst store, so they run in a processed project session on the
   // composed config [R82]. After a structural error myst cannot process the project, so they are
   // skipped. `runChecks` turns a check that throws into its own error row; a project myst cannot
-  // load becomes one check error here. oak's checks already block on missing journal settings
-  // [R116]; the empty default only keeps the result's shape.
+  // load becomes one check error here. oak's checks already block on missing journal settings;
+  // the empty default only keeps the result's shape.
   const journal = loadJournal(input.instanceRoot, probes) ?? emptyJournal();
   let checks: EngineCheckResult[] = [];
-  // Only structural errors stop myst processing; after a bad id the editorial checks still run.
   const structuralErrors = errors.filter((f) => f.klass === 'structural');
   // Checks whose precondition is unmet are reported, not run [R82]; see splitUnrunnableChecks.
   const { runnable, unrunnable } = splitUnrunnableChecks(
@@ -762,18 +758,17 @@ export async function runValidate(
     id: f.check,
     status: CheckStatus.fail,
     message: f.message,
-    // --strict blocks warnings, so they gate the Check Run too ([R119]).
+    // With --strict, warnings block the Check Run and the exit code.
     optional: opts.strict ? false : f.severity === 'warn',
   }));
-  // Curvenote reports absolute paths; they are made relative to the checkout root, so GitHub can
-  // resolve them. That is the paper root by default, the repo root for a single-paper repo.
+  // Curvenote reports absolute paths; they are made relative to `pathBase` (`GITHUB_WORKSPACE`
+  // from `oak validate`), else the paper root, so GitHub can resolve them.
   const checkRun = toCheckRun([...oakResults, ...checks], opts.pathBase ?? input.paperRoot, notes);
 
   const blockingCheckFail = checks.some(
     (c) => (c.status === CheckStatus.fail || c.status === CheckStatus.error) && !c.optional,
   );
   const hasError = errors.length > 0 || blockingCheckFail;
-  // With --strict, warnings fail the Check Run as well as the exit code ([R119]).
   const failed = hasError || (opts.strict && warnings.length > 0);
   const exitCode = failed ? 1 : 0;
 
