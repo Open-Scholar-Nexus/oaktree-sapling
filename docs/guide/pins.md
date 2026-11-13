@@ -20,7 +20,7 @@ oak upgrade --repo <owner>/<paper-repo>
 
 When the `oak` you installed is another version, it downloads the named version into `~/.cache/oak` the first time, runs it, and says which version runs. The `oak release` subcommands also download it when the installed `oak` is the same version but not a git checkout, such as an npm install. The deposit archives the engine with `git archive`, which needs a checkout.
 
-`oak release` refuses a version older than `v0.4.0-dev.6`. Run `oak upgrade` first.
+`oak release` refuses a version from before the release steps stopped building next to the Zenodo token. The error names the oldest version it accepts. Run `oak upgrade` first.
 
 If `.github/actions/engine/pins.yml` names an engine repository other than oaktree-sapling's own, `oak` asks before downloading from it[^other-repo].
 
