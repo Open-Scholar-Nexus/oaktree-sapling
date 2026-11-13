@@ -8,7 +8,7 @@ project:
   title: Oaktree Sapling
   short_title: Home
   description: Documentation for the oaktree-sapling journal engine.
-  # `[text](src:path#L1-L9)` links to oak's source at a release tag.
+  # `[text](src:path@name)` links to oak's source; plugins/source-links.mjs lists the forms.
   plugins:
     - plugins/source-links.mjs
   # oak prints links to these pages' labels (src/docs-links.ts), so a broken one fails the build.

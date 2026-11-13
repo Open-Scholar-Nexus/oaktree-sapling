@@ -1,7 +1,7 @@
 (guide-journal-settings)=
 # Journal settings in a paper
 
-A paper repository names its journal on the [`instance_repo:` line](src:templates/paper/.github/actions/engine/pins.yml#L7) of `.github/actions/engine/pins.yml`, which `oak bootstrap paper --instance` writes:
+A paper repository names its journal on the [`instance_repo:` line](<src:templates/paper/.github/actions/engine/pins.yml@"instance_repo:">) of `.github/actions/engine/pins.yml`, which `oak bootstrap paper --instance` writes:
 
 ```yaml
 instance_repo: <owner>/<journal-repo>
