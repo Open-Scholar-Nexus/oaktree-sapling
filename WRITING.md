@@ -94,7 +94,7 @@ A pointer to a private notebook, a home directory or a repo nobody outside has a
 
 No "no longer", "used to", "replaces", "instead of", in prose or in comments: the reader never saw the earlier version, so the comparison tells them nothing about the current one. The exception is a migration guide, where what changed is the subject.
 
-The same goes for arguing with an alternative the reader never saw. A comment written right after a fix tends to defend the fix: "a finding that blocks, not just a note", "`config` rather than `structural`", "otherwise a broken paper would pass". State what the code does and the fact that makes it right. When an obvious simplification would break it, name that fact: "nothing else rejects a branch pin".
+The same goes for arguing with an alternative the reader never saw. A comment written right after a fix tends to defend the fix: "a finding that blocks, not just a note", "`config` rather than `structural`", "otherwise a broken paper would pass". State what the code does and the fact that makes it right. When an obvious simplification would break it, name that fact: "a tag made by hand passes the `ref` step and has no build".
 
 ```
 Check: "not just", "rather than", "otherwise" next to a design choice.

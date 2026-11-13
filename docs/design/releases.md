@@ -2,13 +2,13 @@
 
 # How oaktree-sapling is released
 
-A paper's CI runs oak from a checkout of the engine repository at the version the paper pins, and installs nothing. This page covers why the build is committed at the release tag, what else is committed there, and the risks the release process accepts. The steps for making a release are in [`RELEASING.md`](src:RELEASING.md).
+A paper's CI runs oak from a checkout of the engine repository at the version the paper pins, and installs nothing. The steps for making a release are in [`RELEASING.md`](src:RELEASING.md).
 
 (r57)=
 
 ## Why commit the build with a tag
 
-[`ci/run.sh`](src:ci/run.sh) ends with `exec node "$engine/dist/cli.cjs"`, so the build has to be in the checkout before a paper can run it. The [release script](src:scripts/cut-engine-release.sh) commits `dist/cli.cjs` and `bin/typst` to a new commit off HEAD and tags that commit. It then makes a GitHub release on the tag, which `releases/latest` and `oak upgrade` read. Both are gitignored, so no branch carries them, and a paper that pins a branch stops in `ci/run.sh` with an error telling it to pin a release tag.
+[`ci/run.sh`](src:ci/run.sh) runs `node "$engine/dist/cli.cjs"`, so the build has to be in the checkout before a paper can run it. The [release script](src:scripts/cut-engine-release.sh) commits `dist/cli.cjs` and `bin/typst` to a new commit off HEAD and tags that commit. It then makes a GitHub release on the tag, which `releases/latest` and `oak upgrade` read. Both are gitignored, so no branch carries them. A paper that pins a branch stops at the engine action's [`ref` step](#design-paper-ci-engine-ref), with an error telling it to pin a release tag, and `ci/run.sh` refuses a checkout without `dist/cli.cjs`.
 
 Committing the build at the tag gives three things. Starting oak in a paper's CI takes one git checkout and no install. Local runs and CI read the same committed file, so they match by git object rather than by esbuild being reproducible. And the Zenodo deposit's `engine.zip`, a `git archive` of that checkout, carries typst, so a deposited PDF can be rendered again with nothing fetched.
 
@@ -60,7 +60,8 @@ When the deposit has a `template.zip`, unzip it too and add `--typst-template <t
 | `template.zip` | the PDF template, when it is the journal's or the author's |
 | `publication-provenance.json` | the paper's and the journal's repository and commit, the paper's website, the DOIs, and where, when and with which typst the PDF was built |
 
-The files in the paper's `deposit/` folder are added beside them, and these names are reserved.
+(r28)=
+The files in the paper's `deposit/` folder are added beside them, and these names are reserved: `oak validate` reports a `deposit/` file that takes one, and `oak release` refuses it before writing to Zenodo.
 
 `journal.zip` holds the journal commit the build used, which the build records in `myst.oak.yml` under `project.options.oaktree-sapling.journal`. The deposit runs in a job of its own and fetches that commit, so the archive matches the PDF even when the journal has changed since the build, as when a failed deposit job is re-run, or an editor deposits [from the terminal](#from-terminal), days later. The record's Zenodo metadata follows the journal's `zenodo:` settings as they are when the deposit runs. A build from journal files that are not a commit of their own repository, such as local changes, cannot be deposited.
 
@@ -93,9 +94,9 @@ The npm package is a second way to get oak, and papers do not use it: their CI r
 
 `repository` in `package.json` has to name the repository whose Actions run publishes, because provenance checks it. The workflow sets it to the repository it runs in.
 
-`files` in `package.json` is an allowlist. It carries what the CLI reads at runtime, plus all of `ci/` and `plugins/`: papers use those from the checkout and from a pinned raw URL, but they are small, and shipping them keeps the tarball a subset of the checkout. `prepack` runs the typecheck and the bundle. `dist/` is gitignored, and `npm pack` leaves out a missing file without an error, so the bundle has to be built by a hook that runs on both `npm pack` and `npm publish`, which `prepublishOnly` does not.
+`files` in `package.json` is an allowlist. It carries what the CLI reads at runtime, plus all of `ci/` and `plugins/`: papers run `ci/` from the checkout and the journal website loads `plugins/` from a pinned raw URL, but they are small, and shipping them keeps the tarball a subset of the checkout. `prepack` runs the typecheck and the bundle. `dist/` is gitignored, and `npm pack` leaves out a missing file without an error, so the bundle has to be built by a hook that runs on both `npm pack` and `npm publish`, which `prepublishOnly` does not.
 
-`oak bootstrap` and `upgrade` run from the package. `validate`, `build` and `start` run the version the paper pins, from a clone of its tag when the package is another version ([](#design-paper-ci-local-ref)), and so does `bootstrap --engine-version` naming another version. `release` and `deposit` always run from a clone of the pinned tag, and the workflow commands from a checkout of it, which carries two things the tarball leaves out:
+`oak bootstrap` and `upgrade` run from the package. `validate`, `build` and `start` run the version the paper pins, from a clone of its tag when the package is another version ([](#design-paper-ci-local-ref)), and so does `bootstrap --engine-version` naming another version. `oak release` and its subcommands, such as `oak release deposit`, always run from a clone of the pinned tag, and the workflow commands from a checkout of it, which carries two things the tarball leaves out:
 
 - `bin/typst`, built for linux x86_64 only. A build run from the package exports the PDF with the typst on the system, and one handed to a clone uses the clone's when it runs.
 - The git history the `oak release` subcommands need: they make `engine.zip` with `git archive` over the engine directory, and `node_modules/oaktree-sapling` is not a git repository.
