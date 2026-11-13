@@ -19,7 +19,7 @@ function callsTo(src: string, name: string): number {
     .length;
 }
 
-describe('build and validate materialize from the same inputs', () => {
+describe('build, start and validate materialize from the same inputs', () => {
   it('assetOverridesFrom is reached only through the shared builder', () => {
     // 0 means the builder stopped passing overrides; more than 1 means a verb builds its own.
     expect(callsTo(cli, 'assetOverridesFrom')).toBe(1);
@@ -37,10 +37,10 @@ describe('build and validate materialize from the same inputs', () => {
   });
 
   it('validate does not rebuild the shared fields by hand', () => {
-    // cmdValidate must not list paperRoot, engineRoot or assetOverrides itself,
-    // since its own list could differ from the build's.
+    // cmdValidate must not set a field the builder sets (the list below) itself, since its own
+    // value could differ from the build's.
     const call = cli.slice(cli.indexOf('await runValidate('));
-    // Leave out the builder call, where `paperRoot` and `instanceRoot` are its arguments.
+    // Leave out the builder call, which takes `paperRoot` as an argument.
     const body = call
       .slice(0, call.indexOf('\n      },'))
       .split('\n')

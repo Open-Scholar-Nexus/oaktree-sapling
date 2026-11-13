@@ -9,6 +9,7 @@ The **Journal site** workflow builds it and deploys it to GitHub Pages on every 
 
 `pages/index.md` is the landing page. To add a page, create a file under `pages/` and list it under `project.toc` in `myst.yml`. The [MyST guide](https://mystmd.org/guide) covers the syntax, and [branding](branding.md) the logo and colours.
 
+(paper-cards)=
 ## The list of papers
 
 ```markdown

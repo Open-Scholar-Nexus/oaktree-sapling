@@ -26,7 +26,7 @@ import * as msg from './messages.js';
 import { annotate, inCI, UserError } from './messages.js';
 import { readDoc } from './yaml-io.js';
 
-// oak only runs as the CJS bundle [R51] (ci/run.sh and local runs both call dist/cli.cjs), so
+// oak only runs as the CJS bundle (ci/run.sh and local runs both call dist/cli.cjs), so
 // `__dirname` is the bundle's directory; @types/node declares it for tsc.
 declare const __dirname: string;
 
@@ -42,8 +42,8 @@ type Verb =
   | 'upgrade'
   | 'conformance';
 
-/** oak's root, the directory holding paper-base.yml: one up from the bundle, or two up from
- *  src/ in development. Found by probing. */
+/** oak's root, the directory holding paper-base.yml: the parent of `__dirname`, else
+ *  `__dirname` itself. Found by probing. */
 function engineRoot(): string {
   for (const up of ['..', '.']) {
     const cand = resolve(__dirname, up);
@@ -91,7 +91,7 @@ function assetOverridesFrom(argv: string[]): ComposeInput['assetOverrides'] {
 type ResolvedInstance = { root: string | null; stamp: JournalStamp | undefined };
 
 /**
- * Where the journal repo is [R38]: none with `--no-instance`, else `--instance`, else a cached
+ * Where the journal repo is: none with `--no-instance`, else `--instance`, else a cached
  * clone of pins.yml's `instance_repo`, else this repo when `instance_repo` is `.` or absent
  * and a `journal.yml` sits beside the paper. pins.yml is editor-gated and that `journal.yml` is
  * not, so the pin comes first. Every verb that reads journal settings finds it here, `deposit`
@@ -175,8 +175,8 @@ function materializeInputFrom(
   };
 }
 
-/** Runs the two-pass build for a paper, for `oak build` and `oak release`. Returns the paper
- *  root, whose `_build/exports` then holds the PDF `release` deposits. */
+/** Runs the two-pass build for a paper. Returns the paper root, whose `_build/exports` then
+ *  holds the PDF a deposit archives. */
 async function buildPaper(argv: string[]): Promise<{ paperRoot: string; resolvedId?: string }> {
   const paperRoot = resolve(flag(argv, 'paper') ?? '.');
   if (isJournalRepo(paperRoot)) {
@@ -225,9 +225,8 @@ async function cmdBuild(argv: string[]): Promise<number> {
 /**
  * The build's last steps, run synchronously from the exit handler: drops symlinks from the site
  * (upload-artifact follows them and would publish a runner file); on a `pull_request` run, leaves
- * the pull request number and the paper folder for Stage 2; and records the result. Stage 1
- * builds a pull request with no secrets; Stage 2 acts on its result from the base branch
- * (docs/design/paper-ci.md, artifact.ts).
+ * the pull request number and the paper folder for Stage 2 (artifact.ts); and records the
+ * result.
  */
 function finishSite(
   paperRoot: string,
@@ -487,8 +486,8 @@ async function cmdRelease(argv: string[]): Promise<number> {
   return cmdReleaseVersion(argv);
 }
 
-/** The Zenodo token for the sandbox or production: `--token`, else the environment's [R102]. A
- *  sandbox run never uses the production one [R102]. */
+/** The Zenodo token for the sandbox or production: `--token`, else the environment's. A
+ *  sandbox run never uses the production one. */
 function zenodoToken(argv: string[], sandbox: boolean): string | undefined {
   return (
     flag(argv, 'token') ?? (sandbox ? process.env.ZENODO_TOKEN_SANDBOX : process.env.ZENODO_TOKEN)
@@ -496,7 +495,7 @@ function zenodoToken(argv: string[], sandbox: boolean): string | undefined {
 }
 
 /** Whether the committed DOI is a sandbox one, or the refusal for `oak <verb>`. The DOI picks
- *  the environment, so a tag cannot reach the wrong one [R4]. */
+ *  the environment, so a tag cannot reach the wrong one. */
 async function sandboxFromDoi(
   mystPath: string,
   verb: string,
@@ -550,7 +549,7 @@ async function cmdReleaseReserveDoi(argv: string[]): Promise<number> {
   }
   const siteUrl = flag(argv, 'site-url') ?? process.env.SITE_URL;
   const out = await z.cmdPrepare({ mystPath, repo, siteUrl, api, instanceRoot });
-  // Open the DOI pull request for the myst.yml write [R3]. Without a gh login the write is
+  // Open the DOI pull request for the myst.yml write. Without a gh login the write is
   // left for the editor to commit.
   if (out.exitCode === 0 && !gh.ghLoggedIn()) {
     process.stderr.write(
@@ -637,8 +636,8 @@ function findExportedPdf(paperRoot: string): string | null {
   return hit ? join(dir, String(hit)) : null;
 }
 
-/** The version of the `typst` on PATH, which `oak build` puts the engine's in front of when it
- *  runs here; null when none runs. */
+/** The version of the `typst` on PATH, or null when none runs. The pinned oak puts its
+ *  release's typst first on PATH, for this run as for the editor's `oak build`. */
 async function typstOnPath(): Promise<string | null> {
   const { parseTypstVersion } = await import('./release.js');
   try {
@@ -714,7 +713,7 @@ async function cmdReleaseDeposit(argv: string[]): Promise<number> {
   // `source.zip` and the provenance are HEAD's, and the metadata the working tree's myst.yml.
   const sha = inActions ? null : release.assertAtTag(paperRoot, tag, gh.realCiBuildSource);
 
-  // In Actions, `_build` holds the build job's artifact
+  // In Actions, `_build` holds the build job's artifact.
   let builtAt: string | null | undefined;
   let builtHere: { platform: string; typstVersion: string | null } | undefined;
   if (!inActions && useLocalBuild) {
@@ -1055,7 +1054,7 @@ async function cmdClean(argv: string[]): Promise<number> {
 }
 
 /** `oak deploy-preview <site> [--verified-head <sha>]`: deploys the build artifact to
- *  Cloudflare Pages, or falls back to a link to it [R16], and posts the preview comment. */
+ *  Cloudflare Pages, or falls back to a link to it, and posts the preview comment. */
 async function cmdDeployPreview(argv: string[]): Promise<number> {
   const preview = await import('./preview.js');
   const gh = await import('./gh.js');
@@ -1085,7 +1084,7 @@ async function cmdDeployPreview(argv: string[]): Promise<number> {
 }
 
 /** The paper's edition, or null. Never throws: `oak validate` reports a missing or malformed
- *  version key as a finding. */
+ *  edition as a finding. */
 function readEditionQuietly(paperRoot: string): string | null {
   try {
     const v = readDoc(join(paperRoot, 'myst.yml')).getIn([
@@ -1128,7 +1127,7 @@ async function writeReport(
 
 /**
  * Writes a failing `--report` for a run that could not produce one, so even a usage error or an
- * unexpected throw leaves a readable report for post-checks to post [R82]. Returns the exit code:
+ * unexpected throw leaves a readable report for post-checks to post [R137]. Returns the exit code:
  * 0 once a report is written, as with a failing result, else `fallback`.
  */
 async function writeFailureReport(
@@ -1294,7 +1293,8 @@ async function cmdValidate(argv: string[]): Promise<number> {
   return out.exitCode;
 }
 
-/** `oak post-checks --report <path> --repo <o/r> --sha <headsha>`: posts the report
+/** `oak post-checks --report <path> --repo <o/r> --sha <headsha> --base <sha>
+ *  --verified-head <sha>`: posts the report
  *  from the trusted `workflow_run` job (checks and pull-requests write). Never reruns validate or
  *  touches myst. The pull request is the `pr-number` beside the report, and is
  *  checked against `--verified-head` before anything is posted. Failing to post the Check Run
@@ -1428,11 +1428,10 @@ async function cmdBootstrap(argv: string[]): Promise<number> {
   gh.assertRepoName(repo, '--repo');
   const instance = flag(rest, 'instance');
   if (instance && instance !== '.') gh.assertRepoName(instance, '--instance');
-  // Malformed arguments are refused before any gh call [R127].
+  // Malformed arguments are refused before any gh call.
   const external = sub === 'journal' && !has(rest, 'co-located');
   if (sub === 'journal') {
-    // A typed secret flag is refused with an external journal; environment values are allowed
-    // [R127].
+    // A typed secret flag is refused with an external journal; environment values are allowed.
     if (external && SECRET_FLAGS.some((f) => flag(rest, f))) {
       process.stderr.write(msg.workflow.bootstrapSecretsNeedPaper + '\n');
       return 2;

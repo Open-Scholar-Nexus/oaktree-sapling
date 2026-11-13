@@ -16,7 +16,13 @@ oak upgrade --repo <owner>/<paper-repo>
 `--to <tag>` picks a release other than the newest, named `vX.Y.Z` or `vX.Y.Z-dev.N`. Without it, a version newer than the newest release is left as it is, and a version that is not a release tag, such as a branch, moves to the newest release. `--files-only` replaces the files and leaves the version. When the release's workflows need a newer engine than the version that pull request would set, `oak` stops before changing anything and names the oldest version they run with.
 
 (pins-local)=
-`oak start`, `oak build`, `oak validate` and the `oak release` subcommands run the version `myst.yml` names, as the paper's CI does, and refuse the versions CI refuses: anything but a release tag. When the `oak` you installed is another version, it downloads that version into `~/.cache/oak` the first time, runs it, and says which version runs. The `oak release` subcommands also download it when the installed `oak` is the same version but not a git checkout, such as an npm install, since the deposit archives the engine with `git archive`, and `oak release` refuses a version older than `v0.4.0-dev.6`: run `oak upgrade` first. If `.github/actions/engine/pins.yml` names an engine repository other than oaktree-sapling's own, `oak` asks before downloading from it[^other-repo].
+`oak start`, `oak build`, `oak validate` and the `oak release` subcommands run the version `myst.yml` names, as the paper's CI does. They refuse the versions CI refuses: anything but a release tag.
+
+When the `oak` you installed is another version, it downloads the named version into `~/.cache/oak` the first time, runs it, and says which version runs. The `oak release` subcommands also download it when the installed `oak` is the same version but not a git checkout, such as an npm install. The deposit archives the engine with `git archive`, which needs a checkout.
+
+`oak release` refuses a version from before the release steps stopped building next to the Zenodo token. The error names the oldest version it accepts. Run `oak upgrade` first.
+
+If `.github/actions/engine/pins.yml` names an engine repository other than oaktree-sapling's own, `oak` asks before downloading from it[^other-repo].
 
 [^other-repo]: It asks even with `--yes`, and refuses without a terminal, so someone has to type yes: the download runs that repository's code on your computer.
 
@@ -32,6 +38,6 @@ These versions in the journal repository are written at bootstrap and change onl
 : The website theme, as the URL of a release zip. A release of oaktree-sapling builds papers with the theme named by `THEME_VERSION` in [`src/assets.ts`](src:src/assets.ts); use the same, so the journal website matches its papers.
 
 `mystmd` in `package.json`
-: The range of MyST versions the website builds with. Each build installs the newest version in the range.
+: The range of MyST versions the website builds with. Each build installs the newest version in the range. When a `package-lock.json` is committed, each build installs the version it names.
 
 Push the change, and the **Journal site** workflow builds with the new versions. If that build fails, the website keeps serving the last version deployed; revert the change to build again.

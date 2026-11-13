@@ -7,8 +7,8 @@
  *   site  + instance   `oak bootstrap journal`
  *
  * `site` and `paper` are not checked: they never land together, and both have a root `myst.yml`
- * and `.gitignore`. A file that belongs in both trees of a checked pair fails here, so someone
- * decides which wins, rather than the write order.
+ * and `.gitignore`. A file in both trees of a checked pair fails here, so a person picks the one
+ * bootstrap writes.
  */
 import { describe, it, expect } from 'vitest';
 import { stampedFiles, listFiles, STAMP_RENAME } from '../src/bootstrap.js';

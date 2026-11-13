@@ -26,8 +26,8 @@ import { loadJournalPreview } from '../src/preview.js';
 const fixturePaper = fileURLToPath(new URL('./fixture-paper/myst.yml', import.meta.url));
 const fixtureInstance = fileURLToPath(new URL('./fixture-instance', import.meta.url));
 
-describe('readEngineCoordinateRaw (local yq equivalent, §6a)', () => {
-  it('reads version + edition from the raw doc, pre-extends', () => {
+describe('readEngineCoordinateRaw', () => {
+  it("reads version and edition from the paper's own myst.yml, before extends", () => {
     const c = readEngineCoordinateRaw(readDoc(fixturePaper));
     expect(c).toEqual({ version: 'v0.3.0', edition: 'fixture-edition' });
   });
@@ -43,7 +43,7 @@ describe('readEngineCoordinateRaw (local yq equivalent, §6a)', () => {
     );
   });
 
-  it('refuses an edition holding a path before it reaches the extends chain [R141]', () => {
+  it('refuses an edition holding a path before it reaches the extends chain', () => {
     // This is read before anything validates the merged config, so the schema check alone
     // would come too late to stop a path in the edition.
     for (const bad of ['../../secret/loot', './x', 'a/b']) {
@@ -55,8 +55,8 @@ describe('readEngineCoordinateRaw (local yq equivalent, §6a)', () => {
   });
 });
 
-describe('working-tree injection preserves author content ([R3])', () => {
-  it('sets extends + overrides without disturbing options.youtube or comments', () => {
+describe("setExtends and applyOwnOverride keep the author's content", () => {
+  it('sets extends and overrides, and keeps options.youtube and comments', () => {
     const doc = readDoc(fixturePaper);
     setExtends(doc, ['.engine/paper-base.yml', '.instance/editions/fixture-edition.yml']);
     applyOwnOverride(doc, {

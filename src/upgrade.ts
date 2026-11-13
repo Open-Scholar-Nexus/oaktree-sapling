@@ -10,7 +10,7 @@
  * An up-to-date repo gets no pull request. Without `--to`, the target is the newest stable
  * release, and a pin already past it stays. Each target has its own branch, and running again
  * updates its open pull request. Finding the target, getting the template and opening the pull
- * request are injected, so tests use fakes.
+ * request are injected.
  */
 import { existsSync, readFileSync, writeFileSync, mkdirSync, copyFileSync } from 'node:fs';
 import { join, dirname, posix } from 'node:path';
@@ -33,7 +33,7 @@ import {
 import type { cmdConformanceReset } from './conformance.js';
 
 /** The branch prefix; the target tag follows it. Exported for {@link cmdConformanceReset},
- *  which deletes these branches [R117]. */
+ *  which deletes these branches. */
 export const UPGRADE_BRANCH_PREFIX = 'oak/upgrade-';
 
 const PINS_REL = posix.join('.github', 'actions', 'engine', 'pins.yml');
@@ -56,14 +56,14 @@ const CODEOWNERS_REL = 'CODEOWNERS';
  * ------------------------------------------------------------------------ */
 
 /** The owner column of the first gated line in CODEOWNERS, or a default. The whole column: a
- *  path may have more than one owner [R126]. */
+ *  path may have more than one owner. */
 export function ownerFromCodeowners(src: string): string {
   const first = Object.values(codeownersColumns(src))[0];
   return first ?? '@owner';
 }
 
-/** The repo's owner column per gated path, so an owner added by hand survives a resync
- *  [R126]. Empty without a CODEOWNERS file. */
+/** The repo's owner column per gated path, so an owner added by hand survives a resync.
+ *  Empty without a CODEOWNERS file. */
 function codeownersOnDisk(repoRoot: string): Record<string, string> {
   const co = join(repoRoot, CODEOWNERS_REL);
   return existsSync(co) ? codeownersColumns(readFileSync(co, 'utf8')) : {};
@@ -127,7 +127,7 @@ export function renderEngineManagedFile(
 }
 
 /**
- * Files under `.github/` that the target template does not ship [R143]. They are reported,
+ * Files under `.github/` that the target template does not ship. They are reported,
  * not deleted: they may be the repo's own additions (a `dependabot.yml`), so a person decides.
  */
 export function extraEngineManagedFiles(repoRoot: string, templateAtTarget: string): string[] {
@@ -273,7 +273,7 @@ export async function cmdUpgrade(input: UpgradeInput, deps: UpgradeDeps): Promis
   if (!versionChanged && !filesChanged) {
     deps.log(msg.upgrade.upToDate(target, answers.engineRepo, targetGiven));
     // Report files the target no longer ships even when up to date: a retired workflow may
-    // still be running [R143].
+    // still be running.
     if (extra.length) deps.log(msg.upgrade.planExtraFiles(extra));
     return {
       exitCode: 0,

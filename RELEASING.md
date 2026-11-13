@@ -2,7 +2,7 @@
 
 This covers releasing the engine. Publishing a paper version is `oak release` ([guide](https://scholar.nexus/oaktree-sapling/guide/publish)).
 
-A paper's CI runs oak from a checkout of this repository at the version the paper pins, and installs nothing, so `dist/cli.cjs` has to be in the checkout. `scripts/cut-engine-release.sh` puts it there: it commits `dist/cli.cjs` and `bin/typst` to a new commit off HEAD, tags that commit and creates the GitHub release. [How oaktree-sapling is released](https://scholar.nexus/oaktree-sapling/design/releases) has the details.
+`scripts/cut-engine-release.sh` commits `dist/cli.cjs` and `bin/typst` to a new commit off HEAD, tags that commit and creates the GitHub release, since a paper's CI runs oak from a checkout of the tag it pins ([why](https://scholar.nexus/oaktree-sapling/design/releases#r57)).
 
 ## Testing a change locally
 

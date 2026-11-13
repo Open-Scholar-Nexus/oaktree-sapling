@@ -62,7 +62,7 @@ Once the checks pass and an editor approves, the pull request can merge, and the
 oak build
 ```
 
-This writes the PDF to `_build/exports/paper.pdf`. It needs [typst](https://github.com/typst/typst) installed.
+This writes the PDF to `_build/exports/paper.pdf`. It needs [typst](https://github.com/typst/typst) installed. On Linux on x86_64, when `oak` downloads the version your paper names, that version brings its own typst.
 
 [^version]: `oak` runs the version your paper names, the one its CI uses, and downloads it the first time. [Keeping versions current](#pins-local) has the details.
 

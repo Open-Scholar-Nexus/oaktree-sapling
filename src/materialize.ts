@@ -1,7 +1,7 @@
 /**
  * What `oak build` and `oak validate` share: the myst interface and the two-pass write of
  * `myst.oak.yml`. It lives apart from build.ts because build also runs validate's `runOakChecks`
- * between the passes, and validate imports this module [R82] [R21].
+ * between the passes, and validate imports this module [R82].
  */
 import { join } from 'node:path';
 import type { ISession } from 'myst-cli';
@@ -53,7 +53,7 @@ export interface MystEdge {
    *  the process alive. */
   start(dir: string, opts: StartOpts, configFile?: string): Promise<void>;
   /**
-   * Loads and processes the project, then runs `fn` with the session, for the editorial checks
+   * Loads and processes the project, then runs `fn` with the session, for the editorial checks.
    * They need processed mdast, not a build.
    */
   withProjectSession<T>(
@@ -99,7 +99,7 @@ export interface MaterializeResult {
  * it.
  *
  * `preflight` runs between the passes and may throw; `oak build` uses it to stop a broken paper
- * before compose [R21].
+ * before compose.
  */
 export async function materializeDerived(
   input: MaterializeInput,
@@ -121,7 +121,7 @@ export async function materializeDerived(
   const derivedPath = join(paperRoot, DERIVED_CONFIG_FILE);
   const doc = readDoc(authorPath);
 
-  // The version and edition, read before the merge [design §6a]. `authorPath` names the file in
+  // The version and edition, read before the merge. `authorPath` names the file in
   // the error.
   const { version: engineVersion, edition } = readEngineCoordinateRaw(doc, authorPath);
   // Refused as the engine action refuses it, also when OAK_USE_RUNNING skips `handOff`.
@@ -134,7 +134,7 @@ export async function materializeDerived(
   // precedence over the edition unpredictable [R72].
   const { extendsChain } = extendsChainFor({ engineRoot, instanceRoot, edition });
   setExtends(doc, extendsChain);
-  // The journal stamp is oak's to write; `oak validate` warns about an author's.
+  // The {@link JournalStamp} is oak's to write; `oak validate` warns about an author's.
   dropJournalStamp(doc);
   writeDerivedDoc(derivedPath, doc);
 
@@ -149,7 +149,7 @@ export async function materializeDerived(
   // The journal's typst template, read the same way from journal.yml [R76].
   const journalTypstTemplate = instanceRoot ? readJournalTypstTemplate(instanceRoot) : undefined;
 
-  // compose, including the version cross-check [R36].
+  // compose, including the version cross-check.
   const result = compose({
     paperRoot,
     engineRoot,
@@ -165,7 +165,7 @@ export async function materializeDerived(
     journal: journalStamp,
   });
 
-  // Pass 2 sets the export's `template` and `output` [R71-out]. `output` fixes the PDF path;
+  // Pass 2 sets the export's `template` and `output`. `output` fixes the PDF path;
   // the default derives it from the file declaring the export, a path the build never writes.
   applyOwnOverride(doc, result.ownOverride);
   writeDerivedDoc(derivedPath, doc);

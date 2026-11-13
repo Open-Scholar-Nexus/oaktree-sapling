@@ -1,8 +1,6 @@
 (ref-files)=
 # Files in a journal repository
 
-*Work in progress.*
-
 (file-journal-yml)=
 ## journal.yml
 
@@ -33,8 +31,20 @@ A parsing error[^journal-error] in `journal.yml` stops every oak command and nam
 (file-brand-yml)=
 ## brand/brand.yml
 
+The journal's look: the header of every paper's website and of the journal website, and the logo and colour on each paper's PDF. Every paper's settings extend this file, and so does the journal website's `myst.yml`. A file path in it starts at the journal repository root, as in `brand/logo.svg`. The fields: [Branding](../guide/branding.md).
+
+`oak bootstrap journal` writes the journal's name as `logo_text` and the website's address as `logo_url`. The `logo` and `favicon` lines start commented out. Until `favicon` is set, every paper's Journal checks show a warning.
+
 (file-editions)=
 ## editions/&lt;edition&gt;.yml
+
+The settings every paper in one edition shares, such as the venue and the licence. The file's name, without `.yml`, is the edition's id. A paper names its edition under `project.options.oaktree-sapling.edition` in its `myst.yml`. An id holds letters, digits, `.`, `_` and `-`, and starts with a letter or a digit.
+
+The file is MyST frontmatter: each field under `project` applies to every paper of the edition. A field the paper's own `myst.yml` sets takes precedence. The edition file cannot change the paper's engine version or edition: a build where it does fails.
+
+A paper whose edition has no file here does not build, and its Journal checks fail.
+
+`oak bootstrap journal --edition` names the first edition, `seedling` by default, and writes the journal's name as its `venue`. To add an edition, copy the file under the new id. The journal website can show a page per edition: see [pages/index.md](#file-pages-index).
 
 (file-registry)=
 ## registry/papers.yml
@@ -59,5 +69,19 @@ The journal's custom checks, one JavaScript module each, in `checks/` (any folde
 (file-pages-index)=
 ## pages/index.md
 
+The journal website's landing page. `oak bootstrap journal` writes it once, with the journal's name as its heading, and never changes it. Its `paper-cards` directive lists every paper in [`registry/papers.yml`](#file-registry). The directive: [the list of papers](../guide/journal-site.md#paper-cards).
+
+To give each edition a page of its own:
+
+1. Create a file under `pages/` for each edition.
+2. In each, put a `paper-cards` directive with `:edition: <id>`, which lists only the papers of that edition.
+3. List each file under `project.toc` in `myst.yml`.
+
 (file-site-workflow)=
 ## .github/workflows/site.yml
+
+The **Journal site** workflow builds the journal website and deploys it to GitHub Pages. It runs on every push to `main`, and from the **Actions** tab with **Run workflow**.
+
+It installs the dependencies in `package.json`, then runs `myst build --html --strict`. The build fails when the `paper-cards` plugin did not load, or when a file named in the settings was not found. MyST only warns about both, so the workflow looks for them in the build log.
+
+When a build fails, the website keeps serving the last version deployed. `oak upgrade` leaves this file alone, so the versions of its actions change only when you edit it.

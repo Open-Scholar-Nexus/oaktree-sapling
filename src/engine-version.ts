@@ -1,6 +1,6 @@
 /**
- * engine-version.ts: the engine version `oak bootstrap` pins. It stamps the running oak's own
- * templates, so it pins the running oak's version unless `--engine-version` names another.
+ * engine-version.ts: the engine version `oak bootstrap` pins. Bootstrap writes the running oak's
+ * own templates, so it pins the running oak's version unless `--engine-version` names another.
  */
 import * as msg from './messages.js';
 import { UserError } from './messages.js';

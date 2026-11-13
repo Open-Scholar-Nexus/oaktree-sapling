@@ -2,8 +2,9 @@
  * The only module that imports myst-cli, so the rest of oak is testable without it. oak calls
  * myst as a library, not a subprocess [design §7a].
  *
- * `loadConfig` does not set the current site and project, which an HTML `build` needs. Each call
- * first runs `findCurrentProjectAndLoad` and `findCurrentSiteAndLoad`, as the myst CLI does.
+ * `loadConfig` does not set the current project and site. `build`, `start` and
+ * `withProjectSession` first run `findCurrentProjectAndLoad`, and `findCurrentSiteAndLoad` when
+ * they build or serve HTML, as the myst CLI does.
  */
 import {
   Session,

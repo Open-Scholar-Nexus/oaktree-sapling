@@ -1,7 +1,8 @@
 /**
- * The pages oak links to. Messages and templates name an entry here, so the domain lives only in
- * `DOCS_BASE` and moving a page is a one-line edit. Anchors are `(label)=` targets, which survive
- * a reworded heading. `test/docs-links.test.ts` checks that every entry resolves.
+ * The pages oak links to. Messages name an entry here, so moving a page is a one-line edit for
+ * oak's output; the seeded templates carry literal URLs under `DOCS_BASE`. Anchors are
+ * `(label)=` targets, which survive a reworded heading. `test/docs-links.test.ts` checks that
+ * every entry resolves.
  */
 import { DOCS_BASE } from './assets.js';
 
@@ -38,7 +39,7 @@ export const DOCS = {
   /** `oak validate` runs the paper's own plugin code; read before validating a submission. */
   validateRunsPaperCode: 'guide/checks#validate-runs-paper-code',
 
-  /** Branding: what each knob in `brand/brand.yml` actually changes. */
+  /** Branding: what each setting in `brand/brand.yml` changes. */
   branding: 'guide/branding',
   /** The text beside the logo at the top of every page. */
   logoText: 'guide/branding#logo-text',

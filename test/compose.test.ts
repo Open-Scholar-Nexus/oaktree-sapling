@@ -65,7 +65,7 @@ describe('compose: the journal stamp [R66]', () => {
   });
 });
 
-describe("compose: what oak sets on the paper's own config [R5] [R52]", () => {
+describe("compose: what oak sets on the paper's own config [R52]", () => {
   it('writes the whole typst entry, articles and template', () => {
     const r = compose(base());
     const exp = r.ownOverride.project!.exports[0]!;
@@ -196,7 +196,7 @@ describe('compose: which typst template wins: author, then journal, then oak [R7
       }),
     );
     expect(templateOf(r)).toBe('./my-template');
-    expect(r.warnings.join(' ')).toMatch(/author template overrides the journal's/);
+    expect(r.warnings.join(' ')).toMatch(/overriding the journal's/);
   });
 
   it("the author's template, with no journal template, wins without a warning", () => {
@@ -249,7 +249,7 @@ describe('compose: which typst template wins: author, then journal, then oak [R7
   });
 });
 
-describe('compose: BASE_URL [design §12a]', () => {
+describe('compose: BASE_URL', () => {
   it('passes /<repo> in CI and "" locally', () => {
     expect(compose(base({ baseUrl: '/fixture-sample-paper' })).env.BASE_URL).toBe(
       '/fixture-sample-paper',
@@ -258,7 +258,7 @@ describe('compose: BASE_URL [design §12a]', () => {
   });
 });
 
-describe('compose: the version key read from myst.yml and after extends must agree [R36]', () => {
+describe('compose: the version key read from myst.yml and after extends must agree', () => {
   it('throws when an extended config overrides project.options.oaktree-sapling', () => {
     const skewed: ResolvedProject = {
       ...resolvedProject,

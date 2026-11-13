@@ -26,6 +26,9 @@
  *   templates/paper/.github/workflows/*.yml . job names and `::error::` annotations (build-paper,
  *                                             deploy-preview, check-paper, post-checks, reserve-doi,
  *                                             deposit-version: the names show in the Actions tab)
+ *   templates/paper/.github/actions/engine/action.yml
+ *                                             the `::error::` lines for a bad pin, printed before
+ *                                             any oak is fetched
  *   templates/instance/README.md ............ what a journal editor reads first
  *   templates/instance/journal.yml .......... the journal's settings and their comments
  *   templates/instance/brand/brand.yml ...... the branding settings and their comments
@@ -38,12 +41,11 @@
  *   templates/typst/*.typ ................... the PDF's fixed wording (headers, footers)
  *   ci/run.sh ............................... the launchers' own echoes
  *
- * Two TS files keep their own strings:
- *   src/conformance.ts . `oak conformance` is the maintainers' release test; its lines are
- *                        progress markers, read in a CI log.
- *   src/zenodo.ts ...... the `[prepare]`/`[upload]` progress markers and the Zenodo API's own
- *                        error bodies, echoed as they are. The one line for authors there is the
- *                        skipped-ORCID warning.
+ * Log lines stay beside the code that prints them:
+ *   src/conformance.ts . the progress and result lines of `oak conformance`, the maintainers'
+ *                        release test.
+ *   src/zenodo.ts ...... the `[prepare]` and `[upload]` progress lines, and the Zenodo API's own
+ *                        error bodies, echoed as they are.
  *
  * The editorial checks' own messages come from `@curvenote/check-implementations`, and those of
  * a journal's check files from the files.
@@ -138,8 +140,13 @@ export const usage = (): string =>
   `                        [--from <author-url> [--source-ref <ref>]]\n` +
   `                        [--engine-repo <owner/name>] [--engine-version <tag>] [--owner <@user|@org/team>]\n` +
   `                        [--private] [--no-require-checks] [--yes]\n` +
+  `                        [--zenodo-token <token>] [--zenodo-token-sandbox <token>]\n` +
+  `                        [--cf-token <token>] [--cf-account <id>]\n` +
   `      --instance    the journal repo this paper belongs to ('.' only if the journal\n` +
   `                    settings live in this same repo); --edition names one of its editions\n` +
+  `      --zenodo-token, --zenodo-token-sandbox, --cf-token, --cf-account\n` +
+  `                    the Zenodo and Cloudflare secrets to set on the repo; journal --co-located\n` +
+  `                    takes them too. See ${docsUrl(DOCS.bootstrap)}\n` +
   `  Both bootstrap subcommands: --engine-version naming another oak version runs that version's\n` +
   `  bootstrap, fetched once into ~/.cache/oak.\n` +
   `  oak upgrade (--repo <owner/name> | --paper <dir>) [--to <tag>] [--files-only] [--yes]\n` +
@@ -175,6 +182,7 @@ export const usage = (): string =>
   `  oak release reserve-doi [--sandbox] [--repo <owner/repo>] [--site-url <url>] [--instance <dir> | --no-instance]\n` +
   `                    reserve the DOI on Zenodo and open the pull request writing it into myst.yml\n` +
   `  oak release deposit --tag <vX.Y.Z> [--paper <dir>] [--use-local-build] [--publish-without-review]\n` +
+  `                      [--token <token>] [--site-url <url>] [--bundle-out <dir>]\n` +
   `                    deposit the tag's build, in a clone at the tag; --use-local-build deposits its _build\n` +
   `  The Zenodo token comes from ZENODO_TOKEN, ZENODO_TOKEN_SANDBOX for the sandbox, or --token.\n` +
   `\n` +
@@ -184,6 +192,7 @@ export const usage = (): string =>
   `  oak deploy-preview <site> [--verified-head <headsha>] [--instance <dir> | --no-instance] [--repo <owner/repo>]\n` +
   `  oak conformance reset   --repo <owner/name>\n` +
   `  oak conformance run   --repo <owner/name> --tag <vX.Y.Z> [--fork-repo <owner/name>]\n` +
+  `                        [--run-id <id>] [--record <path>]\n` +
   `\n` +
   `Any command\n` +
   `  --help      print this text; --version prints oak's version\n` +
@@ -309,23 +318,15 @@ export const declared = {
 export const bootstrap = {
   // refusals, before anything is created
   instanceRequired:
-    'oak bootstrap paper: --instance <owner/journal-repo> is required. It names the ' +
-    'journal this paper belongs to and is written into .github/actions/engine/pins.yml, ' +
-    "where the paper's workflows read it to fetch the journal's branding, its edition " +
-    'and the checks it wants run. Without it the repo bootstraps fine and then every CI ' +
-    'run fails with "no journal repo found". Pass `--instance .` only for a repo ' +
-    'that carries its own journal.yml (use `oak bootstrap journal --co-located` to stand ' +
-    'one up). What the paper gets out of that connection: ' +
+    'oak bootstrap paper: pass --instance <owner/journal-repo>, the journal this paper ' +
+    'belongs to (`--instance .` for a repo with its own journal.yml). ' +
     docsUrl(DOCS.paperJournalLink),
 
   editionRequired: (instance: string): string =>
-    "oak bootstrap paper: --edition <id> is required. It says which of the journal's " +
-    "editions this paper appears in, and is written into the paper's myst.yml; the " +
-    'journal repo must already have an editions/<id>.yml with that exact name. The ids ' +
-    'are the filenames under editions/ in ' +
+    'oak bootstrap paper: pass --edition <id>, the journal edition this paper appears in: ' +
+    'the name of a file under editions/ in ' +
     (instance === '.' ? 'this repo' : `https://github.com/${instance}`) +
-    ' (`oak bootstrap journal` creates the first one). Defaulting it would only move the ' +
-    'failure into the first CI run. What an edition file holds: ' +
+    ', without .yml. ' +
     docsUrl(DOCS.fileEditions),
 
   noSiteNeedsExternal:
@@ -414,7 +415,7 @@ export const bootstrap = {
   logMadePublic:
     '  ✓ made the repo public (paper builds read these settings from here with no token)',
   logSeeded: '  ✓ committed to main',
-  /** A repo that already existed may not default to `main` [R127]. */
+  /** A repo that already existed may have another default branch. */
   logDefaultBranch: (from: string): string => `  ✓ default branch switched from ${from} to main`,
   logReviewBranch:
     "  ✓ built the review branch: the author's files, with this repo's own workflows and settings restored over them",
@@ -452,6 +453,9 @@ export const bootstrap = {
     `  ! this run is incomplete; failed steps: ${steps}. What to do about each is in the ` +
     'runbook above.',
 
+  // the commit that puts the starter files on main
+  seedCommitMessage: 'Initial files from oak bootstrap',
+
   // the pull request that `--from` opens
   ingestCommitMessage: (from: string): string =>
     `Submission from ${from}\n\nOriginal repo: ${from}`,
@@ -487,7 +491,7 @@ export const bootstrap = {
     `approve the workflow run before it starts: one click in the repo's Actions tab, per new ` +
     `contributor. There is no way to switch this off.`,
 
-  // oak has no invite command: authors work from a fork by default [R124].
+  // Authors work from a fork, so oak invites no one.
   runbookAuthorAccess: (repo: string): string =>
     `Authors work from a fork of ${repo}; there is nothing to set up. To give an author push ` +
     `access instead: gh api -X PUT repos/${repo}/collaborators/<github-user> -f permission=push ` +
@@ -617,7 +621,7 @@ const WITHOUT_JOURNAL: Record<JournalVerb, string> = {
   build: 'an unbranded build',
   start: 'an unbranded preview',
   validate: 'a bare, engine-only check',
-  'release reserve-doi': "a deposit without the journal's Zenodo settings",
+  'release reserve-doi': "a DOI reserved without the journal's Zenodo settings",
   'release deposit': "a deposit without the journal's Zenodo settings",
   'release status': "the deposit metadata without the journal's Zenodo settings",
   'deploy-preview': "a preview without the journal's settings",
@@ -723,6 +727,28 @@ export const build = {
 
   coordinateMissingFromResolved:
     'project.options["oaktree-sapling"] missing from the resolved myst config',
+
+  // compose's warnings, printed by build, start and validate
+  noInstanceWarning:
+    "--no-instance: built without the journal's settings, so the edition and the branding " +
+    "(logo, watermark) are left out; the paper's CI builds with them.",
+  noTypstExport:
+    'no typst export in the resolved config, so no PDF is built and there is nothing to ' +
+    'deposit on Zenodo.',
+  /** The label of the PDF download on the paper's website. */
+  pdfDownloadTitle: 'PDF export',
+
+  /** The header comment of myst.oak.yml; each line follows a `#`. */
+  derivedBanner:
+    ' Written by `oak build`, `oak validate` and `oak start`: do not edit or commit it.\n' +
+    ' It is your myst.yml combined with the engine, edition and brand settings.\n' +
+    ' Rewritten on every run; safe to delete.',
+};
+
+/** zod's messages for the values oak reads from myst.yml, journal.yml and pins.yml (schema.ts). */
+export const schema = {
+  editionId: 'must be a plain name (letters, digits, . _ -)',
+  engineVersion: 'must be a release tag like v1.2.3 or v1.2.3-dev.4',
 };
 
 export const start = {
@@ -759,8 +785,8 @@ export const start = {
     `previous version: ${message}`,
 };
 
-/** `oak build`, `validate` and `start` handing the command to the oak version the paper pins, and
- *  `oak bootstrap` to the one `--engine-version` names. */
+/** `oak build`, `validate`, `start` and `release` handing the command to the oak version the
+ *  paper pins, and `oak bootstrap` to the one `--engine-version` names. */
 export const pinned = {
   running: (
     verb: HandoffVerb,
@@ -869,10 +895,11 @@ export const validate = {
     `paper id "${id}" does not match the journal id pattern /${pattern}/: ` +
     `${docsUrl(DOCS.idPattern)}`,
   idRegistryUnavailable: (id: string): string =>
-    `registry unavailable; cannot check id "${id}" for uniqueness`,
+    `no paper list (registry/papers.yml in the journal repo), so paper id "${id}" was not ` +
+    `checked against the journal's other papers`,
   idMaybeOwnEntry: (id: string, repo: string): string =>
-    `paper id "${id}" is registered to ${repo}; cannot confirm it is not this ` +
-    `paper's own entry without a repo context`,
+    `paper id "${id}" is registered to ${repo}, and oak cannot tell which repo this paper is, ` +
+    `so it may be this paper's own entry; pass --repo <owner/name> to check`,
   idTaken: (id: string, repo: string): string => `paper id "${id}" already registered to ${repo}`,
   idRegistryMismatch: (registeredId: string, id: string): string =>
     `registry/papers.yml lists this repository as paper "${registeredId}", but myst.yml has ` +
@@ -1116,6 +1143,19 @@ export const workflow = {
     `version starts with New version on its Zenodo record.`,
   prepareNoDowngrade: (doi: string): string =>
     `project.doi is the production DOI ${doi}; refusing to replace it with a sandbox one.`,
+  prepareDepositPublished: (id: number | string): string =>
+    `Zenodo already holds a published deposit for this paper (${id}), so no new DOI was ` +
+    `reserved. Copy its concept DOI into project.doi in myst.yml.`,
+  /** An author's ORCID left out of the deposit (zenodo.ts `buildMetadata`). */
+  orcidSkipped: (name: string, orcid: string): string =>
+    `the ORCID of ${name} (${orcid}) is not a valid ORCID or is the template's ` +
+    `placeholder, so the deposit leaves it out. Fix it in myst.yml.`,
+
+  // oak release status, in its --json result
+  statusNoDoi: 'no DOI in myst.yml yet: run oak release reserve-doi and merge its pull request',
+  statusNoRecord: 'no Zenodo record matches the DOI',
+  statusDoiIsProduction: (doi: string): string => `${doi} is a production DOI; drop --sandbox`,
+  statusDoiIsSandbox: (doi: string): string => `${doi} is a sandbox DOI; add --sandbox`,
   uploadNoDoi:
     'project.doi missing; run oak release reserve-doi and merge its pull request before tagging.',
   uploadWrongEnvironment: (doiIsSandbox: boolean): string =>
@@ -1134,7 +1174,8 @@ export const workflow = {
     `no Zenodo record matches ${doi}. Check that the token belongs to the account holding it, ` +
     `and that the record was not deleted.`,
   uploadConceptMismatch: (doi: string, found: string): string =>
-    `myst.yml names the concept DOI ${doi}, but the Zenodo record found for it belongs to ${found}.`,
+    `myst.yml names the concept DOI ${doi}, but the Zenodo record found for it belongs to ` +
+    `${found}. Set project.doi in myst.yml to ${found}.`,
   uploadNoBucket:
     'the Zenodo draft came back with no file bucket URL, which its API always returns; Zenodo ' +
     'may have changed its API.',
@@ -1175,6 +1216,7 @@ export const workflow = {
   /** The DOI pull request `gh.openDoiPr` opens. GitHub holds the checks on a pull request a
    *  workflow opens, so in Actions the body says why they wait. */
   doiPrTitle: 'Reserve Zenodo DOI',
+  doiCommitMessage: (conceptDoi: string): string => `chore: reserve Zenodo DOI ${conceptDoi}`,
   doiPrChecksSkipped:
     'Journal checks skipped: an automated change that writes only the reserved DOI',
   doiPrBody: (conceptDoi: string, byWorkflow: boolean): string =>
@@ -1216,6 +1258,8 @@ export const workflow = {
   releaseCommitComment: (url: string, published: boolean): string =>
     published ? `Zenodo record published: ${url}` : `Zenodo draft populated: ${url}`,
   releaseFailureIssue: (tag: string): string => `Zenodo publish failed for ${tag}`,
+  /** The notes of the GitHub release the deposit files are attached to. */
+  releaseNotes: 'The files deposited on Zenodo for this version.',
   releaseFailureIssueFailed: (message: string): string =>
     `oak release deposit: the deposit failed, and opening the issue that says so failed too (${message})`,
   releaseNoTokenReason: 'no Zenodo token on GitHub',
@@ -1309,9 +1353,10 @@ export const workflow = {
     `oak's temporary clone of ${repo} is kept at ${dir} to look into; delete it with oak clean`,
   releaseClonesRemoved: (dirs: string[]): string =>
     `✓ removed the ${dirs.length === 1 ? 'clone' : 'clones'} an earlier run kept: ${dirs.join(', ')}`,
-  /** `where` is `at <tag>` or `on the default branch`. */
-  releaseNotPaper: (repo: string, where: string): string =>
-    `oak release: ${repo} is not an oak paper repo: ${where} it has no myst.yml naming an oak ` +
+  /** `tag` is the tag that was read, or null for the default branch. */
+  releaseNotPaper: (repo: string, tag: string | null): string =>
+    `oak release: ${repo} is not an oak paper repo: ` +
+    `${tag ? `at ${tag}` : 'on the default branch'} it has no myst.yml naming an oak ` +
     `version (project.options.oaktree-sapling.version). Check --repo, or pass --repo ` +
     `<owner>/<paper-repo> to publish from any folder: oak clones it into a temporary folder.`,
   releaseTagNoDoi: (tag: string, repo: string): string =>
@@ -1518,6 +1563,28 @@ export const workflow = {
    *  names the account id. The details stay in the workflow log, where Actions redacts
    *  secrets. */
   wranglerFailed: 'wrangler could not deploy the preview; see the workflow log for its output',
+};
+
+/** The commits and pull requests `oak conformance run` makes on the test repo (gh.ts). */
+export const conformance = {
+  previewCommit: (marker: string): string => `conformance preview probe ${marker}`,
+  previewPrTitle: (marker: string): string => `conformance preview ${marker}`,
+  previewPrBody: 'Opened and closed by `oak conformance run` to test the pull request preview.',
+  forkPreviewCommit: (marker: string, tag: string): string =>
+    `conformance fork preview ${marker} (pin engine ${tag})`,
+  forkPreviewPrTitle: (marker: string): string => `conformance fork preview ${marker}`,
+  forkPreviewPrBody:
+    'Opened and closed by `oak conformance run` to test the preview of a pull request from a fork.',
+};
+
+/** The fixed labels in a Zenodo record's description (zenodo.ts `buildMetadata`). */
+export const zenodoRecord = {
+  recording: 'Seminar Recording',
+  watchRecording: 'Watch on YouTube',
+  website: 'Project Website',
+  repository: 'Repository',
+  venue: 'Venue',
+  funding: 'Funding',
 };
 
 /** A bug in oak: say so, then show the stack. */

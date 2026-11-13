@@ -12,7 +12,8 @@ import * as msg from './messages.js';
 import { UserError } from './messages.js';
 import { COMMIT_ID } from './schema.js';
 
-/** Dot names: the site is served. */
+/** Names inside the built site, which is served; {@link takePrNumber} and {@link takePaperDir}
+ *  delete them before a deploy. */
 export const SITE_FILES = { pr: '.pr-number', paper: '.paper' } as const;
 export const CHECKS_FILES = { pr: 'pr-number', paper: 'paper' } as const;
 type Names = typeof SITE_FILES | typeof CHECKS_FILES;
