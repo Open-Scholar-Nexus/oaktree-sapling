@@ -53,7 +53,7 @@ On the websites, colours come from a CSS file named by `style`, MyST's [custom s
 }
 ```
 
-MyST's [styling guide](https://myst-theme.netlify.app/theming) explains what each variable colours, and its [colour picker](https://myst-theme.netlify.app/color-picker) shows the result live. The variables the papers' theme reads, with their defaults, are in its [`theme-colors.css`](https://github.com/impact-scholars/myst-theme/blob/v0.2.0/styles/theme-colors.css).
+MyST's [styling guide](https://myst-theme.netlify.app/theming) explains what each variable colours, and its [colour picker](https://myst-theme.netlify.app/color-picker) shows the result live. The variables the papers' theme reads, with their defaults, are in its [`theme-colors.css`](https://github.com/jupyter-book/myst-theme/blob/myst-to-react@1.4.1/styles/theme-colors.css).
 
 On the PDF, `theme` under `project.options` sets the colour of the title and links, as a [typst colour](https://typst.app/docs/reference/visualize/color/), such as `rgb("#2f6b3a")` or `green.darken(30%)`.
 

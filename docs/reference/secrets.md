@@ -5,7 +5,7 @@ Draft deposits on Zenodo and live previews of pull requests on Cloudflare need t
 
 :::{warning} Zenodo's current security state
 :label: zenodo-token-scopes
-Creating a Zenodo token asks which scopes it gets, such as `deposit:write`, but currently Zenodo *does not actually check them*. This means that a leaked token can publish, create versions and edit every record of the journal's Zenodo account; while Oaktree Sapling sets up the repo safely, changing configurations could cause a workflow to be merged that exposes a token. Until Zenodo checks token scopes, we suggest leaving the Zenodo tokens unset and having an editor publish [from the terminal](../guide/publish.md#from-terminal), with the token on their own computer.
+Creating a Zenodo token asks which scopes it gets, such as `deposit:write`, but Zenodo *does not check them*. A leaked token can publish, create versions and edit every record of the journal's Zenodo account. oaktree-sapling sets up the repository so that its workflows keep the token safe, but a merged change to a workflow could expose it. Until Zenodo checks token scopes, we suggest leaving the Zenodo tokens unset and having an editor publish [from the terminal](../guide/publish.md#from-terminal), with the token on their own computer.
 :::
 
 `ZENODO_TOKEN`, `ZENODO_TOKEN_SANDBOX`
@@ -16,5 +16,5 @@ Creating a Zenodo token asks which scopes it gets, such as `deposit:write`, but 
 
 `oak bootstrap paper` sets each secret it is given on the environments that hold it. Pass each as its flag, or set an environment variable with the secret's name before running it. When it finishes, `oak` lists the secrets still missing and links to the repository's environment settings, where you can set them.
 
-[^danger-tokens]: Oaktree Sapling sets up the paper repository so that authors cannot read its tokens, even with push access ([how](../design/paper-ci.md)). It cannot stop an editor from merging a workflow change that exposes them, so whenever a pull request changes a file listed in `CODEOWNERS`, you must carefully review it.
+[^danger-tokens]: oaktree-sapling sets up the paper repository so that authors cannot read its tokens, even with push access ([how](../design/paper-ci.md)). It cannot stop an editor from merging a workflow change that exposes them, so whenever a pull request changes a file listed in `CODEOWNERS`, you must carefully review it.
 
