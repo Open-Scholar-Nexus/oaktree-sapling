@@ -32,7 +32,7 @@ Publishing a version deposits it to [Zenodo](https://zenodo.org), which gives it
 
 ## Maintenance
 
-A paper builds with the engine release named in its `myst.yml`, checked out from the engine repository at that release's tag. If the engine stops being maintained, each paper keeps building with the release it names, for as long as that release and the web theme it downloads stay on GitHub. A journal can also run its papers from its own fork of the engine repository, release tags included, by naming that fork in the paper's [`pins.yml`](src:templates/paper/.github/actions/engine/pins.yml#L4).
+A paper builds with the engine release named in its `myst.yml`, checked out from the engine repository at that release's tag. If the engine stops being maintained, each paper keeps building with the release it names, for as long as that release and the web theme it downloads stay on GitHub. A journal can also run its papers from its own fork of the engine repository, release tags included, by naming that fork in the paper's [`pins.yml`](<src:templates/paper/.github/actions/engine/pins.yml@"engine_repo:">).
 
 ## Limits
 
