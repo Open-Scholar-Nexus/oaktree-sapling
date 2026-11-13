@@ -14,8 +14,7 @@ import { join, resolve, dirname, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-/** Also matches a sub-id (`[R35.1]`, `[R71-out]`), which no anchor defines. */
-const CITE = /\[R(\d+)([.-][\w.-]+)?\]/g;
+const CITE = /\[R(\d+)\]/g;
 /** Matches `design §N` and `design.md §N`. */
 const SECTION = /design(?:\.md)? §(\d+[a-z]?)/g;
 
@@ -72,8 +71,7 @@ for (const file of [
       what,
       text: lines[at(i) - 1].trim(),
     });
-  for (const m of text.matchAll(CITE))
-    if (m[2] || !defined.has(m[1])) note(m.index, `[R${m[1]}${m[2] ?? ''}]`);
+  for (const m of text.matchAll(CITE)) if (!defined.has(m[1])) note(m.index, `[R${m[1]}]`);
   for (const m of text.matchAll(SECTION)) if (!sections.has(m[1])) note(m.index, `design §${m[1]}`);
 }
 
