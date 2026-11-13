@@ -48,7 +48,7 @@ The author changes the content and `myst.yml`, including the engine version, wit
 
 (r92)=
 
-[`CODEOWNERS`](src:templates/paper/CODEOWNERS#L3-L7) tells GitHub who must review a change to the files it names. It only blocks a merge behind a branch rule that requires a code owner's review, and the pull request's workflows still run before anyone reviews it. `oak bootstrap` creates that rule as `protect-main` ([`protectMainBody`](src:src/bootstrap.ts)). Our CODEOWNERS names five things:
+[`CODEOWNERS`](src:templates/paper/CODEOWNERS#L3-L7) tells GitHub who must review a change to the files it names. It only blocks a merge behind a branch rule that requires a code owner's review, and the pull request's workflows still run before anyone reviews it. `oak bootstrap` creates that rule as `protect-main` ([`protectMainBody`](src:src/bootstrap.ts)). Our CODEOWNERS names:
 
 - `.github/`, so an editor approves any change to the launchers or to `pins.yml`, which could otherwise name a different engine repository, or a journal repository whose MyST plugins run at build time.
 - `CODEOWNERS` itself, so a pull request cannot remove the gate in the same change.
@@ -234,7 +234,7 @@ Both stages key on the head repository, and the pull request group in each Stage
 
 (r172)=
 
-A workflow reads a secret into `env:` and tests it in `run:`[^why-test-secret-in-run]. A `secrets` reference in a step's `if:` makes GitHub reject the whole workflow file. For a file that only runs on `workflow_dispatch`, such as `reserve-doi.yml`, the rejection shows only when someone runs it. The test ``no `if:` reads the secrets context`` in [`test/workflow-guards.test.ts`](src:test/workflow-guards.test.ts) fails on any frozen `if:` that reads `secrets`.
+A workflow reads a secret into `env:` and tests it in `run:`[^why-test-secret-in-run]. A `secrets` reference in a step's `if:` makes GitHub reject the whole workflow file. For a file that only runs on `workflow_dispatch`, such as `reserve-doi.yml`, the rejection shows only when someone runs it. The test ``no `if:` reads the secrets context`` in [`test/workflow-guards.test.ts`](src:test/workflow-guards.test.ts) fails on any `if:` in the paper template's workflows that reads `secrets`.
 
 [^why-test-secret-in-run]: The `secrets` context does not exist in a step-level `if:`.
 
@@ -248,6 +248,6 @@ A workflow reads a secret into `env:` and tests it in `run:`[^why-test-secret-in
 
 (r90)=
 
-Each guard carries a case that fails against the unfixed step, for example `refuses an unmerged oak pull request, a raw commit or a branch, on any event` in [`test/workflow-guards.test.ts`](src:test/workflow-guards.test.ts) for the `ref` step, and `refuses a real pull request whose head is another commit` in [`test/artifact.test.ts`](src:test/artifact.test.ts) for `verifyPrHead`. A guard written against a specific attack is tested with that attack's input.
+Each guard has a test that fails when the guard is removed, for example `refuses an unmerged oak pull request, a raw commit or a branch, on any event` in [`test/workflow-guards.test.ts`](src:test/workflow-guards.test.ts) for the `ref` step, and `refuses a real pull request whose head is another commit` in [`test/artifact.test.ts`](src:test/artifact.test.ts) for `verifyPrHead`. A guard written against a specific attack is tested with that attack's input.
 
 This is bash, not a runner: `${{ }}` is already resolved by the time a real step runs, `$GITHUB_OUTPUT` is a real file there, and the shell setup differs. So it covers script logic plus the expression-level faults checked statically. A green run here is necessary and not sufficient, and the live conformance run exercises the workflows on a real runner.
