@@ -177,8 +177,7 @@ describe.skipIf(bundleState() === 'absent')('--json gates the machine envelope',
     expect(out.checkRun.conclusion).toBe('success');
   }, 60_000);
 
-  it('the summary lists every finding', () => {
-    // Every finding is printed.
+  it('the summary prints the findings', () => {
     const { stderr } = oak(['validate', '--paper', paperOnly(), '--no-instance']);
     expect(stderr).toMatch(/oak validate: (PASS|FAIL)/);
     // The fixture has no thumbnail, and an uncomposed run adds a note; either way, one warning
@@ -352,7 +351,7 @@ describe.skipIf(bundleState() === 'absent')('a broken paper gets a sentence, nev
   });
 });
 
-describe.skipIf(bundleState() === 'absent')('bootstrap preflight ([R110], [R125], [R127])', () => {
+describe.skipIf(bundleState() === 'absent')('bootstrap preflight', () => {
   beforeAll(assertBundleNotStale);
 
   /** Runs the bundle without gh (node by absolute path, PATH a directory without gh), or with
@@ -396,8 +395,7 @@ describe.skipIf(bundleState() === 'absent')('bootstrap preflight ([R110], [R125]
     expect(stderr).toContain('gh');
     expect(stderr).toContain('not on PATH');
     expect(stderr).toContain('gh auth login');
-    // The gh check comes before the release lookup, which would otherwise report "no stable
-    // release" when gh is the problem.
+    // The gh check runs before the release lookup, so a missing gh is reported as itself.
     expect(stderr).not.toContain('no stable release');
     expect(stderr).not.toMatch(/\bat \w+ \(/);
   });
@@ -657,7 +655,7 @@ describe('a pull request number is a number [R136]', () => {
   });
 });
 
-describe('a sandbox deposit never uses the production token [R102]', () => {
+describe('a sandbox deposit never uses the production token', () => {
   it('refuses when only the production token is set', () => {
     const env = { ZENODO_TOKEN: 'production-secret', ZENODO_TOKEN_SANDBOX: undefined };
     const r = oak(['release', 'reserve-doi', '--sandbox', '--paper', fixturePaper], env);

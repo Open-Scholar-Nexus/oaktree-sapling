@@ -1,8 +1,7 @@
 /**
  * deploy-preview, with fakes for Cloudflare, git and gh: a failed Cloudflare deploy falls back
- * to an artifact link [R16], `.pr-number` is removed before serving [R26], and Cloudflare
- * settings come from journal.yml [R27]. Stage 1 builds a pull request with no secrets; Stage 2
- * acts on its result from the base branch (docs/design/paper-ci.md).
+ * to an artifact link, `.pr-number` is removed before serving [R26], and Cloudflare settings
+ * come from journal.yml.
  */
 import { describe, it, expect } from 'vitest';
 import { mkdtempSync, writeFileSync, existsSync, mkdirSync, readdirSync } from 'node:fs';
@@ -138,7 +137,7 @@ describe('stripPagesControlFiles removes what would make a static upload run cod
   });
 });
 
-describe('previewBranch keeps the pull request number [R139]', () => {
+describe('previewBranch keeps the pull request number', () => {
   const P = 'paper-{repo}-{pr}';
   const long = 'o/lastname-2026-a-long-paper-name';
 
@@ -200,7 +199,7 @@ describe('planPreview', () => {
     });
     expect(plan).toMatchObject({ mode: 'artifact' });
   });
-  it('falls back without the secrets [R6]', () => {
+  it('falls back without the secrets', () => {
     const plan = planPreview({ preview: previewCfg(), cf: {}, repo: 'o/r', pr: '5' });
     expect(plan).toMatchObject({ mode: 'artifact', reason: expect.stringContaining('secrets') });
   });
@@ -232,7 +231,7 @@ describe('comment bodies', () => {
   });
 });
 
-describe('a broken journal.yml [R140]', () => {
+describe('a broken journal.yml', () => {
   const inst = (body: string) => {
     const d = mkdtempSync(join(tmpdir(), 'oak-inst-'));
     writeFileSync(join(d, 'journal.yml'), body);
@@ -299,7 +298,7 @@ describe('cmdDeployPreview', () => {
     expect(existsSync(join(dir, '.pr-number'))).toBe(false); // stripped
   });
 
-  it('falls back to an artifact comment when the Cloudflare deploy throws [R16]', async () => {
+  it('falls back to an artifact comment when the Cloudflare deploy throws', async () => {
     const dir = siteWithPr('7');
     const { gh, stickies } = fakeGh();
     const out = await cmdDeployPreview(baseInput(dir, { instanceRoot: instanceCf(dir) }), {

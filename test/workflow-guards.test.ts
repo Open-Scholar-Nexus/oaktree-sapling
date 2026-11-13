@@ -1,12 +1,12 @@
 /**
- * The checks in the paper template's workflows, run as shell from the real YAML [R99]
- * [R90]. Each test takes a step's `run:` script by id and runs it, so it tests the files that
- * ship.
+ * The shell steps in the paper template's workflows, run from the real YAML [R99] [R90].
+ * Each test takes a step's `run:` script by id and runs it in bash, so it tests the files
+ * that ship.
  *
- * This is bash, not a GitHub runner: there `${{ }}` is resolved before the step runs,
- * `$GITHUB_OUTPUT` is a real file, and the shell differs. So it covers the scripts, plus
- * `secrets` in an `if:`, checked below [R172]; other workflow-level faults pass here, and
- * conformance is what runs them on GitHub.
+ * Bash is not a GitHub runner: `${{ }}` expressions, `$GITHUB_OUTPUT` and the shell
+ * differ there. So these tests cover the scripts, plus `secrets` in an `if:`, checked
+ * below [R172]; conformance runs the workflows on GitHub, which covers the rest of what
+ * a workflow can get wrong.
  */
 import { describe, it, expect } from 'vitest';
 import { spawnSync } from 'node:child_process';

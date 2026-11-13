@@ -1,7 +1,6 @@
 /**
- * Builds the fixture paper through the bundled CLI before a release is cut [design §12]. It runs
- * `node dist/cli.cjs`, since myst-cli crashes unbundled on Node 24 [R51], so it runs what the
- * paper workflows run.
+ * Builds the fixture paper through the bundled CLI (`node dist/cli.cjs`) before a release is
+ * cut.
  *
  * Skipped unless the bundle, typst and oak's template are all present, so `npm test` runs
  * anywhere. The release script bundles first, then this must pass.
@@ -70,7 +69,7 @@ describe.skipIf(!runnable)('fixture build through the bundled CLI', () => {
     // The full typst entry (articles and oak's template) is in myst.oak.yml.
     const doc = parseDocument(readFileSync(join(tmp, DERIVED_CONFIG_FILE), 'utf8'));
     expect(doc.getIn(['project', 'exports', 0, 'template'])).toBe(typstTemplate);
-    // the articles are kept [R53]
+    // the articles are kept [R52]
     expect(doc.getIn(['project', 'exports', 0, 'articles', 0, 'file'])).toBe('index.md');
     expect(doc.getIn(['project', 'exports', 0, 'output'])).toBe(TYPST_OUTPUT);
     // the author's `youtube` option is kept

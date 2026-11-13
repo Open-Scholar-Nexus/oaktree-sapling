@@ -128,7 +128,7 @@ describe('cmdConformanceReset', () => {
     expect(gh.tags).toEqual(['v0.0.1', 'v0.0.2']);
   });
 
-  it('reset on an already-clean fixture is a no-op', async () => {
+  it('reset on an already-clean repo changes nothing', async () => {
     const gh = fakeGh({ branches: ['main'], tags: ['v0.0.1'] });
     const out = await cmdConformanceReset({ repo: REPO }, silentDeps(gh));
     expect(out.result.changed).toBe(0);
@@ -518,9 +518,9 @@ describe('cmdConformanceRun', () => {
     expect(out.result.reason).toContain('timed out');
   });
 
-  it("a 403 refusing the request is oak's fault, and fails [R150]", async () => {
+  it("a 403 refusing the request is oak's fault, and fails", async () => {
     // A missing scope or `permissions:` block answers 403, which is oak's fault, not a third
-    // party's [R150].
+    // party's.
     const gh = fakeCertGh();
     const out = await cmdConformanceRun(
       { repo: REPO, tag: TAG },
@@ -536,7 +536,7 @@ describe('cmdConformanceRun', () => {
     expect(out.result).toMatchObject({ status: 'failed' });
   });
 
-  it("a rate limit is still not oak's fault [R113]", async () => {
+  it("a rate limit is still not oak's fault", async () => {
     const gh = fakeCertGh();
     const out = await cmdConformanceRun(
       { repo: REPO, tag: TAG },
@@ -609,7 +609,7 @@ describe('cmdConformanceRun', () => {
 
   it('fails on a result that never appeared, rather than blaming a slow third party', async () => {
     // An absent Check Run and a slow one are the same `null`; the runs having finished is what
-    // tells them apart ([R113]).
+    // tells them apart.
     const gh = fakeCertGh({ checkRuns: () => [] });
     const out = await cmdConformanceRun({ repo: REPO, tag: TAG }, runDeps(gh));
     expect(out.exitCode).toBe(1);
@@ -641,7 +641,7 @@ describe('cmdConformanceRun', () => {
     expect(out.result).toMatchObject({ status: 'inconclusive' });
   });
 
-  it('fails when the merged fixture is not pinned to the version under test', async () => {
+  it('fails when the merged paper is not pinned to the version under test', async () => {
     const gh = fakeCertGh({ committedEngineVersion: () => 'v0.0.0-dev.8' });
     const out = await cmdConformanceRun({ repo: REPO, tag: TAG }, runDeps(gh));
     expect(out.exitCode).toBe(1);
@@ -683,10 +683,10 @@ describe('cmdConformanceRun', () => {
   });
 });
 
-describe('reset sweeps what the run creates ([R117])', () => {
+describe('reset sweeps what the run creates', () => {
   it('deletes the upgrade branch too, not only cert-*', async () => {
     // The upgrade branch is named after the tag, so leaving it would block a second run of the
-    // same tag [R117].
+    // same tag.
     const branches = ['cert-123', 'oak/upgrade-v0.0.2', 'main'];
     const deleted: string[] = [];
     const out = await cmdConformanceReset(
@@ -718,7 +718,7 @@ describe('reset sweeps what the run creates ([R117])', () => {
   });
 });
 
-/** The cut script and the conformance workflow have no other test. [R111], [R112]. */
+/** The cut script and the conformance workflow have no other test [R111]. */
 describe('the conformance workflow cannot pass without a result', () => {
   const read = (p: string) => readFileSync(join(import.meta.dirname, '..', p), 'utf8');
 
@@ -731,7 +731,7 @@ describe('the conformance workflow cannot pass without a result', () => {
   });
 
   it('unstages the release files however the release script exits', () => {
-    // Left staged, they would go into the next local commit [R112].
+    // Left staged, they would go into the next local commit.
     const cut = read('scripts/cut-engine-release.sh');
     const trap = cut.indexOf('trap ');
     const add = cut.indexOf('git add -f dist/cli.cjs');
@@ -740,7 +740,7 @@ describe('the conformance workflow cannot pass without a result', () => {
   });
 
   it('does not leave a pushed tag without its release', () => {
-    // A runnable engine is a release ([R57]); a bare tag also burns the version ([R112]).
+    // A runnable engine is a release ([R57]); a bare tag also burns the version.
     const cut = read('scripts/cut-engine-release.sh');
     expect(cut).toMatch(/if ! gh release create/);
     expect(cut, 'the tag must be removed when the release does not follow').toContain(

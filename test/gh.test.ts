@@ -1,6 +1,6 @@
 /**
  * gh.ts runs commands, so these check the arguments it passes: no secret in argv, no captured
- * stderr where it would be posted, and validation before `git fetch` [R103] [R104].
+ * stderr where it would be posted, and validation before `git fetch`.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -151,7 +151,7 @@ describe('labelChildOutput', () => {
 });
 
 /* --------------------------------------------------------------------------
- * The arguments the real calls build, with `git` and `gh` replaced [R109].
+ * The arguments the real calls build, with `git` and `gh` replaced.
  * ------------------------------------------------------------------------ */
 
 const child = vi.hoisted(() => ({
@@ -305,7 +305,7 @@ describe('uploadReleaseAsset', () => {
   });
 });
 
-describe('the tolerant probes tell absent from forbidden [R113]', () => {
+describe('the tolerant probes tell absent from forbidden', () => {
   beforeEach(() => {
     child.calls.length = 0;
   });
@@ -336,8 +336,8 @@ describe('the tolerant probes tell absent from forbidden [R113]', () => {
     expect(() => realConformanceGh.deleteTag('o/r', 'v9.9.9')).toThrow(/422/);
   });
 
-  it('approving a run that needs no approval does nothing, though GitHub answers 403 [R150]', () => {
-    // Fork runs are not always held for approval, so this is the usual case [R150].
+  it('approving a run that needs no approval does nothing, though GitHub answers 403', () => {
+    // Fork runs are not always held for approval, so this is the usual case.
     child.respond = () => ({
       status: 1,
       stdout: '',
@@ -468,7 +468,7 @@ describe('realGitContext.fetchCommit', () => {
   });
 });
 
-describe('the preview deploy pins wrangler ([R109])', () => {
+describe('the preview deploy pins wrangler', () => {
   it('runs a pinned version, not whatever npm serves into a token-bearing process', async () => {
     child.calls.length = 0;
     child.respond = () => ({ status: 0, stdout: 'https://abc.pages.dev', stderr: '' });
@@ -485,7 +485,7 @@ describe('the preview deploy pins wrangler ([R109])', () => {
   });
 });
 
-describe('realProvisioner.createLabel ([R127])', () => {
+describe('realProvisioner.createLabel', () => {
   it('does not swallow a refusal, since --force already covers the label existing', () => {
     child.calls.length = 0;
     child.respond = () => ({ status: 1, stdout: '', stderr: 'gh: Forbidden (HTTP 403)' });

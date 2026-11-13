@@ -74,7 +74,7 @@ describe('checkLayout', () => {
   });
 });
 
-describe('checkBrandFavicon [R61]', () => {
+describe('checkBrandFavicon', () => {
   it('warns when no favicon is declared', () => {
     expect(checkBrandFavicon({ instanceRoot: '/i' }, allTrue).ok).toBe(false);
   });
@@ -109,7 +109,7 @@ describe('checkBrandWatermark [R62]', () => {
   });
 });
 
-describe('checkThumbnail [R81]', () => {
+describe('checkThumbnail', () => {
   it('passes when no thumbnail is declared (myst uses the first image)', () => {
     expect(checkThumbnail({ paperRoot: '/paper' }, allFalse).ok).toBe(true);
   });
@@ -182,7 +182,7 @@ describe('checkDepositNames [R28]', () => {
   });
 });
 
-describe('isFloatingTemplate: whether a template can change under the same value [R76] [R5]', () => {
+describe('isFloatingTemplate: whether a template can change under the same value [R76]', () => {
   it('treats pinned remote references as fine', () => {
     expect(isFloatingTemplate('https://github.com/o/r/releases/download/v1.2.3/t.zip')).toBe(false);
     expect(isFloatingTemplate('https://github.com/o/r/archive/refs/tags/v1.2.3.zip')).toBe(false);
@@ -203,7 +203,7 @@ describe('isFloatingTemplate: whether a template can change under the same value
     expect(isFloatingTemplate('/srv/typst-template')).toBe(false);
   });
 
-  it('treats a template named without a version as unpinned [design §7]', () => {
+  it('treats a template named without a version as unpinned', () => {
     expect(isFloatingTemplate('lapreprint-typst')).toBe(true);
   });
 
@@ -302,8 +302,8 @@ describe('runValidate: exit codes with the fixture journal', () => {
   });
 
   it('a bad id still runs the editorial checks and still fails the run (exit 1)', async () => {
-    // An id error is `identity`, not `structural`, so myst still processes the paper and the
-    // author gets every finding at once.
+    // An id error is an `identity` finding, so myst still processes the paper and the author
+    // gets every finding at once.
     const bad = { id: 'fixture-template-placeholder', authors: [], abstract: '', keywords: [] };
     const out = await runValidate(
       {
@@ -429,7 +429,7 @@ describe('runValidate: exit codes with the fixture journal', () => {
     expect(strict.exitCode).toBe(1);
   });
 
-  it('--strict fails the status and the Check Run as well as the exit code [R119]', async () => {
+  it('--strict fails the status and the Check Run as well as the exit code', async () => {
     // A strict run that exits 1 also reports a failure in its status and Check Run.
     const base = { paperRoot: '/paper', instanceRoot: null, edge: edgeReturning(goodProject) };
     const lax = await runValidate(base, { repo: null }, allTrue);
@@ -465,7 +465,7 @@ describe('checkLayerDisjointness: extends layers must not share keys [R72]', () 
     ).toEqual([]);
   });
 
-  it('does not flag different keys under site.options, which merge key by key [R68]', () => {
+  it('does not flag different keys under site.options, which merge key by key', () => {
     // paper-base sets site.options.hide_toc and brand sets site.options.logo: different keys,
     // since keys are compared leaf by leaf.
     const out = checkLayerDisjointness([
@@ -521,7 +521,7 @@ describe('checkLayerDisjointness: extends layers must not share keys [R72]', () 
   });
 });
 
-describe("a layer's own extends: is followed [R119]", () => {
+describe("a layer's own extends: is followed", () => {
   const realProbes: FsProbes = { existsProbe: (p) => existsSync(p), listTree: () => [] };
 
   /** An engine + instance pair on disk, with whatever extra layer files the case needs. */
@@ -717,7 +717,8 @@ describe('runValidate: when there is nothing to compose [R82]', () => {
 
   it('a failed compose fails the run', async () => {
     // With oak's checkout and the journal repo both present, a throw means the paper's own
-    // config broke compose: a mistyped `edition:`, a missing version key, the [R36] check.
+    // config broke compose: a mistyped `edition:`, a missing version key, an edition config
+    // overriding the version.
     // `oak build` throws the same way, so this blocks the merge.
     // A real paper root: materializeDerived reads the author's myst.yml from disk, with its
     // version key, before the myst stub is used.
@@ -743,7 +744,7 @@ describe('runValidate: when there is nothing to compose [R82]', () => {
     );
     const compose = out.errors.find((e) => e.check === 'compose');
     expect(compose?.severity).toBe('error');
-    expect(compose?.klass).toBe('config'); // not `structural`, so the editorial checks still run
+    expect(compose?.klass).toBe('config'); // a `config` finding lets the editorial checks run
     expect(compose?.message).toMatch(/editions\/typo\.yml/);
     expect(out.status).toBe('error');
     expect(out.exitCode).toBe(1);
@@ -753,9 +754,9 @@ describe('runValidate: when there is nothing to compose [R82]', () => {
   });
 });
 
-describe('a journal.yml that cannot be read fails the run [R116]', () => {
-  // Every rule the gate enforces is read from journal.yml ([R116]).
-  // Denies papers.yml too, since loadRegistry reads whatever the probe admits [R119].
+describe('a journal.yml that cannot be read fails the run', () => {
+  // Every rule `oak validate` enforces is read from journal.yml.
+  // Denies papers.yml too, since loadRegistry reads whatever the probe admits.
   const noJournal: FsProbes = {
     existsProbe: (p: string) => !p.endsWith('journal.yml') && !p.endsWith('papers.yml'),
     listTree: () => [],
@@ -785,7 +786,7 @@ describe('a journal.yml that cannot be read fails the run [R116]', () => {
   });
 });
 
-describe('the id policy cannot be turned off by the journal [R119]', () => {
+describe('the id policy cannot be turned off by the journal', () => {
   const journalOf = (yaml: string, dir: string) => {
     writeFileSync(join(dir, 'journal.yml'), yaml);
     return {
@@ -810,7 +811,7 @@ describe('the id policy cannot be turned off by the journal [R119]', () => {
     expect(oakFindings('p-x', dir, probes).some((f) => f.check === 'id-policy')).toBe(false);
   });
 
-  it('says nothing without a journal repo, which holds the policy [R116]', () => {
+  it('says nothing without a journal repo, which holds the policy', () => {
     const dir = mkdtempSync(join(tmpdir(), 'oak-idpolicy-'));
     const probes = journalOf('name: J\n', dir);
     expect(oakFindings('anything-at-all', null, probes).some((f) => f.check === 'id-policy')).toBe(
