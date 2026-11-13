@@ -310,6 +310,36 @@ describe('the newest release', () => {
     }
   });
 
+  it('refuses with exit 2 when the engine has no stable release', async () => {
+    const { pr, opened } = fakePr();
+    const out = await cmdUpgrade(
+      { repoRoot: makeRepo() },
+      { ...deps(pr, 'v2.0.0', () => TEMPLATE_ROOT), resolveTarget: () => null },
+    );
+    expect(out.exitCode).toBe(2);
+    expect(String(out.result.message)).toMatch(/^oak upgrade: GitHub found no stable release/);
+    expect(opened).toHaveLength(0);
+  });
+
+  it('refuses with exit 2 when the release lookup fails, naming why', async () => {
+    const { pr, opened } = fakePr();
+    const out = await cmdUpgrade(
+      { repoRoot: makeRepo() },
+      {
+        ...deps(pr, 'v2.0.0', () => TEMPLATE_ROOT),
+        resolveTarget: () => {
+          throw new Error('gh api failed (exit 1): HTTP 401: Bad credentials');
+        },
+      },
+    );
+    expect(out.exitCode).toBe(2);
+    const m = String(out.result.message);
+    expect(m).toMatch(/^oak upgrade: could not look up/);
+    expect(m).toContain('Bad credentials');
+    expect(m).not.toMatch(/no stable release/);
+    expect(opened).toHaveLength(0);
+  });
+
   it('moves a pre-release pin up to its release', async () => {
     const { pr, opened } = fakePr();
     await cmdUpgrade(

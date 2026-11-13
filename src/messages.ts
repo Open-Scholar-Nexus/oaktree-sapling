@@ -520,6 +520,16 @@ export const upgrade = {
     `${JSON.stringify(target.slice(0, 60))}, not a release tag like v1.2.3 or v1.2.3-dev.4; ` +
     `nothing was changed.`,
 
+  /** GitHub answered 404 for `releases/latest`. */
+  noStableRelease: (engineRepo: string): string =>
+    `oak upgrade: GitHub found no stable release on ${engineRepo} (or no such repo visible to ` +
+    `gh); nothing was changed. Pass --to <tag> to name one; pre-releases are excluded from ` +
+    `"latest" on purpose, since a dev tag can be deleted.`,
+
+  releaseLookupFailed: (engineRepo: string, why: string): string =>
+    `oak upgrade: could not look up the newest release of ${engineRepo} (${why}); nothing was ` +
+    `changed. Check the network and \`gh auth status\`, or pass --to <tag>.`,
+
   /** `--files-only` would leave a version the engine action refuses. */
   badPin: (pin: string): string =>
     `oak upgrade: myst.yml pins ${JSON.stringify(pin.slice(0, 60))}, not a release tag like ` +
@@ -1502,10 +1512,6 @@ export const workflow = {
   /** Printed while a git/gh call is in flight, then erased; see gh.ts `showWorking`. */
   working: (what: string): string => `  … ${what}`,
 
-  // the release lookup and the wrangler deploy (gh.ts)
-  noStableRelease: (engineRepo: string): string =>
-    `no stable release on ${engineRepo} to move to. Pass --to <tag> to name one; ` +
-    `pre-releases are excluded from "latest" on purpose, since a dev tag can be deleted.`,
   /** Thrown by `realGhPr.sticky` (gh.ts) when it cannot tell which repo to post to. */
   noOriginRepo: (repoRoot: string): string =>
     `no github.com origin remote in ${repoRoot}, so there is no repo to post to`,
@@ -1513,6 +1519,7 @@ export const workflow = {
   doiPrDiverged: (head: string, base: string): string =>
     `${head} carries commits that are not on ${base}, so the DOI pull request would not be ` +
     `the one-file change it claims to be. Run oak release reserve-doi on ${base}.`,
+  // the wrangler deploy (gh.ts)
   wranglerNoUrl: 'wrangler did not report a *.pages.dev deployment URL',
   /** No detail from wrangler: this reaches a public pull request comment, and wrangler's output
    *  names the account id. The details stay in the workflow log, where Actions redacts
