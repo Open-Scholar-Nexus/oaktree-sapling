@@ -526,7 +526,7 @@ export function runOakChecks(
     });
   }
 
-  // The extends layers must own disjoint keys, or precedence is a race [R72].
+  // The layers set different keys: MyST gives a key two of them set no stable winner [R72].
   if (engineRoot && instanceRoot && edition) {
     const { layers, unreadable } = expandLayers(
       [
