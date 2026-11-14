@@ -2,7 +2,7 @@
 
 # How a paper's config is assembled
 
-A paper builds from `myst.oak.yml`, a file oak writes next to the paper's `myst.yml`. The paper's own config is the base of that file. `paper-base.yml`, the journal's edition and the journal's brand are its `extends:` layers; [Processing MyST markdown](#processing-myst) says what each one carries. What oak sets itself, such as the PDF template, it writes into the base.
+A paper builds from `myst.oak.yml`, a file oak writes next to the paper's `myst.yml`. The base of that file is the paper's own config. The file's `extends:` layers are `paper-base.yml`, the journal's edition and the journal's brand; [Processing MyST markdown](#processing-myst) says what each one carries. What oak sets itself, such as the PDF template, it writes into the base.
 
 Each rule on this page follows from how MyST merges a config with the layers it extends.
 
