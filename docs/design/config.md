@@ -7,10 +7,10 @@ oaktree-sapling gives every paper the settings its journal controls and the engi
 
 In CI, for a paper in the `seedling` edition of the journal `acme/journal`, `myst.oak.yml` looks like this (shortened):
 
+::::{scroll-code}
 ```{code-block} yaml
 :filename: myst.oak.yml
 :linenos:
-:emphasize-lines: 11-22, 27-31
 version: 1
 project:
   id: my-paper
@@ -44,7 +44,18 @@ site:
     favicon: .../_build/journal/acme/journal/brand/favicon.svg
 ```
 
-Lines 23 to 26 list oak's `paper-base.yml` and the journal's files; [Processing MyST markdown](#processing-myst) says what each one sets. The rest is the paper's own `myst.yml`, plus the highlighted lines, which oak adds.
+:::{scroll-step} 23-26
+Lines 23 to 26 list oak's `paper-base.yml` and the journal's files; [Processing MyST markdown](#processing-myst) says what each one sets.
+:::
+
+:::{scroll-step} 1-10
+Lines 1 to 10 are the paper's own `myst.yml`.
+:::
+
+:::{scroll-step} 11-22, 27-31
+oak adds the rest.
+:::
+::::
 
 Writing its values into the file also lets oak set fields on an entry the paper declares. For a key that a `myst.yml` and a listed file both set, the value in the `myst.yml` replaces the other whole[^options]. A paper with several articles declares its own PDF export, which would replace an export oak set from a listed file, so oak sets `template:` and `output:` on the paper's export in `myst.oak.yml` itself.
 

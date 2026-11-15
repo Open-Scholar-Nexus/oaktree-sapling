@@ -53,3 +53,66 @@
   --myst-color-example-bg: #292524;
   --myst-color-proof-bg: #292524;
 }
+
+/* {scroll-code} (plugins/scroll-code.mjs): once a step reaches the reading line, 40% down the screen, its copy of the code shows on top. */
+.scroll-code-src > * + * {
+  display: none;
+}
+@keyframes scroll-code-show {
+  from,
+  to {
+    visibility: visible;
+  }
+}
+@keyframes scroll-code-on-step {
+  from,
+  to {
+    opacity: 1;
+  }
+}
+@supports (animation-timeline: view()) {
+  @media (min-width: 1024px) {
+    .scroll-code {
+      display: flex;
+      gap: 1.5rem;
+      align-items: flex-start;
+    }
+    .scroll-code-src {
+      position: sticky;
+      top: 5rem;
+      flex: 3;
+      min-width: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+    }
+    /* Opaque and isolated, so a copy covers the theme's highlighted lines of the copies under it. */
+    .scroll-code-src > * {
+      grid-area: 1 / 1;
+      background: var(--myst-color-bg);
+      isolation: isolate;
+    }
+    .scroll-code-src > * + * {
+      display: block;
+      visibility: hidden;
+      animation: scroll-code-show linear forwards;
+    }
+    .scroll-code-src .myst-code {
+      margin: 0;
+    }
+    /* The first step reaches the reading line as the code sticks, the last while it still sticks. */
+    .scroll-code-steps {
+      flex: 2;
+      padding: calc(40vh - 5rem) 0 60vh;
+    }
+    .scroll-code-step {
+      padding: 1.5rem 0;
+      opacity: 0.45;
+      animation: scroll-code-on-step linear;
+      animation-timeline: view(40% 60%);
+      view-timeline-inset: 40% 60%;
+    }
+    .scroll-code-step > * {
+      margin-block: 0;
+    }
+  }
+}
