@@ -2,7 +2,46 @@
 
 # How a paper's config is assembled
 
-A paper builds from `myst.oak.yml`, a file oak writes next to the paper's `myst.yml`. The base of that file is the paper's own config. The file's `extends:` layers are `paper-base.yml`, the journal's edition and the journal's brand; [Processing MyST markdown](#processing-myst) says what each one carries. What oak sets itself, such as the PDF template, it writes into the base.
+A paper builds from `myst.oak.yml`, a file oak writes next to the paper's `myst.yml`. In CI, for a paper in the `seedling` edition of the journal `acme/journal`, it looks like this (shortened):
+
+```{code-block} yaml
+:filename: myst.oak.yml
+:linenos:
+:emphasize-lines: 11-22, 27-31
+version: 1
+project:
+  id: my-paper
+  title: My paper
+  authors:
+    - name: Ada Lovelace
+  options:
+    oaktree-sapling:
+      version: v0.4.0
+      edition: seedling
+    logo: .../_build/journal/acme/journal/brand/watermark.svg
+  exports:
+    - format: typst
+      id: typst-pdf
+      articles:
+        - file: index.md
+          level: 0
+      output: _build/exports/paper.pdf
+      template: .../.engine/templates/typst
+  downloads:
+    - id: typst-pdf
+      title: PDF export
+extends:
+  - .../.engine/paper-base.yml
+  - .../_build/journal/acme/journal/editions/seedling.yml
+  - .../_build/journal/acme/journal/brand/brand.yml
+site:
+  template: book-theme
+  options:
+    logo: .../_build/journal/acme/journal/brand/logo.svg
+    favicon: .../_build/journal/acme/journal/brand/favicon.svg
+```
+
+Lines 23 to 26 are the `extends:` layers; [Processing MyST markdown](#processing-myst) says what each one carries. The rest of the file is the base: the paper's own `myst.yml`, plus the highlighted lines, which oak adds.
 
 Each rule on this page follows from how MyST merges a config with the layers it extends.
 
