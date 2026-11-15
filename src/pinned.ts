@@ -116,7 +116,7 @@ export interface HandoffContext {
  *  the deposit, so they never run from the npm package, which has no git history. */
 const DEPOSIT_VERBS: HandoffVerb[] = ['release'];
 
-/** The first oak whose `oak release` steps never build beside the Zenodo token, and the
+/** The oldest oak version the `oak release` steps are compatible with, and the
  *  `min_engine_version` in templates/paper/.github/actions/engine/pins.yml. The pin is in the
  *  author's `myst.yml`, so {@link DEPOSIT_VERBS} refuse a pin below this one. */
 export const DEPOSIT_MIN_VERSION = 'v0.4.0-dev.6';

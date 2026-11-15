@@ -16,11 +16,11 @@ oak upgrade --repo <owner>/<paper-repo>
 `--to <tag>` picks a release other than the newest, named `vX.Y.Z` or `vX.Y.Z-dev.N`. Without it, a version newer than the newest release is left as it is, and a version that is not a release tag, such as a branch, moves to the newest release. `--files-only` replaces the files and leaves the version. When the release's workflows need a newer engine than the version that pull request would set, `oak` stops before changing anything and names the oldest version they run with.
 
 (pins-local)=
-`oak start`, `oak build`, `oak validate` and the `oak release` subcommands run the version `myst.yml` names, as the paper's CI does. They refuse the versions CI refuses: anything but a release tag.
+`oak start`, `oak build`, `oak validate` and the `oak release` subcommands run the version `myst.yml` names, as the paper's CI does. They refuse any version that is not a release tag.
 
-When the `oak` you installed is another version, it downloads the named version into `~/.cache/oak` the first time, runs it, and says which version runs. The `oak release` subcommands also download it when the installed `oak` is the same version but not a git checkout, such as an npm install. The deposit archives the engine with `git archive`, which needs a checkout.
+When the `oak` you installed is another version, it downloads the named version and runs that[^cached]. The `oak release` subcommands also download it when the installed `oak` is the same version but not a git checkout, such as an npm install, because the deposit archives the engine with `git archive`, which needs a checkout.
 
-`oak release` refuses a version from before the release steps stopped building next to the Zenodo token. The error names the oldest version it accepts. Run `oak upgrade` first.
+[^cached]: The download is kept, so it happens once per version, and `oak` says in its output which version runs.
 
 If `.github/actions/engine/pins.yml` names an engine repository other than oaktree-sapling's own, `oak` asks before downloading from it[^other-repo].
 
