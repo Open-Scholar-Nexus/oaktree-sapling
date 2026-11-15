@@ -35,7 +35,7 @@ extends:
   - .../_build/journal/acme/journal/editions/seedling.yml
   - .../_build/journal/acme/journal/brand/brand.yml
 site:
-  template: book-theme
+  template: https://github.com/jupyter-book/myst-theme/.../book-theme.zip
   options:
     logo: .../_build/journal/acme/journal/brand/logo.svg
     favicon: .../_build/journal/acme/journal/brand/favicon.svg
