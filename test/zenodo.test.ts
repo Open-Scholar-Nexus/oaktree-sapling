@@ -831,6 +831,40 @@ describe('the Project Website link', () => {
   });
 });
 
+/**
+ * A legacy-API Zenodo holding draft 5 of concept 5, whose files are `files` and whose
+ * InvenioRDM view is `rdm`. Records every call and the names deleted and uploaded.
+ */
+function legacyZenodo(files: string[] = [], rdm: Record<string, unknown> = {}) {
+  const uploaded: string[] = [];
+  const deleted: string[] = [];
+  const { transport, calls } = fakeTransport((r) => {
+    const path = new URL(r.url).pathname;
+    if (path === '/api/deposit/depositions/5/files' && r.method === 'GET') {
+      return { json: files.map((filename, i) => ({ id: `f${i}`, filename })) };
+    }
+    if (path.startsWith('/api/deposit/depositions/5/files/') && r.method === 'DELETE') {
+      deleted.push(files[Number(path.split('/f').pop())]!);
+      return { status: 201, json: null };
+    }
+    if (path === '/api/records/5/draft')
+      return { json: { id: '5', versions: { index: 1 }, ...rdm } };
+    if (path === '/api/communities/fixture-community') return { json: { id: 'c0ffee' } };
+    if (path.startsWith('/api/communities/')) return { status: 404, json: {} };
+    if (path.endsWith('/actions/publish')) return { json: dep({ id: 5, submitted: true }) };
+    if (r.method === 'PUT' && path.startsWith('/bucket/')) {
+      uploaded.push(decodeURIComponent(path.split('/').pop()!));
+      return { json: {} };
+    }
+    if (r.method === 'GET' && path === '/api/deposit/depositions') {
+      return { json: [dep({ id: 5, conceptrecid: 5 })] };
+    }
+    if (path === '/api/deposit/depositions/5') return { json: dep({ id: 5, conceptrecid: 5 }) };
+    return { json: {} };
+  });
+  return { api: new ZenodoApi(transport, true, 't'), calls, uploaded, deleted };
+}
+
 describe('cmdUpload', () => {
   it('populates the reserved draft: metadata overwrite + all bundle files uploaded', async () => {
     const mystPath = paperRepo(
@@ -1084,6 +1118,58 @@ describe('cmdUpload', () => {
       published: true,
       record_url: 'https://sandbox.zenodo.org/records/5',
     });
+  });
+
+  /** A built paper ready to upload against concept DOI 10.5072/zenodo.5, built against the
+   *  journal `o/journal` when `journal` is set. */
+  function readyPaper(journal = false): string {
+    const mystPath = paperRepo(
+      BARE_MYST + '  doi: 10.5072/zenodo.5\n  github: https://github.com/o/r\n',
+    );
+    writeFileSync(mystPath.replace('myst.yml', 'paper.pdf'), '%PDF');
+    withBuild(mystPath);
+    if (journal) {
+      const doc = parseDocument('version: 1\n');
+      doc.setIn(['project', 'options', 'oaktree-sapling'], {
+        version: 'v1.0.0',
+        edition: 'e',
+        journal: { repo: 'o/journal', commit: 'a'.repeat(40) },
+      });
+      writeFileSync(mystPath.replace('myst.yml', 'myst.oak.yml'), doc.toString());
+    }
+    return mystPath;
+  }
+  function upload(
+    mystPath: string,
+    api: ZenodoApi,
+    over: { instanceRoot?: string | null; publish?: boolean } = {},
+  ) {
+    return cmdUpload({
+      mystPath,
+      pdf: mystPath.replace('myst.yml', 'paper.pdf'),
+      tag: 'v1.0.0',
+      bundleOut: mystPath.replace('myst.yml', '_bundle'),
+      api,
+      git: { ...fakeGit, originRepo: async () => 'o/journal' },
+      instanceRoot: over.instanceRoot ?? null,
+      engineRoot: mystPath.replace('myst.yml', ''),
+      publish: over.publish,
+    });
+  }
+
+  it('removes every file the draft holds before uploading the bundle ([R28])', async () => {
+    captureStderr();
+    const z = legacyZenodo(['paper.pdf', 'template.zip']);
+    const out = await upload(readyPaper(), z.api);
+    expect(out.exitCode).toBe(0);
+    expect(z.deleted.sort()).toEqual(['paper.pdf', 'template.zip']);
+    expect(z.uploaded).toContain('paper.pdf');
+    expect(z.uploaded).not.toContain('template.zip');
+    const methods = z.calls.map((c) => `${c.method} ${new URL(c.url).pathname}`);
+    const lastDelete = methods.map((m) => m.startsWith('DELETE')).lastIndexOf(true);
+    const firstUpload = methods.findIndex((m) => m.startsWith('PUT /bucket/'));
+    expect(lastDelete).toBeLessThan(firstUpload);
+    expect(methods[lastDelete]).toBe('DELETE /api/deposit/depositions/5/files/f1');
   });
 
   it('errors when the API environment disagrees with the committed DOI prefix', async () => {

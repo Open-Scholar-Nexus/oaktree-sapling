@@ -257,6 +257,16 @@ export class ZenodoApi {
     ).json() as Deposition;
   }
 
+  /** The draft's files, those a new version imports from the one before included. */
+  async listDraftFiles(depId: string | number): Promise<Array<{ id: string; filename: string }>> {
+    const files = (await this.call('GET', `/deposit/depositions/${depId}/files`)).json();
+    return Array.isArray(files) ? files : [];
+  }
+
+  async deleteDraftFile(depId: string | number, fileId: string): Promise<void> {
+    await this.call('DELETE', `/deposit/depositions/${depId}/files/${encodeURIComponent(fileId)}`);
+  }
+
   async uploadFile(bucketUrl: string, name: string, data: Uint8Array): Promise<void> {
     // The bucket PUT takes a bare URL (outside `/api`), so it skips `call`'s path join. The name
     // comes from the author, so it is encoded: a raw `?` would end the path and append to the
@@ -1166,6 +1176,11 @@ async function fillDraft(input: UploadInput, engineZip: string): Promise<Outcome
     engineZip,
   );
 
+  // The bundle is the whole deposit, also on a re-run or a new version that imported files [R28].
+  for (const f of await api.listDraftFiles(dep.id)) {
+    process.stderr.write(`[upload] remove ${f.filename}\n`);
+    await api.deleteDraftFile(dep.id, f.id);
+  }
   for (const p of files) {
     process.stderr.write(`[upload] upload ${basename(p)}\n`);
     await api.uploadFile(bucket, basename(p), readFileSync(p));
