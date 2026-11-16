@@ -14,7 +14,6 @@ import { parseDocument } from 'yaml';
 import {
   ZenodoApi,
   buildMetadata,
-  legacyCreatorName,
   buildBundle,
   paperUrn,
   cmdPrepare,
@@ -216,7 +215,7 @@ describe('buildMetadata', () => {
     expect(related.map((r) => r.identifier)).toContain('https://github.com/o/r');
   });
 
-  it("adds the journal's blurb when journal.yml sets it, and no communities field", () => {
+  it("adds the journal's blurb and the code repository, and no communities field", () => {
     const md = buildMetadata({
       project,
       paperId: project.id,
@@ -226,10 +225,6 @@ describe('buildMetadata', () => {
     expect(md.communities).toBeUndefined();
     expect(JSON.stringify(md)).not.toContain('fixture-community');
     expect(md.description).toContain('Made by the Fixture Journal.');
-  });
-
-  it('sends the GitHub repository as the code repository custom field', () => {
-    const md = buildMetadata({ project, githubUrl: 'https://github.com/o/r', zenodo: {} });
     expect(md.custom).toEqual({ 'code:codeRepository': 'https://github.com/o/r' });
   });
 
@@ -288,6 +283,7 @@ describe('buildMetadata', () => {
           { name: { given: 'Martin Luther', family: 'King', suffix: 'Jr.' } },
           { name: 'Josiah Carberry' },
           { name: 'Plato' },
+          { name: { given: 'Ada', family: 'Lovelace, Countess' } },
         ],
       },
       githubUrl: 'https://github.com/o/r',
@@ -301,14 +297,9 @@ describe('buildMetadata', () => {
       'King Jr., Martin Luther',
       'Carberry, Josiah',
       'Plato',
-    ]);
-  });
-
-  it('joins the name parts with a space when one holds a comma, which Zenodo keeps whole', () => {
-    expect(legacyCreatorName({ given: 'Ada', family: 'Lovelace, Countess' })).toBe(
+      // A part with a comma: Zenodo keeps the whole name as the family name.
       'Ada Lovelace, Countess',
-    );
-    expect(legacyCreatorName({ given: 'A, B', family: 'C' })).toBe('A, B C');
+    ]);
   });
 
   describe("the journal's links", () => {
@@ -345,36 +336,32 @@ describe('buildMetadata', () => {
       expect(related.map((r) => r.identifier)).not.toContain('https://youtu.be/x');
     });
 
-    it('skips a missing option or a value that is not an http(s) address, with a warning', () => {
-      for (const options of [{}, { youtube: 'javascript:alert(1)' }, { youtube: 'not a url' }]) {
+    it('skips a missing option quietly, and a value that is not an http(s) address with a warning', () => {
+      for (const [options, warned] of [
+        [{}, false],
+        [{ youtube: 'javascript:alert(1)' }, true],
+        [{ youtube: 'not a url' }, true],
+      ] as const) {
         const warnings = captureStderr();
         const md = withOptions(options);
         expect(md.description).not.toContain('Seminar recording');
         expect(JSON.stringify(md.related_identifiers)).not.toContain('isSupplementedBy');
-        expect(warnings()).toEqual([expect.stringContaining('project.options.youtube')]);
+        expect(warnings()).toEqual(
+          warned ? [expect.stringContaining('project.options.youtube')] : [],
+        );
       }
     });
   });
 
-  it('escapes the venue, the funding and the repository link', () => {
-    const md = buildMetadata({
-      project: { ...project, venue: { title: 'A <b>venue</b>' }, funding: 'Grant <1>' },
-      githubUrl: 'https://github.com/o/r"x',
-      zenodo: {},
-    });
-    expect(md.description).toContain('<p>Venue: A &lt;b&gt;venue&lt;/b&gt;</p>');
-    expect(md.description).toContain('<p>Funding: Grant &lt;1&gt;</p>');
-    expect(md.description).toContain('href="https://github.com/o/r&quot;x"');
-  });
-
-  it('reads the venue as a string or an object, and skips one with no title', () => {
-    const venueLine = (venue: unknown) =>
-      String(
-        buildMetadata({ project: { ...project, venue }, githubUrl: 'g', zenodo: {} }).description,
-      );
-    expect(venueLine('My Venue')).toContain('<p>Venue: My Venue</p>');
-    expect(venueLine({ title: 'Other', short_title: 'O' })).toContain('<p>Venue: Other</p>');
-    expect(venueLine({ short_title: 'O' })).not.toContain('Venue:');
+  it('reads the venue as a string or an object, skips one with no title, and escapes it', () => {
+    const description = (venue: unknown, githubUrl = 'g') =>
+      String(buildMetadata({ project: { ...project, venue }, githubUrl, zenodo: {} }).description);
+    expect(description('My <b>Venue</b>')).toContain('<p>Venue: My &lt;b&gt;Venue&lt;/b&gt;</p>');
+    expect(description({ title: 'Other', short_title: 'O' })).toContain('<p>Venue: Other</p>');
+    expect(description({ short_title: 'O' })).not.toContain('Venue:');
+    expect(description(undefined, 'https://github.com/o/r"x')).toContain(
+      'href="https://github.com/o/r&quot;x"',
+    );
   });
 
   it('writes funding as its statement, else each award as its sources, id and name', () => {
@@ -383,7 +370,7 @@ describe('buildMetadata', () => {
         ...project,
         affiliations: [{ id: 'nsf', name: 'National Science Foundation' }],
         funding: [
-          { statement: 'Funded by the Fixture Trust.', awards: [{ id: 'ignored' }] },
+          { statement: 'Funded by the <Fixture> Trust.', awards: [{ id: 'ignored' }] },
           {
             awards: [
               { id: 'G-1', name: 'Big grant', sources: ['nsf'], recipients: ['Ada'] },
@@ -397,7 +384,7 @@ describe('buildMetadata', () => {
     });
     const funding = String(md.description).match(/<p>Funding: [^<]*<\/p>/g);
     expect(funding).toEqual([
-      '<p>Funding: Funded by the Fixture Trust.</p>',
+      '<p>Funding: Funded by the &lt;Fixture&gt; Trust.</p>',
       '<p>Funding: National Science Foundation, G-1, Big grant</p>',
       '<p>Funding: Travel award</p>',
     ]);

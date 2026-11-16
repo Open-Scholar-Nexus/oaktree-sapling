@@ -461,7 +461,7 @@ function personName(n: Name = {}): { family: string; given?: string } {
 
 /** A creator `name` for Zenodo's legacy API, which splits a name with exactly one comma into
  *  family and given and keeps any other as the family name. */
-export function legacyCreatorName(n: Name = {}): string {
+function legacyCreatorName(n: Name = {}): string {
   const { family, given } = personName(n);
   if (!given) return family;
   if (family.includes(',') || given.includes(',')) return `${given} ${family}`;
@@ -555,6 +555,7 @@ export function buildMetadata(input: MetadataInput): Record<string, unknown> {
   if (extraDescParas) desc.push(...extraDescParas.map((p) => `<p>${escapeHtml(p)}</p>`));
   for (const link of zenodo.links ?? []) {
     const value = project.options?.[link.option];
+    if (value === undefined || value === null || value === '') continue;
     const url = httpUrl(value);
     if (!url) {
       warn(msg.workflow.zenodoLinkSkipped(link.option, value));

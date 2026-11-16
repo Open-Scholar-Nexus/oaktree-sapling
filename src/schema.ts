@@ -190,35 +190,13 @@ export const PreviewConfig = z
 export type PreviewConfig = z.infer<typeof PreviewConfig>;
 
 /** DataCite relation types, in the camelCase Zenodo's legacy deposit API takes. */
-export const ZENODO_RELATIONS = [
-  'isCitedBy',
-  'cites',
-  'isSupplementTo',
-  'isSupplementedBy',
-  'isContinuedBy',
-  'continues',
-  'isDescribedBy',
-  'describes',
-  'isNewVersionOf',
-  'isPreviousVersionOf',
-  'isPartOf',
-  'hasPart',
-  'isReferencedBy',
-  'references',
-  'isDocumentedBy',
-  'documents',
-  'isCompiledBy',
-  'compiles',
-  'isVariantFormOf',
-  'isOriginalFormOf',
-  'isIdenticalTo',
-  'isReviewedBy',
-  'reviews',
-  'isDerivedFrom',
-  'isSourceOf',
-  'requires',
-  'isRequiredBy',
-] as const;
+export const ZENODO_RELATIONS = (
+  'isCitedBy cites isSupplementTo isSupplementedBy isContinuedBy continues ' +
+  'isDescribedBy describes isNewVersionOf isPreviousVersionOf isPartOf hasPart ' +
+  'isReferencedBy references isDocumentedBy documents isCompiledBy compiles ' +
+  'isVariantFormOf isOriginalFormOf isIdenticalTo isReviewedBy reviews ' +
+  'isDerivedFrom isSourceOf requires isRequiredBy'
+).split(' ') as [string, ...string[]];
 
 /** A link the deposit description gets from a paper's `project.options.<option>` URL. */
 export const ZenodoLink = z.strictObject({

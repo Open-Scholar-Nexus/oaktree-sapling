@@ -71,7 +71,7 @@ project:
     youtube: https://youtu.be/<video>
 ```
 
-gets the line **Seminar recording: Watch on YouTube**. `relation` is optional: it also lists the address among the record's related works, with that relation (the [`zenodo.links` reference](../reference/files.md#file-journal-yml) lists the values). A paper that sets no such option, or a value that is not an `http` or `https` address, gets no line, and the deposit prints a warning. A journal's PDF template can read the same option to show the link in the PDF; oak uses it only for the Zenodo description.
+gets the line **Seminar recording: Watch on YouTube**. `relation` is optional: it also lists the address among the record's related works, with that relation (the [`zenodo.links` reference](../reference/files.md#file-journal-yml) lists the values). A paper that sets no such option gets no line. A value that is not an `http` or `https` address gets no line either, and the deposit prints a warning. A journal's PDF template can read the same option to show the link in the PDF; oak uses it only for the Zenodo description.
 
 (live-previews)=
 ## Live previews

@@ -1195,14 +1195,11 @@ export const workflow = {
   /** `why` is mystmd's own message, which names the author. */
   orcidInvalid: (why: string): string =>
     `${why}. The deposit leaves this ORCID out. Fix it in myst.yml.`,
-  /** A journal.yml `zenodo.links` entry the paper gives no web address for. */
+  /** A journal.yml `zenodo.links` entry whose paper option is not a web address. */
   zenodoLinkSkipped: (option: string, value: unknown): string =>
-    value === undefined
-      ? `myst.yml sets no project.options.${option}, so the deposit description leaves out ` +
-        `that link.`
-      : `project.options.${option} in myst.yml is not an http(s) address ` +
-        `(${JSON.stringify(String(value).slice(0, 80))}), so the deposit description leaves ` +
-        `out that link.`,
+    `project.options.${option} in myst.yml is not an http(s) address ` +
+    `(${JSON.stringify(String(value).slice(0, 80))}), so the deposit description leaves out ` +
+    `that link.`,
   zenodoCommunityMissing: (slug: string): string =>
     `Zenodo has no community "${slug}", which journal.yml names as zenodo.community. Fix the ` +
     `name there; it is the last part of the community's address on Zenodo.`,
