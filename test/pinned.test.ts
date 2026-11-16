@@ -114,7 +114,7 @@ describe('handOff', () => {
     expect(checkout.calls.clones).toEqual([]);
   });
 
-  it("refuses the release subcommands below DEPOSIT_MIN_VERSION, since myst.yml is the author's", async () => {
+  it('refuses the release subcommands below DEPOSIT_MIN_VERSION, and runs other commands at that pin', async () => {
     {
       const { deps, calls } = fakes();
       await expect(handOff(ctx(paper('v0.2.0'), [], {}, 'release'), deps)).rejects.toThrow(

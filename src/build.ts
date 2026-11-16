@@ -1,12 +1,12 @@
 /**
  * `oak build`. The author's `myst.yml` is read, never written [R71]; oak writes the derived
- * config `myst.oak.yml` beside it and builds from that, in two passes [R52] [design §12a]:
+ * config `myst.oak.yml` beside it and builds from that, in two passes [R52]:
  *
  * 1. The author's config with the `extends:` chain, loaded to resolve the whole project.
  * 2. compose's additions (the typst export, the theme) written over it, then the build.
  *
  * `oak validate` shares both passes through `materialize.ts`, so it checks what gets built
- * [R82]. The myst calls are injected (`MystEdge`) so tests can use a fake.
+ * [R82]. The myst calls are injected (`MystEdge`).
  */
 import { existsSync } from 'node:fs';
 import { type ResolvedProject } from './compose.js';
@@ -49,8 +49,7 @@ export async function runBuild(input: RunBuildInput): Promise<RunBuildResult> {
   const { resolvedProject, extendsChain, warnings, typstTemplate } = await materializeDerived(
     input,
     (project, { edition }) => {
-      // The structural checks run before the expensive build [R21]; editorial ones are the pull
-      // request check's job.
+      // oak's checks run before the build, the slow part.
       const oakFindings = runOakChecks({
         paperRoot,
         instanceRoot,
@@ -105,7 +104,7 @@ export interface RunStartInput extends MaterializeInput {
 
 /**
  * `oak start`: composes as `oak build` does and serves the derived config, so a local preview
- * matches the CI build. It skips the structural checks, so a placeholder id does not block
+ * matches the CI build. It runs none of oak's checks, so a placeholder id does not block
  * previewing a draft; `oak validate` and the pull request check do the judging.
  */
 export async function runStart(input: RunStartInput): Promise<MaterializeResult> {

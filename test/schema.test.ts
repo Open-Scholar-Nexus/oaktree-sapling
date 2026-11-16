@@ -55,7 +55,7 @@ describe('OaktreeSaplingOptions', () => {
   });
 });
 
-describe('the edition id cannot carry a path ([R141])', () => {
+describe('the edition id cannot carry a path', () => {
   const opts = (edition: string) => () =>
     OaktreeSaplingOptions.parse({ version: 'v1.0.0', edition });
 
@@ -114,14 +114,14 @@ describe('fixtures parse against the schemas', () => {
   });
 });
 
-describe('JournalConfig additive-only ([R197])', () => {
+describe('JournalConfig additive-only', () => {
   it('ignores an unknown top-level key instead of rejecting', () => {
     const j = JournalConfig.parse({ name: 'X', future_field: 42 });
     expect(j.name).toBe('X');
   });
 });
 
-describe('checkIdShape (check A: catches the placeholder id a paper shipped [R12])', () => {
+describe('checkIdShape: catches the placeholder id a paper shipped', () => {
   const policy = {
     id_sentinel: 'fixture-template-placeholder',
     id_pattern: '^fixture-\\d{4}-[a-z0-9-]+$',
@@ -142,7 +142,7 @@ describe('checkIdShape (check A: catches the placeholder id a paper shipped [R12
     expect(checkIdShape('fixture-2026-sample-paper', policy).ok).toBe(true);
   });
 
-  it("rejects oak's own placeholder with an empty policy [R119]", () => {
+  it("rejects oak's own placeholder with an empty policy", () => {
     // A journal without id_sentinel and id_pattern still has oak's placeholder rejected.
     expect(checkIdShape(ENGINE_ID_SENTINEL, {}).ok).toBe(false);
     expect(checkIdShape(ENGINE_ID_SENTINEL, policy).ok).toBe(false);
@@ -155,7 +155,7 @@ describe('checkIdShape (check A: catches the placeholder id a paper shipped [R12
   });
 });
 
-describe('checkIdUniqueness (check B, needs the registry)', () => {
+describe('checkIdUniqueness, which needs the registry', () => {
   const registry = Registry.parse(read('./fixture-instance/registry/papers.yml'));
 
   it('flags a duplicate id owned by another paper', () => {
@@ -213,7 +213,7 @@ describe('checkIdUniqueness (check B, needs the registry)', () => {
   });
 });
 
-describe('checkOwnEntryId (check C: the registry holds the id the paper has)', () => {
+describe('checkOwnEntryId: the registry holds the id the paper has', () => {
   it('passes when every own entry has the paper id, or there is none', () => {
     expect(checkOwnEntryId('a', [{ id: 'a', location: 'o/a' }]).ok).toBe(true);
     expect(checkOwnEntryId('a', []).ok).toBe(true);

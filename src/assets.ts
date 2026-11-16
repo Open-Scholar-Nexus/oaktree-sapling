@@ -1,10 +1,10 @@
 /**
  * Assets matched to the oak version. compose adds them, so papers and journals never carry them
- * [design §6] [design §7].
+ * [design §6].
  */
 import { join } from 'node:path';
 
-/** The myst-theme release this oak version uses, pinned */
+/** The myst-theme release this oak version uses, pinned. */
 export const THEME_REPO = 'jupyter-book/myst-theme';
 export const THEME_VERSION = 'myst-to-react@1.4.1';
 

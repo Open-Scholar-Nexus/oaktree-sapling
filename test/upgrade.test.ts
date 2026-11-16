@@ -1,8 +1,10 @@
 /**
- * `oak upgrade`, with fakes for gh and git: computeDrift resets to the template (no change, a
- * changed template, a file edited in the repo); a run sets the version and overwrites the
- * engine-managed files that differ; --files-only leaves the version; an up-to-date repo gets no
- * pull request; and the pull request's branch and paths.
+ * `oak upgrade`, with fakes for gh and git: computeDrift lists the engine-managed files that
+ * differ from the template (a changed template, a file edited in the repo, code owners the
+ * journal added) and the files the template no longer ships; a run sets the version and
+ * overwrites the files that differ; --files-only leaves the version; an up-to-date repo gets no
+ * pull request; picking the newest release; and the minimum engine version the workflows
+ * declare.
  */
 import { describe, it, expect } from 'vitest';
 import {
@@ -71,14 +73,14 @@ describe('computeDrift', () => {
     ]);
   });
 
-  it('keeps a second code owner the journal added [R126]', () => {
+  it('keeps a second code owner the journal added', () => {
     const repo = makeRepo();
     const co = join(repo, 'CODEOWNERS');
     writeFileSync(co, readFileSync(co, 'utf8').replace(/@alice/g, '@org/editors @alice'));
     expect(computeDrift(repo, TEMPLATE_ROOT, readAnswers(repo))).toEqual([]);
   });
 
-  it('keeps different owners on different paths [R126]', () => {
+  it('keeps different owners on different paths', () => {
     // With one owner everywhere, keying owners by path would not show. An owner added to one
     // gated path stays on that path, and is not copied onto the others or onto CODEOWNERS.
     const repo = makeRepo();
@@ -96,7 +98,7 @@ describe('computeDrift', () => {
     expect(after).toMatch(/\/CODEOWNERS\s+@alice$/m);
   });
 
-  it('uses the whole owner column for a path the repo lacks [R126]', () => {
+  it('uses the whole owner column for a path the repo lacks', () => {
     // Repos seeded before /paper-environment.yml was gated have no line for it, so the
     // template's line gets the owner read from the repo.
     const repo = makeRepo();
@@ -115,7 +117,7 @@ describe('computeDrift', () => {
     expect(rendered).toMatch(/paper-environment\.yml\s+@org\/editors @alice$/m);
   });
 
-  it('a reset of another file keeps a second code owner [R126]', async () => {
+  it('a reset of another file keeps a second code owner', async () => {
     const repo = makeRepo();
     const co = join(repo, 'CODEOWNERS');
     writeFileSync(co, readFileSync(co, 'utf8').replace(/@alice/g, '@org/editors @alice'));
@@ -166,7 +168,7 @@ function deps(pr: UpgradePr, target: string, materialize: () => string): Upgrade
  * cmdUpgrade
  * ------------------------------------------------------------------------ */
 
-describe('an engine-managed file the target no longer ships [R143]', () => {
+describe('an engine-managed file the target no longer ships', () => {
   const withRetired = () => {
     const repo = makeRepo();
     writeFileSync(join(repo, '.github/workflows/retired.yml'), 'on: push\njobs: {}\n');

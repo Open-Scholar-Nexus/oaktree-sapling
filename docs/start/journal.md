@@ -38,7 +38,7 @@ Every paper build reads [`journal.yml`](../guide/journal-yml.md). Before the fir
 `checks`
 : The editorial checks a paper has to pass. See [editorial checks](../guide/checks.md).
 
-Then replace `brand/logo.svg` and rewrite `pages/index.md`. `brand/brand.yml` already has `logo_url` set to the website, so the logo on every paper's page links back to the journal. See [branding](../guide/branding.md).
+Then replace `brand/logo.svg` and rewrite `pages/index.md`. In `brand/brand.yml`, the `logo` and `favicon` lines under `site.options` start commented out. Remove the `#` from both to show the logo in the header and the icon in the browser tab. Until `favicon` is set, every paper's Journal checks show a warning. `brand/brand.yml` already has `logo_url` set to the website, so the logo on every paper's page links back to the journal. See [branding](../guide/branding.md).
 
 (push-your-edits)=
 ## 3. Commit and push

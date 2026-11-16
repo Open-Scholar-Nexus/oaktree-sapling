@@ -2,7 +2,7 @@
  * A journal's own check files [R208], run by `runChecks` without the bundle: the `paper` is built
  * by hand, and only check files are listed, so the Curvenote catalog (and myst-cli) is never
  * imported. Each file under `test/journal-checks/` does one thing a real check file might get
- * wrong. The two worked examples run through the bundle in `test/validate.integration.test.ts`.
+ * wrong. The worked examples run through the bundle in `test/validate.integration.test.ts`.
  */
 import { describe, it, expect } from 'vitest';
 import { fileURLToPath } from 'node:url';

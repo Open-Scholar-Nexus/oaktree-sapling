@@ -2,11 +2,10 @@
 
 +++ {"part": "abstract"}
 
-This fixture exists so engine CI can build a paper end-to-end before any tag is cut.
-A broken engine tag breaks every tenant; this paper is the canary [@fixture2026].
+This paper is built by the engine's tests before each release, so a release that cannot build a paper is never published [@fixture2026].
 
 +++
 
 ## Introduction
 
-One trivial section so the build has content to render to HTML and typst PDF.
+One short section, so the build has content to render to HTML and PDF.

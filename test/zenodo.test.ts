@@ -1,8 +1,8 @@
 /**
  * The deposit logic, with a fake transport (no network) and a fake git context (no git or gh):
- * pagination past 100 [R20] [R35], finding a deposit by the paper's id first [R7], the
- * journal's metadata from journal.yml [R19], the `deposit/` folder and its reserved names
- * [R28], and prepare and upload, including moving from sandbox to production [R29].
+ * pagination past 100, finding a deposit by the paper's id first, the journal's metadata from
+ * journal.yml, the `deposit/` folder and its reserved names [R28], and prepare and upload,
+ * including moving from sandbox to production.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { mkdtempSync, writeFileSync, mkdirSync, readFileSync } from 'node:fs';
@@ -98,7 +98,7 @@ const dep = (over: Partial<Deposition> = {}): Deposition => ({
 });
 
 /* --------------------------------------------------------------------------
- * Pagination: [R20]/[R35.1]
+ * Pagination
  * ------------------------------------------------------------------------ */
 
 describe('listMyDepositions pagination', () => {
@@ -119,7 +119,7 @@ describe('listMyDepositions pagination', () => {
 });
 
 /* --------------------------------------------------------------------------
- * Finding a deposit: by id first, then by the GitHub repo [R7]
+ * Finding a deposit: by id first, then by the GitHub repo
  * ------------------------------------------------------------------------ */
 
 describe('findDeposit', () => {
@@ -173,7 +173,7 @@ describe('findDeposit', () => {
 });
 
 /* --------------------------------------------------------------------------
- * Metadata: the journal's text from journal.yml [R19], and the id [R7]
+ * Metadata: the journal's text from journal.yml, and the id
  * ------------------------------------------------------------------------ */
 
 describe('buildMetadata', () => {
@@ -430,7 +430,7 @@ describe('readStampedTemplate / resolveTemplateDir ([R76])', () => {
       expect(resolveTemplateDir(dir, paper)).toBe(dir);
     });
 
-    it('is not shadowed by a same-named directory carrying no template.yml ([R107])', () => {
+    it('is not shadowed by a same-named directory carrying no template.yml', () => {
       // myst fetches `lapreprint-typst` from its registry when the local path is not a
       // template, so the local files are not what rendered the PDF.
       const root = mkdtempSync(join(tmpdir(), 'oak-shadow-'));
@@ -510,7 +510,7 @@ describe('readStampedTemplate / resolveTemplateDir ([R76])', () => {
 });
 
 /* --------------------------------------------------------------------------
- * prepare and publish: the result, the myst.yml write, and sandbox to production [R29]
+ * prepare and publish: the result, the myst.yml write, and sandbox to production
  * ------------------------------------------------------------------------ */
 
 function paperRepo(mystBody: string): string {
@@ -541,7 +541,7 @@ const BARE_MYST = `project:
 `;
 
 describe('cmdPrepare', () => {
-  it('creates a draft and stamps doi/github/date into the working-tree myst.yml ([R22])', async () => {
+  it('creates a draft and stamps doi/github/date into the working-tree myst.yml', async () => {
     const mystPath = paperRepo(BARE_MYST);
     const { transport, calls } = fakeTransport(({ method }) => {
       if (method === 'POST') return { json: dep({ id: 5, conceptrecid: 5 }) };
@@ -566,7 +566,7 @@ describe('cmdPrepare', () => {
     );
   });
 
-  it('refuses a same-env re-prepare but allows replacing sandbox with production ([R29])', async () => {
+  it('refuses a same-env re-prepare but allows replacing sandbox with production', async () => {
     const withSandboxDoi = paperRepo(BARE_MYST + '  doi: 10.5072/zenodo.5\n');
     const noop = new ZenodoApi(fakeTransport(() => ({ json: [] })).transport, true, 't');
 
@@ -595,7 +595,7 @@ describe('cmdPrepare', () => {
     expect(up.result.concept_doi).toBe('10.5281/zenodo.8');
   });
 
-  it('forbids replacing production with sandbox ([R29])', async () => {
+  it('forbids replacing production with sandbox', async () => {
     const prodDoi = paperRepo(BARE_MYST + '  doi: 10.5281/zenodo.5\n');
     const noop = new ZenodoApi(fakeTransport(() => ({ json: [] })).transport, true, 't');
     const out = await cmdPrepare({
@@ -1007,8 +1007,8 @@ const PROVENANCE = {
   typst_version: '0.14.2',
 };
 
-describe('deposit integrity ([R107])', () => {
-  it('sends the whole metadata object to the draft at publish ([R22])', async () => {
+describe('deposit integrity', () => {
+  it('sends the whole metadata object to the draft at publish', async () => {
     const mystPath = paperRepo(
       BARE_MYST + '  doi: 10.5072/zenodo.5\n  github: https://github.com/o/r\n',
     );
@@ -1128,12 +1128,12 @@ describe('deposit integrity ([R107])', () => {
   });
 });
 
-describe('finding the deposit, and the checks before it [R100] [R101]', () => {
+describe('finding the deposit, and the checks before it', () => {
   const id = 'foo-bar';
   const gh = 'https://github.com/o/r';
 
   it('scans when a targeted query returns rows that do not match', async () => {
-    // A phrase match returns a longer urn for a query about a shorter one ([R100]).
+    // A phrase match returns a longer urn for a query about a shorter one.
     const nearMiss = dep({
       id: 1,
       metadata: { related_identifiers: [{ identifier: paperUrn('foo-bar-baz') }] },
@@ -1146,7 +1146,7 @@ describe('finding the deposit, and the checks before it [R100] [R101]', () => {
         unfiltered++;
         return { json: [nearMiss, real] };
       }
-      // The URN query phrase-matches the near miss; the GitHub query misses (a renamed repo [R7]).
+      // The URN query phrase-matches the near miss; the GitHub query misses (a renamed repo).
       return { json: String(q).includes(id) ? [nearMiss] : [] };
     });
     const api = new ZenodoApi(transport, true, 't');

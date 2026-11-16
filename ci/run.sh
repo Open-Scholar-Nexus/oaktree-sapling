@@ -7,8 +7,8 @@ here="$(cd "$(dirname "$0")" && pwd)"
 engine="$(cd "$here/.." && pwd)"
 verb="${1:-}"
 
-# Only a release tag carries the build, so a missing one means a branch or an unknown ref is
-# pinned [R57]. Nothing else rejects a branch pin.
+# Only a release tag carries the build [R57]. The engine action's `ref` step refuses a branch
+# pin, but a tag made by hand passes it and has no build.
 if [ ! -f "$engine/dist/cli.cjs" ]; then
   echo "::error::this oak version has no build (dist/cli.cjs); pin a release tag, not a branch"
   exit 1

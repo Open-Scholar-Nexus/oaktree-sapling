@@ -1,8 +1,9 @@
 /**
  * `oak bootstrap paper` and `oak bootstrap journal`: sets up a paper repo (new, or from an
  * author's repo with `--from`) or a journal repo from the templates. Every step reads
- * the current state first, so a rerun repairs a partial bootstrap. Content only arrives through a
- * pull request, and a missing secret is listed in the closing runbook; oak does not set it.
+ * the current state first, so a rerun repairs a partial bootstrap. The starter files are pushed
+ * to main, and an author's `--from` content arrives through a pull request. oak sets the secrets
+ * it is given; a missing one is listed in the closing runbook.
  */
 import * as msg from './messages.js';
 import { firstLine } from './messages.js';
@@ -61,7 +62,7 @@ const RENDER_SITE_PKG = 'package.json';
  *  disjoint paths. */
 const EXCLUDE_FROM_STAMP = new Set(['README.md']);
 
-/** The three template directories in oak's checkout, named so tests can resolve them. */
+/** The template directories in oak's checkout, named so tests can resolve them. */
 export function paperTemplateRoot(engineRoot: string): string {
   return join(engineRoot, 'templates', 'paper');
 }
@@ -75,14 +76,14 @@ export function siteTemplateRoot(engineRoot: string): string {
 /**
  * Extracts the `myst-cli` range from oak's `package.json`. The journal site uses it as its
  * `mystmd` version [R80], so the gallery plugin and theme behave as in oak's builds. A range is
- * enough, since the Zenodo deposit, not the site, is what must be reproducible [design §7].
+ * enough, since the Zenodo deposit, not the site, is what must be reproducible [R66].
  */
 export function engineMystRange(engineRoot: string): string {
   const pkg = JSON.parse(readFileSync(join(engineRoot, 'package.json'), 'utf8')) as {
     dependencies?: Record<string, string>;
     devDependencies?: Record<string, string>;
   };
-  // myst-cli is a dev dependency, since it is bundled into `dist/cli.cjs` [R51]; npm keeps
+  // myst-cli is a dev dependency, since it is bundled into `dist/cli.cjs`; npm keeps
   // `devDependencies` in the published package.json, so the range is readable either way.
   // `dependencies` is read too, for a fork that declares it there.
   const range = pkg.dependencies?.['myst-cli'] ?? pkg.devDependencies?.['myst-cli'];
@@ -154,7 +155,7 @@ function gatedLine(line: string): RegExpExecArray | null {
 
 /**
  * The owner column of each gated line, by path. A column may hold several owners, and `oak
- * upgrade` passes this back to {@link renderCodeowners} so an added owner survives [R126].
+ * upgrade` passes this back to {@link renderCodeowners} so an added owner survives.
  */
 export function codeownersColumns(src: string): Record<string, string> {
   const out: Record<string, string> = {};
@@ -166,8 +167,7 @@ export function codeownersColumns(src: string): Record<string, string> {
 }
 
 /** CODEOWNERS with each gated line's owner column set from `existing` for that path, or to
- *  `owner`. Edited line by line, keeping path and spacing; a column may hold several owners
- *  [R126]. */
+ *  `owner`. Edited line by line, keeping path and spacing; a column may hold several owners. */
 export function renderCodeowners(
   src: string,
   owner: string,
@@ -286,9 +286,9 @@ export function galleryPluginUrl(engineRepo: string, engineVersion: string): str
  * registry also deploys the site.
  *
  * Written once: the journal owns every byte, `oak upgrade` never touches it and oak never reads
- * it back. Four values are rendered and the rest is copied: the gallery plugin URL, `site.template`
- * (from `themeZipUrl()`), the journal name (myst.yml `project.title` and the `pages/index.md`
- * heading), and the `myst-cli` range in `package.json`, beside `js-yaml`.
+ * it back. Rendered: the gallery plugin URL, `site.template` (from {@link themeZipUrl}), the
+ * journal name (myst.yml `project.title` and the `pages/index.md` heading), and the `myst-cli`
+ * range in `package.json`, beside `js-yaml`. The rest is copied.
  */
 export function renderSiteTemplate(
   siteRoot: string,
@@ -347,7 +347,7 @@ export interface Provisioner {
   repoExists(repo: string): boolean;
   createRepo(repo: string, opts: { private: boolean; description: string }): void;
   branchExists(repo: string, branch: string): boolean;
-  /** The repo's default branch: an existing repo may not use `main` [R127]. */
+  /** The repo's default branch: an existing repo may not use `main`. */
   defaultBranch(repo: string): string;
   setDefaultBranch(repo: string, branch: string): void;
   /** Seeds `branch` of `repo` with one commit from a prepared directory, and pushes. */
@@ -374,12 +374,12 @@ export interface Provisioner {
   /** The repo's "About" website; '' when none. */
   homepage(repo: string): string;
   setHomepage(repo: string, url: string): void;
-  /** Whether Actions may create and approve pull requests on `repo` ([R122]). */
+  /** Whether Actions may create and approve pull requests on `repo`. */
   actionsCanApprovePrs(repo: string): boolean;
-  /** Lets Actions create and approve pull requests, keeping the default token permission [R122]. */
+  /** Lets Actions create and approve pull requests, keeping the default token permission. */
   allowActionsApprovePrs(repo: string): void;
   environmentExists(repo: string, name: string): boolean;
-  /** `name`'s required reviewers, so a rerun keeps one added by hand [R127]. */
+  /** `name`'s required reviewers, so a rerun keeps one added by hand. */
   environmentReviewers(repo: string, name: string): EnvironmentReviewer[];
   upsertEnvironment(repo: string, name: string, reviewers: EnvironmentReviewer[]): void;
   /** Whether `env` admits only the refs its deployment policies name; GitHub creates environments
@@ -425,7 +425,7 @@ function protectMainBody(requireChecks: boolean, bypass: unknown[]): unknown {
   ];
   // The Journal checks must pass before a merge: this is what enforces the paper id, which does
   // not block the build. On by default; `--no-require-checks` turns it off. The bypass below
-  // applies to this rule too, since a bypass is per ruleset [R127].
+  // applies to this rule too, since a bypass is per ruleset.
   if (requireChecks) {
     rules.push({
       type: 'required_status_checks',
@@ -445,9 +445,9 @@ function protectMainBody(requireChecks: boolean, bypass: unknown[]): unknown {
   };
 }
 
-/** Who may merge a pull request the rules would block: nobody on an org, the repo
- *  admin on a personal account, where the sole editor cannot approve as code owner. `pull_request`
- *  mode, so pushing directly to main stays refused [R127]. */
+/** Who may merge a pull request the rules would block: nobody on an org; on a personal account
+ *  the repo admin, since the sole editor cannot approve their own pull request as code owner. The
+ *  bypass is `pull_request` mode, so a direct push to main stays refused. */
 function protectMainBypass(team: string | null): unknown[] {
   return team
     ? []
@@ -530,7 +530,7 @@ export interface BootstrapDeps {
  */
 export interface ResolvedFlags {
   engineVersionFrom?: 'flag' | 'running-oak';
-  /** The running oak's version (`oak --version`), whose templates this run stamps. */
+  /** The running oak's version (`oak --version`), whose templates this run writes. */
   runningVersion?: string;
   /** A stable release newer than the running oak, when the lookup found one. */
   newerRelease?: string;
@@ -645,13 +645,13 @@ function resolveOwner(
   return { ownerToken, team, ownerType };
 }
 
-/** What a partial run leaves behind [R125]. */
+/** A step that failed and why, listed in a partial run's result. */
 export interface StepFailure {
   step: string;
   why: string;
 }
 
-/** Runs one step and records an error [R125]; returns false when it failed. */
+/** Runs one step and records an error; returns false when it failed. */
 function stepRunner(
   repo: string,
   actions: Record<string, string>,
@@ -674,7 +674,7 @@ function stepRunner(
   };
 }
 
-/** Returns early from a fatal step with a partial result [R125]. */
+/** Returns early from a fatal step with a partial result. */
 function partial(
   repo: string,
   extra: Record<string, unknown>,
@@ -732,8 +732,7 @@ function pagesSteps(
   });
 }
 
-/** Sets up the repo's settings. Returns the runbook lines and the steps that failed
- *  [R125]. */
+/** Sets up the repo's settings. Returns the runbook lines and the steps that failed. */
 function applyProvisioning(
   repo: string,
   owner: { ownerToken: string; team: string | null; ownerType: 'Organization' | 'User' },
@@ -756,7 +755,7 @@ function applyProvisioning(
   }
 
   // An existing repo may default to another branch: `seedBranch` writes `main` and leaves
-  // `default_branch` alone, so protect-main would guard a branch nothing merges to [R127]. Runs
+  // `default_branch` alone, so protect-main would guard a branch nothing merges to. Runs
   // before the ruleset that depends on it.
   step('default_branch', () => {
     const current = prov.defaultBranch(repo);
@@ -797,7 +796,7 @@ function applyProvisioning(
   pagesSteps(repo, prov, step, actions, log);
 
   // Actions can open a pull request only when the repo allows it, and the DOI write is a
-  // pull request opened by an Action, so every first deposit needs this [R122].
+  // pull request opened by an Action, so every first deposit needs this.
   step('actions_pull_requests', () => {
     if (prov.actionsCanApprovePrs(repo)) {
       actions.actions_pull_requests = 'already allowed';
@@ -809,14 +808,15 @@ function applyProvisioning(
     }
   });
 
-  // GitHub creates a named environment open to every branch; the PUT keeps reviewers [R127].
+  // Limits `env` to its branch policies: GitHub creates an environment open to every branch, and
+  // the update sends back its current reviewers so none is lost.
   const restrict = (env: string) => {
     if (!prov.environmentExists(repo, env)) prov.upsertEnvironment(repo, env, []);
     else if (!prov.customBranchPolicies(repo, env))
       prov.upsertEnvironment(repo, env, prov.environmentReviewers(repo, env));
   };
 
-  // No required reviewer [R123]: only editors push `v*` tags, the environment admits only them,
+  // No required reviewer: only editors push `v*` tags, the environment admits only them,
   // and the Zenodo draft waits for an editor's Publish click.
   step('zenodo_env', () => {
     restrict(ZENODO_ENV);
@@ -876,7 +876,7 @@ function applySecrets(
     if (!value) continue;
     let all = true;
     for (const env of envs) {
-      // Per secret and environment, so one refusal does not stop the rest [R125].
+      // Per secret and environment, so one refusal does not stop the rest.
       const ok = step(`secret_${env}_${name}`, () => {
         prov.setSecret(repo, env, name, value);
         deps.log(msg.bootstrap.logSecretSet(name, env));
@@ -980,7 +980,7 @@ export async function cmdBootstrapPaper(
     }),
     '',
     repoThere ? msg.bootstrap.planRepoExists : msg.bootstrap.planCreateRepo(input.private),
-    // The last point to say so before content exists [R127].
+    // Warned in the plan: on a free plan the ruleset steps 403 after the content exists.
     ...(input.private ? [msg.bootstrap.planPrivate] : []),
     mainThere ? msg.bootstrap.planMainSeeded : msg.bootstrap.planSeedPaper,
     // A rerun does not seed again, so rerunning with a different answer (`--instance`,
@@ -1017,7 +1017,7 @@ export async function cmdBootstrapPaper(
   const contentFailed: StepFailure[] = [];
   const step = stepRunner(repo, actions, contentRunbook, contentFailed, log);
 
-  // Content steps depend on each other; settings steps do not [R125].
+  // Content steps depend on each other; settings steps do not.
   if (!repoThere) {
     const created = step('repo', () => {
       prov.createRepo(repo, {
@@ -1027,18 +1027,17 @@ export async function cmdBootstrapPaper(
       actions.repo = 'created';
       log(msg.bootstrap.logCreated(repo));
     });
-    // Fatal: nothing else can act on a repo that does not exist [R125].
+    // Fatal: nothing else can act on a repo that does not exist.
     if (!created) return partial(repo, { mode }, actions, contentRunbook, contentFailed, log);
   } else actions.repo = 'exists';
 
-  // Render the paper seed once; it is used to seed main.
   const seedDir = deps.workdir();
   renderPaperTemplate(deps.paperTemplateRoot, seedDir, answers);
 
   let mainSeeded = mainThere;
   if (!mainThere) {
     mainSeeded = step('main', () => {
-      prov.seedBranch(repo, 'main', seedDir, 'startpoint');
+      prov.seedBranch(repo, 'main', seedDir, msg.bootstrap.seedCommitMessage);
       actions.main = 'seeded';
       log(msg.bootstrap.logSeeded);
     });
@@ -1119,9 +1118,9 @@ export interface BootstrapJournalInput {
   owner?: string;
   authedUser: string;
   requireChecks: boolean; // add "Journal checks" to protect-main required checks (default true)
-  /** External journal only: also write the journal website and turn on Pages. Default true; `--no-site`
-   *  gives a settings repo with no website [design §2]. `site: false` with `--co-located`
-   *  is a usage error: a co-located journal has no site. */
+  /** External journal only: also write the journal website and turn on Pages. Default true;
+   *  `--no-site` gives a settings repo with no website. `site: false` with `--co-located` is a
+   *  usage error: a co-located journal has no site. */
   site?: boolean;
   secrets: SecretInputs;
   /** Where the defaulted values came from, for the plan. */
@@ -1221,12 +1220,12 @@ export async function cmdBootstrapJournal(
       actions.repo = 'created (public)';
       log(msg.bootstrap.logCreatedPublic(repo));
     });
-    // Fatal: nothing else can act on a repo that does not exist [R125].
+    // Fatal: nothing else can act on a repo that does not exist.
     if (!created)
       return partial(repo, { tier: input.tier }, actions, contentRunbook, contentFailed, log);
   } else {
     actions.repo = 'exists';
-    // Journal repos must be public [R32] [R189]; checked on a rerun too.
+    // Journal repos must be public: paper builds clone them with no token. Checked on a rerun too.
     step('visibility', () => {
       if (prov.repoVisibility(repo) === 'private') {
         prov.setRepoPublic(repo);
@@ -1250,7 +1249,7 @@ export async function cmdBootstrapJournal(
 
   if (!mainThere) {
     step('main', () => {
-      prov.seedBranch(repo, 'main', seedDir, 'startpoint');
+      prov.seedBranch(repo, 'main', seedDir, msg.bootstrap.seedCommitMessage);
       actions.main = 'seeded';
       log(msg.bootstrap.logSeeded);
     });
@@ -1280,7 +1279,7 @@ export async function cmdBootstrapJournal(
 
   // --- external -------------------------------------------------------------------
   // The journal repo gets no rulesets or branch protection: only editors can write to it, and
-  // protecting it is the journal's call. The start/journal docs say so.
+  // protecting it is the journal's call (DOCS.journalStart).
   const runbook: string[] = [msg.bootstrap.runbookStartHere];
   if (!withSite) {
     const allRunbook = [...contentRunbook, ...runbook];
@@ -1302,7 +1301,6 @@ export async function cmdBootstrapJournal(
     };
   }
 
-  // Pages, through the same read-first calls the paper path uses.
   pagesSteps(repo, prov, step, actions, log);
 
   const siteUrl = pagesUrl(repo);

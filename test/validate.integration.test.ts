@@ -1,8 +1,7 @@
 /**
  * The editorial checks from `@curvenote/check-implementations` over the fixture paper,
- * through the bundled CLI. Like integration.test.ts, it runs `node dist/cli.cjs`: the checks
- * read myst's processed project, and myst-cli crashes unbundled on Node 24 [R51]. So this runs
- * what CI runs. Skipped without the bundle.
+ * through the bundled CLI (`node dist/cli.cjs`), since the checks read myst's processed
+ * project. Skipped without the bundle.
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { spawnSync } from 'node:child_process';
@@ -203,14 +202,14 @@ describe.skipIf(bundleState() === 'absent')(
 describe.skipIf(bundleState() === 'absent')('the COMPOSED view reaches the checks ([R82])', () => {
   beforeAll(assertBundleNotStale);
 
-  it('the thumbnail check reports a missing thumbnail [R81]', () => {
+  it('the thumbnail check reports a missing thumbnail', () => {
     // `paper-base.yml` sets `project.thumbnail`, which exists only after `extends`, so only a
     // composed run sees it [R82]. The fixture paper has no `thumbnails/`, so the run says so.
     const { out } = runValidate(fixturePaper);
     const thumb = out.warnings.find((w: any) => w.check === 'thumbnail');
     expect(thumb).toBeDefined();
     expect(thumb.message).toMatch(/thumbnails\/thumbnail\.png/);
-    // A warning, not an error: it does not block a paper that is otherwise fine [R81].
+    // A warning, not an error: it does not block a paper that is otherwise fine.
     expect(out.status).toBe('ok');
   }, 60_000);
 
@@ -235,7 +234,7 @@ describe.skipIf(bundleState() === 'absent')('the COMPOSED view reaches the check
   }, 60_000);
 });
 
-// Finding the journal repo [R38]. With `instance_repo: .` the action passes no `--instance`, so
+// Finding the journal repo. With `instance_repo: .` the action passes no `--instance`, so
 // validate looks for a journal.yml beside the paper; with none, it still writes a report.
 describe.skipIf(bundleState() === 'absent')(
   'oak validate, finding the journal repo and reporting a crash',
@@ -276,7 +275,7 @@ describe.skipIf(bundleState() === 'absent')(
       expect(r.stderr).toContain('--no-instance');
     }, 60_000);
 
-    it('uses a journal.yml beside the paper as the journal repo [R38]', () => {
+    it('uses a journal.yml beside the paper as the journal repo', () => {
       // What `instance_repo: .` means: the journal.yml sits beside the paper.
       const dir = mkdtempSync(join(tmpdir(), 'oak-val-colo-'));
       for (const f of ['bib.bib', 'index.md', 'myst.yml'])
@@ -312,14 +311,14 @@ describe.skipIf(bundleState() === 'absent')(
   },
 );
 
-// The journal's check files [R208]: the two examples in `test/journal-checks/`, listed beside the
+// The journal's check files [R208]: the examples in `test/journal-checks/`, listed beside the
 // catalog checks in a copy of the fixture journal.
 describe.skipIf(bundleState() === 'absent')("oak validate, the journal's check files", () => {
   beforeAll(assertBundleNotStale);
 
   const checkFiles = ['./checks/pseudo-headings.mjs', './checks/duplicate-abstract.mjs'];
 
-  /** A copy of the fixture journal that also lists the two check files. */
+  /** A copy of the fixture journal that also lists the example check files. */
   function journalWithCheckFiles(optional: boolean): string {
     const dir = mkdtempSync(join(tmpdir(), 'oak-val-checkfiles-'));
     cpSync(fixtureInstance, dir, { recursive: true });

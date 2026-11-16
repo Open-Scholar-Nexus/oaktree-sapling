@@ -7,9 +7,6 @@
  * `extends:` load in parallel, so their order is unpredictable. compose's additions therefore go
  * into the base as `ownOverride`, and its typst export is complete: the edition's `articles`
  * plus oak's `template:`.
- *
- * The CLI runs it in two passes: write the chain and resolve the project, then write
- * `ownOverride` over it and build. Neither write is committed.
  */
 import * as msg from './messages.js';
 import { isAbsolute, join } from 'node:path';
@@ -39,7 +36,7 @@ export const BRAND_ASSET_KEYS = {
 
 /** A value myst resolves on its own: an absolute path or a URL. Only paths relative to the
  *  journal repo need rewriting. A URL works for HTML but not for typst, which cannot
- *  fetch; `oak validate` is the place to check that. */
+ *  fetch; `oak validate` reports that. */
 export function isBrandAssetUrl(value: string): boolean {
   return /^[a-zA-Z][\w+.-]*:\/\//.test(value); // matches scheme://…
 }
@@ -92,7 +89,7 @@ function absolutizeBrandAssets(
   return out;
 }
 
-/** The fields compose reads from the project myst resolved, by myst's own names [R185]. */
+/** The fields compose reads from the project myst resolved, by myst's own names. */
 export interface ResolvedProject {
   id?: string;
   title?: string;
@@ -116,7 +113,7 @@ export interface ComposeInput {
   engineVersion: string;
   /** The paper's edition, read before the merge; selects `editions/<edition>.yml`. */
   edition: string;
-  /** `/<repo>` in CI for GitHub Pages; empty locally and for previews [design §12a]. */
+  /** `/<repo>` in CI for GitHub Pages; empty locally and for previews. */
   baseUrl: string;
   /** Overrides for the PDF template and the site theme, from the CLI flags. */
   assetOverrides?: {
@@ -125,7 +122,7 @@ export interface ComposeInput {
     /** string → use it; null → omit site.template (myst default); undefined → release zip. */
     siteTemplate?: string | null;
   };
-  /** The journal's `typst_template:`, read as written from `journal.yml` [R68]. It cannot be an
+  /** The journal's `typst_template:`, read as written from `journal.yml` [R76]. It cannot be an
    *  `exports[].template` in an `extends:` layer: a second layer declaring `exports:` makes the
    *  merge unpredictable [R72], so paper-base stays the only one. A name, path or URL; a `./`
    *  path is made absolute ({@link resolveJournalTemplate}). */
@@ -143,7 +140,7 @@ export interface ComposeInput {
 
 export interface OwnOverride {
   /** Merged into the base `project`. `options` carries the PDF watermark (`logo`) and the
-   *  `oaktree-sapling` key with the journal stamp, set key by key so the author's other options
+   *  `oaktree-sapling` key with the {@link JournalStamp}, set key by key so the author's other options
    *  survive; `downloads` is appended to the author's. */
   project?: {
     exports?: Array<Record<string, unknown>>;
@@ -166,7 +163,7 @@ export interface ComposeResult {
 }
 
 /** The `extends:` chain, from the repo layout alone, so the two-pass build can write it
- *  before anything is resolved [design §12a] [R52]. Warns without a journal.
+ *  before anything is resolved [R52]. Warns without a journal.
  *
  *  It is always a paper's chain: the journal website is a plain MyST project with its own
  *  config, and oak never builds it [R80]. */
@@ -179,10 +176,7 @@ export function extendsChainFor(input: {
   const warnings: string[] = [];
   const extendsChain: string[] = [`${engineRoot}/paper-base.yml`];
   if (instanceRoot === null) {
-    warnings.push(
-      '--no-instance: building unbranded (no edition/brand). Not CI-faithful; ' +
-        'brand assets (logo, watermark) and edition frontmatter are absent.',
-    );
+    warnings.push(msg.build.noInstanceWarning);
   } else {
     extendsChain.push(`${instanceRoot}/editions/${edition}.yml`);
     extendsChain.push(`${instanceRoot}/brand/brand.yml`);
@@ -202,7 +196,7 @@ export function compose(input: ComposeInput): ComposeResult {
   } = input;
 
   // The engine action reads the version and edition before the merge, the CLI after it; an
-  // edition config declaring `project.options` could make them differ [R36].
+  // edition config declaring `project.options` could make them differ.
   const resolved = readEngineOptions(resolvedProject.options);
   if (resolved.version !== engineVersion || resolved.edition !== edition) {
     throw new Error(
@@ -215,17 +209,15 @@ export function compose(input: ComposeInput): ComposeResult {
   // ownOverride: oak's additions to the base config [R52].
   const ownOverride: OwnOverride = {};
 
-  // Typst export: set `output:` and `template:` (precedence below [R76]). MyST merges exports
-  // whole, so the entry is complete: the resolved export (with the edition's `articles`) plus
-  // both fields. A paper-base declaration would be dropped by a multi-article paper's own entry
-  // [R52] [R53].
+  // Typst export: the resolved entry plus `output:` and `template:`, whole, since MyST merges
+  // exports whole [R52].
   const typst = (resolvedProject.exports ?? []).find(
     (e) => e['format'] === 'typst' || e['id'] === TYPST_EXPORT_ID,
   );
   if (typst) {
     // Template precedence [R76]: author, then journal, then oak. A `template:` on the resolved
     // export can only be the author's, since paper-base and editions declare none [R72]. It is
-    // honoured whatever it is; `oak validate` warns when it floats [R5], and the deposit keeps
+    // honoured whatever it is; `oak validate` warns when it floats, and the deposit keeps
     // the resolved template, so a DOI stays reproducible.
     const authorTemplate =
       typeof typst['template'] === 'string' && typst['template']
@@ -242,24 +234,20 @@ export function compose(input: ComposeInput): ComposeResult {
     // A paper overriding the journal's template is allowed, but must show in the pull request;
     // `oak validate` reports it there too.
     if (authorTemplate && journalTemplate && !assetOverrides.typstTemplate) {
-      warnings.push(
-        `author template overrides the journal's: this paper declares its own typst ` +
-          `template ("${authorTemplate}") in place of the journal's ("${input.journalTypstTemplate}").`,
-      );
+      warnings.push(msg.validate.templateOverride(authorTemplate, input.journalTypstTemplate));
     }
 
     ownOverride.project = { exports: [{ ...typst, template, output: TYPST_OUTPUT }] };
     // Offered only when the PDF can be served: `oak start` builds none (DOCS.start).
     if (input.pdfDownload !== false) {
-      ownOverride.project.downloads = [{ id: TYPST_EXPORT_ID, title: 'PDF export' }];
+      ownOverride.project.downloads = [{ id: TYPST_EXPORT_ID, title: msg.build.pdfDownloadTitle }];
     }
   } else {
-    warnings.push(
-      'no typst export found in the resolved config; PDF export + Zenodo deposit will be skipped',
-    );
+    warnings.push(msg.build.noTypstExport);
   }
 
-  // The pinned book-theme fork zip [design §7]. `siteTemplate: null` leaves MyST's default theme.
+  // oak's pinned book-theme ({@link themeZipUrl}). `siteTemplate: null` leaves MyST's default
+  // theme.
   const site: NonNullable<OwnOverride['site']> = {};
   const siteTemplate =
     assetOverrides.siteTemplate === undefined ? themeZipUrl() : assetOverrides.siteTemplate;
@@ -288,7 +276,7 @@ export function compose(input: ComposeInput): ComposeResult {
     }
   }
 
-  // The journal stamp, for the deposit [R66]. MyST merges `project.options` one key deep, so an
+  // The {@link JournalStamp}, for the deposit [R66]. MyST merges `project.options` one key deep, so an
   // `oaktree-sapling` object replaces another whole: this one keeps the coordinates checked above.
   if (input.journal) {
     ownOverride.project = {

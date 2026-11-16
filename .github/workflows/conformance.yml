@@ -27,7 +27,7 @@ concurrency:
 jobs:
   run:
     runs-on: ubuntu-latest
-    # Expect manual runs for dev releases cut from branches other than main.
+    # A release cut on main starts this run; a dev release cut from another branch needs a manual run.
     if: ${{ github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main') }}
     environment: conformance
     permissions:

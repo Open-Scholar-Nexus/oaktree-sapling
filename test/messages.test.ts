@@ -1,8 +1,10 @@
 /**
  * Keeps the printed wording in `src/messages.ts`, so it can be reviewed in one file. Fails when
- * a module hands a string literal straight to output: a `write` or `log` call, or a `message:`,
- * `error:` or `reason:` field of a result. A message built from variables gets past it; a
- * `log('  ✓ done')` does not.
+ * a module hands a prose string literal straight to output: a `stderr.write`, `stdout.write`,
+ * `log`, `warn` or `emit` call, a push onto a list of warnings or notes, or a `message:`,
+ * `error:`, `reason:`, `title:`, `body:` or `description:` field. A message built from variables
+ * gets past it, and so does a literal passed as a `gh` or `git` argument; a `log('  ✓ done')`
+ * does not.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
@@ -29,11 +31,15 @@ const COVERED = [
   'gh.ts',
   'yaml-io.ts',
   'pinned.ts',
+  'release.ts',
+  'clean.ts',
+  'artifact.ts',
+  'journal-checks.ts',
 ];
 
 /** A sink that puts its argument in front of a person. */
 const SINKS =
-  /(?:stderr\.write|stdout\.write|\blog|\bwarn|\bemit)\(\s*(['"`])|(?:message|error|reason|title|body|description)\s*:\s*(['"`])/g;
+  /(?:stderr\.write|stdout\.write|\blog|\bwarn|\bemit|\w*(?:[Ww]arnings|[Nn]otes)\.push)\(\s*(['"`])|(?:message|error|reason|title|body|description)\s*:\s*(['"`])/g;
 
 /** Prose is a literal with whitespace in it; `'main'`, `'ok'`, `'v*'` are identifiers. */
 function isProse(quote: string, rest: string): boolean {

@@ -46,6 +46,7 @@ project:
     - title: Design
       children:
         - file: design/index.md
+        - file: design/config.md
         - file: design/paper-ci.md
         - file: design/checks.md
         - file: design/releases.md

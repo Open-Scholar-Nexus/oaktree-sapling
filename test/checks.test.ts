@@ -18,7 +18,7 @@ import { readFileSync } from 'node:fs';
 // The editorial checks read myst's processed project, so they run only in a real session, in
 // validate.integration.test.ts. This tests how results become a Check Run.
 
-describe('toCheckRun (reporting: GitHub Check Run, ours)', () => {
+describe('toCheckRun', () => {
   it('fails the conclusion on a non-optional failure', () => {
     expect(toCheckRun([{ id: 'x', status: CheckStatus.fail, message: 'bad' }]).conclusion).toBe(
       'failure',
@@ -29,7 +29,7 @@ describe('toCheckRun (reporting: GitHub Check Run, ours)', () => {
     expect(toCheckRun([{ id: 'x', status: CheckStatus.error }]).conclusion).toBe('failure');
   });
 
-  it('optional failures are annotated and do not block the merge', () => {
+  it('optional failures do not block the merge', () => {
     const r = toCheckRun([
       { id: 'x', status: CheckStatus.fail, optional: true },
       { id: 'y', status: CheckStatus.pass },
@@ -143,7 +143,7 @@ describe('toCheckRun (reporting: GitHub Check Run, ours)', () => {
     expect(r.summary).toMatch(/no keywords/);
   });
 
-  it('without a pathBase, paths pass through unchanged (pure default)', () => {
+  it('without a pathBase, paths pass through unchanged', () => {
     const r = toCheckRun([
       {
         id: 'abs',
@@ -278,7 +278,7 @@ describe('cmdPostChecks, with fakes for GitHub', () => {
     expect(out.commentPosted).toBe(true);
     expect(stickies).toHaveLength(1);
     expect(out.warnings.join(' ')).toContain('Check Run not posted');
-    // The Check Run is required to merge, so failing to post it is an error [R144]: the pull
+    // The Check Run is required to merge, so failing to post it is an error: the pull
     // request would wait for a check that never comes.
     expect(out.status).toBe('error');
   });
@@ -294,7 +294,7 @@ describe('cmdPostChecks, with fakes for GitHub', () => {
     expect(out.commentPosted).toBe(false);
     expect(runs).toHaveLength(1);
     expect(out.warnings.join(' ')).toContain('comment not posted');
-    // The Check Run carries the result, so a failed comment stays 'ok' [R144].
+    // The Check Run carries the result, so a failed comment stays 'ok'.
     expect(out.status).toBe('ok');
   });
 });

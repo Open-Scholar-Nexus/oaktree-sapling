@@ -1,6 +1,6 @@
 /**
  * `oak clean` (clean.ts) over a real folder standing in for the temporary folder: only folders
- * of the user's named `oak-release-*` count, and never a symlink.
+ * named `oak-release-*` and owned by the user count, and never a symlink.
  */
 import { describe, it, expect } from 'vitest';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs';

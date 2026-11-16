@@ -1,9 +1,9 @@
 (guide-publish)=
 # Publish a paper on Zenodo
 
-Oaktree Sapling supports creating drafts on Zenodo. Publishing a paper on Zenodo also gives it a DOI. An editor does it once `main` holds the paper as it should be published, and again for each [new version](#new-version). Since the paper's `myst.yml` needs to contain the DOI assigned by Zenodo, publishing the first version has a preliminary step called "reserving the DOI". 
+Publishing a paper on Zenodo gives it a DOI. An editor publishes once `main` holds the paper as it should be published, and again for each [new version](#new-version). The paper's `myst.yml` has to hold the DOI Zenodo assigns, so publishing the first version starts with a step called "reserving the DOI".
 
-Oaktree Sapling can publish with one command run on an editor's computer, or with workflows on GitHub. The workflows need the paper repository to have access to [Zenodo tokens](../reference/secrets.md); the command keeps the token on the editor's computer[^current-security].
+oaktree-sapling can publish with one command run on an editor's computer, or with workflows on GitHub. The workflows need the paper repository to have access to [Zenodo tokens](../reference/secrets.md); the command keeps the token on the editor's computer[^current-security].
 
 [^current-security]: Until Zenodo handles token scopes correctly, we recommend publishing from the terminal ([why](../reference/secrets.md#zenodo-token-scopes)).
 
@@ -25,7 +25,7 @@ oak lists what it will do on GitHub and Zenodo and asks once (`--yes` skips the 
 2. skips that pull request's **Journal checks** ([why](#design-paper-ci-limits)) and merges it;
 3. tags the merge commit with the version, which starts the **Deposit version** workflow;
 4. waits for that workflow to build the paper, which can take several minutes;
-5. fills the Zenodo draft with the build ([what a deposit carries](#design-releases-deposit)), attaches the same files to the tag's GitHub release, and prints the draft's URL, which it also comments on the tagged commit.
+5. fills the Zenodo draft with the build ([what a deposit contains](#design-releases-deposit)), attaches the same files to the tag's GitHub release, and prints the draft's URL, which it also comments on the tagged commit.
 
 You then [publish the draft on Zenodo](#publish-on-zenodo) and [list the paper on the journal website](#list-on-site).
 
@@ -48,6 +48,8 @@ You then [publish the draft on Zenodo](#publish-on-zenodo) and [list the paper o
 ## Publish on Zenodo
 
 Open the draft on Zenodo, check it, and click **Publish**. The DOI resolves from then on.
+
+When the paper's `myst.yml` sets `project.options.youtube` to a video's URL, the draft's description links the video as **Video recording**.
 
 (list-on-site)=
 ## List it on the journal website
@@ -141,7 +143,7 @@ The tag starts the **Deposit version** workflow, which builds the paper and, wit
 data/ export-ignore
 ```
 
-The PDF is rendered from the files in the repository, with notebook outputs as they were saved. All files the manuscript points to must stay: a figure's image, a notebook it embeds, a file it includes. Without it, the PDF in the deposit cannot be rendered again.
+The PDF is rendered from the files in the repository, with notebook outputs as they were saved. All files the manuscript points to must stay: a figure's image, a notebook it embeds, a file it includes. Without those files, the PDF in the deposit cannot be rendered again.
 
 `export-ignore` also leaves the folder out of the source archives GitHub offers for download, such as **Download ZIP**. A clone still has it.
 

@@ -22,7 +22,7 @@ Every build of the paper reads the journal's settings from that repository.
 
 A field set in the paper's own `myst.yml` takes precedence over the same field from the edition.
 
-`oak build` and `oak start` assemble the paper's settings and the journal's into `myst.oak.yml`, next to `myst.yml`, and build from it. It is rewritten on every run, gitignored, and safe to delete.
+`oak build`, `oak start` and `oak validate` assemble the paper's settings and the journal's into `myst.oak.yml`, next to `myst.yml`, and build from it. It is rewritten on every run, gitignored, and safe to delete.
 
 ## When a change to the journal applies
 

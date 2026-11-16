@@ -1,10 +1,10 @@
 /**
  * The documentation URLs oak prints keep resolving, since a printed URL outlives its release.
- * Neither the type checker nor the docs build sees two ways to break one:
+ * Neither the type checker nor the docs build catches these ways to break one:
  *
  *   1. A page or a `(label)=` target in `docs/` is renamed while `docs-links.ts` names the old
  *      one. The docs build checks only links inside docs/.
- *   2. A docs URL written as a literal, not through `docsUrl(DOCS.x)`, which check 1 cannot see.
+ *   2. A docs URL written as a literal, not through `docsUrl(DOCS.x)`, which the first check cannot see.
  *
  * The table is read as source, not imported, so a topic no message uses yet is checked too.
  */
@@ -36,7 +36,7 @@ describe('every documentation topic resolves', () => {
   }
 
   it('the table is the only place a topic path is written', () => {
-    // A literal URL copies the domain and the path, and check 1 cannot see it.
+    // A literal URL copies the domain and the path, and the first check cannot see it.
     const offenders: string[] = [];
     for (const name of readdirSync(srcDir)) {
       if (extname(name) !== '.ts' || name === 'docs-links.ts' || name === 'assets.ts') continue;

@@ -46,7 +46,7 @@ A paper builds with the engine release named in its `myst.yml`, checked out from
 ## Open alternatives
 
 [ReScience C](https://rescience.github.io)
-: Publishes replications of computational studies. Each submission is reviewed in a public GitHub issue and published on Zenodo, using only GitHub and Zenodo. Oaktree Sapling is close to it in setup, and packages that setup as a tool: `oak` creates the repositories, the editorial checks run on every pull request, and a journal upgrades when the engine does.
+: Publishes replications of computational studies. Each submission is reviewed in a public GitHub issue and published on Zenodo, using only GitHub and Zenodo. Oaktree Sapling is close to it in setup, and packages that setup as a tool: `oak` creates the repositories, the editorial checks run on every pull request, and `oak upgrade` moves a paper to a newer engine.
 
 [Journal of Open Source Software](https://joss.theoj.org)
 : Publishes short Markdown papers about research software. It reviews them in GitHub issues, runs its own website and review bot, and registers DOIs with Crossref. With Oaktree Sapling, review happens in a pull request on the paper's own repository, and that repository's GitHub Actions build and publish it.
@@ -71,4 +71,4 @@ An author needs a GitHub account. The journal also needs a Cloudflare account fo
 
 [^scope]: The free tiers cover review in pull requests, papers built by GitHub Actions, a static website for readers, and a permanent copy of each published version on Zenodo. As a journal system adds features, each addition brings its own service and its own cost: collaborative editing, email reminders, an external review platform, other integrations, and running a paper's code for its readers.
 
-[^sustainability]: Of these, GitHub Pages and Cloudflare Pages are the simplest to swap to alternatives. Actions have especially large limits among alternatives, but a journal uses a few minutes of build per change. Zenodo mints DOIs and keeps the archived copies; replacing it would need another provider that mints DOIs at no cost, and a deposit in `oak` written for it.
+[^sustainability]: Of these, GitHub Pages and Cloudflare Pages are the simplest to swap to alternatives. A journal uses a few minutes of build per change, within the free limits of GitHub Actions and of most alternatives. Zenodo mints DOIs and keeps the archived copies; replacing it would need another provider that mints DOIs at no cost, and a deposit in `oak` written for it.

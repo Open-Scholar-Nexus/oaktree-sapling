@@ -78,7 +78,7 @@ describe('renderPaperTemplate', () => {
     expect(written).toContain(rel);
   });
 
-  it('seeds a LICENSE for the licence the edition states [R127]', () => {
+  it('seeds a LICENSE for the licence the edition states', () => {
     const dest = tmp();
     const written = renderPaperTemplate(PAPER_ROOT, dest, answers());
     expect(written).toContain('LICENSE');
@@ -159,7 +159,7 @@ describe('renderInstanceTemplate', () => {
 });
 
 describe('renderSiteTemplate', () => {
-  it('renders the four values and copies the rest as is', () => {
+  it('renders the values and copies the rest as is', () => {
     const dest = tmp();
     const written = renderSiteTemplate(SITE_ROOT, dest, answers(), MYST_RANGE);
 
@@ -269,7 +269,7 @@ function reviewTree(dir: string): Record<string, string> {
   return out;
 }
 
-describe('the review branch takes the engine-managed paths from main [R121]', () => {
+describe('the review branch takes the engine-managed paths from main', () => {
   it("replaces the author's .github, pins.yml included, and CODEOWNERS", () => {
     const tree = reviewTree(
       reviewRepo(
@@ -492,7 +492,7 @@ describe('cmdBootstrapPaper', () => {
     expect(out.exitCode).toBe(2);
     expect(out.result.status).toBe('error');
     expect(String(out.result.error)).toContain('--instance');
-    expect(String(out.result.error)).toContain('pins.yml');
+    expect(String(out.result.error)).toContain('--instance .');
     // Nothing was touched: the check precedes every effect.
     expect(calls.createRepo).toHaveLength(0);
     expect(calls.seedBranch).toHaveLength(0);
@@ -743,7 +743,7 @@ describe('cmdBootstrapPaper', () => {
     expect(runbook).not.toContain('zt'); // never the value
   });
 
-  it('the runbook says how to give an author push access, with the repo filled in [R124]', async () => {
+  it('the runbook says how to give an author push access, with the repo filled in', async () => {
     const { prov } = fakeProv();
     const out = await cmdBootstrapPaper(paperInput(), deps(prov));
     expect((out.result.runbook as string[]).join('\n')).toContain(
@@ -751,7 +751,7 @@ describe('cmdBootstrapPaper', () => {
     );
   });
 
-  it('allows Actions to open pull requests, which the first DOI pull request needs [R122]', async () => {
+  it('allows Actions to open pull requests, which the first DOI pull request needs', async () => {
     const { prov, calls } = fakeProv();
     const out = await cmdBootstrapPaper(paperInput(), deps(prov));
     expect(calls.allowActionsApprovePrs).toEqual(['me/paper']);
@@ -762,7 +762,7 @@ describe('cmdBootstrapPaper', () => {
     expect(already.calls.allowActionsApprovePrs).toHaveLength(0); // read before changing
   });
 
-  it('creates zenodo-publish with no required reviewer, for a team, a user or an org [R123]', async () => {
+  it('creates zenodo-publish with no required reviewer, for a team, a user or an org', async () => {
     const org = fakeProv({ ownerType: 'Organization' });
     await cmdBootstrapPaper(
       paperInput({ repo: 'org/paper', owner: '@org/editors' }),
@@ -783,7 +783,7 @@ describe('cmdBootstrapPaper', () => {
     expect(out.result.status).toBe('ok');
   });
 
-  it('a rerun keeps a zenodo-publish reviewer added by hand [R123]', async () => {
+  it('a rerun keeps a zenodo-publish reviewer added by hand', async () => {
     const { prov, calls } = fakeProv({
       environments: new Set(['me/paper/zenodo-publish']),
       reviewers: [{ type: 'User', id: 12 }],
@@ -875,7 +875,7 @@ describe('cmdBootstrapPaper', () => {
     expect(runbook).not.toContain('CLOUDFLARE_ACCOUNT_ID is still');
   });
 
-  it('creates the labels the workflows use, and no others [R127]', async () => {
+  it('creates the labels the workflows use, and no others', async () => {
     const { prov, calls } = fakeProv();
     await cmdBootstrapPaper(paperInput(), deps(prov));
     expect((calls.createLabel as Array<{ n: string }>).map((c) => c.n)).toEqual([
@@ -883,7 +883,7 @@ describe('cmdBootstrapPaper', () => {
     ]);
   });
 
-  it('makes main the default branch of an existing repo [R127]', async () => {
+  it('makes main the default branch of an existing repo', async () => {
     const moved = fakeProv({ defaultBranch: 'master', repos: new Set(['me/paper']) });
     await cmdBootstrapPaper(paperInput(), deps(moved.prov));
     expect(moved.calls.setDefaultBranch).toEqual([{ r: 'me/paper', b: 'main' }]);
@@ -926,7 +926,7 @@ describe('cmdBootstrapPaper', () => {
     expect((closed.calls.createRepo[0] as { o: { private: boolean } }).o.private).toBe(true);
   });
 
-  it('a sole editor may merge their own gated pull request, and still cannot push to main [R127]', async () => {
+  it('a sole editor may merge their own gated pull request, and still cannot push to main', async () => {
     const personal = fakeProv({ ownerType: 'User' });
     await cmdBootstrapPaper(paperInput(), deps(personal.prov));
     const pm = (personal.calls.createRuleset as Array<{ b: any }>).find(
@@ -1271,10 +1271,10 @@ describe('cmdBootstrapJournal', () => {
 });
 
 /* --------------------------------------------------------------------------
- * A failed step is recorded, not thrown ([R125])
+ * A failed step is recorded, not thrown
  * ------------------------------------------------------------------------ */
 
-describe('a failing setup step [R125]', () => {
+describe('a failing setup step', () => {
   it('a settings failure is recorded, the other settings still run, and the run reports incomplete', async () => {
     // A 403 on the first ruleset is recorded, and the remaining settings are still tried.
     const { prov, calls } = fakeProv();
@@ -1406,7 +1406,7 @@ describe('a failing setup step [R125]', () => {
     expect((out.result.actions as Record<string, string>).protect_main).toMatch(/^failed: /);
   });
 
-  it('an existing zenodo-publish environment is left alone [R127]', async () => {
+  it('an existing zenodo-publish environment is left alone', async () => {
     // The PUT replaces the whole environment, so a rerun sends no PUT and keeps what the
     // journal set by hand.
     const { prov, calls } = fakeProv({
@@ -1421,7 +1421,7 @@ describe('a failing setup step [R125]', () => {
     expect(out.result.status).toBe('ok');
   });
 
-  it('--private warns in the plan that the settings steps need a paid plan [R127]', async () => {
+  it('--private warns in the plan that the settings steps need a paid plan', async () => {
     const { prov } = fakeProv();
     const plans: string[][] = [];
     const d = deps(prov);

@@ -1,12 +1,7 @@
 /**
  * The editorial checks a journal turns on in `journal.yml` `checks:`, from the MIT-licensed
- * `@curvenote/check-implementations` and `@curvenote/check-definitions` (credited in README.md).
- * The journal picks the set and an author cannot weaken it. MyST's `error_rules` are the
- * author's, so they do not decide whether a paper passes.
- *
- * A journal's own check files run beside them (journal-checks.ts) [R208].
- *
- * `runChecks` runs them; `toCheckRun` turns the results into a GitHub Check Run.
+ * `@curvenote/check-implementations` and `@curvenote/check-definitions` (credited in README.md),
+ * and the journal's own check files (journal-checks.ts) [R208].
  */
 import { basename, isAbsolute, relative } from 'node:path';
 import { DERIVED_CONFIG_FILE } from './yaml-io.js';
@@ -25,7 +20,7 @@ import {
 } from '@curvenote/check-definitions';
 
 // Imported only when checks run, inside the bundle: the catalog loads myst-cli, which crashes
-// unbundled on Node 24 [R51]. The definitions package is safe to import statically.
+// unbundled on Node 24. The definitions package is safe to import statically.
 type CheckInterface = CheckDefinition & {
   validate: (
     session: ISession,
@@ -43,7 +38,7 @@ async function curvenoteChecks() {
 export { CheckStatus };
 export type { Check, CheckDefinition, CheckResult, CheckTags };
 
-/** curvenote's result carries no id; we add the journal's, so the report can group results. */
+/** curvenote's result carries no id; oak adds the journal's, so the report can group results. */
 export type EngineCheckResult = CheckResult & { id: string };
 
 /** The ids oak can run: the whole curvenote catalog. */
@@ -70,7 +65,7 @@ export async function runChecks(
   journalRoot: string | null,
   readPaper: () => Paper,
 ): Promise<EngineCheckResult[]> {
-  // Loaded on first use, so the unit tests run check files without the bundle [R51].
+  // Loaded on first use, so the unit tests run check files without the bundle.
   let curvenote: ReturnType<typeof curvenoteChecks> | undefined;
   let paper: Paper | undefined;
   const out: EngineCheckResult[] = [];
@@ -231,7 +226,7 @@ export function checksComment(report: ChecksReport, gatedTouched: string[] | nul
   ].join('\n');
 }
 
-/** The changed files under {@link GATED_PATHS} [design §6a], or null when the list of changed
+/** The changed files under {@link GATED_PATHS}, or null when the list of changed
  *  files is null. A gated file is one listed in CODEOWNERS, so changing it needs an editor's
  *  review. It can also change how the checks run, so post-checks warns that the report cannot be
  *  fully trusted [R83]. */
@@ -326,7 +321,7 @@ export function cmdPostChecks(
   }
 
   // The Check Run and its commit status are the merge gate, so failing to post them is an error:
-  // the pull request would stay blocked with no explanation. A failed comment only warns [R144].
+  // the pull request would stay blocked with no explanation. A failed comment only warns.
   return {
     status: checkRunPosted ? 'ok' : 'error',
     checkRunPosted,

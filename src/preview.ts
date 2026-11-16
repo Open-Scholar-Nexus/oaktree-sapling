@@ -1,9 +1,9 @@
 /**
- * `oak deploy-preview` [R16] [R26] [R27]. It never fails the run [R16]: missing secrets, a
- * Cloudflare outage or a bad journal.yml all fall back to a comment linking the build artifact.
- * It is Stage 2: it runs in the trusted `workflow_run` job, which can write to the pull request,
- * and acts on what Stage 1 built. Stage 1 builds the pull request with no secrets
- * (docs/design/paper-ci.md). Cloudflare, git and gh are injected; the real ones are in gh.ts.
+ * `oak deploy-preview` [R26]. Missing secrets, a Cloudflare outage or a bad journal.yml all fall
+ * back to a comment linking the build artifact; the run fails only when the pull request check
+ * refuses or a gh call fails. It is Stage 2: it runs in the trusted `workflow_run` job, which can
+ * write to the pull request, and acts on what Stage 1 built. Cloudflare and gh are injected; the
+ * real ones are in gh.ts.
  */
 import { existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
@@ -42,16 +42,16 @@ export interface GhPr {
  * ------------------------------------------------------------------------ */
 
 export const STICKY_PREVIEW = 'oak-preview';
-/** The label `openFailureIssue` uses; defined here so `oak bootstrap` can create it [R127]. */
+/** The label `openFailureIssue` uses; defined here so `oak bootstrap` can create it. */
 export const LABEL_ZENODO_FAILED = 'zenodo-publish-failed';
 
 /* --------------------------------------------------------------------------
- * journal.yml `preview:` settings [R27], read as loadJournalZenodo reads `zenodo:`
+ * journal.yml `preview:` settings, read as loadJournalZenodo reads `zenodo:`
  * ------------------------------------------------------------------------ */
 
 /** Reads `preview:` from `<instanceRoot>/journal.yml`, with the schema defaults when absent. A
  *  file that fails to parse is the journal's mistake, so it falls back and `problem` says why
- *  in the comment [R16] [R140]. */
+ *  in the comment. */
 export function loadJournalPreview(instanceRoot: string | null): {
   preview: PreviewConfig;
   problem?: string;
@@ -70,9 +70,9 @@ export function loadJournalPreview(instanceRoot: string | null): {
  * Pure logic
  * ------------------------------------------------------------------------ */
 
-/** Cloudflare Pages runs these from the deploy root: `_worker.js`/`functions/` are code,
- *  `_redirects`/`_headers`/`_routes.json` rewrite responses. A fork controls the artifact, so a
- *  new entry must be one of those two kinds ([R154]). */
+/** Files Cloudflare Pages acts on in the deploy root: `_worker.js`, `_middleware.js` and
+ *  `functions/` run as code, `_redirects`, `_headers` and `_routes.json` rewrite responses. A fork
+ *  controls the artifact, so they are removed before a deploy ([R154]). */
 const PAGES_CONTROL_FILES = [
   '_worker.js',
   'functions',
@@ -82,7 +82,7 @@ const PAGES_CONTROL_FILES = [
   '_middleware.js',
 ];
 
-/** Remove Pages control files from the deploy root; returns the names removed ([R154]). */
+/** Removes Pages control files from the deploy root; returns the names removed ([R154]). */
 export function stripPagesControlFiles(siteDir: string): string[] {
   const removed: string[] = [];
   for (const name of PAGES_CONTROL_FILES) {
@@ -104,8 +104,7 @@ const slug = (x: string): string =>
 
 /** Expands `{repo}` and `{pr}` into a Cloudflare Pages branch alias (lowercase `[a-z0-9-]`, at
  *  most 28 characters). `{repo}` takes the remaining length last, so a long name never cuts off
- *  `{pr}`, and a truncated name is hashed so papers sharing one Pages project stay distinct
- *  ([R139]). */
+ *  `{pr}`, and a truncated name is hashed so papers sharing one Pages project stay distinct. */
 export function previewBranch(pattern: string, repo: string, pr: string): string {
   const shortRepo = repo.includes('/') ? repo.slice(repo.indexOf('/') + 1) : repo;
   const withPr = pattern.replaceAll('{pr}', pr);
@@ -124,8 +123,8 @@ export type PreviewPlan =
   | { mode: 'cloudflare'; accountId: string; apiToken: string; projectName: string; branch: string }
   | { mode: 'artifact'; reason: string };
 
-/** Deploy to Cloudflare, or degrade to an artifact link with a reason ([R6]): needs
- *  `provider: cloudflare`, both secrets, and a `cf_project_name`. */
+/** A Cloudflare deploy when `provider: cloudflare`, both secrets and a `cf_project_name` are
+ *  set, else an artifact link with the reason. */
 export function planPreview(input: {
   preview: PreviewConfig;
   cf: { apiToken?: string; accountId?: string };
@@ -188,7 +187,7 @@ export interface PreviewDeps {
   gh: GhPr;
 }
 
-/** `oak deploy-preview <site>` [R16]: deploys the build artifact to a preview URL, or falls
+/** `oak deploy-preview <site>`: deploys the build artifact to a preview URL, or falls
  *  back to a link to it, and comments on the pull request. Without a pull request it does
  *  nothing. It fails only when the pull request check refuses ({@link verifyPrHead}).
  *  Documented at DOCS.deployPreview. */
@@ -237,8 +236,8 @@ export async function cmdDeployPreview(
       deps.gh.sticky(repoRoot, pr, STICKY_PREVIEW, previewComment(url));
       outcome = { preview: 'cloudflare', url, branch: plan.branch };
     } catch (e) {
-      // The one fallback [R16]: a Cloudflare failure still gives the reviewer the artifact link.
-      // A gh failure below is not caught; it throws.
+      // A Cloudflare failure still gives the reviewer the artifact link. A gh failure below is
+      // not caught; it throws.
       const failure = (e as Error).message;
       process.stderr.write(annotate('warning', msg.workflow.cloudflareDegraded(failure)) + '\n');
       deps.gh.sticky(

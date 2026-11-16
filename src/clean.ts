@@ -1,6 +1,7 @@
 /**
  * clean.ts: `oak clean`, which lists and removes the clones `oak release` keeps after a failure,
- * and the pinned oak versions in `~/.cache/oak` with `--cache`. Documented at DOCS.clean.
+ * and with `--cache` the pinned oak versions in `$XDG_CACHE_HOME/oak` (else `~/.cache/oak`).
+ * Documented at DOCS.clean.
  */
 import { existsSync, lstatSync, readdirSync, rmSync } from 'node:fs';
 import { basename, join } from 'node:path';
@@ -83,7 +84,7 @@ export function removeKeptClones(
 export interface CleanInput {
   /** The temporary folder `oak release` clones into. */
   dir: string;
-  /** `~/.cache/oak`, which holds the pinned oak versions. */
+  /** `$XDG_CACHE_HOME/oak` (else `~/.cache/oak`), which holds the pinned oak versions. */
   cacheDir: string;
   /** `--cache`: remove {@link CleanInput.cacheDir} too. */
   cache: boolean;

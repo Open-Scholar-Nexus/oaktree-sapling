@@ -28,6 +28,7 @@ On an organisation, add `--owner @<org>/<team>` so the editors team owns the rep
 
 As with the journal, `oak` prints a plan, including every default it took, and asks before changing anything. Running the same command again finishes a run that failed partway.
 
+(what-it-sets-up)=
 ## What it sets up
 
 - A public repository with the starter manuscript and the workflows that build and check it. `--private` makes it private, but on GitHub's free plan a private repository gets neither branch rules nor Pages, and the journal website cannot show it.

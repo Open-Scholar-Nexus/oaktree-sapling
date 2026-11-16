@@ -1,5 +1,6 @@
 /**
- * For the tests that run the bundle (`dist/cli.cjs`) [R51]:
+ * For the tests that run the bundle (`dist/cli.cjs`), which is what the paper workflows run;
+ * myst-cli crashes unbundled on Node 24.
  *
  *   - **absent**: skip. `dist/cli.cjs` is gitignored, so a fresh clone has none, and `npm test`
  *     should run anywhere.

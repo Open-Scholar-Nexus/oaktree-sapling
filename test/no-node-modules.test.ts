@@ -1,6 +1,6 @@
 /**
  * `npx oaktree-sapling` runs without installing anything. `dist/cli.cjs` bundles every runtime
- * dependency [R51], so the package declares no `dependencies` and a first `npx` takes seconds.
+ * dependency, so the package declares no `dependencies` and a first `npx` takes seconds.
  *
  * A `require` that esbuild left out goes unnoticed in every other test, since they run inside
  * this checkout, where its own `node_modules` resolves it. So this lays the package out as npm
