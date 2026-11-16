@@ -3,7 +3,7 @@
  *   src:path                the file
  *   src:path#L10-L20        those lines
  *   src:path@name           the line declaring `name`
- *   <src:path@"some text">  the first line holding the text; a target with spaces needs the <>
+ *   <src:path@"some text">  the first line containing the text; a target with spaces needs the <>
  *
  * Lines are found in the files on disk, so links point at the commit being built: GITHUB_SHA in
  * CI, else main. A name or text that is not found fails the build.
