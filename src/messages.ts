@@ -1181,9 +1181,9 @@ export const workflow = {
     `version starts with New version on its Zenodo record.`,
   prepareNoDowngrade: (doi: string): string =>
     `project.doi is the production DOI ${doi}; refusing to replace it with a sandbox one.`,
-  prepareDepositPublished: (id: number | string): string =>
-    `Zenodo already has a published deposit for this paper (${id}), so no new DOI was ` +
-    `reserved. Copy its concept DOI into project.doi in myst.yml.`,
+  prepareDepositPublished: (conceptDoi: string): string =>
+    `Zenodo already has a published deposit for this paper, with the concept DOI ` +
+    `${conceptDoi}, so no new DOI was reserved. Copy that DOI into project.doi in myst.yml.`,
   /** The template's placeholder ORCID, left out of the deposit (zenodo.ts `buildMetadata`). */
   orcidPlaceholder: (name: string, orcid: string): string =>
     `the ORCID of ${name} (${orcid}) is the template's placeholder, so the deposit leaves it ` +

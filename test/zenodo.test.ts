@@ -731,6 +731,26 @@ describe('cmdPrepare', () => {
     expect(up.result.concept_doi).toBe('10.5281/zenodo.8');
   });
 
+  it('refuses a paper Zenodo already published, naming its concept DOI', async () => {
+    const urn = { identifier: paperUrn('fixture-2026-sample-paper') };
+    const published = dep({
+      id: 6,
+      conceptrecid: 4,
+      submitted: true,
+      metadata: { related_identifiers: [urn] },
+    });
+    const { transport, calls } = fakeTransport(() => ({ json: [published] }));
+    const out = await cmdPrepare({
+      mystPath: paperRepo(BARE_MYST),
+      repo: 'o/r',
+      api: new ZenodoApi(transport, true, 't'),
+      instanceRoot: null,
+    });
+    expect(out.exitCode).toBe(3);
+    expect(String(out.result.message)).toContain('concept DOI 10.5072/zenodo.4');
+    expect(calls.every((c) => c.method === 'GET')).toBe(true);
+  });
+
   it('forbids replacing production with sandbox', async () => {
     const prodDoi = paperRepo(BARE_MYST + '  doi: 10.5281/zenodo.5\n');
     const noop = new ZenodoApi(fakeTransport(() => ({ json: [] })).transport, true, 't');

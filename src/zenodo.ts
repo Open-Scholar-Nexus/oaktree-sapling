@@ -974,7 +974,7 @@ export async function cmdPrepare(input: PrepareInput): Promise<Outcome> {
     process.stderr.write(`[prepare] reusing draft ${existing.id}\n`);
     dep = await api.updateMetadata(existing.id, md);
   } else if (existing) {
-    return err(3, msg.workflow.prepareDepositPublished(existing.id));
+    return err(3, msg.workflow.prepareDepositPublished(conceptDoiFor(existing, sandbox)));
   } else {
     dep = await api.createDeposition(md);
   }
