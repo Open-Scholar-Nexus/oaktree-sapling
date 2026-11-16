@@ -1579,7 +1579,7 @@ export const conformance = {
 
 /** The fixed labels in a Zenodo record's description (zenodo.ts `buildMetadata`). */
 export const zenodoRecord = {
-  recording: 'Seminar Recording',
+  recording: 'Video recording',
   watchRecording: 'Watch on YouTube',
   website: 'Project Website',
   repository: 'Repository',
