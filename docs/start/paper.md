@@ -35,7 +35,7 @@ Open the address `oak start` prints. The preview reloads as you edit, and shows 
 ## 3. Write the paper
 
 `myst.yml`
-: The paper's metadata. Replace the placeholders: `id`, unique in the journal and in the shape the journal asks for (for example `oak-2026-tidal-flats`, see [id_pattern](../guide/journal-yml.md#id-pattern)), then `title`, `authors` and `keywords`. The commented-out `authors` block shows the fields, with `name` written as its parts, `given` and `family`, so that Zenodo gets the family name right. A name written as one string is split the way MyST splits it: `Ada Lovelace` has the family name `Lovelace` and the given name `Ada`, a lowercase word before the last one goes with the family name (`Vincent van Gogh`), and `Lovelace, Ada` puts everything before the comma in the family name. A family name of two words, such as `García Márquez`, needs `name` written as its parts or as `García Márquez, Gabriel`. MyST's [author fields](https://mystmd.org/guide/frontmatter#frontmatter-authors) list the other parts. Leave the `oaktree-sapling` block at the bottom as it is.
+: The paper's metadata. Replace the placeholders: `id`, unique in the journal and in the shape the journal asks for (for example `oak-2026-tidal-flats`, see [id_pattern](../guide/journal-yml.md#id-pattern)), then `title`, `authors` and `keywords`. The commented-out `authors` block shows the fields. Leave the `oaktree-sapling` block at the bottom as it is.
 
 `index.md`
 : The paper, with its abstract in the frontmatter at the top. The [MyST guide](https://mystmd.org/guide) covers the syntax: headings, figures, equations, citations.
