@@ -51,7 +51,7 @@ Open the draft on Zenodo, check it, and click **Publish**. The DOI resolves from
 
 When the journal has a [Zenodo community](journal-yml.md#zenodo-community), the first version's button reads **Submit for review**, and the paper is published once a curator of the community accepts it. An editor who curates the community sees **Publish to community**, which publishes it at once.
 
-The draft's description links the addresses the journal lists in [`zenodo.links`](journal-yml.md#zenodo-links), such as a recording of a talk, from the options the paper sets in its `myst.yml`.
+The draft's description has a line for each [`zenodo.links`](journal-yml.md#zenodo-links) entry whose option the paper sets in its `myst.yml`, such as a link to a recording of a talk.
 
 (list-on-site)=
 ## List it on the journal website

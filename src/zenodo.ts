@@ -181,7 +181,7 @@ export interface GitContext {
 // Depositions are loosely typed: Zenodo owns the shape, oak reads a few fields by name.
 export type Deposition = Record<string, any>;
 
-/** The InvenioRDM JSON of `/api/records`, which has the community fields the legacy shape lacks. */
+/** The InvenioRDM JSON of `/api/records`, which has the draft's communities and review. */
 const RDM_JSON = 'application/vnd.inveniordm.v1+json';
 
 export class ZenodoError extends Error {
@@ -260,7 +260,7 @@ export class ZenodoApi {
     ).json() as Deposition;
   }
 
-  /** The draft's files, those a new version imports from the one before included. */
+  /** The draft's files, including those a new version imports from the one before. */
   async listDraftFiles(depId: string | number): Promise<Array<{ id: string; filename: string }>> {
     const files = (await this.call('GET', `/deposit/depositions/${depId}/files`)).json();
     return Array.isArray(files) ? files : [];
@@ -463,9 +463,7 @@ function personName(n: Name = {}): { family: string; given?: string } {
  *  family and given and keeps any other as the family name. */
 function legacyCreatorName(n: Name = {}): string {
   const { family, given } = personName(n);
-  if (!given) return family;
-  if (family.includes(',') || given.includes(',')) return `${given} ${family}`;
-  return `${family}, ${given}`;
+  return given ? `${family}, ${given}` : family;
 }
 
 /** The value of `project.options.<option>` when it is an http(s) address, else undefined. */
@@ -607,7 +605,7 @@ export function buildMetadata(input: MetadataInput): Record<string, unknown> {
 
 /**
  * Makes the journal's community [R19] the review of a paper's first version, so the editor's
- * Publish button on Zenodo submits it there. The legacy `communities` field applies only when
+ * Submit for review on Zenodo sends it there. The legacy `communities` field applies only when
  * the API publishes the record. A later version stays in its first version's communities.
  * Returns a refusal message, or null.
  */

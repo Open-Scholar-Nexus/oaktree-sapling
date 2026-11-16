@@ -45,7 +45,7 @@ A paper can set its own template in its `myst.yml` (`exports[].template`). It ta
 (zenodo-community)=
 ## Zenodo community, description and links
 
-A paper can join a [Zenodo community](https://help.zenodo.org/docs/communities/), and the journal can add two things to every deposit's description: a paragraph about the journal, after the abstract, and links to addresses the paper sets in its `myst.yml`:
+A paper can join a [Zenodo community](https://help.zenodo.org/docs/communities/), and the journal can add to every deposit's description a paragraph about the journal, after the abstract, and links to addresses the paper sets in its `myst.yml`:
 
 ```yaml
 zenodo:

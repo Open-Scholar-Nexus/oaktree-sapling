@@ -1199,7 +1199,7 @@ export const workflow = {
   zenodoLinkSkipped: (option: string, value: unknown): string =>
     `project.options.${option} in myst.yml is not an http(s) address ` +
     `(${JSON.stringify(String(value).slice(0, 80))}), so the deposit description leaves out ` +
-    `that link.`,
+    `that link. Fix it in myst.yml.`,
   zenodoCommunityMissing: (slug: string): string =>
     `Zenodo has no community "${slug}", which journal.yml names as zenodo.community. Fix the ` +
     `name there; it is the last part of the community's address on Zenodo.`,

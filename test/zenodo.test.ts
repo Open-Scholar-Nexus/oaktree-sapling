@@ -297,8 +297,8 @@ describe('buildMetadata', () => {
       'King Jr., Martin Luther',
       'Carberry, Josiah',
       'Plato',
-      // A part with a comma: Zenodo keeps the whole name as the family name.
-      'Ada Lovelace, Countess',
+      // Two commas: Zenodo keeps the whole name as the family name.
+      'Lovelace, Countess, Ada',
     ]);
   });
 
