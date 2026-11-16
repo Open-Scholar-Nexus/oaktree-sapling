@@ -96,6 +96,10 @@
       visibility: hidden;
       animation: scroll-code-show linear forwards;
     }
+    /* Only keep a single shadow of the stack. */
+    .scroll-code-src > * + * .myst-code {
+      box-shadow: none;
+    }
     .scroll-code-src .myst-code {
       margin: 0;
     }
