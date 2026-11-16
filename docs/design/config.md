@@ -3,7 +3,7 @@
 # How a paper's config is assembled
 
 (r52)=
-oaktree-sapling gives every paper the settings its journal shares, such as the logo and the venue, and sets the template and the output file of each paper's PDF export. MyST combines config files through `extends:`: a `myst.yml` lists other files there, and for a key that both set, the value in the `myst.yml` replaces theirs whole[^options]. So oak cannot set the template from a listed file when a paper declares its own PDF export, as a paper with several articles does, because the paper's export replaces oak's. Instead, oak writes `myst.oak.yml` next to the paper's `myst.yml`, with the paper's config and oak's values in the file itself and the journal's files under `extends:`, and MyST builds from it.
+oaktree-sapling gives every paper settings that its journal controls, such as the logo and the venue, and settings that come with the engine version the paper pins, such as the template and the output file of its PDF export. MyST combines config files through `extends:`: a `myst.yml` lists other files there, and for a key that both set, the value in the `myst.yml` replaces theirs whole[^options]. So oak cannot set the template from a listed file when a paper declares its own PDF export, as a paper with several articles does, because the paper's export replaces oak's. Instead, oak writes `myst.oak.yml` next to the paper's `myst.yml`, with the paper's config and oak's values in the file itself and the journal's files under `extends:`, and MyST builds from it.
 
 [^options]: `site.options` and `project.options` are the exception: MyST merges them key by key.
 
