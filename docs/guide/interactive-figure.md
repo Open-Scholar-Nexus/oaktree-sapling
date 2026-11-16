@@ -85,7 +85,7 @@ Seedling height over three weeks.
 
 ## 6. Check the result
 
-1. Run `oak start`, open the address it prints, and hover over a point of the chart. A tooltip shows the point's values. Check with a chart that has a tooltip or a selection, since a chart with neither looks the same when it fails to become interactive. The chart loads its drawing code from `cdn.jsdelivr.net`, so the browser has to be online.
+1. Run `oak start`, open the address it prints, and hover over a point of the chart. A tooltip shows the point's values. The chart loads its drawing code from `cdn.jsdelivr.net`, so the browser has to be online.
 2. Run `oak build` and open `_build/exports/paper.pdf`. The figure is in it as an image, above its caption.
 
 ## The thumbnail
