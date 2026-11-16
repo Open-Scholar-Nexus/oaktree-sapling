@@ -1212,7 +1212,7 @@ describe('cmdUpload', () => {
     expect(methods[lastDelete]).toBe('DELETE /api/deposit/depositions/5/files/f1');
   });
 
-  it("requests the journal's community for a first version only ([R19])", async () => {
+  it("requests the journal's community for a first version only", async () => {
     captureStderr();
     const journal = journalWithCommunity('fixture-community');
     const reviewOf = (z: ReturnType<typeof legacyZenodo>) =>

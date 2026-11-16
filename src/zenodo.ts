@@ -604,7 +604,7 @@ export function buildMetadata(input: MetadataInput): Record<string, unknown> {
 }
 
 /**
- * Makes the journal's community [R19] the review of a paper's first version, so the editor's
+ * Makes the journal's community the review of a paper's first version, so the editor's
  * Submit for review on Zenodo sends it there. The legacy `communities` field applies only when
  * the API publishes the record. A later version stays in its first version's communities.
  * Returns a refusal message, or null.
