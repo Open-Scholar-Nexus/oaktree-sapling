@@ -3,9 +3,7 @@
 # How a paper's config is assembled
 
 (r52)=
-oaktree-sapling gives every paper settings that its journal controls, such as the logo and the venue, and settings that come with the engine version the paper pins, such as the template and the output file of its PDF export. MyST combines config files through `extends:`: a `myst.yml` lists other files there, and for a key that both set, the value in the `myst.yml` replaces theirs whole[^options]. So oak cannot set the template from a listed file when a paper declares its own PDF export, as a paper with several articles does, because the paper's export replaces oak's. Instead, oak writes `myst.oak.yml` next to the paper's `myst.yml`, with the paper's config and oak's values in the file itself and the journal's files under `extends:`, and MyST builds from it.
-
-[^options]: `site.options` and `project.options` are the exception: MyST merges them key by key.
+oaktree-sapling gives every paper the settings its journal controls and the engine version the paper pins. MyST combines config files through `extends:`: a `myst.yml` lists other files there, and its own values win over theirs. That suits settings fixed in a file, but many of oak's values are known only when the paper builds: where the engine and the journal were cloned, which version the paper pins, and whether a PDF exists yet for the website to offer. So on every build oak writes `myst.oak.yml` next to the paper's `myst.yml`, with (1) the paper's config, (2) oak's values for that run, and (3) `paper-base.yml` and the journal's files under `extends:`, and MyST builds from it.
 
 In CI, for a paper in the `seedling` edition of the journal `acme/journal`, `myst.oak.yml` looks like this (shortened):
 
@@ -47,6 +45,10 @@ site:
 ```
 
 Lines 23 to 26 list oak's `paper-base.yml` and the journal's files; [Processing MyST markdown](#processing-myst) says what each one sets. The rest is the paper's own `myst.yml`, plus the highlighted lines, which oak adds.
+
+Writing its values into the file also lets oak set fields on an entry the paper declares. For a key that a `myst.yml` and a listed file both set, the value in the `myst.yml` replaces the other whole[^options]. A paper with several articles declares its own PDF export, which would replace an export oak set from a listed file, so oak sets `template:` and `output:` on the paper's export in `myst.oak.yml` itself.
+
+[^options]: `site.options` and `project.options` are the exception: MyST merges them key by key.
 
 oak writes the file in two steps. The first version contains the paper's config and the `extends:` list, and MyST loads it to resolve the project. oak then adds its own values. For the PDF export, oak writes the whole entry MyST resolved, from `paper-base.yml` or from the paper, with its own `template:` and `output:` set on it.
 
