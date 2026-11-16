@@ -53,3 +53,74 @@
   --myst-color-example-bg: #292524;
   --myst-color-proof-bg: #292524;
 }
+
+/* {scroll-code}: plugins/scroll-code.mjs explains how this works. The reading line is 40% down the screen. */
+.scroll-code {
+  .scroll-code-src > * + * {
+    display: none;
+  }
+  @supports (animation-timeline: view()) {
+    @media (min-width: 1024px) {
+      display: flex;
+      gap: 1.5rem;
+      align-items: flex-start;
+      /* The sticky code paints over the text after it, so its shadow needs room. */
+      margin-bottom: 2.5rem;
+      .scroll-code-src {
+        position: sticky;
+        top: 5rem;
+        flex: 3;
+        min-width: 0;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+      }
+      /* Opaque and isolated, so a copy covers the theme's highlighted lines of the copies under it. */
+      .scroll-code-src > * {
+        grid-area: 1 / 1;
+        background: var(--myst-color-bg);
+        isolation: isolate;
+      }
+      .scroll-code-src > * + * {
+        display: block;
+        visibility: hidden;
+        animation: scroll-code-show linear forwards;
+      }
+      /* Only keep a single shadow of the stack. */
+      .scroll-code-src > * + * .myst-code {
+        box-shadow: none;
+      }
+      .scroll-code-src .myst-code {
+        margin: 0;
+      }
+      /* The first step reaches the reading line as the code sticks, the last while code as tall as the screen still sticks. */
+      .scroll-code-steps {
+        flex: 2;
+        padding: calc(40vh - 5rem) 0 calc(60vh - 9rem);
+      }
+      /* More than one mouse-wheel notch of scrolling per step. */
+      .scroll-code-step {
+        min-height: 9rem;
+        padding: 1.5rem 0;
+        opacity: 0.45;
+        animation: scroll-code-on-step linear;
+        animation-timeline: view(40% 60%);
+        view-timeline-inset: 40% 60%;
+      }
+      .scroll-code-step > * {
+        margin-block: 0;
+      }
+    }
+  }
+}
+@keyframes scroll-code-show {
+  from,
+  to {
+    visibility: visible;
+  }
+}
+@keyframes scroll-code-on-step {
+  from,
+  to {
+    opacity: 1;
+  }
+}
