@@ -12,7 +12,7 @@
  *     prompt.
  *   {NO-JARGON} No design-doc jargon ([S#]/[R#], "frozen shim", "build_type=workflow",
  *     "instance-config"). Enforced by a lint in messages.test.ts.
- *   {PROSE-TO-STDERR} Prose goes to stderr. stdout carries only the JSON of `--json` and the
+ *   {PROSE-TO-STDERR} Prose goes to stderr. stdout gets only the JSON of `--json` and the
  *     text of `--help` and `--version`.
  *   {ERROR-NAMES-FIX} An error names the file and the fix, and shows no stack trace.
  *
@@ -118,7 +118,7 @@ export function firstLine(e: unknown): string {
 // ── oak --help ──
 export const usage = (): string =>
   `oak: a mystmd-based engine for running a small journal. It sets up the journal\n` +
-  `(its branding, editions and list of papers) and the repos its papers live in, then\n` +
+  `(its branding, editions and list of papers) and the repos its papers are in, then\n` +
   `builds, checks, previews and publishes each paper with the journal's settings. It\n` +
   `drives git and gh (the GitHub CLI) under the hood; anything that changes a repo\n` +
   `prints a plan and asks before it does it.\n` +
@@ -131,11 +131,11 @@ export const usage = (): string =>
   `  oak bootstrap journal --repo <owner/name> [--name <name>] [--edition <id>]\n` +
   `                        [--engine-repo <owner/name>] [--engine-version <tag>] [--owner <@user|@org/team>]\n` +
   `                        [--no-require-checks] [--no-site] [--co-located] [--yes]\n` +
-  `                    a public repo holding the journal's settings, branding, website and\n` +
-  `                    list of published papers; each paper lives in a repo of its own that\n` +
+  `                    a public repo with the journal's settings, branding, website and\n` +
+  `                    list of published papers; each paper is in a repo of its own that\n` +
   `                    points back at it\n` +
   `      --co-located  not ready: one repo for the journal and its papers, with no journal\n` +
-  `                    website; today it holds a single paper\n` +
+  `                    website; for now, with a single paper\n` +
   `  oak bootstrap paper   --repo <owner/name> --instance <owner/journal-repo> --edition <id>\n` +
   `                        [--from <author-url> [--source-ref <ref>]]\n` +
   `                        [--engine-repo <owner/name>] [--engine-version <tag>] [--owner <@user|@org/team>]\n` +
@@ -143,7 +143,7 @@ export const usage = (): string =>
   `                        [--zenodo-token <token>] [--zenodo-token-sandbox <token>]\n` +
   `                        [--cf-token <token>] [--cf-account <id>]\n` +
   `      --instance    the journal repo this paper belongs to ('.' only if the journal\n` +
-  `                    settings live in this same repo); --edition names one of its editions\n` +
+  `                    settings are in this same repo); --edition names one of its editions\n` +
   `      --zenodo-token, --zenodo-token-sandbox, --cf-token, --cf-account\n` +
   `                    the Zenodo and Cloudflare secrets to set on the repo; journal --co-located\n` +
   `                    takes them too. See ${docsUrl(DOCS.bootstrap)}\n` +
@@ -225,12 +225,12 @@ export const yamlInvalid = (file: string, why: string, duplicateKey: boolean): s
 /** A YAML file with a `---` (or `...`) line that starts a second document (yaml-io.ts
  *  `parseYaml`). */
 export const yamlMultipleDocs = (file: string, line: number, marker: string): string =>
-  `${file} holds more than one YAML document: the ${marker} at line ${line} splits it. Keep ` +
+  `${file} has more than one YAML document: the ${marker} at line ${line} splits it. Keep ` +
   `one document: delete that line, and merge what follows into the rest.`;
 
 /** A YAML value with `: ` in it, read as a second key (yaml-io.ts `parseYaml`). */
 export const yamlColonInValue = (file: string, line: number): string =>
-  `${file} is not valid YAML: the value at line ${line} holds a colon and a space, which YAML ` +
+  `${file} is not valid YAML: the value at line ${line} has a colon and a space, which YAML ` +
   `reads as a new key. Put the whole value in quotes, like title: "Tides: a study".`;
 
 /** A YAML line where a key is expected but none is written (yaml-io.ts `parseYaml`). */
@@ -344,7 +344,7 @@ export const bootstrap = {
   paperPlanHeader: (mode: 'ingest' | 'bare', repo: string): string =>
     `bootstrap paper (${mode === 'ingest' ? "importing an author's repo" : 'new, empty paper'}): ${repo}`,
   journalPlanHeader: (external: boolean, repo: string): string =>
-    `bootstrap journal (${external ? 'its own repo; papers live elsewhere' : 'journal and paper in one repo'}): ${repo}`,
+    `bootstrap journal (${external ? 'its own repo; papers in other repos' : 'journal and paper in one repo'}): ${repo}`,
 
   planRepoExists: '  ✓ repo exists',
   planCreateRepo: (isPrivate: boolean): string =>
@@ -382,7 +382,7 @@ export const bootstrap = {
     `  ○ copy the author's files from ${from}@${ref} onto a "review" branch`,
   ingestBadUrl: (url: string): string =>
     `oak bootstrap: --from must be a GitHub repo URL (https://github.com/owner/repo or ` +
-    `git@github.com:owner/repo), got: ${url}. A URL carrying a username or password is refused ` +
+    `git@github.com:owner/repo), got: ${url}. A URL with a username or password is refused ` +
     `too, because --from is copied into a public commit message and pull request.`,
   ingestBadRef: (ref: string): string =>
     `oak bootstrap: --source-ref must be a branch, tag or commit name, got: ${ref}. git reads a ` +
@@ -445,7 +445,7 @@ export const bootstrap = {
     `  ✓ created the '${env}' environment: only main may use its secrets`,
   logSecretSet: (name: string, env: string): string => `  ✓ secret ${name} set on '${env}'`,
   logRepoSecretDeleted: (name: string): string =>
-    `  ✓ deleted the repository secret ${name}; its environments hold it now`,
+    `  ✓ deleted the repository secret ${name}; it is set on its environments now`,
   logSiteAdded: (siteUrl: string): string => `  ✓ journal website added: ${siteUrl}`,
   logStepFailed: (step: string, why: string): string => `  ✗ ${step} failed: ${why}`,
   logRunbookLine: (line: string): string => `  → ${line}`,
@@ -594,7 +594,7 @@ export function bytes(n: number): string {
 export const clean = {
   noClones: (dir: string): string => `oak clean: no clones kept by oak release in ${dir}`,
   cacheKept: (dir: string, n: number): string =>
-    `oak clean: ${dir} holds ${bytes(n)} of pinned oak versions; --cache removes it`,
+    `oak clean: ${dir} uses ${bytes(n)} for pinned oak versions; --cache removes it`,
   planHeader: 'oak clean will remove:',
   planClone: (path: string, n: number): string => `  ${path}: ${bytes(n)}`,
   planCache: (dir: string, n: number): string =>
@@ -641,9 +641,9 @@ export const build = {
 
   /** `oak build` in the journal repo, whose myst.yml is the website (cli.ts `isJournalRepo`). */
   inJournalRepo: (root: string): string =>
-    `oak build: ${root} is the journal repo, not a paper. Its journal.yml holds the journal's ` +
+    `oak build: ${root} is the journal repo, not a paper. Its journal.yml has the journal's ` +
     `settings and its myst.yml is the journal website; there is no manuscript here to build.\n` +
-    `The website builds itself: every push to main runs the "Journal site" workflow, which ` +
+    `Every push to main runs the "Journal site" workflow, which builds the website and ` +
     `publishes it to GitHub Pages. To look at it before you push, run \`npm install\` once in ` +
     `this repo and then \`oak start\`.\n` +
     `To build a paper, run oak build inside that paper's checkout, or pass ` +
@@ -841,7 +841,7 @@ export const pinned = {
 export const validate = {
   /** `oak validate` in the journal repo, as {@link build.inJournalRepo}. */
   inJournalRepo: (root: string): string =>
-    `oak validate: ${root} is the journal repo, not a paper; journal.yml holds the journal's ` +
+    `oak validate: ${root} is the journal repo, not a paper; journal.yml has the journal's ` +
     `settings, and there is no manuscript here to check. The journal's settings are checked by ` +
     `each paper's own build, which reads them.\n` +
     `Run oak validate inside a paper's checkout, or pass --paper <path to the paper>.`,
@@ -941,7 +941,7 @@ export const validate = {
 
   // the deposit folder
   depositCollision: (names: string[], reserved: string[]): string =>
-    `deposit/ holds ${names.map((n) => `"${n}"`).join(', ')}, which the engine writes into ` +
+    `deposit/ has ${names.map((n) => `"${n}"`).join(', ')}, which the engine writes into ` +
     `every deposit itself; the release would refuse to publish. Rename them: ` +
     `${reserved.join(', ')} are the engine's.`,
 
@@ -1009,7 +1009,7 @@ export const pr = {
       ? `unknown check id "${id}"; a check file's path starts with ./, as in ` +
         `"./${id.replace(/^\/+/, '')}": ` +
         `${docsUrl(DOCS.checksJournal)}`
-      : `unknown check id "${id}"; the ids the journal can ask for, and how to change the set: ` +
+      : `unknown check id "${id}"; the ids journal.yml can list, and how to change the set: ` +
         `${docsUrl(DOCS.checksChanging)}`,
   checkThrew: (message: string): string =>
     `the check stopped with an error: ${message.replace(/\.$/, '')}. To show this as a ` +
@@ -1126,7 +1126,7 @@ export const workflow = {
     `a registry name in myst.yml and build again.`,
   depositTemplateMissing: (template: string, dir: string): string =>
     `typst template "${template}" resolves to ${dir}, which does not exist. The deposit ` +
-    `archives the template the PDF was rendered with, since no other file carries it. Run the ` +
+    `archives the template the PDF was rendered with, since no other file contains it. Run the ` +
     `build in this working tree before depositing.`,
   depositTemplateElsewhere: (path: string): string =>
     `the build recorded the typst template at ${path}, which is not on this computer and not ` +
@@ -1136,7 +1136,7 @@ export const workflow = {
     `deposit/ has files named like the ones oak adds: ${names.join(', ')}. Rename them; oak ` +
     `adds ${reserved.join(', ')}.`,
   depositEngineNotReleased: (missing: string[]): string =>
-    `engine.zip carries no ${missing.join(', ')}, so the deposit could not render its own PDF ` +
+    `engine.zip has no ${missing.join(', ')}, so the deposit could not render its own PDF ` +
     `again. This oak is not a released engine: deposit with a release tag.`,
   prepareDoiSet: (doi: string): string =>
     `project.doi is already ${doi}; oak release reserve-doi reserves a paper's first DOI only. A new ` +
@@ -1168,10 +1168,10 @@ export const workflow = {
     'project.github missing from myst.yml. oak release reserve-doi writes it beside project.doi, ' +
     'as https://github.com/<owner>/<repo>; put it back.',
   uploadNoBuildContent:
-    'no myst build output under _build/site/content, so the deposit description would carry ' +
+    'no myst build output under _build/site/content, so the deposit description would have ' +
     'no abstract and overwrite one that does. Build this working tree before depositing.',
   uploadNoRecord: (doi: string): string =>
-    `no Zenodo record matches ${doi}. Check that the token belongs to the account holding it, ` +
+    `no Zenodo record matches ${doi}. Check that the token belongs to the account that owns it, ` +
     `and that the record was not deleted.`,
   uploadConceptMismatch: (doi: string, found: string): string =>
     `myst.yml names the concept DOI ${doi}, but the Zenodo record found for it belongs to ` +
@@ -1186,7 +1186,7 @@ export const workflow = {
     `computer with oak release --repo ${repo ?? '<owner/repo>'} <vX.Y.Z>` +
     `${sandbox ? ' --sandbox' : ''}, which reserves the DOI too. ${docsUrl(DOCS.publishFromTerminal)}`,
   depositDoiPrNoGh: (conceptDoi: string): string =>
-    `oak release reserve-doi: gh is not logged in, so no pull request was opened. myst.yml now holds ` +
+    `oak release reserve-doi: gh is not logged in, so no pull request was opened. myst.yml now has ` +
     `${conceptDoi}; commit it and open the pull request yourself.`,
   depositDoiPrOpened: (url: string): string => `oak release reserve-doi: opened DOI PR ${url}`,
   depositDoiPrStatusFailed: (message: string): string =>
@@ -1213,8 +1213,8 @@ export const workflow = {
     `the journal commit the PDF was built from (${at}) could not be fetched (${why}). Re-run ` +
     `the whole workflow, so the build and the deposit read the same journal commit.`,
 
-  /** The DOI pull request `gh.openDoiPr` opens. GitHub holds the checks on a pull request a
-   *  workflow opens, so in Actions the body says why they wait. */
+  /** The DOI pull request `gh.openDoiPr` opens. GitHub starts no checks on a pull request a
+   *  workflow opens, so in Actions the body says why. */
   doiPrTitle: 'Reserve Zenodo DOI',
   doiCommitMessage: (conceptDoi: string): string => `chore: reserve Zenodo DOI ${conceptDoi}`,
   doiPrChecksSkipped:
@@ -1226,9 +1226,9 @@ export const workflow = {
         ? [
             '',
             '<details>',
-            '<summary>Why are the checks waiting?</summary>',
+            '<summary>Why are the checks not running?</summary>',
             '',
-            'GitHub holds the checks on a pull request a workflow opens. This one changes only ' +
+            'GitHub starts no checks on a pull request a workflow opens. This one changes only ' +
               'the DOI in `myst.yml`, so the workflow skipped the Journal checks, and the other ' +
               'checks are not needed to merge. If the Journal checks are missing, close and ' +
               'reopen this pull request to run them.',
@@ -1363,7 +1363,7 @@ export const workflow = {
     `oak release: ${tag} on ${repo} has no Zenodo DOI in its myst.yml, so it was tagged before ` +
     `the DOI pull request was merged. Delete the tag (editors can) or pick another version.`,
   releaseSandboxWithProdDoi: (doi: string): string =>
-    `oak release: --sandbox, but myst.yml holds the production DOI ${doi}, and a paper never ` +
+    `oak release: --sandbox, but myst.yml has the production DOI ${doi}, and a paper never ` +
     `moves back to the sandbox. Drop --sandbox.`,
   releaseNoRecord: (doi: string): string => `oak release: ${workflow.uploadNoRecord(doi)}`,
   releaseNeedsNewVersion: (tag: string, recordUrl: string | null): string =>
@@ -1399,7 +1399,7 @@ export const workflow = {
   releaseTagExists: (tag: string, sha: string): string =>
     `✓ ${tag} is already tagged at ${sha.slice(0, 7)}`,
   releaseAlreadyDeposited: (tag: string): string =>
-    `✓ ${tag} is already deposited: its GitHub release holds the deposit files`,
+    `✓ ${tag} is already deposited: its GitHub release has the deposit files`,
   releaseDepositedByCi: (tag: string, url: string): string =>
     `✓ the Deposit version run deposited ${tag} and attached the files to its release: ${url}`,
   releaseNextByCi: [
@@ -1459,12 +1459,12 @@ export const workflow = {
     `✓ merged the DOI pull request as ${sha.slice(0, 7)}: ${url}`,
   releaseMainMoved: (sha: string, commits: string[]): string =>
     `! the default branch moved after the merge. The tag goes on the merge commit ` +
-    `${sha.slice(0, 7)}, which holds the DOI; these commits are not in this release:\n` +
+    `${sha.slice(0, 7)}, which has the DOI; these commits are not in this release:\n` +
     commits.map((c) => `  ${c}`).join('\n'),
   releaseTagged: (tag: string, sha: string): string => `✓ tagged ${tag} at ${sha.slice(0, 7)}`,
   releaseTagAppeared: (tag: string, repo: string): string =>
     `oak release: ${tag} was created on ${repo} while this ran, so oak left it as it is. Check ` +
-    `who made it; running this again deposits it, if its myst.yml holds the DOI.`,
+    `who made it; running this again deposits it, if its myst.yml has the DOI.`,
   releaseTagFailed: (tag: string, repo: string, why: string): string =>
     `oak release: GitHub did not create ${tag} (${why}). Only editors can create v* tags on ` +
     `${repo}; once that is fixed, run this again.`,
@@ -1533,7 +1533,7 @@ export const workflow = {
   bootstrapUsage: 'oak bootstrap: usage: oak bootstrap <paper|journal> --repo <owner/name> [...]',
   bootstrapSecretsNeedPaper:
     'oak bootstrap journal: the secret flags (--zenodo-token, ' +
-    '--zenodo-token-sandbox, --cf-token, --cf-account) set nothing here; this repo holds ' +
+    '--zenodo-token-sandbox, --cf-token, --cf-account) set nothing here; this repo has ' +
     "the journal's settings and runs no publishing, so it takes no secrets. The tokens are " +
     'set per paper repo: `oak bootstrap paper` accepts the same flags, or set them in the ' +
     "paper repo's environment settings.",
@@ -1556,8 +1556,8 @@ export const workflow = {
     `no github.com origin remote in ${repoRoot}, so there is no repo to post to`,
   /** The DOI pull request must change one file against the default branch. */
   doiPrDiverged: (head: string, base: string): string =>
-    `${head} carries commits that are not on ${base}, so the DOI pull request would not be ` +
-    `the one-file change it claims to be. Run oak release reserve-doi on ${base}.`,
+    `${head} has commits that are not on ${base}, so the DOI pull request would change more ` +
+    `than myst.yml. Run oak release reserve-doi on ${base}.`,
   wranglerNoUrl: 'wrangler did not report a *.pages.dev deployment URL',
   /** No detail from wrangler: this reaches a public pull request comment, and wrangler's output
    *  names the account id. The details stay in the workflow log, where Actions redacts

@@ -114,7 +114,7 @@ describe.skipIf(bundleState() === 'absent')(
 
     it('explains the journal repo and --co-located in plain words', () => {
       const { stderr } = oak([]);
-      expect(stderr).toMatch(/a public repo holding the journal's settings/);
+      expect(stderr).toMatch(/a public repo with the journal's settings/);
       expect(stderr).toMatch(/--co-located\s+not ready: one repo for the journal and its papers/);
     });
 
@@ -1053,7 +1053,7 @@ describe.skipIf(bundleState() === 'absent')('oak clean', () => {
     const r = oak(['clean', '--json'], { TMPDIR: dir, XDG_CACHE_HOME: cache });
     expect(r.code).toBe(0);
     expect(r.stderr).toContain(`no clones kept by oak release in ${dir}`);
-    expect(r.stderr).toContain(`${join(cache, 'oak')} holds`);
+    expect(r.stderr).toContain(`${join(cache, 'oak')} uses`);
     expect(JSON.parse(r.stdout)).toMatchObject({ status: 'ok', dir, clones: [] });
   });
 });

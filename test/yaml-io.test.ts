@@ -291,7 +291,7 @@ describe('a common YAML mistake is refused in plain words', () => {
   it('names the --- line that starts a second document, and says to keep one', () => {
     for (const text of ['project:\n  id: p\n---\nversion: 1\n', '---\nid: p\n\n---\n']) {
       const why = refusal(text);
-      expect(why).toContain('myst.yml holds more than one YAML document: the --- at line');
+      expect(why).toContain('myst.yml has more than one YAML document: the --- at line');
       expect(why).toContain('Keep one document');
       expect(why).not.toContain('parseAllDocuments');
     }
@@ -305,7 +305,7 @@ describe('a common YAML mistake is refused in plain words', () => {
 
   it('says to quote a value holding a colon and a space', () => {
     const why = refusal('project:\n  title: Tides: a study\n');
-    expect(why).toContain('the value at line 2 holds a colon and a space');
+    expect(why).toContain('the value at line 2 has a colon and a space');
     expect(why).toContain('in quotes');
   });
 
