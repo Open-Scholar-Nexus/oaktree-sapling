@@ -450,14 +450,6 @@ function escapeHtml(s: string): string {
     .replace(/'/g, '&#x27;');
 }
 
-function youtubeUrl(project: any): string | null {
-  const fromOptions = project.options?.youtube;
-  if (fromOptions) return String(fromOptions).trim();
-  const fromSocial = project.social?.youtube;
-  if (fromSocial) return String(fromSocial).trim();
-  return null;
-}
-
 /** An author's name parts as MyST parses them. Zenodo has no field for a suffix, so it goes
  *  with the family name. */
 function personName(n: Name = {}): { family: string; given?: string } {
@@ -474,6 +466,18 @@ export function legacyCreatorName(n: Name = {}): string {
   if (!given) return family;
   if (family.includes(',') || given.includes(',')) return `${given} ${family}`;
   return `${family}, ${given}`;
+}
+
+/** The value of `project.options.<option>` when it is an http(s) address, else undefined. */
+function httpUrl(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const url = value.trim();
+  try {
+    const { protocol } = new URL(url);
+    return protocol === 'http:' || protocol === 'https:' ? url : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function warn(message: string): void {
@@ -543,18 +547,24 @@ export function buildMetadata(input: MetadataInput): Record<string, unknown> {
   if (paperId)
     related.push({ identifier: paperUrn(paperId), relation: 'isVersionOf', scheme: 'urn' });
   if (siteUrl) related.push({ identifier: siteUrl, relation: 'isIdenticalTo', scheme: 'url' });
-  const yt = youtubeUrl(project);
-  if (yt) related.push({ identifier: yt, relation: 'isSupplementedBy', scheme: 'url' });
 
   const desc: string[] = [];
   if (abstractParas) desc.push(...abstractParas.map((p) => `<p>${escapeHtml(p)}</p>`));
   // The journal's optional paragraph.
   if (zenodo.description_blurb) desc.push(`<p>${escapeHtml(zenodo.description_blurb)}</p>`);
   if (extraDescParas) desc.push(...extraDescParas.map((p) => `<p>${escapeHtml(p)}</p>`));
-  const label = msg.zenodoRecord;
-  if (yt) {
-    desc.push(`<p>${label.recording}: <a href="${escapeHtml(yt)}">${label.watchRecording}</a></p>`);
+  for (const link of zenodo.links ?? []) {
+    const value = project.options?.[link.option];
+    const url = httpUrl(value);
+    if (!url) {
+      warn(msg.workflow.zenodoLinkSkipped(link.option, value));
+      continue;
+    }
+    const href = escapeHtml(url);
+    desc.push(`<p>${escapeHtml(link.label)}: <a href="${href}">${escapeHtml(link.text)}</a></p>`);
+    if (link.relation) related.push({ identifier: url, relation: link.relation, scheme: 'url' });
   }
+  const label = msg.zenodoRecord;
   if (siteUrl) {
     const href = escapeHtml(siteUrl);
     desc.push(`<p>${label.website}: <a href="${href}">${href}</a></p>`);

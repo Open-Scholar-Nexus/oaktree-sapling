@@ -311,6 +311,51 @@ describe('buildMetadata', () => {
     expect(legacyCreatorName({ given: 'A, B', family: 'C' })).toBe('A, B C');
   });
 
+  describe("the journal's links", () => {
+    const yt = {
+      option: 'youtube',
+      label: 'Seminar recording',
+      text: 'Watch on YouTube',
+      relation: 'isSupplementedBy' as const,
+    };
+    const withOptions = (options: Record<string, unknown>, links = [yt]) =>
+      buildMetadata({
+        project: { title: 'T', options },
+        githubUrl: 'https://github.com/o/r',
+        zenodo: { links },
+      });
+
+    it('adds a line and a related identifier from the paper option', () => {
+      const md = withOptions({ youtube: 'https://youtu.be/x?a=1&b=2' });
+      expect(md.description).toContain(
+        '<p>Seminar recording: <a href="https://youtu.be/x?a=1&amp;b=2">Watch on YouTube</a></p>',
+      );
+      expect(md.related_identifiers).toContainEqual({
+        identifier: 'https://youtu.be/x?a=1&b=2',
+        relation: 'isSupplementedBy',
+        scheme: 'url',
+      });
+    });
+
+    it('adds only the line when the link has no relation', () => {
+      const { relation: _, ...plain } = yt;
+      const md = withOptions({ youtube: 'https://youtu.be/x' }, [plain]);
+      expect(md.description).toContain('Watch on YouTube');
+      const related = md.related_identifiers as Array<Record<string, string>>;
+      expect(related.map((r) => r.identifier)).not.toContain('https://youtu.be/x');
+    });
+
+    it('skips a missing option or a value that is not an http(s) address, with a warning', () => {
+      for (const options of [{}, { youtube: 'javascript:alert(1)' }, { youtube: 'not a url' }]) {
+        const warnings = captureStderr();
+        const md = withOptions(options);
+        expect(md.description).not.toContain('Seminar recording');
+        expect(JSON.stringify(md.related_identifiers)).not.toContain('isSupplementedBy');
+        expect(warnings()).toEqual([expect.stringContaining('project.options.youtube')]);
+      }
+    });
+  });
+
   it('escapes the venue, the funding and the repository link', () => {
     const md = buildMetadata({
       project: { ...project, venue: { title: 'A <b>venue</b>' }, funding: 'Grant <1>' },

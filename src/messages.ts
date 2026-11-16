@@ -785,6 +785,10 @@ export const build = {
 export const schema = {
   editionId: 'must be a plain name (letters, digits, . _ -)',
   engineVersion: 'must be a release tag like v1.2.3 or v1.2.3-dev.4',
+  zenodoLinkOption: 'must be a myst.yml option name: lowercase letters, digits and _',
+  zenodoLinkRelation:
+    'must be a DataCite relation as Zenodo spells it, such as isSupplementedBy; the ' +
+    'journal.yml reference lists them',
 };
 
 export const start = {
@@ -1191,6 +1195,14 @@ export const workflow = {
   /** `why` is mystmd's own message, which names the author. */
   orcidInvalid: (why: string): string =>
     `${why}. The deposit leaves this ORCID out. Fix it in myst.yml.`,
+  /** A journal.yml `zenodo.links` entry the paper gives no web address for. */
+  zenodoLinkSkipped: (option: string, value: unknown): string =>
+    value === undefined
+      ? `myst.yml sets no project.options.${option}, so the deposit description leaves out ` +
+        `that link.`
+      : `project.options.${option} in myst.yml is not an http(s) address ` +
+        `(${JSON.stringify(String(value).slice(0, 80))}), so the deposit description leaves ` +
+        `out that link.`,
   zenodoCommunityMissing: (slug: string): string =>
     `Zenodo has no community "${slug}", which journal.yml names as zenodo.community. Fix the ` +
     `name there; it is the last part of the community's address on Zenodo.`,
@@ -1626,8 +1638,6 @@ export const conformance = {
 
 /** The fixed labels in a Zenodo record's description (zenodo.ts `buildMetadata`). */
 export const zenodoRecord = {
-  recording: 'Video recording',
-  watchRecording: 'Watch on YouTube',
   website: 'Project Website',
   repository: 'Repository',
   venue: 'Venue',

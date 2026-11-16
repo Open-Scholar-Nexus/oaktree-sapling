@@ -189,12 +189,54 @@ export const PreviewConfig = z
   .loose();
 export type PreviewConfig = z.infer<typeof PreviewConfig>;
 
+/** DataCite relation types, in the camelCase Zenodo's legacy deposit API takes. */
+export const ZENODO_RELATIONS = [
+  'isCitedBy',
+  'cites',
+  'isSupplementTo',
+  'isSupplementedBy',
+  'isContinuedBy',
+  'continues',
+  'isDescribedBy',
+  'describes',
+  'isNewVersionOf',
+  'isPreviousVersionOf',
+  'isPartOf',
+  'hasPart',
+  'isReferencedBy',
+  'references',
+  'isDocumentedBy',
+  'documents',
+  'isCompiledBy',
+  'compiles',
+  'isVariantFormOf',
+  'isOriginalFormOf',
+  'isIdenticalTo',
+  'isReviewedBy',
+  'reviews',
+  'isDerivedFrom',
+  'isSourceOf',
+  'requires',
+  'isRequiredBy',
+] as const;
+
+/** A link the deposit description gets from a paper's `project.options.<option>` URL. */
+export const ZenodoLink = z.strictObject({
+  option: z.string().regex(/^[a-z][a-z0-9_]*$/, msg.schema.zenodoLinkOption),
+  label: z.string().min(1),
+  text: z.string().min(1),
+  /** Also adds the URL as a related identifier with this relation. */
+  relation: z.enum(ZENODO_RELATIONS, { error: msg.schema.zenodoLinkRelation }).optional(),
+});
+export type ZenodoLink = z.infer<typeof ZenodoLink>;
+
 export const ZenodoConfig = z
   .object({
     /** Optional Zenodo community identifier; a new journal has none. */
     community: z.string().optional(),
     /** Optional paragraph appended to every deposit's description. */
     description_blurb: z.string().optional(),
+    links: z.array(ZenodoLink).optional(),
   })
   .loose();
 export type ZenodoConfig = z.infer<typeof ZenodoConfig>;
