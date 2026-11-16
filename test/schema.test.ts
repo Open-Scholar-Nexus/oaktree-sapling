@@ -265,7 +265,7 @@ describe('registry location: one string', () => {
 });
 
 describe('Pins', () => {
-  it('defaults instance_repo to "." when omitted (the repo is its own journal)', () => {
+  it('sets instance_repo to "." when it is omitted (the repo is its own journal)', () => {
     const p = Pins.parse({ engine_repo: 'open-scholar-nexus/oaktree-sapling' });
     expect(p.instance_repo).toBe('.');
   });

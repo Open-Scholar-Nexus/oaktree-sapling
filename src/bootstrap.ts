@@ -417,8 +417,8 @@ function protectMainBody(requireChecks: boolean, bypass: unknown[]): unknown {
         dismiss_stale_reviews_on_push: true,
         require_last_push_approval: false,
         required_review_thread_resolution: false,
-        // GitHub defaults this on, which asks for an approving review of a pull request no person
-        // authored, such as the DOI pull request `oak release reserve-doi` opens.
+        // GitHub turns this on by default, which asks for an approving review of a pull request no
+        // person authored, such as the DOI pull request `oak release reserve-doi` opens.
         require_extra_approval_for_unattributed_changes: false,
       },
     },
@@ -622,7 +622,7 @@ export interface BootstrapPaperInput {
   private: boolean;
   requireChecks: boolean; // add "Journal checks" to protect-main required checks (default true)
   secrets: SecretInputs;
-  /** Where the defaulted values came from, for the plan. */
+  /** Where the values bootstrap filled in came from, for the plan. */
   resolved?: ResolvedFlags;
 }
 
@@ -923,8 +923,8 @@ export async function cmdBootstrapPaper(
   const mode = input.from ? 'ingest' : 'bare';
 
   // `--instance` is required: `pins.yml`'s `instance_repo` is the only record of a paper's
-  // journal, and with `.` the engine action clones nothing, so a defaulted `.` would leave CI
-  // with no journal. `--instance .` is for a repo that is its own journal.
+  // journal, and with `.` the engine action clones nothing, so a `.` that bootstrap filled in
+  // would leave CI with no journal. `--instance .` is for a repo that is its own journal.
   if (!input.instance) {
     return {
       exitCode: 2,
@@ -974,7 +974,7 @@ export async function cmdBootstrapPaper(
       ownerGiven: Boolean(input.owner),
       ownerUsed: true,
       edition: input.edition,
-      editionGiven: true, // required for papers, never defaulted
+      editionGiven: true, // required for papers, never filled in for the user
       instanceRepo,
       resolved: input.resolved,
     }),
@@ -1123,7 +1123,7 @@ export interface BootstrapJournalInput {
    *  usage error: a co-located journal has no site. */
   site?: boolean;
   secrets: SecretInputs;
-  /** Where the defaulted values came from, for the plan. */
+  /** Where the values bootstrap filled in came from, for the plan. */
   resolved?: ResolvedFlags;
 }
 

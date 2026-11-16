@@ -62,7 +62,7 @@ describe('renderPaperTemplate', () => {
     const co = readFileSync(join(dest, 'CODEOWNERS'), 'utf8');
     expect(co).toMatch(/\/\.github\/\s+@alice/);
     expect(co).toMatch(/\/CODEOWNERS\s+@alice/);
-    expect(co).not.toContain('@pollomarzo');
+    expect(co).not.toContain('@ghost');
 
     const myst = parseDocument(readFileSync(join(dest, 'myst.yml'), 'utf8'));
     expect(myst.getIn(['project', 'options', 'oaktree-sapling', 'version'])).toBe('v1.2.3');

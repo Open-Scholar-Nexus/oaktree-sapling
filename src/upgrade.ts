@@ -59,7 +59,7 @@ const CODEOWNERS_REL = 'CODEOWNERS';
  *  path may have more than one owner. */
 export function ownerFromCodeowners(src: string): string {
   const first = Object.values(codeownersColumns(src))[0];
-  return first ?? '@owner';
+  return first ?? '@ghost';
 }
 
 /** The repo's owner column per gated path, so an owner added by hand survives a resync.
@@ -76,7 +76,7 @@ export function readAnswers(repoRoot: string): TemplateAnswers {
   const engineRepo = String(pins?.get('engine_repo') ?? '');
   const instanceRepo = String(pins?.get('instance_repo') ?? '.');
   const coPath = join(repoRoot, CODEOWNERS_REL);
-  const owner = existsSync(coPath) ? ownerFromCodeowners(readFileSync(coPath, 'utf8')) : '@owner';
+  const owner = existsSync(coPath) ? ownerFromCodeowners(readFileSync(coPath, 'utf8')) : '@ghost';
   const myst = join(repoRoot, 'myst.yml');
   let version = '';
   let edition = '';
