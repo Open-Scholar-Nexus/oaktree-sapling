@@ -19,14 +19,16 @@ A parsing error[^journal-error] in `journal.yml` stops every oak command and nam
 | `preview.provider` | `artifact` | `cloudflare` for live previews on Cloudflare Pages, `artifact` for a downloadable copy.[^providers] See [live previews](../guide/journal-yml.md#live-previews). |
 | `preview.cf_project_name` | | The Cloudflare Pages project the previews go to. |
 | `preview.branch_pattern` | `paper-{repo}-{pr}` | The name of each preview inside the project, with `{repo}` and `{pr}` filled in. It is lowercased and cut to 28 characters by shortening `{repo}`, which then ends in a 4-character hash so that papers with similar names stay distinct. |
-| `zenodo.community` | | The Zenodo community every deposit joins. |
+| `zenodo.community` | | The Zenodo community a paper's first version is submitted to. See [Zenodo community](../guide/journal-yml.md#zenodo-community). |
 | `zenodo.description_blurb` | | A paragraph added to every deposit's description, after the abstract. |
+| `zenodo.links` | none | Lines added to every deposit's description, each linking the web address a paper sets as `project.options.<option>`. Each entry has `option` (lowercase letters, digits and `_`, starting with a letter), `label`, `text` and an optional `relation`.[^relations] See [Zenodo links](../guide/journal-yml.md#zenodo-links). |
 | `id_pattern` | | A regular expression every paper's `project.id` must match, when set. See [the paper id rule](../guide/journal-yml.md#id-pattern). |
 | `tier` | `paper` | Only `paper` is built.[^tier] |
 | `id_sentinel` | | An id rejected as a placeholder, besides `CHANGE-ME-template-placeholder`. |
 
 [^tier]: `edition` and `journal` are reserved for a repository that holds an edition's papers or the whole journal's. Neither is built yet.
 [^providers]: More providers may be added later.
+[^relations]: `relation` also lists the address among the record's related works. It is one of `isCitedBy`, `cites`, `isSupplementTo`, `isSupplementedBy`, `isContinuedBy`, `continues`, `isDescribedBy`, `describes`, `isNewVersionOf`, `isPreviousVersionOf`, `isPartOf`, `hasPart`, `isReferencedBy`, `references`, `isDocumentedBy`, `documents`, `isCompiledBy`, `compiles`, `isVariantFormOf`, `isOriginalFormOf`, `isIdenticalTo`, `isReviewedBy`, `reviews`, `isDerivedFrom`, `isSourceOf`, `requires` and `isRequiredBy`.
 
 (file-brand-yml)=
 ## brand/brand.yml

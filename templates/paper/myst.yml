@@ -7,8 +7,11 @@ project:
   # https://scholar.nexus/oaktree-sapling/guide/journal-yml#id-pattern
   id: CHANGE-ME-template-placeholder
   title: CHANGE-ME (your paper title)
+  # Author fields: https://mystmd.org/guide/frontmatter#frontmatter-authors
   # authors:
-  #   - name: Ada Lovelace
+  #   - name:
+  #       given: Ada
+  #       family: Lovelace
   #     orcid: 0000-0000-0000-0000
   #     affiliations:
   #       - Your Institution

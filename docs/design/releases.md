@@ -61,9 +61,12 @@ When the deposit has a `template.zip`, unzip it too and add `--typst-template <t
 | `publication-provenance.json` | the paper's and the journal's repository and commit, the paper's website, the DOIs, and where, when and with which typst the PDF was built |
 
 (r28)=
-The files in the paper's `deposit/` folder are added beside them, and these names are reserved: `oak validate` reports a `deposit/` file that takes one, and `oak release` refuses it before writing to Zenodo.
+The files in the paper's `deposit/` folder are added beside them, and these names are reserved: `oak validate` reports a `deposit/` file that takes one, and `oak release` refuses it before writing to Zenodo. Before the upload, `oak release` removes every file the draft holds, including those a new version imports from the one before, so the deposit is exactly these files.
 
 `journal.zip` holds the journal commit the build used, which the build records in `myst.oak.yml` under `project.options.oaktree-sapling.journal`. The deposit runs in a job of its own and fetches that commit, so the archive matches the PDF even when the journal has changed since the build, as when a failed deposit job is re-run, or an editor deposits [from the terminal](#from-terminal), days later. The record's Zenodo metadata follows the journal's `zenodo:` settings as they are when the deposit runs. A build from journal files that are not a commit of their own repository, such as local changes, cannot be deposited.
+
+(r19)=
+The journal's `zenodo:` paragraph, links and community are optional. oak writes the record through Zenodo's legacy deposit API (`/api/deposit/depositions`), whose `communities` field takes effect only when that API publishes the record, so a draft an editor publishes on Zenodo's page would join no community. So the community is a review request on the draft, set through Zenodo's InvenioRDM API (`/api/records/<id>/draft/review`) with the same token, and the editor's **Submit for review** sends it. Zenodo takes a community on a first version only, and later versions stay in the communities the first one joined. `--publish-without-review` publishes through the legacy API with no review, so that record joins no community.
 
 A paper repository that is its own journal (`instance_repo: "."` in `pins.yml`)[^own-journal] gets no `journal.zip`, because its journal files are in `source.zip` at the same commit; the provenance names the paper's repository and commit as the journal's. A paper built with `--no-instance` has no journal to archive.
 

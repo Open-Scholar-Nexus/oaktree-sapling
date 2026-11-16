@@ -42,14 +42,16 @@ You then [publish the draft on Zenodo](#publish-on-zenodo) and [list the paper o
 (publish-without-review)=
 ### Publishing without review
 
-`oak release --publish-without-review` publishes the draft as soon as it is filled, so the version gets its DOI with no check on Zenodo first. Once it is published, Zenodo does not let its files change.
+`oak release --publish-without-review` publishes the draft as soon as it is filled, so the version gets its DOI with no check on Zenodo first. Once it is published, Zenodo does not let its files change. The record is published outside the journal's [Zenodo community](journal-yml.md#zenodo-community), and oak prints a warning saying so. An editor can then submit it to the community on Zenodo.
 
 (publish-on-zenodo)=
 ## Publish on Zenodo
 
 Open the draft on Zenodo, check it, and click **Publish**. The DOI resolves from then on.
 
-When the paper's `myst.yml` sets `project.options.youtube` to a video's URL, the draft's description links the video as **Video recording**.
+When the journal has a [Zenodo community](journal-yml.md#zenodo-community), the first version's button reads **Submit for review**, and the paper is published once a curator of the community accepts it. An editor who curates the community sees **Publish to community**, which publishes it at once.
+
+The draft's description links the addresses the journal lists in [`zenodo.links`](journal-yml.md#zenodo-links), such as a recording of a talk, from the options the paper sets in its `myst.yml`.
 
 (list-on-site)=
 ## List it on the journal website
