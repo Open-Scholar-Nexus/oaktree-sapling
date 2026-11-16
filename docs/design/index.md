@@ -34,7 +34,7 @@ Everything else is worked out when the paper builds. `oak build` assembles this 
 | `brand/brand.yml` | the journal repository | logo, colours, the mark on the PDF |
 | `myst.yml` | the paper | the manuscript's own frontmatter |
 
-The first three rows are files outside the paper repository. In CI, before oak runs, the engine action checks out oaktree-sapling at the version the paper pinned. oak then clones the journal repository at its default branch[^pinning] into the paper's `_build/journal/`. When MyST runs (resolving the generated `extends:` chain) every entry is a local path.
+`paper-base.yml`, the edition file and `brand/brand.yml` are outside the paper repository. In CI, before oak runs, the engine action clones oaktree-sapling, which has `paper-base.yml`, at the version the paper pinned. oak then clones the journal repository, which has the edition file and `brand/brand.yml`, at its default branch[^pinning] into the paper's `_build/journal/`. When MyST runs (resolving the generated `extends:` chain) every entry is a local path.
 
 [^pinning]: The journal repository is deliberately not pinned. A new logo or an extra editorial check reaches every paper on its next build, with nobody re-pinning anything. When a version is deposited to Zenodo, the journal repository at the commit its build used is archived with it, so the PDF can be rendered again with the settings it was published with ([what a deposit contains](#design-releases-deposit)).
 
@@ -47,7 +47,7 @@ The assembled result is written to **`myst.oak.yml`**[^public], next to the pape
 
 Each page takes one part of oaktree-sapling and explains why it is built that way. What each part _does_ belongs in [Reference](../reference/files.md); this section is for the reasoning.
 
-[How a paper's config is assembled](config.md) continues from the section above. [How a paper repository's CI is built](paper-ci.md) covers why every job is split in two, what a job holding a token is allowed to believe, and what `CODEOWNERS` gates. [The editorial checks](checks.md) covers the checks a journal writes itself, and [How oaktree-sapling is released](releases.md) why a release commits its build and what a deposit contains.
+[How a paper's config is assembled](config.md) continues from the section above. [How a paper repository's CI is built](paper-ci.md) covers why every job is split in two, what a job with a token uses from a pull request's build, and which files need an editor's review. [The editorial checks](checks.md) covers the checks a journal writes itself, and [How oaktree-sapling is released](releases.md) why each release tag has oak's bundled code committed on it, and what a deposit contains.
 
 Code comments cite decisions as `[R#]` and `[design §N]`. Those not yet written up on these pages are in the original [decision record](https://github.com/pollomarzo/whitelabel/blob/v0.0.7/docs/design/record.md) and [design brief](https://github.com/pollomarzo/whitelabel/blob/v0.0.7/docs/design/brief.md), in the repository oaktree-sapling was developed in.
 
