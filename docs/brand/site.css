@@ -64,6 +64,8 @@
       display: flex;
       gap: 1.5rem;
       align-items: flex-start;
+      /* The sticky code paints over the text after it, so its shadow needs room. */
+      margin-bottom: 2.5rem;
       .scroll-code-src {
         position: sticky;
         top: 5rem;
