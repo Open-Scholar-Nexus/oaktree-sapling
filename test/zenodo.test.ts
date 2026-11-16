@@ -14,6 +14,7 @@ import { parseDocument } from 'yaml';
 import {
   ZenodoApi,
   buildMetadata,
+  legacyCreatorName,
   buildBundle,
   paperUrn,
   cmdPrepare,
@@ -84,6 +85,19 @@ const fakeGit: GitContext = {
     return null;
   },
 };
+
+/** Collects what is written to stderr until the test ends, one entry per write. */
+function captureStderr(): () => string[] {
+  const lines: string[] = [];
+  vi.spyOn(process.stderr, 'write').mockImplementation((c) => {
+    lines.push(String(c));
+    return true;
+  });
+  return () => lines;
+}
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 const dep = (over: Partial<Deposition> = {}): Deposition => ({
   id: 1,
@@ -188,14 +202,13 @@ describe('buildMetadata', () => {
     ],
   };
 
-  it('leaves out community and blurb for a new journal, and keeps the GitHub and id related identifiers', () => {
+  it('leaves out the blurb for a new journal, and keeps the GitHub and id related identifiers', () => {
     const md = buildMetadata({
       project,
       paperId: project.id,
       githubUrl: 'https://github.com/o/r',
       zenodo: {},
     });
-    expect(md.communities).toBeUndefined();
     // Without a journal blurb the description is only the repo and site lines.
     expect(md.description).not.toContain('Program');
     const related = md.related_identifiers as Array<Record<string, string>>;
@@ -214,11 +227,134 @@ describe('buildMetadata', () => {
     expect(md.description).toContain('Made by the Fixture Journal.');
   });
 
-  it('drops placeholder or invalid ORCIDs and keeps valid ones', () => {
+  it('sends the GitHub repository as the code repository custom field', () => {
     const md = buildMetadata({ project, githubUrl: 'https://github.com/o/r', zenodo: {} });
-    const creators = md.creators as Array<Record<string, string>>;
+    expect(md.custom).toEqual({ 'code:codeRepository': 'https://github.com/o/r' });
+  });
+
+  it('drops placeholder or malformed ORCIDs with a warning, and keeps valid ones', () => {
+    const warnings = captureStderr();
+    const authors = [...project.authors, { name: 'Bad Orcid', orcid: '1234' }];
+    const md = buildMetadata({
+      project: { ...project, authors },
+      githubUrl: 'https://github.com/o/r',
+      zenodo: {},
+    });
+    const creators = md.creators as Array<Record<string, unknown>>;
     expect(creators[0]!.orcid).toBe('0000-0002-1825-0097');
     expect(creators[1]!.orcid).toBeUndefined();
+    expect(creators[2]!.orcid).toBeUndefined();
+    expect(warnings()).toEqual([
+      expect.stringMatching(/ORCID "1234" is not valid.*authors\.2.*leaves this ORCID out/),
+      expect.stringMatching(/Placeholder \(0000-0000-0000-0000\) is the template's placeholder/),
+    ]);
+  });
+
+  it('sends every affiliation as a list, from a string, an object or a project affiliation id', () => {
+    const md = buildMetadata({
+      project: {
+        title: 'T',
+        affiliations: [{ id: 'brown', name: 'Brown University' }],
+        authors: [
+          { name: 'Ada', affiliations: ['Inst A', { name: 'Inst B' }, 'brown'] },
+          { name: 'Bo', affiliation: 'Solo Inst' },
+          { name: 'Cy' },
+        ],
+      },
+      githubUrl: 'https://github.com/o/r',
+      zenodo: {},
+    });
+    const creators = md.creators as Array<Record<string, unknown>>;
+    expect(creators[0]!.affiliations).toEqual([
+      { name: 'Inst A' },
+      { name: 'Inst B' },
+      { name: 'Brown University' },
+    ]);
+    expect(creators[1]!.affiliations).toEqual([{ name: 'Solo Inst' }]);
+    expect(creators[2]!.affiliations).toBeUndefined();
+    expect(creators.some((c) => 'affiliation' in c)).toBe(false);
+  });
+
+  it('writes each name as "Family, Given", split as MyST parses it', () => {
+    const md = buildMetadata({
+      project: {
+        title: 'T',
+        authors: [
+          'Ada Lovelace',
+          { name: { given: 'Ada', family: 'Lovelace' } },
+          { name: { first: 'Vincent', particle: 'van', surname: 'Gogh' } },
+          { name: { forename: 'Ludwig', 'dropping-particle': 'van', last: 'Beethoven' } },
+          { name: { given: 'Martin Luther', family: 'King', suffix: 'Jr.' } },
+          { name: 'Josiah Carberry' },
+          { name: 'Plato' },
+        ],
+      },
+      githubUrl: 'https://github.com/o/r',
+      zenodo: {},
+    });
+    expect((md.creators as Array<{ name: string }>).map((c) => c.name)).toEqual([
+      'Lovelace, Ada',
+      'Lovelace, Ada',
+      'van Gogh, Vincent',
+      'Beethoven, Ludwig van',
+      'King Jr., Martin Luther',
+      'Carberry, Josiah',
+      'Plato',
+    ]);
+  });
+
+  it('joins the name parts with a space when one holds a comma, which Zenodo keeps whole', () => {
+    expect(legacyCreatorName({ given: 'Ada', family: 'Lovelace, Countess' })).toBe(
+      'Ada Lovelace, Countess',
+    );
+    expect(legacyCreatorName({ given: 'A, B', family: 'C' })).toBe('A, B C');
+  });
+
+  it('escapes the venue, the funding and the repository link', () => {
+    const md = buildMetadata({
+      project: { ...project, venue: { title: 'A <b>venue</b>' }, funding: 'Grant <1>' },
+      githubUrl: 'https://github.com/o/r"x',
+      zenodo: {},
+    });
+    expect(md.description).toContain('<p>Venue: A &lt;b&gt;venue&lt;/b&gt;</p>');
+    expect(md.description).toContain('<p>Funding: Grant &lt;1&gt;</p>');
+    expect(md.description).toContain('href="https://github.com/o/r&quot;x"');
+  });
+
+  it('reads the venue as a string or an object, and skips one with no title', () => {
+    const venueLine = (venue: unknown) =>
+      String(
+        buildMetadata({ project: { ...project, venue }, githubUrl: 'g', zenodo: {} }).description,
+      );
+    expect(venueLine('My Venue')).toContain('<p>Venue: My Venue</p>');
+    expect(venueLine({ title: 'Other', short_title: 'O' })).toContain('<p>Venue: Other</p>');
+    expect(venueLine({ short_title: 'O' })).not.toContain('Venue:');
+  });
+
+  it('writes funding as its statement, else each award as its sources, id and name', () => {
+    const md = buildMetadata({
+      project: {
+        ...project,
+        affiliations: [{ id: 'nsf', name: 'National Science Foundation' }],
+        funding: [
+          { statement: 'Funded by the Fixture Trust.', awards: [{ id: 'ignored' }] },
+          {
+            awards: [
+              { id: 'G-1', name: 'Big grant', sources: ['nsf'], recipients: ['Ada'] },
+              { name: 'Travel award' },
+            ],
+          },
+        ],
+      },
+      githubUrl: 'https://github.com/o/r',
+      zenodo: {},
+    });
+    const funding = String(md.description).match(/<p>Funding: [^<]*<\/p>/g);
+    expect(funding).toEqual([
+      '<p>Funding: Funded by the Fixture Trust.</p>',
+      '<p>Funding: National Science Foundation, G-1, Big grant</p>',
+      '<p>Funding: Travel award</p>',
+    ]);
   });
 });
 

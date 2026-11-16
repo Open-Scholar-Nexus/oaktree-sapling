@@ -1184,10 +1184,13 @@ export const workflow = {
   prepareDepositPublished: (id: number | string): string =>
     `Zenodo already has a published deposit for this paper (${id}), so no new DOI was ` +
     `reserved. Copy its concept DOI into project.doi in myst.yml.`,
-  /** An author's ORCID left out of the deposit (zenodo.ts `buildMetadata`). */
-  orcidSkipped: (name: string, orcid: string): string =>
-    `the ORCID of ${name} (${orcid}) is not a valid ORCID or is the template's ` +
-    `placeholder, so the deposit leaves it out. Fix it in myst.yml.`,
+  /** The template's placeholder ORCID, left out of the deposit (zenodo.ts `buildMetadata`). */
+  orcidPlaceholder: (name: string, orcid: string): string =>
+    `the ORCID of ${name} (${orcid}) is the template's placeholder, so the deposit leaves it ` +
+    `out. Fix it in myst.yml.`,
+  /** `why` is mystmd's own message, which names the author. */
+  orcidInvalid: (why: string): string =>
+    `${why}. The deposit leaves this ORCID out. Fix it in myst.yml.`,
 
   // oak release status, in its --json result
   statusNoDoi: 'no DOI in myst.yml yet: run oak release reserve-doi and merge its pull request',

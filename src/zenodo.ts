@@ -22,6 +22,7 @@ import { join, resolve, basename, relative, isAbsolute } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
 import AdmZip from 'adm-zip';
+import { validateProjectFrontmatter, type Name } from 'myst-frontmatter';
 import {
   readDoc,
   readJournalConfig,
@@ -47,8 +48,6 @@ import { err, ok, type Outcome } from './result.js';
 
 export const ZENODO_PROD = 'https://zenodo.org/api';
 export const ZENODO_SANDBOX = 'https://sandbox.zenodo.org/api';
-
-const ORCID_RE = /^\d{4}-\d{4}-\d{4}-\d{3}[\dX]$/;
 
 /** Extra document part appended to the Zenodo description (e.g. shared authorship). */
 const ZENODO_EXTRA_PART = 'zenodo_extra_description';
@@ -424,6 +423,28 @@ function youtubeUrl(project: any): string | null {
   return null;
 }
 
+/** An author's name parts as MyST parses them. Zenodo has no field for a suffix, so it goes
+ *  with the family name. */
+function personName(n: Name = {}): { family: string; given?: string } {
+  const family = [n.non_dropping_particle, n.family, n.suffix].filter(Boolean).join(' ');
+  const given = [n.given, n.dropping_particle].filter(Boolean).join(' ');
+  if (family) return given ? { given, family } : { family };
+  return { family: given || n.literal || '' };
+}
+
+/** A creator `name` for Zenodo's legacy API, which splits a name with exactly one comma into
+ *  family and given and keeps any other as the family name. */
+export function legacyCreatorName(n: Name = {}): string {
+  const { family, given } = personName(n);
+  if (!given) return family;
+  if (family.includes(',') || given.includes(',')) return `${given} ${family}`;
+  return `${family}, ${given}`;
+}
+
+function warn(message: string): void {
+  process.stderr.write(annotate('warning', message) + '\n');
+}
+
 export interface MetadataInput {
   project: any;
   paperId?: string;
@@ -454,48 +475,30 @@ export function buildMetadata(input: MetadataInput): Record<string, unknown> {
     extraDescParas,
   } = input;
 
-  const creators: Array<Record<string, string>> = [];
-  for (const a of project.authors ?? []) {
-    const c: Record<string, string> = { name: String(a.name) };
-    const affs = a.affiliations ?? [];
-    if (affs.length) c.affiliation = String(affs[0]);
-    const orcid = String(a.orcid ?? '');
-    // Only a well-formed, non-placeholder ORCID (the template's is 0000-0000-...) is sent: Zenodo
-    // replaces `name` from the ORCID profile when the ORCID does not resolve.
-    if (orcid && ORCID_RE.test(orcid) && !orcid.startsWith('0000-0000-')) {
-      c.orcid = orcid;
-    } else if (orcid) {
-      process.stderr.write(
-        annotate('warning', msg.workflow.orcidSkipped(String(a.name), orcid)) + '\n',
-      );
-    }
+  // MyST reads the frontmatter as it does for its own output: names parsed, affiliations as ids.
+  const messages: { errors?: Array<{ property: string; message: string }> } = {};
+  const fm = validateProjectFrontmatter(project, { property: 'project', messages });
+  // MyST drops a malformed ORCID; its other errors are mystmd's to report at build.
+  for (const e of messages.errors ?? []) {
+    if (e.property === 'orcid') warn(msg.workflow.orcidInvalid(e.message));
+  }
+  const affiliationName = new Map((fm.affiliations ?? []).map((a) => [a.id, a.name]));
+
+  const creators: Array<Record<string, unknown>> = [];
+  for (const a of fm.authors ?? []) {
+    const c: Record<string, unknown> = { name: legacyCreatorName(a.nameParsed) };
+    // `affiliations` is undocumented in the legacy API, and Zenodo stores every entry.
+    const affs = (a.affiliations ?? []).map((id) => affiliationName.get(id)).filter(Boolean);
+    if (affs.length) c.affiliations = affs.map((name) => ({ name }));
+    const orcid = a.orcid ?? '';
+    // Zenodo replaces `name` from the ORCID profile when the ORCID does not resolve.
+    if (orcid && !orcid.startsWith('0000-0000-')) c.orcid = orcid;
+    else if (orcid) warn(msg.workflow.orcidPlaceholder(String(a.name), orcid));
     creators.push(c);
   }
 
   const keywords = (project.keywords ?? []).map((k: unknown) => String(k));
   const licenseId = String(project.license ?? 'cc-by-4.0').toLowerCase();
-
-  const desc: string[] = [];
-  if (abstractParas) desc.push(...abstractParas.map((p) => `<p>${escapeHtml(p)}</p>`));
-  // The journal's optional paragraph.
-  if (zenodo.description_blurb) desc.push(`<p>${escapeHtml(zenodo.description_blurb)}</p>`);
-  if (extraDescParas) desc.push(...extraDescParas.map((p) => `<p>${escapeHtml(p)}</p>`));
-  const yt = youtubeUrl(project);
-  const label = msg.zenodoRecord;
-  if (yt) {
-    desc.push(`<p>${label.recording}: <a href="${escapeHtml(yt)}">${label.watchRecording}</a></p>`);
-  }
-  if (siteUrl) {
-    const href = escapeHtml(siteUrl);
-    desc.push(`<p>${label.website}: <a href="${href}">${href}</a></p>`);
-  }
-  desc.push(`<p>${label.repository}: <a href="${githubUrl}">${githubUrl}</a></p>`);
-  const venue = project.venue;
-  if (venue) {
-    const v = typeof venue === 'string' ? venue : (venue.title ?? String(venue));
-    desc.push(`<p>${label.venue}: ${v}</p>`);
-  }
-  if (project.funding) desc.push(`<p>${label.funding}: ${project.funding}</p>`);
 
   const related: Array<Record<string, string>> = [
     { identifier: githubUrl, relation: 'isVersionOf', scheme: 'url' },
@@ -504,7 +507,37 @@ export function buildMetadata(input: MetadataInput): Record<string, unknown> {
   if (paperId)
     related.push({ identifier: paperUrn(paperId), relation: 'isVersionOf', scheme: 'urn' });
   if (siteUrl) related.push({ identifier: siteUrl, relation: 'isIdenticalTo', scheme: 'url' });
+  const yt = youtubeUrl(project);
   if (yt) related.push({ identifier: yt, relation: 'isSupplementedBy', scheme: 'url' });
+
+  const desc: string[] = [];
+  if (abstractParas) desc.push(...abstractParas.map((p) => `<p>${escapeHtml(p)}</p>`));
+  // The journal's optional paragraph.
+  if (zenodo.description_blurb) desc.push(`<p>${escapeHtml(zenodo.description_blurb)}</p>`);
+  if (extraDescParas) desc.push(...extraDescParas.map((p) => `<p>${escapeHtml(p)}</p>`));
+  const label = msg.zenodoRecord;
+  if (yt) {
+    desc.push(`<p>${label.recording}: <a href="${escapeHtml(yt)}">${label.watchRecording}</a></p>`);
+  }
+  if (siteUrl) {
+    const href = escapeHtml(siteUrl);
+    desc.push(`<p>${label.website}: <a href="${href}">${href}</a></p>`);
+  }
+  const repoHref = escapeHtml(githubUrl);
+  desc.push(`<p>${label.repository}: <a href="${repoHref}">${repoHref}</a></p>`);
+  if (fm.venue?.title) desc.push(`<p>${label.venue}: ${escapeHtml(fm.venue.title)}</p>`);
+  // MyST's own fields: a statement, else per award its sources, id and name.
+  for (const f of fm.funding ?? []) {
+    if (f.statement) {
+      desc.push(`<p>${label.funding}: ${escapeHtml(f.statement)}</p>`);
+      continue;
+    }
+    for (const award of f.awards ?? []) {
+      const sources = (award.sources ?? []).map((id) => affiliationName.get(id) ?? id);
+      const parts = [...sources, award.id, award.name].filter(Boolean) as string[];
+      if (parts.length) desc.push(`<p>${label.funding}: ${escapeHtml(parts.join(', '))}</p>`);
+    }
+  }
 
   const md: Record<string, unknown> = {
     upload_type: 'publication',
@@ -515,6 +548,8 @@ export function buildMetadata(input: MetadataInput): Record<string, unknown> {
     license: licenseId,
     related_identifiers: related,
     access_right: 'open',
+    // Zenodo's legacy API copies `custom` into the record's custom fields.
+    custom: { 'code:codeRepository': githubUrl },
   };
   // The journal's optional community.
   if (zenodo.community) md.communities = [{ identifier: zenodo.community }];
@@ -1086,12 +1121,13 @@ async function fillDraft(input: UploadInput, engineZip: string): Promise<Outcome
   }
   process.stderr.write(`[upload] reusing existing draft ${dep.id}\n`);
 
+  const zenodo = loadJournalZenodo(instanceRoot);
   const md = buildMetadata({
     project,
     paperId: project.id ? String(project.id) : undefined,
     githubUrl,
     siteUrl,
-    zenodo: loadJournalZenodo(instanceRoot),
+    zenodo,
     version,
     publicationDate: String(project.date ?? new Date().toISOString().slice(0, 10)),
     abstractParas: abstractParagraphs(repoRoot),
