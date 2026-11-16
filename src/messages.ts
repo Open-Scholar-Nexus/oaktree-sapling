@@ -1144,7 +1144,7 @@ export const workflow = {
   prepareNoDowngrade: (doi: string): string =>
     `project.doi is the production DOI ${doi}; refusing to replace it with a sandbox one.`,
   prepareDepositPublished: (id: number | string): string =>
-    `Zenodo already holds a published deposit for this paper (${id}), so no new DOI was ` +
+    `Zenodo already has a published deposit for this paper (${id}), so no new DOI was ` +
     `reserved. Copy its concept DOI into project.doi in myst.yml.`,
   /** An author's ORCID left out of the deposit (zenodo.ts `buildMetadata`). */
   orcidSkipped: (name: string, orcid: string): string =>
