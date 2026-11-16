@@ -1191,6 +1191,15 @@ export const workflow = {
   /** `why` is mystmd's own message, which names the author. */
   orcidInvalid: (why: string): string =>
     `${why}. The deposit leaves this ORCID out. Fix it in myst.yml.`,
+  zenodoCommunityMissing: (slug: string): string =>
+    `Zenodo has no community "${slug}", which journal.yml names as zenodo.community. Fix the ` +
+    `name there; it is the last part of the community's address on Zenodo.`,
+  zenodoCommunityLaterVersion: (slug: string): string =>
+    `the record is not in the Zenodo community "${slug}", and Zenodo adds a community to a ` +
+    `first version only. An editor can submit the published record to it on Zenodo.`,
+  zenodoCommunitySkipped: (slug: string): string =>
+    `--publish-without-review publishes the record without joining the Zenodo community ` +
+    `"${slug}". An editor can submit the published record to it on Zenodo.`,
 
   // oak release status, in its --json result
   statusNoDoi: 'no DOI in myst.yml yet: run oak release reserve-doi and merge its pull request',

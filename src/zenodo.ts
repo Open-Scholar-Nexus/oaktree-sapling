@@ -181,6 +181,9 @@ export interface GitContext {
 // Depositions are loosely typed: Zenodo owns the shape, oak reads a few fields by name.
 export type Deposition = Record<string, any>;
 
+/** The InvenioRDM JSON of `/api/records`, which has the community fields the legacy shape lacks. */
+const RDM_JSON = 'application/vnd.inveniordm.v1+json';
+
 export class ZenodoError extends Error {
   constructor(
     message: string,
@@ -265,6 +268,28 @@ export class ZenodoApi {
 
   async deleteDraftFile(depId: string | number, fileId: string): Promise<void> {
     await this.call('DELETE', `/deposit/depositions/${depId}/files/${encodeURIComponent(fileId)}`);
+  }
+
+  /** The draft as InvenioRDM shapes it: `parent.communities`, `parent.review` and
+   *  `versions.index`. */
+  async getRdmDraft(depId: string | number): Promise<Deposition> {
+    const res = await this.call('GET', `/records/${depId}/draft`, {
+      headers: { Accept: RDM_JSON },
+    });
+    return res.json() as Deposition;
+  }
+
+  /** A community's id from its slug, the last part of its address. */
+  async communityId(slug: string): Promise<string> {
+    const res = await this.call('GET', `/communities/${encodeURIComponent(slug)}`);
+    return String((res.json() as { id: string }).id);
+  }
+
+  /** Makes the community the draft's review, so publishing it on Zenodo submits it there. */
+  async setCommunityReview(depId: string | number, communityId: string): Promise<void> {
+    await this.call('PUT', `/records/${depId}/draft/review`, {
+      json: { receiver: { community: communityId }, type: 'community-submission' },
+    });
   }
 
   async uploadFile(bucketUrl: string, name: string, data: Uint8Array): Promise<void> {
@@ -470,7 +495,8 @@ export interface MetadataInput {
 /**
  * Builds the deposition metadata from a myst project and the journal's `zenodo:` settings. The
  * description is HTML paragraphs (abstract, journal paragraph, extra part, links), and the
- * identity URN sits beside the GitHub URL.
+ * identity URN sits beside the GitHub URL. The community is the draft's review, which
+ * {@link requestCommunity} sets.
  */
 export function buildMetadata(input: MetadataInput): Record<string, unknown> {
   const {
@@ -561,13 +587,42 @@ export function buildMetadata(input: MetadataInput): Record<string, unknown> {
     // Zenodo's legacy API copies `custom` into the record's custom fields.
     custom: { 'code:codeRepository': githubUrl },
   };
-  // The journal's optional community.
-  if (zenodo.community) md.communities = [{ identifier: zenodo.community }];
   if (keywords.length) md.keywords = keywords;
   if (version !== undefined) md.version = version;
   const pubdate = publicationDate ?? project.date;
   if (pubdate) md.publication_date = String(pubdate);
   return md;
+}
+
+/**
+ * Makes the journal's community [R19] the review of a paper's first version, so the editor's
+ * Publish button on Zenodo submits it there. The legacy `communities` field applies only when
+ * the API publishes the record. A later version stays in its first version's communities.
+ * Returns a refusal message, or null.
+ */
+async function requestCommunity(
+  api: ZenodoApi,
+  depId: string | number,
+  slug: string,
+): Promise<string | null> {
+  const draft = await api.getRdmDraft(depId);
+  let id: string;
+  try {
+    id = await api.communityId(slug);
+  } catch (e) {
+    if (e instanceof ZenodoError && e.status === 404) {
+      return msg.workflow.zenodoCommunityMissing(slug);
+    }
+    throw e;
+  }
+  if ((draft.parent?.communities?.ids ?? []).includes(id)) return null;
+  if (draft.parent?.review?.receiver?.community === id) return null;
+  if ((draft.versions?.index ?? 1) > 1) {
+    warn(msg.workflow.zenodoCommunityLaterVersion(slug));
+    return null;
+  }
+  await api.setCommunityReview(depId, id);
+  return null;
 }
 
 /* --------------------------------------------------------------------------
@@ -1132,6 +1187,13 @@ async function fillDraft(input: UploadInput, engineZip: string): Promise<Outcome
   process.stderr.write(`[upload] reusing existing draft ${dep.id}\n`);
 
   const zenodo = loadJournalZenodo(instanceRoot);
+  // A review set here survives the legacy metadata update below.
+  if (zenodo.community && input.publish) {
+    warn(msg.workflow.zenodoCommunitySkipped(zenodo.community));
+  } else if (zenodo.community) {
+    const refused = await requestCommunity(api, dep.id, zenodo.community);
+    if (refused) return err(2, refused);
+  }
   const md = buildMetadata({
     project,
     paperId: project.id ? String(project.id) : undefined,

@@ -216,14 +216,15 @@ describe('buildMetadata', () => {
     expect(related.map((r) => r.identifier)).toContain('https://github.com/o/r');
   });
 
-  it("adds the journal's blurb and community when journal.yml sets them", () => {
+  it("adds the journal's blurb when journal.yml sets it, and no communities field", () => {
     const md = buildMetadata({
       project,
       paperId: project.id,
       githubUrl: 'https://github.com/o/r',
       zenodo: { community: 'fixture-community', description_blurb: 'Made by the Fixture Journal.' },
     });
-    expect(md.communities).toEqual([{ identifier: 'fixture-community' }]);
+    expect(md.communities).toBeUndefined();
+    expect(JSON.stringify(md)).not.toContain('fixture-community');
     expect(md.description).toContain('Made by the Fixture Journal.');
   });
 
@@ -865,6 +866,13 @@ function legacyZenodo(files: string[] = [], rdm: Record<string, unknown> = {}) {
   return { api: new ZenodoApi(transport, true, 't'), calls, uploaded, deleted };
 }
 
+/** A journal checkout whose journal.yml names `community`. */
+function journalWithCommunity(community: string): string {
+  const root = mkdtempSync(join(tmpdir(), 'oak-journal-'));
+  writeFileSync(join(root, 'journal.yml'), `name: J\nzenodo:\n  community: ${community}\n`);
+  return root;
+}
+
 describe('cmdUpload', () => {
   it('populates the reserved draft: metadata overwrite + all bundle files uploaded', async () => {
     const mystPath = paperRepo(
@@ -1170,6 +1178,70 @@ describe('cmdUpload', () => {
     const firstUpload = methods.findIndex((m) => m.startsWith('PUT /bucket/'));
     expect(lastDelete).toBeLessThan(firstUpload);
     expect(methods[lastDelete]).toBe('DELETE /api/deposit/depositions/5/files/f1');
+  });
+
+  it("requests the journal's community for a first version only ([R19])", async () => {
+    captureStderr();
+    const journal = journalWithCommunity('fixture-community');
+    const reviewOf = (z: ReturnType<typeof legacyZenodo>) =>
+      z.calls.filter((c) => c.url.includes('/draft/review'));
+
+    const first = legacyZenodo();
+    expect((await upload(readyPaper(true), first.api, { instanceRoot: journal })).exitCode).toBe(0);
+    expect(reviewOf(first).map((c) => [c.method, new URL(c.url).pathname, c.opts.json])).toEqual([
+      [
+        'PUT',
+        '/api/records/5/draft/review',
+        { receiver: { community: 'c0ffee' }, type: 'community-submission' },
+      ],
+    ]);
+    const read = first.calls.find((c) => c.url.includes('/api/records/5/draft'))!;
+    expect(read.method).toBe('GET');
+    expect(read.opts.headers?.Accept).toBe('application/vnd.inveniordm.v1+json');
+
+    // A draft already up for the community, or already in it, is left as it is.
+    for (const rdm of [
+      { parent: { review: { receiver: { community: 'c0ffee' } } } },
+      { parent: { communities: { ids: ['c0ffee'] } } },
+    ]) {
+      const z = legacyZenodo([], rdm);
+      expect((await upload(readyPaper(true), z.api, { instanceRoot: journal })).exitCode).toBe(0);
+      expect(reviewOf(z)).toHaveLength(0);
+    }
+
+    // Zenodo takes no review for a later version, which stays in its first version's communities.
+    const warnings = captureStderr();
+    const next = legacyZenodo([], { versions: { index: 2 } });
+    expect((await upload(readyPaper(true), next.api, { instanceRoot: journal })).exitCode).toBe(0);
+    expect(reviewOf(next)).toHaveLength(0);
+    expect(warnings().join('')).toContain('Zenodo adds a community to a first version only');
+  });
+
+  it('refuses a community Zenodo does not have, naming journal.yml', async () => {
+    captureStderr();
+    const z = legacyZenodo();
+    const out = await upload(readyPaper(true), z.api, {
+      instanceRoot: journalWithCommunity('no-such-community'),
+    });
+    expect(out.exitCode).toBe(2);
+    expect(String(out.result.message)).toContain('Zenodo has no community "no-such-community"');
+    expect(z.calls.filter((c) => c.method !== 'GET')).toEqual([]);
+  });
+
+  it('skips the community with a warning under --publish-without-review', async () => {
+    const warnings = captureStderr();
+    const z = legacyZenodo();
+    const out = await upload(readyPaper(true), z.api, {
+      instanceRoot: journalWithCommunity('fixture-community'),
+      publish: true,
+    });
+    expect(out.exitCode).toBe(0);
+    expect(z.calls.some((c) => c.url.includes('/api/records/'))).toBe(false);
+    expect(z.calls.some((c) => c.url.includes('/api/communities/'))).toBe(false);
+    expect(z.calls.some((c) => c.url.endsWith('/actions/publish'))).toBe(true);
+    expect(warnings().join('')).toContain(
+      'publishes the record without joining the Zenodo community "fixture-community"',
+    );
   });
 
   it('errors when the API environment disagrees with the committed DOI prefix', async () => {
