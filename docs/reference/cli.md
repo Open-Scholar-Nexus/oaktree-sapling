@@ -1,19 +1,14 @@
 (ref-cli)=
 # CLI reference
 
-`oak --help` lists every command and its flags. This page says what each command does, and explains the flags whose effect `--help` has no room for.
+`oak --help` lists every command and its flags. This page says what each command does, with the flags that need more explanation than `--help` gives.
 
-(cli-any-command)=
-## Any command
-
-`--yes` answers yes to the plan a command shows before changing anything. Without a terminal, a command that asks needs it.
-
-A flag that takes a value and is given none stops the command. This usually means an empty shell variable.
+## Commands you run
 
 (build)=
-## build
+### build
 
-`oak build` builds the paper's website and PDF into `_build/`. It first writes `myst.oak.yml`, the paper's settings combined with the journal's, and builds from it. It runs the `oak` version the paper names ([which version runs](#pins-local)). In a journal repository it refuses: the journal website is built by its own workflow.
+`oak build` builds the paper's website and PDF into `_build/`. It first writes `myst.oak.yml`, the paper's settings combined with the journal's, and builds from it. It runs the `oak` version the paper names ([which version runs](#pins-local)). In a journal repository it refuses: the [**Journal site**](#file-site-workflow) workflow builds the journal website, and [`oak start`](#start) or MyST's own `myst start` previews it.
 
 `--instance <dir>`, `--no-instance`
 : Build with the journal repository at `<dir>`, or without the journal's settings. See [previewing with other settings](../guide/journal-settings.md#previewing-with-other-settings).
@@ -28,18 +23,18 @@ A flag that takes a value and is given none stops the command. This usually mean
 : Renders the PDF with the typst template in `<dir>`, ahead of the author's, the journal's and oak's own. [`oak start`](#start) and [`oak validate`](#validate) take it too, so all three write the same `myst.oak.yml`.
 
 (start)=
-## start
+### start
 
-`oak start` runs MyST's live preview of the paper, with the journal's settings, and prints its address. It writes `myst.oak.yml` as [`oak build`](#build) does, and writes it again when `myst.yml` changes. The preview offers the PDF for download once `oak build` has made one. Ctrl-C stops it.
+`oak start` is a small wrapper around MyST's `myst start`, the live preview of the paper. It writes `myst.oak.yml` as [`oak build`](#build) does, writes it again when `myst.yml` changes, and runs the preview on that file, so the preview has the journal's settings. The preview offers the PDF for download once `oak build` has made one. Ctrl-C stops it.
 
 In a journal repository, it serves the journal website as it is. Run `npm install` there first.
 
 It takes the flags of [`oak build`](#build) that apply, and passes `--port`, `--server-port`, `--template`, `--headless` and `--keep-host` to MyST's own `myst start`.
 
 (validate)=
-## validate
+### validate
 
-`oak validate` runs oak's own checks and the journal's [editorial checks](../guide/checks.md) on the paper, and prints what fails. It writes `myst.oak.yml` as [`oak build`](#build) does, and checks that. With `--no-instance`, or when the journal repository cannot be found, it checks the paper's `myst.yml` as it is, and says so in a note on the Check Run. It runs the paper's plugin code ([read this first](../guide/checks.md#validate-runs-paper-code)).
+`oak validate` runs oak's own checks and the journal's [editorial checks](../guide/checks.md) on the `myst.oak.yml` that [`oak build`](#build) would write, and prints what fails. Without the journal repository, with `--no-instance` or when it cannot be found, it checks the paper's own `myst.yml`, and the Check Run says so in a note. It runs the paper's plugin code ([read this first](../guide/checks.md#validate-runs-paper-code)).
 
 It exits 0 when nothing blocks the merge, 1 when a check fails, and 2 when it cannot run.
 
@@ -49,32 +44,8 @@ It exits 0 when nothing blocks the merge, 1 when a check fails, and 2 when it ca
 `--repo <owner/name>`
 : The paper's repository on GitHub, used to find its entry in the journal's [`registry/papers.yml`](files.md#file-registry). Without it, `GITHUB_REPOSITORY` or the clone's `origin` names it.
 
-(post-checks)=
-## post-checks
-
-`oak post-checks` posts the result `oak validate --report` wrote. The **Post checks** workflow runs it, after each **Check paper** run. It never runs the checks again.
-
-It posts the result on the checked commit as the **Journal checks** Check Run and commit status, and as a comment on the pull request. The comment is updated on every push. Before posting, it checks that the pull request's head is still the commit that was checked.
-
-When the pull request changes a file listed in `CODEOWNERS`, the Check Run and the comment say so. That change can alter how the checks run, so an editor should read it. The result itself stays the same.
-
-It exits 1 when the Check Run could not be posted. A comment that could not be posted only gives a warning.
-
-Its flags are all required, except `--repo` when `GITHUB_REPOSITORY` is set. Posting needs `GH_TOKEN`.
-
-(deploy-preview)=
-## deploy-preview
-
-`oak deploy-preview [<site>]` posts a preview of a pull request's website. The **Deploy preview** workflow runs it, after each **Build paper** run, with the built site in the folder `<site>` (default `site`).
-
-It reads the pull request's number from a file the build left in the site, and removes that file. A site with no number gets no preview. Before posting, it checks that the pull request's head is still the commit that was built. It also removes the files Cloudflare Pages would run as code or use to rewrite pages, such as `_worker.js` and `_headers`, with a warning.
-
-With `preview.provider: cloudflare` and `preview.cf_project_name` in [`journal.yml`](files.md#file-journal-yml), and both Cloudflare secrets set, it deploys the site to Cloudflare Pages and comments the preview's address on the pull request. Otherwise the comment links the build's artifact and says why. A failed Cloudflare deploy or an unreadable `journal.yml` also gives the artifact link. The comment is updated on every push.
-
-It fails only when the pull request's head is another commit, or when gh cannot post the comment.
-
 (release)=
-## release
+### release
 
 `oak release [--repo <owner/name>] <vX.Y.Z>` publishes a version from the terminal ([guide](#from-terminal)). It has three subcommands, [`reserve-doi`](#release-reserve-doi), [`deposit`](#release-deposit) and [`status`](#release-status); the paper's workflows run the first two.
 
@@ -118,7 +89,7 @@ What `--repo <owner/name>` does depends on the command. `oak release vX` and `oa
 : For the committed DOI, the newest version published on Zenodo and the draft of the next one, if any. `--json` adds the metadata a deposit would send. `--sandbox` reads the sandbox. `--repo <owner/name>` reads the repository's default branch from a clone in a temporary folder, removed after, with the editor's gh login.
 
 (release-reserve-doi)=
-### oak release reserve-doi
+#### oak release reserve-doi
 
 `oak release reserve-doi` reserves a draft on Zenodo, writes its DOI into `myst.yml`, and opens the pull request for it with gh. The **Reserve DOI** workflow runs it, and `oak release` runs it when publishing the first version. With gh logged out it says to commit the change and open the pull request yourself. Production by default; `--sandbox` uses the Zenodo sandbox. `--repo <owner/name>` names the repository; without it, `GITHUB_REPOSITORY` or the clone's origin does. In GitHub Actions with no token it fails, pointing at `oak release` from the terminal.
 
@@ -126,7 +97,7 @@ What `--repo <owner/name>` does depends on the command. `oak release vX` and `oa
 : The paper's website, which the deposit links as its Project Website. Without it, oak links the `site_url` of the paper's entry in the journal's [`registry/papers.yml`](#file-registry), else the paper's GitHub Pages address. An empty value leaves the link out. `oak release`, `oak release deposit` and `oak release status` take it too.
 
 (release-deposit)=
-### oak release deposit
+#### oak release deposit
 
 `oak release deposit --tag <vX.Y.Z>` deposits the tag's build on Zenodo, in the clone at `--paper` (default `.`), attaches the deposit's files to the tag's GitHub release, and comments the draft's address on the tagged commit. The **Deposit version** workflow runs it, `oak release` runs it, and an editor can run it by hand. The committed DOI picks the sandbox or production. The deposit's files are written to `_build/bundle` (`--bundle-out <dir>`). It never tags or merges.
 
@@ -145,7 +116,7 @@ Outside GitHub Actions the clone has to be at the tag, with no changes to tracke
 : The Zenodo token, ahead of `ZENODO_TOKEN` and `ZENODO_TOKEN_SANDBOX`. Every `oak release` command takes it.
 
 (clean)=
-## clean
+### clean
 
 `oak clean` lists the folders [`oak release`](#release) left in the temporary folder, such as the clones it keeps after a failure or Ctrl-C, with their size, and removes them after you confirm. It looks in the temporary folder of the shell it runs in (`TMPDIR`), and prints its path. It lists only folders whose name starts with `oak-release-` and that belong to you, and never a symlink. It cannot tell whether an `oak release` is still using a clone, so run it when none is running. A successful `oak release` removes the clones kept for the same repository and version, since a clone's folder name holds both.
 
@@ -154,7 +125,7 @@ It also shows the size of `~/.cache/oak` (`$XDG_CACHE_HOME/oak` when set), which
 `--yes` skips the confirmation prompt, and is needed without a terminal; declining removes nothing, so answering no only lists them. `--json` prints what it found and removed.
 
 (bootstrap)=
-## bootstrap
+### bootstrap
 
 `oak bootstrap journal` creates a journal repository, and `oak bootstrap paper` a paper repository, on GitHub, from the templates in `oak`. Both print a plan, with every default they took, and ask before changing anything. Running the same command again finishes a run that stopped partway. Files already on `main` are left as they are. How to use them: [Create a journal](../start/setup.md) and [Add a paper](../guide/add-paper.md).
 
@@ -189,7 +160,7 @@ Bootstrap also sets up the repository on GitHub: [what it sets up](../guide/add-
 Without a token flag, bootstrap uses the environment variable with the secret's name, if set. Only `oak bootstrap paper` takes the token flags: `oak bootstrap journal` refuses them, since the journal repository publishes nothing. Once an environment holds a secret, bootstrap deletes a repository-level copy of it, which every branch could read. At the end, it lists the secrets still missing. What each token allows: [Secrets](secrets.md).
 
 (upgrade)=
-## upgrade
+### upgrade
 
 `oak upgrade` moves a paper repository to a newer `oak` release, through a pull request. A paper keeps the version its `myst.yml` names until an editor runs `oak upgrade`. A change to the journal repository needs no upgrade: each paper reads it on its next run ([when](../guide/journal-settings.md)).
 
@@ -203,8 +174,34 @@ The pull request goes through the Journal checks and an editor's review like any
 `--files-only`
 : Replaces the files and leaves the version in `myst.yml`.
 
+## Commands the workflows run
+
+(post-checks)=
+### post-checks
+
+`oak post-checks` posts the result `oak validate --report` wrote. The **Post checks** workflow runs it, after each **Check paper** run. It never runs the checks again.
+
+It posts the result on the checked commit as the **Journal checks** Check Run and commit status, and as a comment on the pull request. The comment is updated on every push. Before posting, it checks that the pull request's head is still the commit that was checked.
+
+When the pull request changes a file listed in `CODEOWNERS`, the Check Run and the comment say so. That change can alter how the checks run, so an editor should read it. The result itself stays the same.
+
+It exits 1 when the Check Run could not be posted. A comment that could not be posted only gives a warning.
+
+Its flags are all required, except `--repo` when `GITHUB_REPOSITORY` is set. Posting needs `GH_TOKEN`.
+
+(deploy-preview)=
+### deploy-preview
+
+`oak deploy-preview [<site>]` posts a preview of a pull request's website. The **Deploy preview** workflow runs it, after each **Build paper** run, with the built site in the folder `<site>` (default `site`).
+
+It reads the pull request's number from a file the build left in the site, and removes that file. A site with no number gets no preview. Before posting, it checks that the pull request's head is still the commit that was built. It also removes the files Cloudflare Pages would run as code or use to rewrite pages, such as `_worker.js` and `_headers`, with a warning.
+
+With `preview.provider: cloudflare` and `preview.cf_project_name` in [`journal.yml`](files.md#file-journal-yml), and both Cloudflare secrets set, it deploys the site to Cloudflare Pages and comments the preview's address on the pull request. Otherwise the comment links the build's artifact and says why. A failed Cloudflare deploy or an unreadable `journal.yml` also gives the artifact link. The comment is updated on every push.
+
+It fails when the pull request's head is another commit (or when gh cannot post the comment).
+
 (conformance)=
-## conformance
+### conformance
 
 `oak conformance` tests a release of `oak` on GitHub, with a paper repository kept for testing. The engine's **Conformance** workflow runs it after each release. [RELEASING.md](src:RELEASING.md) covers the workflow.
 

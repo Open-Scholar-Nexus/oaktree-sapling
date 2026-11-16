@@ -56,7 +56,7 @@ oak writes the file in two steps. The first version contains the paper's config 
 `oak validate` writes `myst.oak.yml` as `oak build` does and checks that file, so it also checks what the paper's `myst.yml` leaves to `paper-base.yml`, such as the cover image and the PDF export.
 
 (r72)=
-MyST loads the files under `extends:` in parallel, so when two of them set the same key, either value can end up in the build. Each key is set in one of [`paper-base.yml`](src:paper-base.yml), the [edition file](#file-editions) and the [brand file](#file-brand-yml), and `oak validate` reports a key set in two of them as an error. The paper's config is in `myst.oak.yml` itself, so it wins over all three.
+MyST loads the files under `extends:` in parallel, so when two of them set the same key, either value can end up in the build. Each key is set in one of [`paper-base.yml`](src:paper-base.yml), the [edition file](#file-editions) and the [brand file](#file-brand-yml), and `oak validate` reports a key set in two of them as an error. The paper's config is in `myst.oak.yml` itself, so for a key it shares with one of the three files, MyST uses the paper's value.
 
 (r62)=
 ## Paths in the brand
