@@ -1120,16 +1120,17 @@ export function cachedJournal(
 }
 
 /** The newest stable release tag of `engineRepo` (`releases/latest` skips drafts and
- *  pre-releases). Throws when there is none or the lookup fails. */
-export function latestEngineRelease(engineRepo: string): string {
-  let tag = '';
+ *  pre-releases), or null when GitHub answers 404. Any other failure throws. */
+export function latestEngineRelease(engineRepo: string): string | null {
   try {
-    tag = gh(['api', `repos/${engineRepo}/releases/latest`, '--jq', '.tag_name'], { quiet: true });
-  } catch {
-    throw new Error(msg.workflow.noStableRelease(engineRepo));
+    const tag = gh(['api', `repos/${engineRepo}/releases/latest`, '--jq', '.tag_name'], {
+      quiet: true,
+    });
+    return tag || null;
+  } catch (e) {
+    if (/HTTP 404/.test((e as { stderr?: string }).stderr ?? '')) return null;
+    throw e;
   }
-  if (!tag) throw new Error(msg.workflow.noStableRelease(engineRepo));
-  return tag;
 }
 
 /** Shallow-clones `engineRepo` at `tag` into the empty directory `dest`, for {@link handOff} in
