@@ -90,10 +90,10 @@
       .scroll-code-src .myst-code {
         margin: 0;
       }
-      /* The first step reaches the reading line as the code sticks, the last while it still sticks. */
+      /* The first step reaches the reading line as the code sticks, the last while code as tall as the screen still sticks. */
       .scroll-code-steps {
         flex: 2;
-        padding: calc(40vh - 5rem) 0 60vh;
+        padding: calc(40vh - 5rem) 0 calc(60vh - 9rem);
       }
       /* More than one mouse-wheel notch of scrolling per step. */
       .scroll-code-step {
