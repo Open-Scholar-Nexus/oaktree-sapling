@@ -1,8 +1,25 @@
 /**
- * `{scroll-code}` holds a code block and `{scroll-step}` paragraphs. A step's argument lists code lines the way
- * `emphasize-lines` does (`3, 7-9`). Each step gets a copy of the code block with those lines emphasized, stacked
- * over the plain one. CSS only: each step is a view timeline that shows its copy once the step reaches the reading
- * line, and the rules are in brand/site.css.
+ * A code block that stays in view while the paragraphs beside it highlight its lines:
+ *
+ *   ::::{scroll-code}
+ *   ```yaml
+ *   ...
+ *   ```
+ *
+ *   :::{scroll-step} 23-26
+ *   Lines 23 to 26 list ...
+ *   :::
+ *
+ *   :::{scroll-step} 11-22, 27-31
+ *   oak adds the rest.
+ *   :::
+ *   ::::
+ *
+ * Each step gets a copy of the code block with its lines emphasized, stacked over the plain one. The rest is CSS, in
+ * brand/site.css: each step is a view timeline, and its copy shows once the step reaches the reading line and stays
+ * shown after, so the copy of the latest step reached is on top. `timeline-scope` on the block lets a copy follow a
+ * step that is not its parent. Narrow screens and browsers without scroll-driven animations get the plain block and
+ * the paragraphs in order.
  */
 
 // Line numbers in a `3, 7-9` list; undefined if the list is malformed.
