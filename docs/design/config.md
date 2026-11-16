@@ -2,7 +2,12 @@
 
 # How a paper's config is assembled
 
-A paper builds from `myst.oak.yml`, a file oak writes next to the paper's `myst.yml`. In CI, for a paper in the `seedling` edition of the journal `acme/journal`, it looks like this (shortened):
+(r52)=
+oaktree-sapling gives every paper the settings its journal shares, such as the logo and the venue, and sets the template and the output file of each paper's PDF export. MyST combines config files through `extends:`: a `myst.yml` lists other files there, and for a key that both set, the value in the `myst.yml` replaces theirs whole[^options]. So oak cannot set the template from a listed file when a paper declares its own PDF export, as a paper with several articles does, because the paper's export replaces oak's. Instead, oak writes `myst.oak.yml` next to the paper's `myst.yml`, with the paper's config and oak's values in the file itself and the journal's files under `extends:`, and MyST builds from it.
+
+[^options]: `site.options` and `project.options` are the exception: MyST merges them key by key.
+
+In CI, for a paper in the `seedling` edition of the journal `acme/journal`, `myst.oak.yml` looks like this (shortened):
 
 ```{code-block} yaml
 :filename: myst.oak.yml
@@ -41,50 +46,29 @@ site:
     favicon: .../_build/journal/acme/journal/brand/favicon.svg
 ```
 
-Lines 23 to 26 are the `extends:` layers; [Processing MyST markdown](#processing-myst) says what each one carries. The rest of the file is the base: the paper's own `myst.yml`, plus the highlighted lines, which oak adds.
+Lines 23 to 26 list oak's `paper-base.yml` and the journal's files; [Processing MyST markdown](#processing-myst) says what each one sets. The rest is the paper's own `myst.yml`, plus the highlighted lines, which oak adds.
 
-Each rule on this page follows from how MyST merges a config with the layers it extends.
+oak writes the file in two steps. The first version contains the paper's config and the `extends:` list, and MyST loads it to resolve the project. oak then adds its own values. For the PDF export, oak writes the whole entry MyST resolved, from `paper-base.yml` or from the paper, with its own `template:` and `output:` set on it.
 
-## How MyST merges an `extends:` chain
-
-- **The base wins.** For a key that the base and a layer both set, MyST keeps the base's value.
-- **Most keys are replaced whole.** `exports` entries are matched by `id`, and the config that wins an `id` supplies the entire entry. `site.options` and `project.options` are the exceptions: MyST merges them key by key.
-- **The layers have no order.** MyST loads the `extends:` entries in parallel, so when two layers set the same key, which one wins can change between runs.
-
-(r52)=
-## Why oak generates the file
-
-oak sets values on things a paper may declare too. A paper with several articles declares its own PDF export, and oak still has to set `template:` and `output:` on it. From a layer it could not: the paper's export would win the `id` and replace the layer's entry whole. So oak writes its values into the base, and the base has to be a file oak owns, because the paper's `myst.yml` is read and never written ([](#r71)).
-
-The paper's config is copied into that base, where it wins over every layer. As one more `extends:` entry it would load in parallel with the edition and the brand.
-
-oak writes the file in two steps. The first holds the paper's config and the `extends:` chain, and MyST loads it to resolve the project. The second adds oak's values to the base. For the PDF export that is the complete entry: the one MyST resolved, from `paper-base.yml` or from the paper, with oak's `template:` and `output:` set on it.
+(r82)=
+`oak validate` writes `myst.oak.yml` as `oak build` does and checks that file, so it also checks what the paper's `myst.yml` leaves to `paper-base.yml`, such as the cover image and the PDF export.
 
 (r72)=
-## The layers set different keys
-
-`paper-base.yml`, the edition and the brand each set keys the other two leave alone, because a key that two layers set has no stable winner. `oak validate` reports a key that two layers share as an error.
-
-## Values oak reads from the file that sets them
-
-Once MyST has merged the chain, a value no longer says which file it came from. Where that matters, oak reads the value from its own file.
+MyST loads the files under `extends:` in parallel, so when two of them set the same key, either value can end up in the build. Each key is set in one of [`paper-base.yml`](src:paper-base.yml), the [edition file](#file-editions) and the [brand file](#file-brand-yml), and `oak validate` reports a key set in two of them as an error. The paper's config is in `myst.oak.yml` itself, so it wins over all three.
 
 (r62)=
-**Paths in the brand.** A path in `brand/brand.yml`, such as `logo` or `favicon`, is relative to the journal repository, and MyST resolves it against the paper. oak reads these fields from `brand/brand.yml` and makes a relative path absolute under the journal repository. A relative path in the paper's own config is left alone.
+## Paths in the brand
+
+A path in `brand/brand.yml`, such as `logo` or `favicon`, starts at the journal repository's root, and MyST resolves it against the paper. oak reads these fields from `brand/brand.yml` and writes them into `myst.oak.yml` as absolute paths under the journal repository, as on lines 11, 30 and 31. A relative path in the paper's own `myst.yml` stays as it is.
 
 (r76)=
-**The PDF template.** oak uses the first template that is set, in this order:
+## The PDF template
+
+oak uses the first template that is set, in this order:
 
 1. `--typst-template` on the command line
 2. `template:` on the PDF export in the paper's `myst.yml`
 3. `typst_template:` in `journal.yml`
 4. oak's own, in `templates/typst`
 
-The journal's template is a field in `journal.yml` because an `exports:` entry in the edition would share a key with `paper-base.yml`. A paper's own template is used, and `oak validate` warns about it on the pull request, where an editor decides. A deposit archives a template that is not oak's as `template.zip` ([what a deposit carries](#design-releases-deposit)).
-
-(r82)=
-## What `oak validate` checks
-
-`oak validate` writes `myst.oak.yml` as `oak build` does and runs the checks on it. Some of what it checks, such as the cover image and the PDF export, is set by `paper-base.yml` and is absent from the paper's `myst.yml`.
-
-With `--no-instance`, or when the journal repository cannot be found, there are no layers to add. `oak validate` then checks the paper's `myst.yml` and says so in a note on the Check Run.
+The journal's template is a field in `journal.yml` because an `exports:` entry in the edition would share a key with `paper-base.yml`. A paper's own template is used, and `oak validate` warns about it on the pull request, where an editor decides. A deposit archives a template that is not oak's as `template.zip` ([what a deposit contains](#design-releases-deposit)).

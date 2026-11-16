@@ -25,7 +25,7 @@ oak lists what it will do on GitHub and Zenodo and asks once (`--yes` skips the 
 2. skips that pull request's **Journal checks** ([why](#design-paper-ci-limits)) and merges it;
 3. tags the merge commit with the version, which starts the **Deposit version** workflow;
 4. waits for that workflow to build the paper, which can take several minutes;
-5. fills the Zenodo draft with the build ([what a deposit carries](#design-releases-deposit)), attaches the same files to the tag's GitHub release, and prints the draft's URL, which it also comments on the tagged commit.
+5. fills the Zenodo draft with the build ([what a deposit contains](#design-releases-deposit)), attaches the same files to the tag's GitHub release, and prints the draft's URL, which it also comments on the tagged commit.
 
 You then [publish the draft on Zenodo](#publish-on-zenodo) and [list the paper on the journal website](#list-on-site).
 

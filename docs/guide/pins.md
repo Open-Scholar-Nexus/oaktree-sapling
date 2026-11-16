@@ -20,7 +20,7 @@ oak upgrade --repo <owner>/<paper-repo>
 
 When the `oak` you installed is another version, it downloads the named version and runs that[^cached]. The `oak release` subcommands also download it when the installed `oak` is the same version but not a git checkout, such as an npm install, because the deposit archives the engine with `git archive`, which needs a checkout.
 
-[^cached]: The download is kept, so it happens once per version, and `oak` says in its output which version runs.
+[^cached]: The download is cached, so it happens once per version, and `oak` says in its output which version runs.
 
 If `.github/actions/engine/pins.yml` names an engine repository other than oaktree-sapling's own, `oak` asks before downloading from it[^other-repo].
 

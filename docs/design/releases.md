@@ -39,9 +39,9 @@ The release script downloads typst at the version in `typst.version` and runs th
 
 (design-releases-deposit)=
 
-## What a deposit carries
+## What a deposit contains
 
-A deposit holds the PDF and what it was rendered from. To render the PDF again with nothing fetched from GitHub, unzip `engine.zip`, `journal.zip` and `source.zip` into three folders, and from the paper's folder run:
+A deposit contains the PDF and what it was rendered from. To render the PDF again with nothing fetched from GitHub, unzip `engine.zip`, `journal.zip` and `source.zip` into three folders, and from the paper's folder run:
 
 ```sh
 node <engine>/dist/cli.cjs build --instance <journal> --exports-only

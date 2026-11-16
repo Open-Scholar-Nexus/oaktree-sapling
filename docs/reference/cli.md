@@ -39,7 +39,7 @@ It takes the flags of [`oak build`](#build) that apply, and passes `--port`, `--
 (validate)=
 ## validate
 
-`oak validate` runs oak's own checks and the journal's [editorial checks](../guide/checks.md) on the paper, and prints what fails. It writes `myst.oak.yml` as [`oak build`](#build) does, and checks that. It runs the paper's plugin code ([read this first](../guide/checks.md#validate-runs-paper-code)).
+`oak validate` runs oak's own checks and the journal's [editorial checks](../guide/checks.md) on the paper, and prints what fails. It writes `myst.oak.yml` as [`oak build`](#build) does, and checks that. With `--no-instance`, or when the journal repository cannot be found, it checks the paper's `myst.yml` as it is, and says so in a note on the Check Run. It runs the paper's plugin code ([read this first](../guide/checks.md#validate-runs-paper-code)).
 
 It exits 0 when nothing blocks the merge, 1 when a check fails, and 2 when it cannot run.
 
