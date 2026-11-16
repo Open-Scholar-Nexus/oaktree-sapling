@@ -49,6 +49,8 @@ You then [publish the draft on Zenodo](#publish-on-zenodo) and [list the paper o
 
 Open the draft on Zenodo, check it, and click **Publish**. The DOI resolves from then on.
 
+When the paper's `myst.yml` sets `project.options.youtube` to a video's URL, the draft's description links the video as **Video recording**.
+
 (list-on-site)=
 ## List it on the journal website
 
