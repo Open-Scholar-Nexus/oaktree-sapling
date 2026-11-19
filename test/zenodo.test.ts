@@ -57,7 +57,10 @@ function fakeTransport(handler: (r: Recorded) => { status?: number; json: unknow
     async request(method, url, opts): Promise<TransportResponse> {
       const rec = { method, url, opts };
       calls.push(rec);
-      const { status = 200, json } = handler(rec);
+      let { status = 200, json } = handler(rec);
+      // A draft has no files unless the handler lists some.
+      if (method === 'GET' && /\/depositions\/\d+\/files$/.test(url) && !Array.isArray(json))
+        json = [];
       const text = JSON.stringify(json);
       return { ok: status >= 200 && status < 300, status, text, json: () => json };
     },

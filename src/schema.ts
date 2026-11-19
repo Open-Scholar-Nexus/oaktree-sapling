@@ -203,10 +203,9 @@ export const ZenodoLink = z.strictObject({
   option: z.string().regex(/^[a-z][a-z0-9_]*$/, msg.schema.zenodoLinkOption),
   label: z.string().min(1),
   text: z.string().min(1),
-  /** Also adds the URL as a related identifier with this relation. */
+  /** When set, the record also lists the URL among its related works, with this relation. */
   relation: z.enum(ZENODO_RELATIONS, { error: msg.schema.zenodoLinkRelation }).optional(),
 });
-export type ZenodoLink = z.infer<typeof ZenodoLink>;
 
 export const ZenodoConfig = z
   .object({

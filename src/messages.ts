@@ -787,8 +787,8 @@ export const schema = {
   engineVersion: 'must be a release tag like v1.2.3 or v1.2.3-dev.4',
   zenodoLinkOption: 'must be a myst.yml option name: lowercase letters, digits and _',
   zenodoLinkRelation:
-    'must be a DataCite relation as Zenodo spells it, such as isSupplementedBy; the ' +
-    'journal.yml reference lists them',
+    'must be a DataCite relation as Zenodo spells it, such as isSupplementedBy. See ' +
+    docsUrl(DOCS.fileJournalYml),
 };
 
 export const start = {

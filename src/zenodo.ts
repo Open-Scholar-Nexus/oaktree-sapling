@@ -31,7 +31,7 @@ import {
   DERIVED_CONFIG_FILE,
 } from './yaml-io.js';
 import {
-  JournalConfig,
+  ZenodoConfig,
   locationRepo,
   pagesUrl,
   PAPER_VERSION_TAG,
@@ -40,7 +40,6 @@ import {
   repoFromGithubUrl,
   sameRepo,
   zenodoDoiPrefix,
-  type ZenodoConfig,
 } from './schema.js';
 import * as msg from './messages.js';
 import { annotate } from './messages.js';
@@ -262,8 +261,12 @@ export class ZenodoApi {
 
   /** The draft's files, including those a new version imports from the one before. */
   async listDraftFiles(depId: string | number): Promise<Array<{ id: string; filename: string }>> {
-    const files = (await this.call('GET', `/deposit/depositions/${depId}/files`)).json();
-    return Array.isArray(files) ? files : [];
+    const path = `/deposit/depositions/${depId}/files`;
+    const res = await this.call('GET', path);
+    const files = res.json();
+    if (!Array.isArray(files))
+      throw new ZenodoError(`Zenodo GET ${path}: not a file list`, res.status, res.text);
+    return files;
   }
 
   async deleteDraftFile(depId: string | number, fileId: string): Promise<void> {
@@ -604,8 +607,8 @@ export function buildMetadata(input: MetadataInput): Record<string, unknown> {
 }
 
 /**
- * Makes the journal's community the review of a paper's first version, so the editor's
- * Submit for review on Zenodo sends it there. The legacy `communities` field applies only when
+ * Sets a paper's first-version draft to be reviewed by the journal's community, so the editor's
+ * Submit for review on Zenodo sends the draft to that community. The legacy `communities` field applies only when
  * the API publishes the record. A later version stays in its first version's communities.
  * Returns a refusal message, or null.
  */
@@ -955,7 +958,7 @@ function assertEngineArchive(zipPath: string): void {
  *  deposit never goes out without the journal's settings. */
 export function loadJournalZenodo(instanceRoot: string | null): ZenodoConfig {
   const journal = instanceRoot ? readJournalConfig(instanceRoot) : null;
-  return (journal ?? JournalConfig.parse({ name: 'x' })).zenodo;
+  return journal?.zenodo ?? ZenodoConfig.parse({});
 }
 
 /**
