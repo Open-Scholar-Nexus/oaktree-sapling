@@ -43,13 +43,24 @@ typst_template: ./typst-template
 A paper can set its own template in its `myst.yml` (`exports[].template`). It takes precedence over the journal's, and the Journal checks flag it for the editors.
 
 (zenodo-community)=
-## Zenodo community, description and links
+## Zenodo community
 
-A paper can join a [Zenodo community](https://help.zenodo.org/docs/communities/), and the journal can add to every deposit's description a paragraph about the journal, after the abstract, and links to addresses the paper sets in its `myst.yml`:
+A journal's papers can join a [Zenodo community](https://help.zenodo.org/docs/communities/):
 
 ```yaml
 zenodo:
   community: my-journal
+```
+
+`community` is the community's identifier, the last part of its address on Zenodo. It applies to a paper whose first version is not published yet: an editor submits that draft to the community ([publish on Zenodo](publish.md#publish-on-zenodo)), and later versions stay in the community. A paper published before the community was set, or with [`--publish-without-review`](publish.md#publish-without-review), joins it only when an editor submits its record to the community on Zenodo.
+
+(zenodo-description)=
+## Zenodo description
+
+The journal can add to every deposit's description a paragraph about the journal, after the abstract, and links to addresses the paper sets in its `myst.yml`:
+
+```yaml
+zenodo:
   description_blurb: Published in My Journal.
   links:
     - option: youtube
@@ -57,8 +68,6 @@ zenodo:
       text: Watch on YouTube
       relation: isSupplementedBy
 ```
-
-`community` is the community's identifier, the last part of its address on Zenodo. It applies to a paper whose first version is not published yet: an editor submits that draft to the community ([publish on Zenodo](publish.md#publish-on-zenodo)), and later versions stay in the community. A paper published before the community was set, or with [`--publish-without-review`](publish.md#publish-without-review), joins it only when an editor submits its record to the community on Zenodo.
 
 The paragraph and the links apply from the next [published version](publish.md).
 
