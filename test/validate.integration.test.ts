@@ -460,6 +460,14 @@ describe.skipIf(bundleState() === 'absent')('oak validate, what a check file rea
       pageParts: { data_availability: 'At the archive.' },
     });
   }, 60_000);
+
+  it("gets the page's frontmatter as written beside the one MyST fills in, and myst.yml", () => {
+    const { pageKeys, fileFrontmatter, configTitle } = seen();
+    // MyST copies the project's authors and keywords into the page's frontmatter.
+    expect(pageKeys).toEqual(expect.arrayContaining(['authors', 'keywords']));
+    expect(fileFrontmatter).toEqual({ data_availability: 'At the archive.' });
+    expect(configTitle).toBe('A Fixture Paper for Engine Release Safety');
+  }, 60_000);
 });
 
 describe.skipIf(bundleState() === 'absent')("oak validate, a catalog check's options", () => {

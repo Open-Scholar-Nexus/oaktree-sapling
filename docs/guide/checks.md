@@ -122,7 +122,8 @@ export default {
 | field | |
 |---|---|
 | `root` | The paper's folder, an absolute path. |
-| `project` | The project frontmatter, such as `title`, `authors` and `keywords`. |
+| `project` | The project frontmatter, such as `title`, `authors` and `keywords`, with the journal's settings merged in. |
+| `config` | The paper's `myst.yml` as the author wrote it, without the journal's settings. |
 | `projectParts` | The content of each part the project frontmatter sets, as a tree, by part name. |
 | `pages` | One entry per page, in table-of-contents order and starting with the root page, which Curvenote's checks read as the article. |
 | `toText(node)` | The text of a node and everything under it. |
@@ -133,7 +134,8 @@ Each entry of `pages` holds:
 | field | |
 |---|---|
 | `file` | The page's file, an absolute path. |
-| `frontmatter` | Its frontmatter. |
+| `frontmatter` | Its frontmatter as MyST reads it: the project's fields, such as `authors` and `keywords`, fill in what the page does not set, and a first `# Heading` becomes the `title`. |
+| `fileFrontmatter` | The frontmatter block at the top of its file, as written. It is `{}` when the page has none, and `null` when the block is not valid YAML or the page is not a `.md` file. List MyST's `frontmatter-is-yaml` rule to block a page whose block is not valid YAML. |
 | `mdast` | Its content, as a tree. |
 | `parts` | The content of each part its frontmatter sets, as a tree, by part name. |
 

@@ -5,7 +5,7 @@
  * A check file loads from the journal clone, where myst-cli is not installed, so it gets
  * {@link Paper}: plain data and two helpers.
  */
-import { statSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
 import { extname, isAbsolute, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { z } from 'zod';
@@ -13,6 +13,7 @@ import { CheckStatus, type CheckResult } from '@curvenote/check-definitions';
 import type { GenericNode, GenericParent } from 'myst-common';
 import * as messages from './messages.js';
 import { UserError, firstLine } from './messages.js';
+import { parseYaml } from './yaml-io.js';
 
 /** A frontmatter part's tree, by part name, such as `abstract`. */
 export type Parts = Record<string, GenericParent>;
@@ -21,7 +22,10 @@ export type Parts = Record<string, GenericParent>;
 export interface PaperPage {
   /** Absolute path to the page's file. */
   file: string;
+  /** The frontmatter as MyST resolved it, with the project's fields filled in. */
   frontmatter: Record<string, any>;
+  /** The frontmatter block at the top of the file, as written; see {@link readFileFrontmatter}. */
+  fileFrontmatter: Record<string, any> | null;
   mdast: GenericParent;
   /** The content of the parts the page's frontmatter sets. `frontmatter.parts` holds only
    *  pointers to them. */
@@ -36,11 +40,37 @@ export interface Paper {
   project: Record<string, any>;
   /** The content of the parts the project frontmatter sets. */
   projectParts: Parts;
+  /** The paper's `myst.yml`, as written. */
+  config: Record<string, any>;
   /** One per page, in table-of-contents order: the root page, which Curvenote's checks read as
    *  the article, then the rest. */
   pages: PaperPage[];
   toText(node: GenericNode | GenericNode[]): string;
   selectAll(selector: string, node: GenericNode): GenericNode[];
+}
+
+/** The fields of {@link Paper} that come from MyST's processed project (`MystEdge.paperForChecks`). */
+export type PaperFromMyst = Omit<Paper, 'config'>;
+
+/**
+ * The frontmatter block at the top of a markdown page, parsed: `{}` when the page has none, null
+ * when it does not parse to a mapping, or when the page is not a `.md` file. MyST reports a block
+ * that does not parse under its `frontmatter-is-yaml` rule.
+ */
+export function readFileFrontmatter(file: string): Record<string, any> | null {
+  if (extname(file) !== '.md') return null;
+  const block = /^---[ \t]*\r?\n(?:([\s\S]*?)\r?\n)?---[ \t]*(?:\r?\n|$)/.exec(
+    readFileSync(file, 'utf8'),
+  );
+  if (!block) return {};
+  let value: unknown;
+  try {
+    value = parseYaml(block[1] ?? '', file).toJS();
+  } catch {
+    return null;
+  }
+  if (value == null) return {};
+  return typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, any>) : null;
 }
 
 /** Whether a `checks:` id names a check file: it starts with `./` or `../`, the prefix rule of

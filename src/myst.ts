@@ -27,7 +27,7 @@ import { toText } from 'myst-common';
 import { selectAll } from 'unist-util-select';
 import type { MystEdge, StartOpts } from './materialize.js';
 import type { ResolvedProject } from './compose.js';
-import type { Paper, Parts } from './journal-checks.js';
+import { readFileFrontmatter, type PaperFromMyst, type Parts } from './journal-checks.js';
 
 /** Each frontmatter part's tree, as Curvenote's checks read it: a part that is not one block of
  *  text is left out, as {@link resolveFrontmatterParts} does. */
@@ -127,7 +127,7 @@ export function createMystEdge(): MystEdge {
         process.chdir(prev);
       }
     },
-    paperForChecks(session: ISession, root: string): Paper {
+    paperForChecks(session: ISession, root: string): PaperFromMyst {
       const state = session.store.getState();
       const project = selectors.selectLocalProject(state, root);
       if (!project) throw new Error(`myst has no processed project at ${root}`);
@@ -136,9 +136,11 @@ export function createMystEdge(): MystEdge {
         const data = selectFile(session, file);
         if (!data) throw new Error(`myst has not processed ${file}`);
         // `file` is relative to the paper root, the cwd `withProjectSession` loaded it from.
+        const abs = resolve(root, file);
         return {
-          file: resolve(root, file),
+          file: abs,
           frontmatter: data.frontmatter,
+          fileFrontmatter: readFileFrontmatter(abs),
           mdast: data.mdast,
           parts: partTrees(session, data.frontmatter),
         };

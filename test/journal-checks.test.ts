@@ -6,10 +6,13 @@
  */
 import { describe, it, expect } from 'vitest';
 import { fileURLToPath } from 'node:url';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { toText } from 'myst-common';
 import { selectAll } from 'unist-util-select';
 import { runChecks, toCheckRun, type JournalCheck } from '../src/checks.js';
-import type { Paper } from '../src/journal-checks.js';
+import { readFileFrontmatter, type Paper } from '../src/journal-checks.js';
 import * as messages from '../src/messages.js';
 import { DOCS, docsUrl } from '../src/docs-links.js';
 
@@ -21,10 +24,12 @@ function handBuiltPaper(): Paper {
     root: '/paper',
     project: { title: 'A Paper' },
     projectParts: {},
+    config: { project: { title: 'A Paper' } },
     pages: [
       {
         file: '/paper/index.md',
         frontmatter: {},
+        fileFrontmatter: {},
         mdast: {
           type: 'root',
           children: [
@@ -194,5 +199,31 @@ describe('each check reads its own copy of the paper', () => {
         message: 'bad',
       },
     ]);
+  });
+});
+
+describe("a page's frontmatter as written", () => {
+  const dir = mkdtempSync(join(tmpdir(), 'oak-file-frontmatter-'));
+  const read = (name: string, text: string) => {
+    writeFileSync(join(dir, name), text);
+    return readFileFrontmatter(join(dir, name));
+  };
+
+  it('is the block at the top of the file, without the fields MyST fills in', () => {
+    expect(read('a.md', '---\ntitle: T\nauthors: [A]\n---\n# Body\n')).toEqual({
+      title: 'T',
+      authors: ['A'],
+    });
+  });
+
+  it('is empty for a page without one, or with an empty one', () => {
+    expect(read('b.md', '# Body\n\n---\ntitle: T\n---\n')).toEqual({});
+    expect(read('c.md', '---\n---\n# Body\n')).toEqual({});
+  });
+
+  it('is null when the block is not a YAML mapping, or the page is not markdown', () => {
+    expect(read('d.md', '---\ntitle: [unclosed\n---\n')).toBeNull();
+    expect(read('e.md', '---\n- a list\n---\n')).toBeNull();
+    expect(read('f.ipynb', '{"cells": []}')).toBeNull();
   });
 });

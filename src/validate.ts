@@ -49,6 +49,7 @@ import {
 import { materializeDerived, type MystEdge } from './materialize.js';
 import { depositCollisions, RESERVED_DEPOSIT_NAMES } from './zenodo.js';
 import type { ComposeInput } from './compose.js';
+import type { Paper } from './journal-checks.js';
 
 export interface FsProbes {
   existsProbe(path: string): boolean;
@@ -748,7 +749,10 @@ export async function runValidate(
       const ran = await input.edge.withProjectSession(
         input.paperRoot,
         (session) => {
-          const readPaper = () => input.edge.paperForChecks(session, input.paperRoot);
+          const readPaper = (): Paper => ({
+            ...input.edge.paperForChecks(session, input.paperRoot),
+            config: (readDoc(authorMyst).toJS() ?? {}) as Paper['config'],
+          });
           return runChecks(session, runnable, input.instanceRoot, readPaper);
         },
         configFile, // the composed config, when there is one
