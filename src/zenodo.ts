@@ -289,6 +289,11 @@ export class ZenodoApi {
     return String((res.json() as { id: string }).id);
   }
 
+  /** Removes the draft's review, which Zenodo requires before it publishes the draft. */
+  async deleteReview(depId: string | number): Promise<void> {
+    await this.call('DELETE', `/records/${depId}/draft/review`);
+  }
+
   /** Makes the community the draft's review, so publishing it on Zenodo submits it there. */
   async setCommunityReview(depId: string | number, communityId: string): Promise<void> {
     await this.call('PUT', `/records/${depId}/draft/review`, {
@@ -1219,8 +1224,10 @@ async function fillDraft(input: UploadInput, engineZip: string): Promise<Outcome
 
   const { zenodo, paperLinks } = loadJournalDeposit(instanceRoot);
   // A review set here survives the legacy metadata update below.
-  if (zenodo.community && input.publish) {
-    warn(msg.workflow.zenodoCommunitySkipped(zenodo.community));
+  if (input.publish) {
+    // Zenodo publishes no draft that has a review, such as one an earlier run set.
+    if ((await api.getRdmDraft(dep.id)).parent?.review) await api.deleteReview(dep.id);
+    if (zenodo.community) warn(msg.workflow.zenodoCommunitySkipped(zenodo.community));
   } else if (zenodo.community) {
     const refused = await requestCommunity(api, dep.id, zenodo.community);
     if (refused) return err(2, refused);

@@ -1294,12 +1294,26 @@ describe('cmdUpload', () => {
       publish: true,
     });
     expect(out.exitCode).toBe(0);
-    expect(z.calls.some((c) => c.url.includes('/api/records/'))).toBe(false);
+    expect(z.calls.some((c) => c.url.includes('/draft/review'))).toBe(false);
     expect(z.calls.some((c) => c.url.includes('/api/communities/'))).toBe(false);
     expect(z.calls.some((c) => c.url.endsWith('/actions/publish'))).toBe(true);
     expect(warnings().join('')).toContain(
       'publishes with no review by the Zenodo community "fixture-community"',
     );
+  });
+
+  it('removes a review an earlier run set before --publish-without-review publishes', async () => {
+    captureStderr();
+    const z = legacyZenodo([], { parent: { review: { receiver: { community: 'c0ffee' } } } });
+    const out = await upload(readyPaper(true), z.api, {
+      instanceRoot: journalWithCommunity('fixture-community'),
+      publish: true,
+    });
+    expect(out.exitCode).toBe(0);
+    const urls = z.calls.map((c) => `${c.method} ${new URL(c.url).pathname}`);
+    const removed = urls.indexOf('DELETE /api/records/5/draft/review');
+    expect(removed).toBeGreaterThan(-1);
+    expect(removed).toBeLessThan(urls.indexOf('POST /api/deposit/depositions/5/actions/publish'));
   });
 
   it('errors when the API environment disagrees with the committed DOI prefix', async () => {

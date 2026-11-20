@@ -42,7 +42,7 @@ You then [publish the draft on Zenodo](#publish-on-zenodo) and [list the paper o
 (publish-without-review)=
 ### Publishing without review
 
-`oak release --publish-without-review` publishes the draft as soon as it is filled, so the version gets its DOI with no check on Zenodo first. Once it is published, Zenodo does not let its files change. The journal's [Zenodo community](journal-yml.md#zenodo-community) does not review it, and oak prints a warning saying so. A first version published this way is in no community, and an editor can then submit it to the community on Zenodo.
+`oak release --publish-without-review` publishes the draft as soon as it is filled, so the version gets its DOI with no check on Zenodo first. Once it is published, Zenodo does not let its files change. The journal's [Zenodo community](journal-yml.md#zenodo-community) does not review it, and oak prints a warning saying so. If an earlier `oak release` set the draft's community review, oak removes it first, since Zenodo does not publish a draft that has one. A first version published this way is in no community, and an editor can then submit it to the community on Zenodo.
 
 (publish-on-zenodo)=
 ## Publish on Zenodo
