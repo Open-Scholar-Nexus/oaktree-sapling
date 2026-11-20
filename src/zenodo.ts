@@ -542,8 +542,7 @@ export function buildMetadata(input: MetadataInput): Record<string, unknown> {
     const affs = (a.affiliations ?? []).map((id) => affiliationName.get(id)).filter(Boolean);
     if (affs.length) c.affiliations = affs.map((name) => ({ name }));
     const orcid = a.orcid ?? '';
-    // The template's placeholder ORCID (0000-0000-...) is left out: Zenodo replaces `name` from
-    // the ORCID profile when the ORCID does not resolve.
+    // The template's placeholder ORCID (0000-0000-...) is left out, with a warning.
     if (orcid && !orcid.startsWith('0000-0000-')) c.orcid = orcid;
     else if (orcid) warn(msg.workflow.orcidPlaceholder(String(a.name), orcid));
     creators.push(c);
