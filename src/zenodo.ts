@@ -470,13 +470,13 @@ function legacyCreatorName(n: Name = {}): string {
   return given ? `${family}, ${given}` : family;
 }
 
-/** The value of `project.options.<option>` when it is an http(s) address, else undefined. */
+/** The value of `project.options.<option>`, normalized, when it is an http(s) address, else undefined. */
 function httpUrl(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
   const url = value.trim();
   try {
-    const { protocol } = new URL(url);
-    return protocol === 'http:' || protocol === 'https:' ? url : undefined;
+    const { protocol, href } = new URL(url);
+    return protocol === 'http:' || protocol === 'https:' ? href : undefined;
   } catch {
     return undefined;
   }

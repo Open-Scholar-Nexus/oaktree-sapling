@@ -332,6 +332,13 @@ describe('buildMetadata', () => {
       });
     });
 
+    it('sends the address as the URL parser normalizes it', () => {
+      const md = withOptions({ youtube: ' https://YouTu.be/x\ty ' });
+      expect(md.description).toContain('<a href="https://youtu.be/xy">');
+      const related = md.related_identifiers as Array<Record<string, string>>;
+      expect(related.map((r) => r.identifier)).toContain('https://youtu.be/xy');
+    });
+
     it('adds only the line when the link has no relation', () => {
       const { relation: _, ...plain } = yt;
       const md = withOptions({ youtube: 'https://youtu.be/x' }, [plain]);
