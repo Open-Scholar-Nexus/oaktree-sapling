@@ -254,7 +254,7 @@ export function checkTemplates(
     ['journal', journalTemplate],
   ] as const) {
     if (!value) continue;
-    // An error, since `oak build` refuses it too.
+    // No build can fetch this template, so it blocks the merge.
     const problem = unfetchableTemplateUrl(value);
     if (problem) {
       out.push({
