@@ -57,6 +57,38 @@ export function isInstanceRelativeTemplate(value: string): boolean {
   return /^\.\.?\//.test(value);
 }
 
+/**
+ * Why myst cannot fetch the template URL `value`, with the URL to use instead when oak can
+ * work it out; undefined when myst can, or oak cannot tell. myst-templates downloads a URL that
+ * ends in `.zip`, or in `.git` (as the `main` branch's zip), and reads any other URL as a
+ * template listing, a JSON document that a repository or archive URL is not.
+ */
+export function unfetchableTemplateUrl(
+  value: string,
+): { kind: 'git-ref' | 'url-suffix' | 'not-zip'; fix?: string } | undefined {
+  if (!isBrandAssetUrl(value)) return undefined;
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return undefined;
+  }
+  const path = url.origin + url.pathname;
+  const github = url.hostname === 'github.com';
+  if (path.endsWith('.git') && !value.endsWith('.git')) {
+    const ref = url.hash.slice(1);
+    const zip = github && ref ? `${path.slice(0, -4)}/archive/${ref}.zip` : undefined;
+    return ref ? { kind: 'git-ref', fix: zip } : { kind: 'url-suffix', fix: path };
+  }
+  if (path.endsWith('.zip') && !value.endsWith('.zip')) return { kind: 'url-suffix', fix: path };
+  const tar = /\.(tar\.gz|tgz)$/.exec(path);
+  if (tar) {
+    const fix = github ? path.slice(0, -tar[0].length) + '.zip' : undefined;
+    return { kind: 'not-zip', fix };
+  }
+  return undefined;
+}
+
 /** Makes a journal's template path absolute against the journal repo root, where
  *  `journal.yml` lives. Only `./` and `../` values change; see
  *  {@link isInstanceRelativeTemplate}. Exported so `oak validate` checks the path compose emits

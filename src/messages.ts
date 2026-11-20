@@ -635,6 +635,36 @@ const WITHOUT_JOURNAL: Record<JournalVerb, string> = {
   'deploy-preview': "a preview without the journal's settings",
 };
 
+/** Why myst cannot fetch a template URL, and what to write instead (`unfetchableTemplateUrl` in
+ *  compose.ts). */
+function templateUnfetchable(
+  value: string,
+  problem: { kind: 'git-ref' | 'url-suffix' | 'not-zip'; fix?: string },
+): string {
+  const head = `typst template "${value}" cannot be fetched: `;
+  switch (problem.kind) {
+    case 'git-ref':
+      return (
+        head +
+        `myst fetches a .git URL only at its main branch, and reads one with #<ref> as a ` +
+        `template listing, which fails. Pin a commit with its zip URL: ` +
+        `${problem.fix ?? 'https://github.com/<owner>/<repo>/archive/<sha>.zip'}`
+      );
+    case 'url-suffix':
+      return (
+        head +
+        `myst downloads a template URL only when it ends in .zip or .git, and reads any other ` +
+        `as a template listing, which fails. Write ${problem.fix}`
+      );
+    case 'not-zip':
+      return (
+        head +
+        `myst unpacks only .zip templates. Use the .zip archive` +
+        (problem.fix ? `: ${problem.fix}` : '')
+      );
+  }
+}
+
 export const build = {
   done: (id: string): string => `oak build: done (id=${id})`,
   placeholder:
@@ -656,6 +686,11 @@ export const build = {
       `${reason ?? 'myst reported no error; see its log above'}.`
     );
   },
+  /** The chosen typst template is a URL myst cannot fetch (`runBuild`). */
+  templateUnfetchable: (
+    value: string,
+    problem: Parameters<typeof templateUnfetchable>[1],
+  ): string => `oak build: the ${templateUnfetchable(value, problem)}`,
   /** oak's install lacks `templates/typst`, which every release and npm package ships. */
   noEngineTypstTemplate: (dir: string): string =>
     `oak build: oak's typst template is missing (${dir}). Reinstall oak, or run it from a full ` +
@@ -934,8 +969,13 @@ export const validate = {
     (journalTemplate ? `the journal's ("${journalTemplate}").` : "oaktree-sapling's."),
   templateFloating: (layer: string, value: string): string =>
     `${layer} typst template "${value}" is not pinned, so the file it points to can change ` +
-    `without this value changing. Prefer a release URL or a local path. (Published PDFs stay ` +
-    `reproducible: the deposit archives the template used.)`,
+    `without this value changing. Prefer a commit's or a release's .zip URL, or a local path. ` +
+    `(Published PDFs stay reproducible: the deposit archives the template used.)`,
+  templateUnfetchable: (
+    layer: string,
+    value: string,
+    problem: Parameters<typeof templateUnfetchable>[1],
+  ): string => `${layer} ${templateUnfetchable(value, problem)}`,
   templateNameAmbiguous: (journalTemplate: string): string =>
     `journal.yml typst_template "${journalTemplate}" is being used as a myst template ` +
     `NAME, but "${journalTemplate}" also exists in the journal repo. If you meant the ` +

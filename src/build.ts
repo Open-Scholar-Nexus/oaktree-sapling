@@ -10,7 +10,7 @@
  */
 import { existsSync, statSync } from 'node:fs';
 import { relative } from 'node:path';
-import { type ResolvedProject } from './compose.js';
+import { type ResolvedProject, unfetchableTemplateUrl } from './compose.js';
 import { engineTypstTemplate } from './assets.js';
 import { runLayerA } from './validate.js';
 import {
@@ -91,6 +91,11 @@ export async function runBuild(input: RunBuildInput): Promise<RunBuildResult> {
   ) {
     throw new UserError(msg.build.noEngineTypstTemplate(typstTemplate));
   }
+
+  // A template URL myst cannot fetch is refused before myst runs, with the reason.
+  const unfetchable =
+    buildsPdf && typstTemplate ? unfetchableTemplateUrl(typstTemplate) : undefined;
+  if (unfetchable) throw new UserError(msg.build.templateUnfetchable(typstTemplate!, unfetchable));
 
   if (baseUrl) process.env.BASE_URL = baseUrl;
   const started = Date.now();

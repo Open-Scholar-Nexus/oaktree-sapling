@@ -224,6 +224,37 @@ describe("an install missing oak's typst template", () => {
   });
 });
 
+describe('a typst template URL myst cannot fetch', () => {
+  const url = 'https://github.com/o/r.git#a1b2c3d4e5f6';
+  const build = (buildOpts?: Parameters<typeof runBuild>[0]['buildOpts']) => {
+    const { edge, calls } = fakeEdge();
+    const run = runBuild({
+      paperRoot: tmpPaper(),
+      engineRoot: '.engine',
+      instanceRoot: '.instance',
+      baseUrl: '',
+      assetOverrides: { typstTemplate: url },
+      buildOpts,
+      edge,
+    });
+    return { run, calls };
+  };
+
+  it('stops a PDF build before myst runs, with the zip URL to use', async () => {
+    const { run, calls } = build();
+    const err = await run.catch((e) => e);
+    expect(err).toBeInstanceOf(UserError);
+    expect(err.message).toContain('https://github.com/o/r/archive/a1b2c3d4e5f6.zip');
+    expect(calls.some((c) => c.startsWith('build:'))).toBe(false);
+  });
+
+  it('builds the site alone (--no-exports), which fetches no template', async () => {
+    const { run, calls } = build({ all: false, html: true });
+    await run;
+    expect(calls.some((c) => c.startsWith('build:'))).toBe(true);
+  });
+});
+
 describe('a build whose export myst did not write', () => {
   const pdf = (root: string) => join(root, TYPST_OUTPUT);
   const typst = (root: string) => ({ id: 'typst-pdf', format: 'typst', output: pdf(root) });

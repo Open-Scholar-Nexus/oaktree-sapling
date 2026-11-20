@@ -29,7 +29,7 @@ Papers are typeset with oak's own [typst](https://typst.app) template. To use an
 : A MyST typst template committed in the journal repository, as a path from its root. The value has to start with `./` or `../`.
 
 a URL
-: A template zip or git repository. Pin it to a release or a commit: a template that can change while this value stays the same gets a warning in the Journal checks.
+: A template `.zip`, pinned to a commit or a release, such as `https://github.com/<owner>/<repo>/archive/<sha>.zip`. A template that can change while this value stays the same gets a warning in the Journal checks: a branch's zip, or a git repository URL ending in `.git`, which myst fetches at its `main` branch. myst cannot fetch a `.git` URL with a ref after it (`.git#<sha>`), or a `.tar.gz`, so the Journal checks and `oak build` refuse both and print the `.zip` URL to use.
 
 a name
 : A template from MyST's [template list](https://mystmd.org/guide/creating-pdf-documents), such as `lapreprint-typst`. A name gets the same warning.

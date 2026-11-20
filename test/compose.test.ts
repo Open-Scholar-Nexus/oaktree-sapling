@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { compose, type ComposeInput, type ResolvedProject } from '../src/compose.js';
+import {
+  compose,
+  unfetchableTemplateUrl,
+  type ComposeInput,
+  type ResolvedProject,
+} from '../src/compose.js';
 import { themeZipUrl } from '../src/assets.js';
 
 const ENGINE = '.engine';
@@ -265,5 +270,47 @@ describe('compose: the version key read from myst.yml and after extends must agr
       options: { 'oaktree-sapling': { version: 'v9.9.9', edition: EDITION } },
     };
     expect(() => compose(base({ resolvedProject: skewed }))).toThrow(/mismatch/);
+  });
+});
+
+describe('unfetchableTemplateUrl: the template URLs myst-templates cannot download', () => {
+  const sha = 'a1b2c3d4e5f6';
+
+  it('passes the forms myst downloads, and names and paths it does not judge', () => {
+    for (const ok of [
+      `https://github.com/o/r/archive/${sha}.zip`,
+      'https://github.com/o/r/releases/download/v1.2.3/t.zip',
+      'https://github.com/o/r.git',
+      'https://api.mystmd.org/templates/typst/myst/lapreprint-typst',
+      'lapreprint-typst',
+      './typst-template',
+    ]) {
+      expect(unfetchableTemplateUrl(ok), ok).toBeUndefined();
+    }
+  });
+
+  it('refuses a .git URL with a ref, and gives the commit zip on GitHub', () => {
+    expect(unfetchableTemplateUrl(`https://github.com/o/r.git#${sha}`)).toEqual({
+      kind: 'git-ref',
+      fix: `https://github.com/o/r/archive/${sha}.zip`,
+    });
+    expect(unfetchableTemplateUrl(`https://git.example.org/o/r.git#${sha}`)).toEqual({
+      kind: 'git-ref',
+      fix: undefined,
+    });
+  });
+
+  it('refuses a .zip or .git URL followed by a query or fragment', () => {
+    expect(unfetchableTemplateUrl('https://example.org/t.zip?raw=1')).toEqual({
+      kind: 'url-suffix',
+      fix: 'https://example.org/t.zip',
+    });
+  });
+
+  it('refuses a tarball, which myst does not unpack', () => {
+    expect(unfetchableTemplateUrl(`https://github.com/o/r/archive/${sha}.tar.gz`)).toEqual({
+      kind: 'not-zip',
+      fix: `https://github.com/o/r/archive/${sha}.zip`,
+    });
   });
 });

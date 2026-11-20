@@ -23,7 +23,12 @@ import {
   type RegistryEntry,
 } from './schema.js';
 import { dirname, isAbsolute, join } from 'node:path';
-import { resolveBrandAssetPath, isBrandAssetUrl, isInstanceRelativeTemplate } from './compose.js';
+import {
+  resolveBrandAssetPath,
+  isBrandAssetUrl,
+  isInstanceRelativeTemplate,
+  unfetchableTemplateUrl,
+} from './compose.js';
 import {
   readBrandAssetOptions,
   readAuthorTypstTemplate,
@@ -211,12 +216,10 @@ export function checkDepositNames(input: { paperRoot: string }, probes: FsProbes
  */
 export function isFloatingTemplate(value: string): boolean {
   if (isBrandAssetUrl(value)) {
-    const [url, ref] = value.split('#');
-    if (/\/refs\/heads\//.test(url!)) return true;
-    if (/\/archive\/(main|master|HEAD|develop)\.(zip|tar\.gz)$/.test(url!)) return true;
-    // A `.git` URL is floating unless it carries a pinned-looking ref (a sha or a version tag).
-    if (/\.git$/.test(url!)) return !(ref && /^([0-9a-f]{7,40}|v?\d)/.test(ref));
-    return false;
+    if (/\/refs\/heads\//.test(value)) return true;
+    if (/\/archive\/(main|master|HEAD|develop)\.zip$/.test(value)) return true;
+    // myst fetches a `.git` URL at its `main` branch.
+    return value.endsWith('.git');
   }
   // A local path is committed and reviewed, so it does not float.
   if (isAbsolute(value) || isInstanceRelativeTemplate(value)) return false;
@@ -250,8 +253,19 @@ export function checkTemplates(
     ['author', authorTemplate],
     ['journal', journalTemplate],
   ] as const) {
-    if (!value || !isFloatingTemplate(value)) continue;
-    warn('template-floating', msg.validate.templateFloating(layer, value));
+    if (!value) continue;
+    // An error, since `oak build` refuses it too.
+    const problem = unfetchableTemplateUrl(value);
+    if (problem) {
+      out.push({
+        check: 'template-unfetchable',
+        severity: 'error',
+        message: msg.validate.templateUnfetchable(layer, value, problem),
+        klass: 'config',
+      });
+    } else if (isFloatingTemplate(value)) {
+      warn('template-floating', msg.validate.templateFloating(layer, value));
+    }
   }
 
   // Only `./` or `../` is a path, so a bare `templates/typst` goes to myst as a name and fails
