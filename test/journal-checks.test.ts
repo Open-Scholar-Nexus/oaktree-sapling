@@ -25,6 +25,7 @@ function handBuiltPaper(): Paper {
     project: { title: 'A Paper' },
     projectParts: {},
     config: { project: { title: 'A Paper' } },
+    journal: { root: '/journal', config: { name: 'A Journal' } as never, registry: [] },
     pages: [
       {
         file: '/paper/index.md',
@@ -177,8 +178,9 @@ describe('each check reads its own copy of the paper', () => {
     const paper = handBuiltPaper();
     const out = await run([{ id: './edits-tree.mjs' }, { id: './reads-tree.mjs' }], paper);
     expect(out).toEqual([
-      { id: './reads-tree.mjs', status: 'pass', message: '2 nodes, title A Paper' },
+      { id: './reads-tree.mjs', status: 'pass', message: '2 nodes, title A Paper, A Journal' },
     ]);
+    expect(paper.journal!.config.name).toBe('A Journal');
     expect(paper.pages[0]!.mdast.children).toHaveLength(2);
   });
 

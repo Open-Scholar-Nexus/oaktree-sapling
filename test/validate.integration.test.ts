@@ -434,17 +434,12 @@ describe.skipIf(bundleState() === 'absent')('oak validate, what a check file rea
     return dir;
   }
 
+  const journal = journalWithReporter();
   function seen(): any {
+    const paper = paperWithFrontmatter();
     const r = spawnSync(
       'node',
-      [
-        bundle,
-        'validate',
-        '--paper',
-        paperWithFrontmatter(),
-        '--instance',
-        journalWithReporter(),
-      ].concat(['--repo', repo, '--json']),
+      [bundle, 'validate', '--paper', paper, '--instance', journal, '--repo', repo, '--json'],
       { encoding: 'utf8' },
     );
     const row = JSON.parse(r.stdout).checks.find((c: any) => c.id === id);
@@ -467,6 +462,14 @@ describe.skipIf(bundleState() === 'absent')('oak validate, what a check file rea
     expect(pageKeys).toEqual(expect.arrayContaining(['authors', 'keywords']));
     expect(fileFrontmatter).toEqual({ data_availability: 'At the archive.' });
     expect(configTitle).toBe('A Fixture Paper for Engine Release Safety');
+  }, 60_000);
+
+  it('gets the journal settings and registry', () => {
+    expect(seen()).toMatchObject({
+      journalName: 'Fixture Journal',
+      journalRoot: journal,
+      registryIds: ['fixture-2026-sample-paper'],
+    });
   }, 60_000);
 });
 

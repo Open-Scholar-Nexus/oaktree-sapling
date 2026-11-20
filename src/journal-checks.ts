@@ -14,6 +14,7 @@ import type { GenericNode, GenericParent } from 'myst-common';
 import * as messages from './messages.js';
 import { UserError, firstLine } from './messages.js';
 import { parseYaml } from './yaml-io.js';
+import type { JournalConfig, Registry } from './schema.js';
 
 /** A frontmatter part's tree, by part name, such as `abstract`. */
 export type Parts = Record<string, GenericParent>;
@@ -42,6 +43,15 @@ export interface Paper {
   projectParts: Parts;
   /** The paper's `myst.yml`, as written. */
   config: Record<string, any>;
+  /** The journal repository the check file comes from, as `oak validate` reads it. */
+  journal: {
+    /** Absolute path to the journal repository. */
+    root: string;
+    /** `journal.yml`, with oak's defaults filled in. */
+    config: JournalConfig;
+    /** The entries of `registry/papers.yml` oak accepts; empty when there is no registry. */
+    registry: Registry;
+  };
   /** One per page, in table-of-contents order: the root page, which Curvenote's checks read as
    *  the article, then the rest. */
   pages: PaperPage[];
@@ -50,7 +60,7 @@ export interface Paper {
 }
 
 /** The fields of {@link Paper} that come from MyST's processed project (`MystEdge.paperForChecks`). */
-export type PaperFromMyst = Omit<Paper, 'config'>;
+export type PaperFromMyst = Omit<Paper, 'config' | 'journal'>;
 
 /**
  * The frontmatter block at the top of a markdown page, parsed: `{}` when the page has none, null
