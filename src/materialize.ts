@@ -25,11 +25,10 @@ import { UserError } from './messages.js';
 export interface BuildOpts {
   all?: boolean;
   html?: boolean;
-  /** Only the typst export, no site, so the theme zip is not downloaded. */
   exportsOnly?: boolean;
 }
 
-/** What a build's exports did, for {@link MystEdge.build}'s `afterExports`. */
+/** The exports myst ran and its first error, passed to {@link MystEdge.build}'s `afterExports`. */
 export interface ExportOutcome {
   /** Every export myst ran, as it resolved them; `output` is absolute. */
   exports: Array<{ id?: string; format: string; output: string }>;

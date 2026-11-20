@@ -63,8 +63,10 @@ export function createMystEdge(): MystEdge {
 
         // myst's `build` logs a failed export and carries on, and its HTML build ends the
         // process, so oak runs the exports itself and reports them before the site.
-        const formats = opts.exportsOnly ? { typst: true } : opts.all ? { all: true } : null;
-        const exports = formats ? await collectAllBuildExportOptions(session, [], formats) : [];
+        const exports =
+          opts.exportsOnly || opts.all
+            ? await collectAllBuildExportOptions(session, [], { all: true })
+            : [];
         let error: string | undefined;
         if (exports.length) {
           try {
