@@ -305,7 +305,7 @@ describe('buildMetadata', () => {
     ]);
   });
 
-  describe("the journal's links", () => {
+  describe("the journal's paper links", () => {
     const yt = {
       option: 'youtube',
       label: 'Seminar recording',
@@ -316,7 +316,8 @@ describe('buildMetadata', () => {
       buildMetadata({
         project: { title: 'T', options },
         githubUrl: 'https://github.com/o/r',
-        zenodo: { links },
+        zenodo: {},
+        paperLinks: links,
       });
 
     it('adds a line and a related identifier from the paper option', () => {

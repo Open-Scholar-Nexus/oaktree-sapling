@@ -117,10 +117,10 @@ describe('fixtures parse against the schemas', () => {
   });
 });
 
-describe('zenodo.links in journal.yml', () => {
+describe('paper_links in journal.yml', () => {
   const journalWithLinks = (links: string): string => {
     const root = mkdtempSync(join(tmpdir(), 'oak-journal-'));
-    writeFileSync(join(root, 'journal.yml'), `name: J\nzenodo:\n  links:\n${links}`);
+    writeFileSync(join(root, 'journal.yml'), `name: J\npaper_links:\n${links}`);
     return root;
   };
 
@@ -129,7 +129,7 @@ describe('zenodo.links in journal.yml', () => {
       '    - { option: youtube, label: Seminar recording, text: Watch on YouTube, relation: isSupplementedBy }\n' +
         '    - { option: slides_2, label: Slides, text: Open the slides }\n',
     );
-    expect(readJournalConfig(root)?.zenodo.links).toEqual([
+    expect(readJournalConfig(root)?.paper_links).toEqual([
       {
         option: 'youtube',
         label: 'Seminar recording',
@@ -141,13 +141,13 @@ describe('zenodo.links in journal.yml', () => {
   });
 
   it.each([
-    ['a bad option name', '{ option: You-Tube, label: L, text: T }', 'zenodo.links.0.option'],
+    ['a bad option name', '{ option: You-Tube, label: L, text: T }', 'paper_links.0.option'],
     [
       'an unknown relation',
       '{ option: youtube, label: L, text: T, relation: isFunOf }',
       'relation',
     ],
-    ['an empty label', "{ option: youtube, label: '', text: T }", 'zenodo.links.0.label'],
+    ['an empty label', "{ option: youtube, label: '', text: T }", 'paper_links.0.label'],
     ['an unknown key', '{ option: youtube, label: L, text: T, url: x }', 'url'],
   ])('refuses %s when journal.yml is read, naming the file', (_, entry, says) => {
     const root = journalWithLinks(`    - ${entry}\n`);

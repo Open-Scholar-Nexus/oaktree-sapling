@@ -57,22 +57,29 @@ zenodo:
 (zenodo-description)=
 ## Zenodo description
 
-The journal can add to every deposit's description a paragraph about the journal, after the abstract, and links to addresses the paper sets in its `myst.yml`:
+The journal can add a paragraph about itself to every deposit's description, after the abstract:
 
 ```yaml
 zenodo:
   description_blurb: Published in My Journal.
-  links:
-    - option: youtube
-      label: Seminar recording
-      text: Watch on YouTube
-      relation: isSupplementedBy
 ```
 
-The paragraph and the links apply from the next [published version](publish.md).
+The description also gets a line for each of the journal's [paper links](#paper-links) that the paper sets. Both apply from the next [published version](publish.md).
 
-(zenodo-links)=
-Each entry in `links` reads the web address a paper sets as `project.options.<option>` in its `myst.yml`, and adds a line `<label>: <text>` to the description, with `<text>` linking to that address. With this example, a paper that sets
+(paper-links)=
+## Paper links
+
+A journal can name links that each paper sets for itself, such as a recording of a talk:
+
+```yaml
+paper_links:
+  - option: youtube
+    label: Seminar recording
+    text: Watch on YouTube
+    relation: isSupplementedBy
+```
+
+Each entry reads the web address a paper sets as `project.options.<option>` in its `myst.yml`, and adds a line `<label>: <text>` to the Zenodo description, with `<text>` linking to that address. With this example, a paper that sets
 
 ```yaml
 project:
@@ -80,7 +87,7 @@ project:
     youtube: https://youtu.be/<video>
 ```
 
-gets the line **Seminar recording: Watch on YouTube**. `relation` is optional: it also lists the address among the record's related works, with that relation (the [`zenodo.links` reference](../reference/files.md#file-journal-yml) lists the values). A paper that sets no such option gets no line. A value that is not an `http` or `https` address gets no line either, and the deposit prints a warning. A journal's PDF template can read the same option to show the link in the PDF; oak uses it only for the Zenodo description.
+gets the line **Seminar recording: Watch on YouTube**. `relation` is optional: it also lists the address among the Zenodo record's related works, with that relation (the [`paper_links` reference](../reference/files.md#file-journal-yml) lists the values). A paper that sets no such option gets no line. A value that is not an `http` or `https` address gets no line either, and the deposit prints a warning. A journal's PDF template can read the same option to show the link in the PDF; oak uses it only for the Zenodo description.
 
 (live-previews)=
 ## Live previews

@@ -21,7 +21,7 @@ A parsing error[^journal-error] in `journal.yml` stops every oak command and nam
 | `preview.branch_pattern` | `paper-{repo}-{pr}` | The name of each preview inside the project, with `{repo}` and `{pr}` filled in. It is lowercased and cut to 28 characters by shortening `{repo}`, which then ends in a 4-character hash so that papers with similar names stay distinct. |
 | `zenodo.community` | | The Zenodo community a paper's first version is submitted to. See [Zenodo community](../guide/journal-yml.md#zenodo-community). |
 | `zenodo.description_blurb` | | A paragraph added to every deposit's description, after the abstract. |
-| `zenodo.links` | | Lines added to every deposit's description, each linking the web address a paper sets as `project.options.<option>`. Each entry has `option` (lowercase letters, digits and `_`, starting with a letter), `label`, `text` and an optional `relation`.[^relations] See [Zenodo links](../guide/journal-yml.md#zenodo-links). |
+| `paper_links` | | Links a paper sets as `project.options.<option>`, each shown as a line in its deposit's description. Each entry has `option` (lowercase letters, digits and `_`, starting with a letter), `label`, `text` and an optional `relation`.[^relations] See [paper links](../guide/journal-yml.md#paper-links). |
 | `id_pattern` | | A regular expression every paper's `project.id` must match, when set. See [the paper id rule](../guide/journal-yml.md#id-pattern). |
 | `tier` | `paper` | Only `paper` is built.[^tier] |
 | `id_sentinel` | | An id rejected as a placeholder, besides `CHANGE-ME-template-placeholder`. |

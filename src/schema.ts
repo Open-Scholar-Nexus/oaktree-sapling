@@ -198,13 +198,13 @@ export const ZENODO_RELATIONS = (
   'isDerivedFrom isSourceOf requires isRequiredBy'
 ).split(' ') as [string, ...string[]];
 
-/** A link the deposit description gets from a paper's `project.options.<option>` URL. */
-export const ZenodoLink = z.strictObject({
-  option: z.string().regex(/^[a-z][a-z0-9_]*$/, msg.schema.zenodoLinkOption),
+/** A link a paper can set as `project.options.<option>`, which the deposit description shows. */
+export const PaperLink = z.strictObject({
+  option: z.string().regex(/^[a-z][a-z0-9_]*$/, msg.schema.paperLinkOption),
   label: z.string().min(1),
   text: z.string().min(1),
   /** When set, the record also lists the URL among its related works, with this relation. */
-  relation: z.enum(ZENODO_RELATIONS, { error: msg.schema.zenodoLinkRelation }).optional(),
+  relation: z.enum(ZENODO_RELATIONS, { error: msg.schema.paperLinkRelation }).optional(),
 });
 
 export const ZenodoConfig = z
@@ -213,10 +213,10 @@ export const ZenodoConfig = z
     community: z.string().optional(),
     /** Optional paragraph appended to every deposit's description. */
     description_blurb: z.string().optional(),
-    links: z.array(ZenodoLink).optional(),
   })
   .loose();
 export type ZenodoConfig = z.infer<typeof ZenodoConfig>;
+export type PaperLink = z.infer<typeof PaperLink>;
 
 /**
  * An editorial check the journal turns on, by id, with its options. It lives in the journal
@@ -248,6 +248,7 @@ export const JournalConfig = z
     typst_template: z.string().optional(),
     preview: PreviewConfig.prefault({}),
     zenodo: ZenodoConfig.prefault({}),
+    paper_links: z.array(PaperLink).default([]),
     /** The editorial checks `oak validate` runs. */
     checks: z.array(Check).default([]),
   })

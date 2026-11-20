@@ -40,6 +40,7 @@ import {
   repoFromGithubUrl,
   sameRepo,
   zenodoDoiPrefix,
+  type PaperLink,
 } from './schema.js';
 import * as msg from './messages.js';
 import { annotate } from './messages.js';
@@ -491,6 +492,8 @@ export interface MetadataInput {
   githubUrl: string;
   siteUrl?: string;
   zenodo: ZenodoConfig;
+  /** The journal's `paper_links`. */
+  paperLinks?: PaperLink[];
   version?: string;
   publicationDate?: string;
   abstractParas?: string[] | null;
@@ -510,6 +513,7 @@ export function buildMetadata(input: MetadataInput): Record<string, unknown> {
     githubUrl,
     siteUrl,
     zenodo,
+    paperLinks,
     version,
     publicationDate,
     abstractParas,
@@ -554,12 +558,12 @@ export function buildMetadata(input: MetadataInput): Record<string, unknown> {
   // The journal's optional paragraph.
   if (zenodo.description_blurb) desc.push(`<p>${escapeHtml(zenodo.description_blurb)}</p>`);
   if (extraDescParas) desc.push(...extraDescParas.map((p) => `<p>${escapeHtml(p)}</p>`));
-  for (const link of zenodo.links ?? []) {
+  for (const link of paperLinks ?? []) {
     const value = project.options?.[link.option];
     if (value === undefined || value === null || value === '') continue;
     const url = httpUrl(value);
     if (!url) {
-      warn(msg.workflow.zenodoLinkSkipped(link.option, value));
+      warn(msg.workflow.paperLinkSkipped(link.option, value));
       continue;
     }
     const href = escapeHtml(url);
@@ -950,15 +954,21 @@ function assertEngineArchive(zipPath: string): void {
 }
 
 /* --------------------------------------------------------------------------
- * journal.yml `zenodo:` settings
+ * journal.yml `zenodo:` and `paper_links:` settings
  * ------------------------------------------------------------------------ */
 
-/** Reads the journal's `zenodo:` block from `<instanceRoot>/journal.yml`. A new journal, or a
- *  build with no journal, gets empty defaults. A journal.yml oak cannot read throws, so a
- *  deposit never goes out without the journal's settings. */
-export function loadJournalZenodo(instanceRoot: string | null): ZenodoConfig {
+/** Reads the journal's `zenodo:` block and `paper_links` from `<instanceRoot>/journal.yml`. A new
+ *  journal, or a build with no journal, gets empty defaults. A journal.yml oak cannot read
+ *  throws, so a deposit never goes out without the journal's settings. */
+export function loadJournalDeposit(instanceRoot: string | null): {
+  zenodo: ZenodoConfig;
+  paperLinks: PaperLink[];
+} {
   const journal = instanceRoot ? readJournalConfig(instanceRoot) : null;
-  return journal?.zenodo ?? ZenodoConfig.parse({});
+  return {
+    zenodo: journal?.zenodo ?? ZenodoConfig.parse({}),
+    paperLinks: journal?.paper_links ?? [],
+  };
 }
 
 /**
@@ -1036,7 +1046,7 @@ export async function cmdPrepare(input: PrepareInput): Promise<Outcome> {
     paperId: project.id ? String(project.id) : undefined,
     githubUrl,
     siteUrl,
-    zenodo: loadJournalZenodo(instanceRoot),
+    ...loadJournalDeposit(instanceRoot),
     abstractParas: abstractParagraphs(repoRoot),
     extraDescParas: zenodoExtraParagraphs(repoRoot),
   });
@@ -1198,7 +1208,7 @@ async function fillDraft(input: UploadInput, engineZip: string): Promise<Outcome
   }
   process.stderr.write(`[upload] reusing existing draft ${dep.id}\n`);
 
-  const zenodo = loadJournalZenodo(instanceRoot);
+  const { zenodo, paperLinks } = loadJournalDeposit(instanceRoot);
   // A review set here survives the legacy metadata update below.
   if (zenodo.community && input.publish) {
     warn(msg.workflow.zenodoCommunitySkipped(zenodo.community));
@@ -1212,6 +1222,7 @@ async function fillDraft(input: UploadInput, engineZip: string): Promise<Outcome
     githubUrl,
     siteUrl,
     zenodo,
+    paperLinks,
     version,
     publicationDate: String(project.date ?? new Date().toISOString().slice(0, 10)),
     abstractParas: abstractParagraphs(repoRoot),
@@ -1353,7 +1364,7 @@ export async function cmdStatus(input: StatusInput): Promise<Outcome> {
     paperId: project.id ? String(project.id) : undefined,
     githubUrl: project.github ?? '',
     siteUrl: input.siteUrl ?? defaultSiteUrl(repoFromGithubUrl(project.github ?? ''), instanceRoot),
-    zenodo: loadJournalZenodo(instanceRoot),
+    ...loadJournalDeposit(instanceRoot),
     abstractParas: abstractParagraphs(repoRoot),
     extraDescParas: zenodoExtraParagraphs(repoRoot),
   });

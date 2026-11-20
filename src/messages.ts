@@ -785,8 +785,8 @@ export const build = {
 export const schema = {
   editionId: 'must be a plain name (letters, digits, . _ -)',
   engineVersion: 'must be a release tag like v1.2.3 or v1.2.3-dev.4',
-  zenodoLinkOption: 'must be a myst.yml option name: lowercase letters, digits and _',
-  zenodoLinkRelation:
+  paperLinkOption: 'must be a myst.yml option name: lowercase letters, digits and _',
+  paperLinkRelation:
     'must be a DataCite relation as Zenodo spells it, such as isSupplementedBy. See ' +
     docsUrl(DOCS.fileJournalYml),
 };
@@ -1195,8 +1195,8 @@ export const workflow = {
   /** `why` is mystmd's own message, which names the author. */
   orcidInvalid: (why: string): string =>
     `${why}. The deposit leaves this ORCID out. Fix it in myst.yml.`,
-  /** A journal.yml `zenodo.links` entry whose paper option is not a web address. */
-  zenodoLinkSkipped: (option: string, value: unknown): string =>
+  /** A journal.yml `paper_links` entry whose paper option is not a web address. */
+  paperLinkSkipped: (option: string, value: unknown): string =>
     `project.options.${option} in myst.yml is not an http(s) address ` +
     `(${JSON.stringify(String(value).slice(0, 80))}), so the deposit description leaves out ` +
     `that link. Fix it in myst.yml.`,
