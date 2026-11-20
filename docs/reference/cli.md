@@ -11,8 +11,6 @@
 
 `oak build` builds the paper's website and PDF into `_build/`.
 
-It runs the exports first. When myst raises an error for an export, or does not write one, `oak build` stops before the website, names the export and myst's error, and exits with code 2, so the **Build paper** and **Deposit version** workflows fail at their build step. A paper that declares no typst export builds its website alone, with a warning.
-
 `--exports-only`
 : Builds the PDF and not the website, so it does not download the website's theme.
 

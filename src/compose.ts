@@ -61,7 +61,7 @@ export function isInstanceRelativeTemplate(value: string): boolean {
  * Why myst cannot fetch the template URL `value`, with the URL to use instead when oak can
  * work it out; undefined when myst can, or oak cannot tell. myst-templates downloads a URL that
  * ends in `.zip`, or in `.git` (as the `main` branch's zip), and reads any other URL as a
- * template listing, a JSON document that a repository or archive URL is not.
+ * template listing, which it parses as JSON.
  */
 export function unfetchableTemplateUrl(
   value: string,
