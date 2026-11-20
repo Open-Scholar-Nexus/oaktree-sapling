@@ -123,13 +123,23 @@ export default {
 |---|---|
 | `root` | The paper's folder, an absolute path. |
 | `project` | The project frontmatter, such as `title`, `authors` and `keywords`. |
-| `pages` | One `{ file, frontmatter, mdast }` per page, in table-of-contents order and starting with the root page, which Curvenote's checks read as the article: its absolute path, its own frontmatter, and its content as a tree. |
+| `projectParts` | The content of each part the project frontmatter sets, as a tree, by part name. |
+| `pages` | One entry per page, in table-of-contents order and starting with the root page, which Curvenote's checks read as the article. |
 | `toText(node)` | The text of a node and everything under it. |
 | `selectAll(selector, node)` | The nodes under `node` that match a selector such as `'heading'`, from [`unist-util-select`](https://github.com/syntax-tree/unist-util-select). |
 
-MyST moves an `abstract:` to `parts.abstract`: of `project` when `myst.yml` sets it, of the page's `frontmatter` when the page does. A `+++ {"part": "abstract"}` block stays in `mdast`, as a `block` node with `data.part` set to `abstract`.
+Each entry of `pages` holds:
 
-The tree follows [MyST's document structure](https://mystmd.org/spec), from the MyST version in the paper's oak, so a MyST upgrade may change the shape of a node. oak adds fields to `paper` and never renames or removes one. Each check gets its own copy of `project` and `pages`, so a check that changes them leaves the next one unaffected.
+| field | |
+|---|---|
+| `file` | The page's file, an absolute path. |
+| `frontmatter` | Its frontmatter. |
+| `mdast` | Its content, as a tree. |
+| `parts` | The content of each part its frontmatter sets, as a tree, by part name. |
+
+MyST moves a frontmatter `abstract:` into a part, and the same goes for the other parts, such as `data_availability:` and `acknowledgments:`. An `abstract:` in `myst.yml` is in `projectParts.abstract`, one in a page's frontmatter in that page's `parts.abstract`. `project.parts` and a page's `frontmatter.parts` hold only the location of each part, not its text. A part's `position` counts lines from the start of the part's own text, so it does not point at a line of the file. A `+++ {"part": "abstract"}` block stays in `mdast`, as a `block` node with `data.part` set to `abstract`.
+
+The tree follows [MyST's document structure](https://mystmd.org/spec), from the MyST version in the paper's oak, so a MyST upgrade may change the shape of a node. oak adds fields to `paper` and never renames or removes one. Each check gets its own copy of every field of `paper`, so a check that changes one leaves the next check unaffected.
 
 A check file can import Node's built-in modules, such as `node:path`, and other files in the journal repository. CI clones the journal repository without installing anything, so an import of a package fails there, even when it works on your machine.
 

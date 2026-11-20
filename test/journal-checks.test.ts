@@ -20,6 +20,7 @@ function handBuiltPaper(): Paper {
   return {
     root: '/paper',
     project: { title: 'A Paper' },
+    projectParts: {},
     pages: [
       {
         file: '/paper/index.md',
@@ -31,6 +32,7 @@ function handBuiltPaper(): Paper {
             { type: 'paragraph', children: [{ type: 'text', value: 'Two' }] },
           ],
         },
+        parts: {},
       },
     ],
     toText,

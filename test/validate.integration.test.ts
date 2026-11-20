@@ -409,6 +409,59 @@ describe.skipIf(bundleState() === 'absent')("oak validate, the journal's check f
   }, 60_000);
 });
 
+describe.skipIf(bundleState() === 'absent')('oak validate, what a check file reads', () => {
+  beforeAll(assertBundleNotStale);
+
+  const id = './checks/reports-paper.mjs';
+
+  /** A copy of the fixture journal that lists `test/journal-checks/reports-paper.mjs`. */
+  function journalWithReporter(): string {
+    const dir = mkdtempSync(join(tmpdir(), 'oak-val-reporter-'));
+    cpSync(fixtureInstance, dir, { recursive: true });
+    mkdirSync(join(dir, 'checks'));
+    copyFileSync(join(engineDir, 'test', 'journal-checks', basename(id)), join(dir, id));
+    const journalYml = readFileSync(join(dir, 'journal.yml'), 'utf8');
+    writeFileSync(join(dir, 'journal.yml'), `${journalYml}  - id: ${id}\n`);
+    return dir;
+  }
+
+  /** The fixture paper, its index.md given frontmatter with a part. */
+  function paperWithFrontmatter(): string {
+    const dir = mkdtempSync(join(tmpdir(), 'oak-val-reporter-paper-'));
+    for (const f of ['bib.bib', 'myst.yml']) copyFileSync(join(fixturePaper, f), join(dir, f));
+    const index = readFileSync(join(fixturePaper, 'index.md'), 'utf8');
+    writeFileSync(join(dir, 'index.md'), `---\ndata_availability: At the archive.\n---\n${index}`);
+    return dir;
+  }
+
+  function seen(): any {
+    const r = spawnSync(
+      'node',
+      [
+        bundle,
+        'validate',
+        '--paper',
+        paperWithFrontmatter(),
+        '--instance',
+        journalWithReporter(),
+      ].concat(['--repo', repo, '--json']),
+      { encoding: 'utf8' },
+    );
+    const row = JSON.parse(r.stdout).checks.find((c: any) => c.id === id);
+    expect(row).toMatchObject({ status: 'pass' });
+    return JSON.parse(row.message);
+  }
+
+  it("gets the content of the project's and the page's frontmatter parts", () => {
+    expect(seen()).toMatchObject({
+      projectParts: {
+        abstract: 'A short plain-language abstract for the engine release-safety fixture paper.',
+      },
+      pageParts: { data_availability: 'At the archive.' },
+    });
+  }, 60_000);
+});
+
 describe.skipIf(bundleState() === 'absent')("oak validate, a catalog check's options", () => {
   beforeAll(assertBundleNotStale);
 

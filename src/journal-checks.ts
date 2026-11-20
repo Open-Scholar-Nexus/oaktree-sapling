@@ -14,12 +14,18 @@ import type { GenericNode, GenericParent } from 'myst-common';
 import * as messages from './messages.js';
 import { UserError, firstLine } from './messages.js';
 
+/** A frontmatter part's tree, by part name, such as `abstract`. */
+export type Parts = Record<string, GenericParent>;
+
 /** One page of the paper, as MyST processed it. */
 export interface PaperPage {
   /** Absolute path to the page's file. */
   file: string;
   frontmatter: Record<string, any>;
   mdast: GenericParent;
+  /** The content of the parts the page's frontmatter sets. `frontmatter.parts` holds only
+   *  pointers to them. */
+  parts: Parts;
 }
 
 /** What a check file's `validate` gets. Fields are only ever added [R208]. */
@@ -28,6 +34,8 @@ export interface Paper {
   root: string;
   /** The project frontmatter as MyST resolved it. */
   project: Record<string, any>;
+  /** The content of the parts the project frontmatter sets. */
+  projectParts: Parts;
   /** One per page, in table-of-contents order: the root page, which Curvenote's checks read as
    *  the article, then the rest. */
   pages: PaperPage[];
@@ -111,11 +119,8 @@ export async function runCheckFile(
   let own: Paper;
   try {
     const paper = readPaper();
-    own = {
-      ...paper,
-      project: structuredClone(paper.project),
-      pages: structuredClone(paper.pages),
-    };
+    const { toText, selectAll, ...data } = paper;
+    own = { ...structuredClone(data), toText, selectAll };
   } catch (e) {
     throw new UserError(messages.pr.checkFilePaperUnreadable(firstLine(e)));
   }

@@ -17,6 +17,7 @@ import {
   findCurrentProjectAndLoad,
   findCurrentSiteAndLoad,
   filterPages,
+  resolveFrontmatterParts,
   selectFile,
   selectors,
 } from 'myst-cli';
@@ -26,7 +27,14 @@ import { toText } from 'myst-common';
 import { selectAll } from 'unist-util-select';
 import type { MystEdge, StartOpts } from './materialize.js';
 import type { ResolvedProject } from './compose.js';
-import type { Paper } from './journal-checks.js';
+import type { Paper, Parts } from './journal-checks.js';
+
+/** Each frontmatter part's tree, as Curvenote's checks read it: a part that is not one block of
+ *  text is left out, as {@link resolveFrontmatterParts} does. */
+function partTrees(session: ISession, frontmatter: { parts?: unknown } | undefined): Parts {
+  const resolved = resolveFrontmatterParts(session, frontmatter as never) ?? {};
+  return Object.fromEntries(Object.entries(resolved).map(([name, { mdast }]) => [name, mdast]));
+}
 
 export function createMystEdge(): MystEdge {
   /**
@@ -128,11 +136,18 @@ export function createMystEdge(): MystEdge {
         const data = selectFile(session, file);
         if (!data) throw new Error(`myst has not processed ${file}`);
         // `file` is relative to the paper root, the cwd `withProjectSession` loaded it from.
-        return { file: resolve(root, file), frontmatter: data.frontmatter, mdast: data.mdast };
+        return {
+          file: resolve(root, file),
+          frontmatter: data.frontmatter,
+          mdast: data.mdast,
+          parts: partTrees(session, data.frontmatter),
+        };
       });
+      const projectConfig = selectors.selectLocalProjectConfig(state, root) ?? {};
       return {
         root,
-        project: selectors.selectLocalProjectConfig(state, root) ?? {},
+        project: projectConfig,
+        projectParts: partTrees(session, projectConfig),
         pages,
         toText,
         selectAll,
