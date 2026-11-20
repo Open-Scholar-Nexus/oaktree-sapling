@@ -181,6 +181,15 @@ export interface GitContext {
 // Depositions are loosely typed: Zenodo owns the shape, oak reads a few fields by name.
 export type Deposition = Record<string, any>;
 
+/** The fields of an InvenioRDM draft that oak reads. */
+interface RdmDraft {
+  parent?: {
+    communities?: { ids?: string[] };
+    review?: { receiver?: { community?: string } } | null;
+  };
+  versions?: { index?: number };
+}
+
 /** The InvenioRDM JSON of `/api/records`, which has the draft's communities and review. */
 const RDM_JSON = 'application/vnd.inveniordm.v1+json';
 
@@ -274,13 +283,11 @@ export class ZenodoApi {
     await this.call('DELETE', `/deposit/depositions/${depId}/files/${encodeURIComponent(fileId)}`);
   }
 
-  /** The draft as InvenioRDM shapes it: `parent.communities`, `parent.review` and
-   *  `versions.index`. */
-  async getRdmDraft(depId: string | number): Promise<Deposition> {
+  async getRdmDraft(depId: string | number): Promise<RdmDraft> {
     const res = await this.call('GET', `/records/${depId}/draft`, {
       headers: { Accept: RDM_JSON },
     });
-    return res.json() as Deposition;
+    return res.json() as RdmDraft;
   }
 
   /** A community's id from its slug, the last part of its address. */
@@ -289,12 +296,10 @@ export class ZenodoApi {
     return String((res.json() as { id: string }).id);
   }
 
-  /** Removes the draft's review. Zenodo refuses to publish a draft that has one. */
   async deleteReview(depId: string | number): Promise<void> {
     await this.call('DELETE', `/records/${depId}/draft/review`);
   }
 
-  /** Makes the community the draft's reviewer, so publishing it on Zenodo submits it there. */
   async setCommunityReview(depId: string | number, communityId: string): Promise<void> {
     await this.call('PUT', `/records/${depId}/draft/review`, {
       json: { receiver: { community: communityId }, type: 'community-submission' },
