@@ -57,14 +57,14 @@ zenodo:
 (zenodo-description)=
 ## Zenodo description
 
-The journal can add a paragraph about itself to every deposit's description, after the abstract:
+A deposit's description is the paper's abstract, followed by links to the paper's website and repository, and its venue and funding when its `myst.yml` sets them. The journal can add a paragraph of its own after the abstract:
 
 ```yaml
 zenodo:
   description_blurb: Published in My Journal.
 ```
 
-The description also gets a line for each of the journal's [paper links](#paper-links) that the paper sets. Both apply from the next [published version](publish.md).
+Each [paper link](#paper-links) a paper sets is added to the description, with the label from `journal.yml` and the address from the paper's `myst.yml`.
 
 (paper-links)=
 ## Paper links
@@ -87,7 +87,7 @@ project:
     youtube: https://youtu.be/<video>
 ```
 
-gets the line **Seminar recording: Watch on YouTube**. `relation` is optional: it also lists the address among the Zenodo record's related works, with that relation (the [`paper_links` reference](../reference/files.md#file-journal-yml) lists the values). A paper that sets no such option gets no line. A value that is not an `http` or `https` address gets no line either, and the deposit prints a warning. A journal's PDF template can read the same option to show the link in the PDF; oak uses it only for the Zenodo description.
+has the line **Seminar recording: Watch on YouTube** in its Zenodo description. `relation` is optional: it also lists the address among the Zenodo record's related works, with that relation (the [`paper_links` reference](../reference/files.md#file-journal-yml) lists the values). If a paper does not set the option, its description does not contain the line. If the value is not an `http` or `https` address, the description does not contain it either, and the deposit prints a warning. A journal's PDF template can read the same option to show the link in the PDF.
 
 (live-previews)=
 ## Live previews

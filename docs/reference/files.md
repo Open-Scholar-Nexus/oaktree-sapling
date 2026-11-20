@@ -28,7 +28,7 @@ A parsing error[^journal-error] in `journal.yml` stops every oak command and nam
 
 [^tier]: `edition` and `journal` are reserved for a repository that holds an edition's papers or the whole journal's. Neither is built yet.
 [^providers]: More providers may be added later.
-[^relations]: `relation` lists the address among the record's related works with that relation, one of `isCitedBy`, `cites`, `isSupplementTo`, `isSupplementedBy`, `isContinuedBy`, `continues`, `isDescribedBy`, `describes`, `isNewVersionOf`, `isPreviousVersionOf`, `isPartOf`, `hasPart`, `isReferencedBy`, `references`, `isDocumentedBy`, `documents`, `isCompiledBy`, `compiles`, `isVariantFormOf`, `isOriginalFormOf`, `isIdenticalTo`, `isReviewedBy`, `reviews`, `isDerivedFrom`, `isSourceOf`, `requires` and `isRequiredBy`.
+[^relations]: `relation` lists the address among the record's related works with that relation, one of the DataCite relations Zenodo accepts ([list](src:src/schema.ts@ZENODO_RELATIONS)).
 
 (file-brand-yml)=
 ## brand/brand.yml
