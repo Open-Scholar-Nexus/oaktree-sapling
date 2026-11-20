@@ -425,12 +425,15 @@ describe.skipIf(bundleState() === 'absent')('oak validate, what a check file rea
     return dir;
   }
 
-  /** The fixture paper, its index.md given frontmatter with a part. */
+  /** The fixture paper's index.md, given frontmatter with a part and a figure at the end. */
+  const index =
+    `---\ndata_availability: At the archive.\n---\n` +
+    readFileSync(join(fixturePaper, 'index.md'), 'utf8') +
+    '\n:::{figure} figure.png\nA caption.\n:::\n';
   function paperWithFrontmatter(): string {
     const dir = mkdtempSync(join(tmpdir(), 'oak-val-reporter-paper-'));
     for (const f of ['bib.bib', 'myst.yml']) copyFileSync(join(fixturePaper, f), join(dir, f));
-    const index = readFileSync(join(fixturePaper, 'index.md'), 'utf8');
-    writeFileSync(join(dir, 'index.md'), `---\ndata_availability: At the archive.\n---\n${index}`);
+    writeFileSync(join(dir, 'index.md'), index);
     return dir;
   }
 
@@ -462,6 +465,11 @@ describe.skipIf(bundleState() === 'absent')('oak validate, what a check file rea
     expect(pageKeys).toEqual(expect.arrayContaining(['authors', 'keywords']));
     expect(fileFrontmatter).toEqual({ data_availability: 'At the archive.' });
     expect(configTitle).toBe('A Fixture Paper for Engine Release Safety');
+  }, 60_000);
+
+  it('places a figure, which has no position of its own, on the line before it', () => {
+    const line = index.split('\n').findIndex((l) => l.startsWith('One trivial section')) + 1;
+    expect(seen().figure).toEqual({ own: false, line });
   }, 60_000);
 
   it('gets the repository --repo names', () => {

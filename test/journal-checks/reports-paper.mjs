@@ -5,7 +5,12 @@ const texts = (parts, toText) =>
 export default {
   validate(paper) {
     const [index] = paper.pages;
+    const [figure] = paper.selectAll('container', index.mdast);
     const seen = {
+      figure: figure && {
+        own: Boolean(figure.position),
+        line: paper.positionOf(figure)?.start.line,
+      },
       projectParts: texts(paper.projectParts, paper.toText),
       pageParts: texts(index.parts, paper.toText),
       pageKeys: Object.keys(index.frontmatter).sort(),

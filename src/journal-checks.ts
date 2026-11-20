@@ -59,10 +59,15 @@ export interface Paper {
   pages: PaperPage[];
   toText(node: GenericNode | GenericNode[]): string;
   selectAll(selector: string, node: GenericNode): GenericNode[];
+  /** See {@link positionFinder}. */
+  positionOf(node: GenericNode): GenericNode['position'];
 }
 
+/** What `readPaper` builds once per run; each check file gets a copy plus {@link Paper.positionOf}. */
+export type PaperData = Omit<Paper, 'positionOf'>;
+
 /** The fields of {@link Paper} that come from MyST's processed project (`MystEdge.paperForChecks`). */
-export type PaperFromMyst = Omit<Paper, 'config' | 'repo' | 'journal'>;
+export type PaperFromMyst = Omit<PaperData, 'config' | 'repo' | 'journal'>;
 
 /**
  * The frontmatter block at the top of a markdown page, parsed: `{}` when the page has none, null
@@ -83,6 +88,36 @@ export function readFileFrontmatter(file: string): Record<string, any> | null {
   }
   if (value == null) return {};
   return typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, any>) : null;
+}
+
+/**
+ * `positionOf(node)` for one copy of the paper: the node's own `position`, else a position on the
+ * line of the nearest node before it in its page's `mdast` that has one. MyST gives no `position`
+ * to the nodes a directive makes, such as a figure or an `{image}`. Undefined for a node in no
+ * page's `mdast`.
+ */
+export function positionFinder(paper: Pick<Paper, 'pages'>): Paper['positionOf'] {
+  return (target) => {
+    if (target.position) return target.position;
+    for (const page of paper.pages) {
+      let line: number | undefined;
+      let found = false;
+      const visit = (node: GenericNode): void => {
+        if (found) return;
+        line = node.position?.start.line ?? line;
+        if (node === target) {
+          found = true;
+          return;
+        }
+        for (const child of node.children ?? []) visit(child);
+      };
+      visit(page.mdast);
+      if (found) {
+        return line ? { start: { line, column: 1 }, end: { line, column: 1 } } : undefined;
+      }
+    }
+    return undefined;
+  };
 }
 
 /** Whether a `checks:` id names a check file: it starts with `./` or `../`, the prefix rule of
@@ -155,14 +190,14 @@ export async function runCheckFile(
   journalRoot: string | null,
   id: string,
   options: Record<string, unknown>,
-  readPaper: () => Paper,
+  readPaper: () => PaperData,
 ): Promise<CheckResult[]> {
   const check = await importCheckFile(resolveCheckFile(journalRoot, id));
   let own: Paper;
   try {
-    const paper = readPaper();
-    const { toText, selectAll, ...data } = paper;
-    own = { ...structuredClone(data), toText, selectAll };
+    const { toText, selectAll, ...data } = readPaper();
+    const copy = structuredClone(data);
+    own = { ...copy, toText, selectAll, positionOf: positionFinder(copy) };
   } catch (e) {
     throw new UserError(messages.pr.checkFilePaperUnreadable(firstLine(e)));
   }

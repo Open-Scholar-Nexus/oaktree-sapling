@@ -230,3 +230,39 @@ describe("a page's frontmatter as written", () => {
     expect(read('f.ipynb', '{"cells": []}')).toBeNull();
   });
 });
+
+describe('positionOf', () => {
+  const at = (line: number) => ({ start: { line, column: 1 }, end: { line, column: 1 } });
+  /** A figure and an `{image}` as MyST makes them from directives: with no `position`. */
+  function paperWithDirectives(): Paper {
+    const paper = handBuiltPaper();
+    paper.pages[0]!.mdast = {
+      type: 'root',
+      position: { start: { line: 1, column: 1 }, end: { line: 12, column: 1 } },
+      children: [
+        { type: 'paragraph', position: at(3), children: [{ type: 'text', value: 'Text' }] },
+        {
+          type: 'container',
+          kind: 'figure',
+          children: [
+            { type: 'image', url: 'in-figure.png' },
+            { type: 'caption', children: [{ type: 'paragraph', position: at(7), children: [] }] },
+          ],
+        },
+        { type: 'image', url: 'directive.png' },
+        { type: 'image', url: 'markdown.png', position: at(11) },
+      ],
+    };
+    return paper;
+  }
+
+  it("is a node's own position, else the line of the nearest node before it that has one", async () => {
+    const out = await run([{ id: './image-positions.mjs' }], paperWithDirectives());
+    expect(out.map((r) => [r.message, r.position?.start.line])).toEqual([
+      ['in-figure.png', 3],
+      ['directive.png', 7],
+      ['markdown.png', 11],
+      ['made', undefined],
+    ]);
+  });
+});

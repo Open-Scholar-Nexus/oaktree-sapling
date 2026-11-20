@@ -130,6 +130,7 @@ export default {
 | `pages` | One entry per page, in table-of-contents order and starting with the root page, which Curvenote's checks read as the article. |
 | `toText(node)` | The text of a node and everything under it. |
 | `selectAll(selector, node)` | The nodes under `node` that match a selector such as `'heading'`, from [`unist-util-select`](https://github.com/syntax-tree/unist-util-select). |
+| `positionOf(node)` | A `position` for a result about `node`: the node's own, else one on the line of the nearest node before it on its page that has one. MyST gives no `position` to the nodes a directive makes, such as a figure or an `{image}`, so a result about one of them points at the line before it. `undefined` for a node that is in no page's `mdast`. |
 
 Each entry of `pages` holds:
 

@@ -7,7 +7,7 @@ import { basename, isAbsolute, relative } from 'node:path';
 import { DERIVED_CONFIG_FILE } from './yaml-io.js';
 import * as messages from './messages.js';
 import { annotate, firstLine, UserError } from './messages.js';
-import { isCheckFile, runCheckFile, type Paper } from './journal-checks.js';
+import { isCheckFile, runCheckFile, type PaperData } from './journal-checks.js';
 import { GATED_PATHS, underPaths } from './schema.js';
 import type { ISession } from 'myst-cli';
 import {
@@ -63,11 +63,11 @@ export async function runChecks(
   session: ISession,
   journalChecks: JournalCheck[],
   journalRoot: string | null,
-  readPaper: () => Paper,
+  readPaper: () => PaperData,
 ): Promise<EngineCheckResult[]> {
   // Loaded on first use, so the unit tests run check files without the bundle.
   let curvenote: ReturnType<typeof curvenoteChecks> | undefined;
-  let paper: Paper | undefined;
+  let paper: PaperData | undefined;
   const out: EngineCheckResult[] = [];
   for (const { optional, ...check } of journalChecks) {
     const flag = optional ? { optional: true } : {};
