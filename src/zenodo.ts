@@ -289,12 +289,12 @@ export class ZenodoApi {
     return String((res.json() as { id: string }).id);
   }
 
-  /** Removes the draft's review, which Zenodo requires before it publishes the draft. */
+  /** Removes the draft's review. Zenodo refuses to publish a draft that has one. */
   async deleteReview(depId: string | number): Promise<void> {
     await this.call('DELETE', `/records/${depId}/draft/review`);
   }
 
-  /** Makes the community the draft's review, so publishing it on Zenodo submits it there. */
+  /** Makes the community the draft's reviewer, so publishing it on Zenodo submits it there. */
   async setCommunityReview(depId: string | number, communityId: string): Promise<void> {
     await this.call('PUT', `/records/${depId}/draft/review`, {
       json: { receiver: { community: communityId }, type: 'community-submission' },
@@ -475,7 +475,8 @@ function legacyCreatorName(n: Name = {}): string {
   return given ? `${family}, ${given}` : family;
 }
 
-/** The value of `project.options.<option>`, normalized, when it is an http(s) address, else undefined. */
+/** The value of `project.options.<option>`, normalized, when it is an http(s) address, else
+ *  undefined. */
 function httpUrl(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
   const url = value.trim();
@@ -508,8 +509,8 @@ export interface MetadataInput {
 /**
  * Builds the deposition metadata from a myst project and the journal's `zenodo:` settings. The
  * description is HTML paragraphs (abstract, journal paragraph, extra part, links), and the
- * identity URN sits beside the GitHub URL. The community is the draft's review, which
- * {@link requestCommunity} sets.
+ * identity URN sits beside the GitHub URL. {@link requestCommunity} sets the community as the
+ * draft's reviewer.
  */
 export function buildMetadata(input: MetadataInput): Record<string, unknown> {
   const {
@@ -541,7 +542,8 @@ export function buildMetadata(input: MetadataInput): Record<string, unknown> {
     const affs = (a.affiliations ?? []).map((id) => affiliationName.get(id)).filter(Boolean);
     if (affs.length) c.affiliations = affs.map((name) => ({ name }));
     const orcid = a.orcid ?? '';
-    // Zenodo replaces `name` from the ORCID profile when the ORCID does not resolve.
+    // The template's placeholder ORCID (0000-0000-...) is left out: Zenodo replaces `name` from
+    // the ORCID profile when the ORCID does not resolve.
     if (orcid && !orcid.startsWith('0000-0000-')) c.orcid = orcid;
     else if (orcid) warn(msg.workflow.orcidPlaceholder(String(a.name), orcid));
     creators.push(c);
@@ -626,10 +628,9 @@ async function findCommunity(api: ZenodoApi, slug: string): Promise<string | nul
 }
 
 /**
- * Sets a paper's first-version draft to be reviewed by the journal's community, so the editor's
- * Submit for review on Zenodo sends the draft to that community. The legacy `communities` field applies only when
- * the API publishes the record. A later version stays in its first version's communities.
- * Returns a refusal message, or null.
+ * Makes the journal's community the reviewer of a paper's first-version draft, so the editor's
+ * Submit for review on Zenodo sends the draft there. The legacy `communities` field applies only
+ * to a record that API publishes. Returns a refusal message, or null.
  */
 async function requestCommunity(
   api: ZenodoApi,
@@ -1225,7 +1226,7 @@ async function fillDraft(input: UploadInput, engineZip: string): Promise<Outcome
   const { zenodo, paperLinks } = loadJournalDeposit(instanceRoot);
   // A review set here survives the legacy metadata update below.
   if (input.publish) {
-    // Zenodo publishes no draft that has a review, such as one an earlier run set.
+    // Zenodo refuses to publish a draft that has a review, such as one an earlier run set.
     if ((await api.getRdmDraft(dep.id)).parent?.review) await api.deleteReview(dep.id);
     if (zenodo.community) warn(msg.workflow.zenodoCommunitySkipped(zenodo.community));
   } else if (zenodo.community) {
