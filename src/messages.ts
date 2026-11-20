@@ -1208,8 +1208,8 @@ export const workflow = {
     `Zenodo has no community "${slug}", which journal.yml names as zenodo.community. Fix the ` +
     `name there; it is the last part of the community's address on Zenodo.`,
   zenodoCommunityLaterVersion: (slug: string): string =>
-    `the record is not in the Zenodo community "${slug}", and Zenodo adds a community to a ` +
-    `first version only. An editor can submit the published record to it on Zenodo.`,
+    `the record is not in the Zenodo community "${slug}", and Zenodo reviews a first version ` +
+    `only. An editor can submit the published record to it on Zenodo.`,
   zenodoCommunitySkipped: (slug: string): string =>
     `--publish-without-review publishes with no review by the Zenodo community "${slug}". ` +
     `A first version published this way is in no community; an editor can submit it to ` +

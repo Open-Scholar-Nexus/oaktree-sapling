@@ -1272,7 +1272,7 @@ describe('cmdUpload', () => {
     const next = legacyZenodo([], { versions: { index: 2 } });
     expect((await upload(readyPaper(true), next.api, { instanceRoot: journal })).exitCode).toBe(0);
     expect(reviewOf(next)).toHaveLength(0);
-    expect(warnings().join('')).toContain('Zenodo adds a community to a first version only');
+    expect(warnings().join('')).toContain('Zenodo reviews a first version only');
   });
 
   it('refuses a community Zenodo does not have, naming journal.yml', async () => {
