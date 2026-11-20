@@ -57,7 +57,7 @@ export function createMystEdge(): MystEdge {
       try {
         // As the myst CLI does; without it `build --html` finds no site.
         await findCurrentProjectAndLoad(session, dir);
-        // An exports-only build works offline: the site needs the theme zip from the network.
+        // An exports-only build skips the site, which downloads the theme zip.
         const site = !opts.exportsOnly;
         if (site) await findCurrentSiteAndLoad(session, dir);
 
@@ -80,7 +80,8 @@ export function createMystEdge(): MystEdge {
           error,
         });
 
-        // myst's `build` disposes the session when it ends, closing any Jupyter kernel.
+        // Given no format, myst's `build` runs no exports, only the site. It disposes the session
+        // when it ends, closing any Jupyter kernel.
         if (site) await build(session, [], { html: opts.html });
         else session.dispose();
       } finally {

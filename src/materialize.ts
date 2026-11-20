@@ -25,7 +25,7 @@ import { UserError } from './messages.js';
 export interface BuildOpts {
   all?: boolean;
   html?: boolean;
-  /** Only the typst export, no site. Works offline, since the site needs the theme zip. */
+  /** Only the typst export, no site, so the theme zip is not downloaded. */
   exportsOnly?: boolean;
 }
 
