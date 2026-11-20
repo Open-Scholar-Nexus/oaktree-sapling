@@ -199,13 +199,15 @@ export const ZENODO_RELATIONS = (
 ).split(' ') as [string, ...string[]];
 
 /** A link a paper can set as `project.options.<option>`, which the deposit description shows. */
-export const PaperLink = z.strictObject({
-  option: z.string().regex(/^[a-z][a-z0-9_]*$/, msg.schema.paperLinkOption),
-  label: z.string().min(1),
-  text: z.string().min(1),
-  /** When set, the record also lists the URL among its related works, with this relation. */
-  relation: z.enum(ZENODO_RELATIONS, { error: msg.schema.paperLinkRelation }).optional(),
-});
+export const PaperLink = z
+  .object({
+    option: z.string().regex(/^[a-z][a-z0-9_]*$/, msg.schema.paperLinkOption),
+    label: z.string().min(1),
+    text: z.string().min(1),
+    /** When set, the record also lists the URL among its related works, with this relation. */
+    relation: z.enum(ZENODO_RELATIONS, { error: msg.schema.paperLinkRelation }).optional(),
+  })
+  .loose();
 
 export const ZenodoConfig = z
   .object({

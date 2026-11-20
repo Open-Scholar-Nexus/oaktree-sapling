@@ -148,7 +148,6 @@ describe('paper_links in journal.yml', () => {
       'relation',
     ],
     ['an empty label', "{ option: youtube, label: '', text: T }", 'paper_links.0.label'],
-    ['an unknown key', '{ option: youtube, label: L, text: T, url: x }', 'url'],
   ])('refuses %s when journal.yml is read, naming the file', (_, entry, says) => {
     const root = journalWithLinks(`    - ${entry}\n`);
     expect(() => readJournalConfig(root)).toThrow(join(root, 'journal.yml'));
@@ -160,6 +159,12 @@ describe('JournalConfig additive-only', () => {
   it('ignores an unknown top-level key instead of rejecting', () => {
     const j = JournalConfig.parse({ name: 'X', future_field: 42 });
     expect(j.name).toBe('X');
+  });
+
+  it('accepts a paper link with a key from a newer oak', () => {
+    const links = [{ option: 'youtube', label: 'L', text: 'T', future_field: 42 }];
+    const j = JournalConfig.parse({ name: 'X', paper_links: links });
+    expect(j.paper_links[0]!.option).toBe('youtube');
   });
 });
 
