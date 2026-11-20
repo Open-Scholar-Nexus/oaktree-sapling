@@ -25,8 +25,15 @@ import { UserError } from './messages.js';
 export interface BuildOpts {
   all?: boolean;
   html?: boolean;
-  /** Only the typst export, no site. Works offline, since the site needs the theme zip. */
   exportsOnly?: boolean;
+}
+
+/** The exports myst ran and its first error, passed to {@link MystEdge.build}'s `afterExports`. */
+export interface ExportOutcome {
+  /** Every export myst ran, as it resolved them; `output` is absolute. */
+  exports: Array<{ id?: string; format: string; output: string }>;
+  /** myst's first export error, on one line; undefined when it raised none. */
+  error?: string;
 }
 
 /** The `myst start` options `oak start` passes through, under myst's names. */
@@ -47,8 +54,16 @@ export interface StartOpts {
 export interface MystEdge {
   /** The project as myst resolves it. */
   loadProject(dir: string, configFile?: string): Promise<ResolvedProject>;
-  /** Builds from within `dir`. */
-  build(dir: string, opts: BuildOpts, configFile?: string): Promise<void>;
+  /**
+   * Builds from within `dir`: the exports `opts` asks for, then the site. Between the two,
+   * `afterExports` gets the exports myst ran and its first error, and may throw to stop the build.
+   */
+  build(
+    dir: string,
+    opts: BuildOpts,
+    configFile?: string,
+    afterExports?: (outcome: ExportOutcome) => void,
+  ): Promise<void>;
   /** Starts the dev server from within `dir` and resolves once it is up. The caller must keep
    *  the process alive. */
   start(dir: string, opts: StartOpts, configFile?: string): Promise<void>;

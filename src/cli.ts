@@ -193,7 +193,6 @@ async function buildPaper(argv: string[]): Promise<{ paperRoot: string; resolved
   const { createMystEdge } = await import('./myst.js');
   const res = await runBuild({
     ...materializeInputFrom(argv, paperRoot, resolved),
-    // --exports-only builds only the typst PDF, offline; --no-exports only the HTML.
     buildOpts: has(argv, 'exports-only')
       ? { exportsOnly: true }
       : has(argv, 'no-exports')

@@ -6,6 +6,7 @@ import {
   mkdirSync,
   writeFileSync,
   existsSync,
+  utimesSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -15,6 +16,7 @@ import { runBuild, runStart, type MystEdge } from '../src/build.js';
 import { UserError } from '../src/messages.js';
 import { DERIVED_CONFIG_FILE } from '../src/yaml-io.js';
 import type { ResolvedProject } from '../src/compose.js';
+import type { ExportOutcome } from '../src/materialize.js';
 import { themeZipUrl } from '../src/assets.js';
 import { TYPST_OUTPUT } from '../src/compose.js';
 
@@ -219,6 +221,105 @@ describe("an install missing oak's typst template", () => {
     const { run, calls } = build({ buildOpts: { all: false, html: true } });
     await run;
     expect(calls.some((c) => c.startsWith('build:'))).toBe(true);
+  });
+});
+
+describe('a typst template URL myst cannot fetch', () => {
+  const url = 'https://github.com/o/r.git#a1b2c3d4e5f6';
+  const build = (buildOpts?: Parameters<typeof runBuild>[0]['buildOpts']) => {
+    const { edge, calls } = fakeEdge();
+    const run = runBuild({
+      paperRoot: tmpPaper(),
+      engineRoot: '.engine',
+      instanceRoot: '.instance',
+      baseUrl: '',
+      assetOverrides: { typstTemplate: url },
+      buildOpts,
+      edge,
+    });
+    return { run, calls };
+  };
+
+  it('stops a PDF build before myst runs, with the zip URL to use', async () => {
+    const { run, calls } = build();
+    const err = await run.catch((e) => e);
+    expect(err).toBeInstanceOf(UserError);
+    expect(err.message).toContain('https://github.com/o/r/archive/a1b2c3d4e5f6.zip');
+    expect(calls.some((c) => c.startsWith('build:'))).toBe(false);
+  });
+
+  it('builds the site alone (--no-exports), which fetches no template', async () => {
+    const { run, calls } = build({ all: false, html: true });
+    await run;
+    expect(calls.some((c) => c.startsWith('build:'))).toBe(true);
+  });
+});
+
+describe('a build whose export myst did not write', () => {
+  const pdf = (root: string) => join(root, TYPST_OUTPUT);
+  const typst = (root: string) => ({ id: 'typst-pdf', format: 'typst', output: pdf(root) });
+
+  /** A fake edge that passes `exports(paperRoot)` to `afterExports`, then records a site build. */
+  const run = (exports: (paperRoot: string) => ExportOutcome, paperRoot = tmpPaper()) => {
+    const { edge, calls } = fakeEdge();
+    edge.build = async (dir, _opts, _configFile, afterExports) => {
+      afterExports?.(exports(dir));
+      calls.push('site');
+    };
+    const done = runBuild({
+      paperRoot,
+      engineRoot: '.engine',
+      instanceRoot: '.instance',
+      baseUrl: '',
+      assetOverrides: { typstTemplate: '/local/typst' },
+      edge,
+    });
+    return { done, calls, paperRoot };
+  };
+
+  it("stops before the site, naming the export and myst's error", async () => {
+    const { done, calls } = run((root) => ({
+      exports: [typst(root)],
+      error: 'Unexpected token \'<\', "<!DOCTYPE "... is not valid JSON',
+    }));
+    const err = await done.catch((e) => e);
+    expect(err).toBeInstanceOf(UserError);
+    expect(err.message).toContain('"typst-pdf" (_build/exports/paper.pdf)');
+    expect(err.message).toContain('is not valid JSON');
+    expect(calls).not.toContain('site');
+  });
+
+  it('stops when myst raised no error but wrote nothing', async () => {
+    const err = await run((root) => ({ exports: [typst(root)] })).done.catch((e) => e);
+    expect(err).toBeInstanceOf(UserError);
+    expect(err.message).toContain('_build/exports/paper.pdf');
+    expect(err.message).toContain('myst reported no error');
+  });
+
+  it("stops when the only PDF is a previous build's", async () => {
+    const paperRoot = tmpPaper();
+    mkdirSync(join(paperRoot, '_build', 'exports'), { recursive: true });
+    writeFileSync(pdf(paperRoot), '%PDF');
+    const old = new Date(Date.now() - 60_000);
+    utimesSync(pdf(paperRoot), old, old);
+    const err = await run((root) => ({ exports: [typst(root)] }), paperRoot).done.catch((e) => e);
+    expect(err).toBeInstanceOf(UserError);
+  });
+
+  it('builds the site when every export was written', async () => {
+    const { done, calls } = run((root) => {
+      mkdirSync(join(root, '_build', 'exports'), { recursive: true });
+      writeFileSync(pdf(root), '%PDF');
+      return { exports: [typst(root)] };
+    });
+    await done;
+    expect(calls).toContain('site');
+  });
+
+  it('builds the site when no export ran (--no-exports, or a paper declaring none)', async () => {
+    const { done, calls } = run(() => ({ exports: [] }));
+    await done;
+    expect(calls).toContain('site');
   });
 });
 

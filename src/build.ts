@@ -8,8 +8,9 @@
  * `oak validate` shares both passes through `materialize.ts`, so it checks what gets built
  * [R82]. The myst calls are injected (`MystEdge`).
  */
-import { existsSync } from 'node:fs';
-import { type ResolvedProject } from './compose.js';
+import { existsSync, statSync } from 'node:fs';
+import { relative } from 'node:path';
+import { type ResolvedProject, unfetchableTemplateUrl } from './compose.js';
 import { engineTypstTemplate } from './assets.js';
 import { runOakChecks } from './validate.js';
 import {
@@ -92,10 +93,31 @@ export async function runBuild(input: RunBuildInput): Promise<RunBuildResult> {
     throw new UserError(msg.build.noEngineTypstTemplate(typstTemplate));
   }
 
+  const unfetchable =
+    buildsPdf && typstTemplate ? unfetchableTemplateUrl(typstTemplate) : undefined;
+  if (unfetchable)
+    throw new UserError(msg.build.templateUnfetchable(typstTemplate!, unfetchable.fix));
+
   if (baseUrl) process.env.BASE_URL = baseUrl;
-  await edge.build(paperRoot, buildOpts, DERIVED_CONFIG_FILE);
+  const started = Date.now();
+  await edge.build(paperRoot, buildOpts, DERIVED_CONFIG_FILE, (outcome) => {
+    const missing = outcome.exports.filter((e) => !writtenSince(e.output, started));
+    if (outcome.error || missing.length) {
+      throw new UserError(
+        msg.build.exportFailed(
+          missing.map((e) => ({ ...e, output: relative(paperRoot, e.output) })),
+          outcome.error,
+        ),
+      );
+    }
+  });
 
   return { resolvedProject, extendsChain, warnings: [...warnings, ...oakWarnings] };
+}
+
+/** Whether `file` was written since `since`, allowing for 2 s mtime steps (FAT). */
+function writtenSince(file: string, since: number): boolean {
+  return existsSync(file) && statSync(file).mtimeMs >= since - 2000;
 }
 
 export interface RunStartInput extends MaterializeInput {

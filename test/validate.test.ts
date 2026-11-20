@@ -186,15 +186,12 @@ describe('isFloatingTemplate: whether a template can change under the same value
   it('treats pinned remote references as fine', () => {
     expect(isFloatingTemplate('https://github.com/o/r/releases/download/v1.2.3/t.zip')).toBe(false);
     expect(isFloatingTemplate('https://github.com/o/r/archive/refs/tags/v1.2.3.zip')).toBe(false);
-    expect(isFloatingTemplate('https://github.com/o/r.git#v1.2.3')).toBe(false);
-    expect(isFloatingTemplate('https://github.com/o/r.git#a1b2c3d4e5f6')).toBe(false);
   });
 
   it('flags branch-shaped references', () => {
     expect(isFloatingTemplate('https://github.com/o/my-lapreprint-typst.git')).toBe(true);
     expect(isFloatingTemplate('https://github.com/o/r/archive/refs/heads/main.zip')).toBe(true);
     expect(isFloatingTemplate('https://github.com/o/r/archive/main.zip')).toBe(true);
-    expect(isFloatingTemplate('https://github.com/o/r.git#my-branch')).toBe(true);
   });
 
   it('treats local paths as fixed', () => {
@@ -256,6 +253,18 @@ describe('checkTemplates [R76]', () => {
     );
     expect(ids(f)).toEqual(expect.arrayContaining(['template-override', 'template-floating']));
     expect(f.every((x) => x.severity === 'warn')).toBe(true);
+  });
+
+  it('refuses a .git#<sha> URL, which myst cannot fetch, and names the zip URL to use', () => {
+    const sha = '31c0090290a8d842b6c868eb16d44d0ac7f99765';
+    const f = checkTemplates(
+      { instanceRoot: '/i', journalTemplate: `https://github.com/o/r.git#${sha}` },
+      allFalse,
+    );
+    expect(ids(f)).toEqual(['template-unfetchable']);
+    expect(f[0]!.severity).toBe('error');
+    expect(f[0]!.message).toMatch(/^journal typst template/);
+    expect(f[0]!.message).toContain(`https://github.com/o/r/archive/${sha}.zip`);
   });
 
   it("warns when the journal's template name matches a directory in the journal repo", () => {

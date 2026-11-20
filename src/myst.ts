@@ -10,6 +10,8 @@ import {
   Session,
   loadConfig,
   build,
+  collectAllBuildExportOptions,
+  localArticleExport,
   startServer,
   processProject,
   findCurrentProjectAndLoad,
@@ -22,7 +24,7 @@ import type { ISession } from 'myst-cli';
 import { resolve } from 'node:path';
 import { toText } from 'myst-common';
 import { selectAll } from 'unist-util-select';
-import type { MystEdge, BuildOpts, StartOpts } from './materialize.js';
+import type { MystEdge, StartOpts } from './materialize.js';
 import type { ResolvedProject } from './compose.js';
 import type { Paper } from './journal-checks.js';
 
@@ -48,20 +50,41 @@ export function createMystEdge(): MystEdge {
       const res = await loadConfig(sessionFor(configFile), dir);
       return (res?.project ?? {}) as ResolvedProject;
     },
-    async build(dir: string, opts: BuildOpts, configFile?: string): Promise<void> {
+    async build(dir, opts, configFile, afterExports): Promise<void> {
       const session = sessionFor(configFile);
       const prev = process.cwd();
       process.chdir(dir);
       try {
         // Sets the current project, as the myst CLI does.
         await findCurrentProjectAndLoad(session, dir);
-        if (opts.exportsOnly) {
-          // Offline: the typst export only, since HTML needs the theme zip from the network.
-          await build(session, [], { typst: true } as Parameters<typeof build>[2]);
-        } else {
-          await findCurrentSiteAndLoad(session, dir);
-          await build(session, [], { all: opts.all, html: opts.html });
+        const site = !opts.exportsOnly;
+        if (site) await findCurrentSiteAndLoad(session, dir);
+
+        // myst's `build` logs a failed export and carries on, and its HTML build ends the
+        // process, so oak runs the exports itself and reports them before the site.
+        const exports =
+          opts.exportsOnly || opts.all
+            ? await collectAllBuildExportOptions(session, [], { all: true })
+            : [];
+        let error: string | undefined;
+        if (exports.length) {
+          try {
+            await localArticleExport(session, exports, { throwOnFailure: true });
+          } catch (e) {
+            error = String((e as Error)?.message ?? e)
+              .replace(/\s+/g, ' ')
+              .trim();
+          }
         }
+        afterExports?.({
+          exports: exports.map((e) => ({ id: e.id, format: e.format, output: e.output })),
+          error,
+        });
+
+        // Given no format, myst's `build` runs no exports, only the site. It disposes the session
+        // when it ends, closing any Jupyter kernel.
+        if (site) await build(session, [], { html: opts.html });
+        else session.dispose();
       } finally {
         process.chdir(prev);
       }
