@@ -55,8 +55,8 @@ export interface MystEdge {
   /** The project as myst resolves it. */
   loadProject(dir: string, configFile?: string): Promise<ResolvedProject>;
   /**
-   * Builds from within `dir`: the exports `opts` asks for, then the site. `afterExports` gets
-   * what the exports did before the site build starts, and may throw to stop the build.
+   * Builds from within `dir`: the exports `opts` asks for, then the site. Between the two,
+   * `afterExports` gets the exports myst ran and its first error, and may throw to stop the build.
    */
   build(
     dir: string,

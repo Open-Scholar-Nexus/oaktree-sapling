@@ -57,7 +57,6 @@ export function createMystEdge(): MystEdge {
       try {
         // As the myst CLI does; without it `build --html` finds no site.
         await findCurrentProjectAndLoad(session, dir);
-        // An exports-only build skips the site, which downloads the theme zip.
         const site = !opts.exportsOnly;
         if (site) await findCurrentSiteAndLoad(session, dir);
 

@@ -259,8 +259,7 @@ describe('a build whose export myst did not write', () => {
   const pdf = (root: string) => join(root, TYPST_OUTPUT);
   const typst = (root: string) => ({ id: 'typst-pdf', format: 'typst', output: pdf(root) });
 
-  /** A fake edge whose exports end with `exports(paperRoot)`, and which records the site build
-   *  that follows them. */
+  /** A fake edge that passes `exports(paperRoot)` to `afterExports`, then records a site build. */
   const run = (exports: (paperRoot: string) => ExportOutcome, paperRoot = tmpPaper()) => {
     const { edge, calls } = fakeEdge();
     edge.build = async (dir, _opts, _configFile, afterExports) => {
