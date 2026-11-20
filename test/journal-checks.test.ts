@@ -48,7 +48,7 @@ function handBuiltPaper(): Paper {
 }
 
 function run(checks: JournalCheck[], paper: Paper = handBuiltPaper()) {
-  return runChecks(session, checks, journalRoot, () => paper);
+  return runChecks(session, checks, { journalRoot, readPaper: () => paper });
 }
 
 const pass = { status: 'pass', message: 'fine' };
@@ -130,14 +130,12 @@ describe('loading and options', () => {
 
 describe('a paper oak cannot read', () => {
   it('every check file sends the author to the editors', async () => {
-    const out = await runChecks(
-      session,
-      [{ id: './echo.mjs' }, { id: './throws.mjs' }],
+    const out = await runChecks(session, [{ id: './echo.mjs' }, { id: './throws.mjs' }], {
       journalRoot,
-      () => {
+      readPaper: () => {
         throw new Error('no project');
       },
-    );
+    });
     const message = messages.pr.checkFilePaperUnreadable('no project');
     expect(out).toEqual([
       { id: './echo.mjs', status: 'error', message },
@@ -146,10 +144,37 @@ describe('a paper oak cannot read', () => {
   });
 
   it('is not read for a check file that does not load', async () => {
-    const out = await runChecks(session, [{ id: './missing.mjs' }], journalRoot, () => {
-      throw new Error('unreachable');
+    const out = await runChecks(session, [{ id: './missing.mjs' }], {
+      journalRoot,
+      readPaper: () => {
+        throw new Error('unreachable');
+      },
     });
     expect(out[0]!.message).toBe(messages.pr.checkFileMissing(`${journalRoot}/missing.mjs`));
+  });
+});
+
+describe('a check that does not finish in time', () => {
+  it('is an error row, keeps its optional, and the next check still runs', async () => {
+    const out = await runChecks(
+      session,
+      [
+        { id: './hangs.mjs' },
+        { id: './hangs.mjs', optional: true },
+        { id: './echo.mjs', result: pass },
+      ],
+      { journalRoot, readPaper: handBuiltPaper, timeoutMs: 50 },
+    );
+    const message = messages.pr.checkTimedOut(0);
+    expect(out).toEqual([
+      { id: './hangs.mjs', status: 'error', message },
+      { id: './hangs.mjs', status: 'error', message, optional: true },
+      { id: './echo.mjs', status: 'pass', message: 'fine' },
+    ]);
+  });
+
+  it('names the limit in seconds', () => {
+    expect(messages.pr.checkTimedOut(120)).toContain('within 120 seconds');
   });
 });
 

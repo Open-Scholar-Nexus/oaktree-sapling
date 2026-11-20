@@ -56,6 +56,8 @@ Any of MyST's own [build rules](https://github.com/jupyter-book/mystmd/blob/main
 
 A check fails, with a link to this section, when its id is neither a check above nor the path of a [check file](#journal-checks), or when an option has the wrong type, such as `max: lots`. An option the check does not have, such as a misspelled `maxx`, adds a warning, and the check runs without it.
 
+oak waits up to two minutes for each check. A check still running then, such as `links-resolve` waiting on a server that does not answer, shows as an `error` row, and oak moves on to the next check.
+
 (journal-checks)=
 ## Custom checks
 
@@ -160,7 +162,7 @@ It runs the journal's checks, check files included, as they are on disk, uncommi
 
 ### When a check file breaks
 
-A check file that is missing, does not load, has no `validate`, throws, or returns a result oak cannot read shows one `error` row under its path, with the reason and a link to this section. It blocks the merge unless the entry is `optional: true`, and the other checks still run. A check file pushed to the journal repository runs on every open paper pull request's next run, so try it with `oak validate` first.
+A check file that is missing, does not load, has no `validate`, throws, does not finish within two minutes, or returns a result oak cannot read shows one `error` row under its path, with the reason and a link to this section. It blocks the merge unless the entry is `optional: true`, and the other checks still run. A check file pushed to the journal repository runs on every open paper pull request's next run, so try it with `oak validate` first.
 
 (validate-runs-paper-code)=
 ## `oak validate` runs the paper's code

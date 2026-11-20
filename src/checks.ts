@@ -50,20 +50,49 @@ export interface JournalCheck {
   [k: string]: unknown;
 }
 
+/** How long one check may take before oak reports it as an error and runs the next. */
+export const CHECK_TIMEOUT_MS = 120_000;
+
+/** What {@link runChecks} needs besides the session and the checks. */
+export interface RunChecksContext {
+  /** The journal repository, where check files are. */
+  journalRoot: string | null;
+  /** The data each check file gets a copy of; read once, when the first check file runs. */
+  readPaper: () => PaperData;
+  /** {@link CHECK_TIMEOUT_MS} unless a test sets it. */
+  timeoutMs?: number;
+}
+
+/** `work`, or a rejection with {@link messages.pr.checkTimedOut} once `ms` have passed. A timer
+ *  cannot stop a check that never yields, such as one in an endless loop. */
+async function withinTime<T>(work: () => Promise<T>, ms: number): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const late = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new UserError(messages.pr.checkTimedOut(Math.round(ms / 1000)))),
+      ms,
+    );
+  });
+  try {
+    return await Promise.race([work(), late]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /**
  * Runs the journal's checks against a processed myst session (`MystEdge.withProjectSession`).
  * Each result gets the check's id, and `optional` when the journal set it. A catalog check's
  * options get Curvenote's defaults and types, as Curvenote's own runner gives them. An unknown
- * id, an option Curvenote rejects, a check that throws and a broken check file each become one
- * error result, so a misconfigured journal shows up in the report and the remaining checks still
- * run. An option Curvenote ignores adds an optional error row, a warning. A `./` id runs a check
- * file from `journalRoot` on `readPaper()`'s data.
+ * id, an option Curvenote rejects, a check that throws or takes longer than the time limit, and
+ * a broken check file each become one error result, so a misconfigured journal shows up in the
+ * report and the remaining checks still run. An option Curvenote ignores adds an optional error
+ * row, a warning. A `./` id runs a check file from `journalRoot` on `readPaper()`'s data.
  */
 export async function runChecks(
   session: ISession,
   journalChecks: JournalCheck[],
-  journalRoot: string | null,
-  readPaper: () => PaperData,
+  { journalRoot, readPaper, timeoutMs = CHECK_TIMEOUT_MS }: RunChecksContext,
 ): Promise<EngineCheckResult[]> {
   // Loaded on first use, so the unit tests run check files without the bundle.
   let curvenote: ReturnType<typeof curvenoteChecks> | undefined;
@@ -73,9 +102,10 @@ export async function runChecks(
     const flag = optional ? { optional: true } : {};
     let results: CheckResult[];
     try {
-      if (isCheckFile(check.id)) {
-        results = await runCheckFile(journalRoot, check.id, check, () => (paper ??= readPaper()));
-      } else {
+      results = await withinTime(async () => {
+        if (isCheckFile(check.id)) {
+          return runCheckFile(journalRoot, check.id, check, () => (paper ??= readPaper()));
+        }
         const { catalog, validateCheck } = await (curvenote ??= curvenoteChecks());
         const impl = catalog.find((c) => c.id === check.id);
         if (!impl) throw new UserError(messages.pr.unknownCheckId(check.id));
@@ -98,8 +128,8 @@ export async function runChecks(
             optional: true,
           });
         }
-        results = [await impl.validate(session, options)].flat();
-      }
+        return [await impl.validate(session, options)].flat();
+      }, timeoutMs);
     } catch (e) {
       const message = e instanceof UserError ? e.message : messages.pr.checkThrew(firstLine(e));
       out.push({ id: check.id, status: CheckStatus.error, message, ...flag });

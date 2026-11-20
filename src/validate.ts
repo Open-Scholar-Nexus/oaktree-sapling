@@ -760,7 +760,7 @@ export async function runValidate(
               registry: loadRegistry(input.instanceRoot, probes).registry ?? [],
             },
           });
-          return runChecks(session, runnable, input.instanceRoot, readPaper);
+          return runChecks(session, runnable, { journalRoot: input.instanceRoot, readPaper });
         },
         configFile, // the composed config, when there is one
       );
