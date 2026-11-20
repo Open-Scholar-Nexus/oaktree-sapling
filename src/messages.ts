@@ -1196,10 +1196,14 @@ export const workflow = {
   orcidInvalid: (why: string): string =>
     `${why}. The deposit leaves this ORCID out. Fix it in myst.yml.`,
   /** A journal.yml `paper_links` entry whose paper option is not a web address. */
-  paperLinkSkipped: (option: string, value: unknown): string =>
-    `project.options.${option} in myst.yml is not an http(s) address ` +
-    `(${JSON.stringify(String(value).slice(0, 80))}), so the deposit description leaves out ` +
-    `that link. Fix it in myst.yml.`,
+  paperLinkSkipped: (option: string, value: unknown): string => {
+    const shown = typeof value === 'string' ? value : (JSON.stringify(value) ?? String(value));
+    return (
+      `project.options.${option} in myst.yml is not an http(s) address ` +
+      `(${JSON.stringify(shown.slice(0, 80))}), so the deposit description leaves out ` +
+      `that link. Fix it in myst.yml.`
+    );
+  },
   zenodoCommunityMissing: (slug: string): string =>
     `Zenodo has no community "${slug}", which journal.yml names as zenodo.community. Fix the ` +
     `name there; it is the last part of the community's address on Zenodo.`,
@@ -1207,8 +1211,9 @@ export const workflow = {
     `the record is not in the Zenodo community "${slug}", and Zenodo adds a community to a ` +
     `first version only. An editor can submit the published record to it on Zenodo.`,
   zenodoCommunitySkipped: (slug: string): string =>
-    `--publish-without-review publishes the record without joining the Zenodo community ` +
-    `"${slug}". An editor can submit the published record to it on Zenodo.`,
+    `--publish-without-review publishes with no review by the Zenodo community "${slug}". ` +
+    `A first version published this way is in no community; an editor can submit it to ` +
+    `"${slug}" on Zenodo.`,
 
   // oak release status, in its --json result
   statusNoDoi: 'no DOI in myst.yml yet: run oak release reserve-doi and merge its pull request',

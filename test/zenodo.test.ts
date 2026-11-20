@@ -721,6 +721,21 @@ const BARE_MYST = `project:
 `;
 
 describe('cmdPrepare', () => {
+  it('refuses a journal community Zenodo does not have, before creating a draft', async () => {
+    const mystPath = paperRepo(BARE_MYST);
+    const { api, calls } = legacyZenodo();
+    const out = await cmdPrepare({
+      mystPath,
+      repo: 'o/r',
+      api,
+      instanceRoot: journalWithCommunity('no-such-community'),
+    });
+    expect(out.exitCode).toBe(2);
+    expect(String(out.result.message)).toContain('Zenodo has no community "no-such-community"');
+    expect(calls.some((c) => c.method === 'POST')).toBe(false);
+    expect(parseDocument(readFileSync(mystPath, 'utf8')).getIn(['project', 'doi'])).toBeUndefined();
+  });
+
   it('creates a draft and stamps doi/github/date into the working-tree myst.yml', async () => {
     const mystPath = paperRepo(BARE_MYST);
     const { transport, calls } = fakeTransport(({ method }) => {
@@ -1283,7 +1298,7 @@ describe('cmdUpload', () => {
     expect(z.calls.some((c) => c.url.includes('/api/communities/'))).toBe(false);
     expect(z.calls.some((c) => c.url.endsWith('/actions/publish'))).toBe(true);
     expect(warnings().join('')).toContain(
-      'publishes the record without joining the Zenodo community "fixture-community"',
+      'publishes with no review by the Zenodo community "fixture-community"',
     );
   });
 

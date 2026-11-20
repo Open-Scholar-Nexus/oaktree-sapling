@@ -610,6 +610,16 @@ export function buildMetadata(input: MetadataInput): Record<string, unknown> {
   return md;
 }
 
+/** The community's id, or null when Zenodo has no community with that slug. */
+async function findCommunity(api: ZenodoApi, slug: string): Promise<string | null> {
+  try {
+    return await api.communityId(slug);
+  } catch (e) {
+    if (e instanceof ZenodoError && e.status === 404) return null;
+    throw e;
+  }
+}
+
 /**
  * Sets a paper's first-version draft to be reviewed by the journal's community, so the editor's
  * Submit for review on Zenodo sends the draft to that community. The legacy `communities` field applies only when
@@ -622,15 +632,8 @@ async function requestCommunity(
   slug: string,
 ): Promise<string | null> {
   const draft = await api.getRdmDraft(depId);
-  let id: string;
-  try {
-    id = await api.communityId(slug);
-  } catch (e) {
-    if (e instanceof ZenodoError && e.status === 404) {
-      return msg.workflow.zenodoCommunityMissing(slug);
-    }
-    throw e;
-  }
+  const id = await findCommunity(api, slug);
+  if (!id) return msg.workflow.zenodoCommunityMissing(slug);
   if ((draft.parent?.communities?.ids ?? []).includes(id)) return null;
   if (draft.parent?.review?.receiver?.community === id) return null;
   if ((draft.versions?.index ?? 1) > 1) {
@@ -1039,6 +1042,12 @@ export async function cmdPrepare(input: PrepareInput): Promise<Outcome> {
     doc2.setIn(['project', 'date'], new Date().toISOString().slice(0, 10));
   }
 
+  const deposit = loadJournalDeposit(instanceRoot);
+  const { community } = deposit.zenodo;
+  if (community && !(await findCommunity(api, community))) {
+    return err(2, msg.workflow.zenodoCommunityMissing(community));
+  }
+
   const githubUrl = `https://github.com/${repo}`;
   const repoRoot = resolve(mystPath, '..');
   const md = buildMetadata({
@@ -1046,7 +1055,7 @@ export async function cmdPrepare(input: PrepareInput): Promise<Outcome> {
     paperId: project.id ? String(project.id) : undefined,
     githubUrl,
     siteUrl,
-    ...loadJournalDeposit(instanceRoot),
+    ...deposit,
     abstractParas: abstractParagraphs(repoRoot),
     extraDescParas: zenodoExtraParagraphs(repoRoot),
   });
