@@ -673,7 +673,8 @@ export const build = {
   finishFailed: (why: string): string =>
     `oak build: the site was built, but preparing it for upload failed (${why})`,
   /** An export myst raised an error for, or did not write (`runBuild`). `reason` is myst's
-   *  error; without one, myst failed silently. */
+   *  first error, printed as it is, since it may belong to another export; without one, myst
+   *  failed silently. */
   exportFailed: (
     missing: Array<{ id?: string; format: string; output: string }>,
     reason: string | undefined,
@@ -682,8 +683,8 @@ export const build = {
       ? missing.map((e) => `the ${e.format} export${e.id ? ` "${e.id}"` : ''} (${e.output})`)
       : ['an export'];
     return (
-      `oak build: myst could not write ${which.join(', ')}: ` +
-      `${reason ?? 'myst reported no error; see its log above'}.`
+      `oak build: myst could not write ${which.join(', ')}.\n` +
+      (reason ? `myst's error: ${reason}` : 'myst reported no error; see its log above.')
     );
   },
   /** The chosen typst template is a URL myst cannot fetch (`runBuild`). */

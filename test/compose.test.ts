@@ -294,10 +294,12 @@ describe('unfetchableTemplateUrl: the template URLs myst-templates cannot downlo
       kind: 'git-ref',
       fix: `https://github.com/o/r/archive/${sha}.zip`,
     });
-    expect(unfetchableTemplateUrl(`https://git.example.org/o/r.git#${sha}`)).toEqual({
-      kind: 'git-ref',
-      fix: undefined,
-    });
+    for (const noFix of [
+      `https://git.example.org/o/r.git#${sha}`,
+      'https://github.com/o/r.git#feat-x',
+    ]) {
+      expect(unfetchableTemplateUrl(noFix), noFix).toEqual({ kind: 'git-ref', fix: undefined });
+    }
   });
 
   it('refuses a .zip or .git URL followed by a query or fragment', () => {

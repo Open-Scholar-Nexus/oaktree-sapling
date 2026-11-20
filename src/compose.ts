@@ -77,7 +77,9 @@ export function unfetchableTemplateUrl(
   const github = url.hostname === 'github.com';
   if (path.endsWith('.git') && !value.endsWith('.git')) {
     const ref = url.hash.slice(1);
-    const zip = github && ref ? `${path.slice(0, -4)}/archive/${ref}.zip` : undefined;
+    // Suggested only for a commit: a ref name may be a branch, whose zip floats.
+    const sha = /^[0-9a-f]{7,40}$/.test(ref);
+    const zip = github && sha ? `${path.slice(0, -4)}/archive/${ref}.zip` : undefined;
     return ref ? { kind: 'git-ref', fix: zip } : { kind: 'url-suffix', fix: path };
   }
   if (path.endsWith('.zip') && !value.endsWith('.zip')) return { kind: 'url-suffix', fix: path };

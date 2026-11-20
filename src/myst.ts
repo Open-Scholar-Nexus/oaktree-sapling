@@ -80,7 +80,9 @@ export function createMystEdge(): MystEdge {
           error,
         });
 
+        // myst's `build` disposes the session when it ends, closing any Jupyter kernel.
         if (site) await build(session, [], { html: opts.html });
+        else session.dispose();
       } finally {
         process.chdir(prev);
       }
