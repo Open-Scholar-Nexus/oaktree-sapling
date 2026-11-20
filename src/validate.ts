@@ -752,6 +752,7 @@ export async function runValidate(
           const readPaper = (): Paper => ({
             ...input.edge.paperForChecks(session, input.paperRoot),
             config: (readDoc(authorMyst).toJS() ?? {}) as Paper['config'],
+            repo,
             // Check files come only from a journal repository, so `instanceRoot` is set here.
             journal: {
               root: input.instanceRoot!,

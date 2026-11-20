@@ -124,6 +124,7 @@ export default {
 | `root` | The paper's folder, an absolute path. |
 | `project` | The project frontmatter, such as `title`, `authors` and `keywords`, with the journal's settings merged in. |
 | `config` | The paper's `myst.yml` as the author wrote it, without the journal's settings. |
+| `repo` | The paper's repository, as `owner/name`, or `null` when oak cannot tell. It is the `--repo` of `oak validate`, else the repository a GitHub Actions run is for, else the repository the `origin` git remote points to. In the pull request checks it is the paper's repository, also for a pull request from a fork. |
 | `journal` | The journal repository the check file comes from: `root`, its folder as an absolute path; `config`, its `journal.yml` with oak's defaults filled in; and `registry`, the entries of `registry/papers.yml` that oak accepts, or an empty list when it has none. |
 | `projectParts` | The content of each part the project frontmatter sets, as a tree, by part name. |
 | `pages` | One entry per page, in table-of-contents order and starting with the root page, which Curvenote's checks read as the article. |

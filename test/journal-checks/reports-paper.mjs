@@ -11,6 +11,7 @@ export default {
       pageKeys: Object.keys(index.frontmatter).sort(),
       fileFrontmatter: index.fileFrontmatter,
       configTitle: paper.config.project?.title,
+      repo: paper.repo,
       journalName: paper.journal?.config.name,
       journalRoot: paper.journal?.root,
       registryIds: paper.journal?.registry.map((e) => e.id),

@@ -464,6 +464,10 @@ describe.skipIf(bundleState() === 'absent')('oak validate, what a check file rea
     expect(configTitle).toBe('A Fixture Paper for Engine Release Safety');
   }, 60_000);
 
+  it('gets the repository --repo names', () => {
+    expect(seen()).toMatchObject({ repo });
+  }, 60_000);
+
   it('gets the journal settings and registry', () => {
     expect(seen()).toMatchObject({
       journalName: 'Fixture Journal',

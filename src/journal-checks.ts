@@ -43,6 +43,8 @@ export interface Paper {
   projectParts: Parts;
   /** The paper's `myst.yml`, as written. */
   config: Record<string, any>;
+  /** The paper's repository as `owner/name`, as `oak validate` found it; null when unknown. */
+  repo: string | null;
   /** The journal repository the check file comes from, as `oak validate` reads it. */
   journal: {
     /** Absolute path to the journal repository. */
@@ -60,7 +62,7 @@ export interface Paper {
 }
 
 /** The fields of {@link Paper} that come from MyST's processed project (`MystEdge.paperForChecks`). */
-export type PaperFromMyst = Omit<Paper, 'config' | 'journal'>;
+export type PaperFromMyst = Omit<Paper, 'config' | 'repo' | 'journal'>;
 
 /**
  * The frontmatter block at the top of a markdown page, parsed: `{}` when the page has none, null

@@ -25,6 +25,7 @@ function handBuiltPaper(): Paper {
     project: { title: 'A Paper' },
     projectParts: {},
     config: { project: { title: 'A Paper' } },
+    repo: 'owner/paper',
     journal: { root: '/journal', config: { name: 'A Journal' } as never, registry: [] },
     pages: [
       {
