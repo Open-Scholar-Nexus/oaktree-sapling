@@ -10,6 +10,8 @@ import {
   Session,
   loadConfig,
   build,
+  collectAllBuildExportOptions,
+  localArticleExport,
   startServer,
   processProject,
   findCurrentProjectAndLoad,
@@ -22,7 +24,7 @@ import type { ISession } from 'myst-cli';
 import { resolve } from 'node:path';
 import { toText } from 'myst-common';
 import { selectAll } from 'unist-util-select';
-import type { MystEdge, BuildOpts, StartOpts } from './materialize.js';
+import type { MystEdge, StartOpts } from './materialize.js';
 import type { ResolvedProject } from './compose.js';
 import type { Paper } from './journal-checks.js';
 
@@ -48,20 +50,37 @@ export function createMystEdge(): MystEdge {
       const res = await loadConfig(sessionFor(configFile), dir);
       return (res?.project ?? {}) as ResolvedProject;
     },
-    async build(dir: string, opts: BuildOpts, configFile?: string): Promise<void> {
+    async build(dir, opts, configFile, afterExports): Promise<void> {
       const session = sessionFor(configFile);
       const prev = process.cwd();
       process.chdir(dir);
       try {
         // As the myst CLI does; without it `build --html` finds no site.
         await findCurrentProjectAndLoad(session, dir);
-        if (opts.exportsOnly) {
-          // Offline: the typst export only, since HTML needs the theme zip from the network.
-          await build(session, [], { typst: true } as Parameters<typeof build>[2]);
-        } else {
-          await findCurrentSiteAndLoad(session, dir);
-          await build(session, [], { all: opts.all, html: opts.html });
+        // An exports-only build works offline: the site needs the theme zip from the network.
+        const site = !opts.exportsOnly;
+        if (site) await findCurrentSiteAndLoad(session, dir);
+
+        // myst's `build` logs a failed export and carries on, and its HTML build ends the
+        // process, so oak runs the exports itself and reports them before the site.
+        const formats = opts.exportsOnly ? { typst: true } : opts.all ? { all: true } : null;
+        const exports = formats ? await collectAllBuildExportOptions(session, [], formats) : [];
+        let error: string | undefined;
+        if (exports.length) {
+          try {
+            await localArticleExport(session, exports, { throwOnFailure: true });
+          } catch (e) {
+            error = String((e as Error)?.message ?? e)
+              .replace(/\s+/g, ' ')
+              .trim();
+          }
         }
+        afterExports?.({
+          exports: exports.map((e) => ({ id: e.id, format: e.format, output: e.output })),
+          error,
+        });
+
+        if (site) await build(session, [], { html: opts.html });
       } finally {
         process.chdir(prev);
       }

@@ -642,6 +642,20 @@ export const build = {
     'deployed until it is set',
   finishFailed: (why: string): string =>
     `oak build: the site was built, but preparing it for upload failed (${why})`,
+  /** An export myst raised an error for, or did not write (`runBuild`). `reason` is myst's
+   *  error; without one, myst failed silently. */
+  exportFailed: (
+    missing: Array<{ id?: string; format: string; output: string }>,
+    reason: string | undefined,
+  ): string => {
+    const which = missing.length
+      ? missing.map((e) => `the ${e.format} export${e.id ? ` "${e.id}"` : ''} (${e.output})`)
+      : ['an export'];
+    return (
+      `oak build: myst could not write ${which.join(', ')}: ` +
+      `${reason ?? 'myst reported no error; see its log above'}.`
+    );
+  },
   /** oak's install lacks `templates/typst`, which every release and npm package ships. */
   noEngineTypstTemplate: (dir: string): string =>
     `oak build: oak's typst template is missing (${dir}). Reinstall oak, or run it from a full ` +

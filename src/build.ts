@@ -8,7 +8,8 @@
  * `oak validate` shares both passes through `materialize.ts`, so it checks what gets built
  * [R82]. The myst calls are injected (`MystEdge`) so tests can use a fake.
  */
-import { existsSync } from 'node:fs';
+import { existsSync, statSync } from 'node:fs';
+import { relative } from 'node:path';
 import { type ResolvedProject } from './compose.js';
 import { engineTypstTemplate } from './assets.js';
 import { runLayerA } from './validate.js';
@@ -92,9 +93,26 @@ export async function runBuild(input: RunBuildInput): Promise<RunBuildResult> {
   }
 
   if (baseUrl) process.env.BASE_URL = baseUrl;
-  await edge.build(paperRoot, buildOpts, DERIVED_CONFIG_FILE);
+  const started = Date.now();
+  await edge.build(paperRoot, buildOpts, DERIVED_CONFIG_FILE, (outcome) => {
+    const missing = outcome.exports.filter((e) => !writtenSince(e.output, started));
+    if (outcome.error || missing.length) {
+      throw new UserError(
+        msg.build.exportFailed(
+          missing.map((e) => ({ ...e, output: relative(paperRoot, e.output) })),
+          outcome.error,
+        ),
+      );
+    }
+  });
 
   return { resolvedProject, extendsChain, warnings: [...warnings, ...layerAWarnings] };
+}
+
+/** Whether `file` exists and was written at or after `since`, give or take the 2 s mtime step
+ *  of the coarsest common filesystem (FAT). An older file is a previous build's. */
+function writtenSince(file: string, since: number): boolean {
+  return existsSync(file) && statSync(file).mtimeMs >= since - 2000;
 }
 
 export interface RunStartInput extends MaterializeInput {
