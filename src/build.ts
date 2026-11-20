@@ -94,7 +94,8 @@ export async function runBuild(input: RunBuildInput): Promise<RunBuildResult> {
 
   const unfetchable =
     buildsPdf && typstTemplate ? unfetchableTemplateUrl(typstTemplate) : undefined;
-  if (unfetchable) throw new UserError(msg.build.templateUnfetchable(typstTemplate!, unfetchable));
+  if (unfetchable)
+    throw new UserError(msg.build.templateUnfetchable(typstTemplate!, unfetchable.fix));
 
   if (baseUrl) process.env.BASE_URL = baseUrl;
   const started = Date.now();
@@ -113,8 +114,7 @@ export async function runBuild(input: RunBuildInput): Promise<RunBuildResult> {
   return { resolvedProject, extendsChain, warnings: [...warnings, ...layerAWarnings] };
 }
 
-/** Whether `file` exists and was written at or after `since`, give or take the 2 s mtime step
- *  of the coarsest common filesystem (FAT). An older file is a previous build's. */
+/** Whether `file` was written since `since`, allowing for 2 s mtime steps (FAT). */
 function writtenSince(file: string, since: number): boolean {
   return existsSync(file) && statSync(file).mtimeMs >= since - 2000;
 }

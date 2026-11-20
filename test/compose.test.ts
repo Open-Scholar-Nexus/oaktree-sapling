@@ -291,27 +291,24 @@ describe('unfetchableTemplateUrl: the template URLs myst-templates cannot downlo
 
   it('refuses a .git URL with a ref, and gives the commit zip on GitHub', () => {
     expect(unfetchableTemplateUrl(`https://github.com/o/r.git#${sha}`)).toEqual({
-      kind: 'git-ref',
       fix: `https://github.com/o/r/archive/${sha}.zip`,
     });
     for (const noFix of [
       `https://git.example.org/o/r.git#${sha}`,
       'https://github.com/o/r.git#feat-x',
     ]) {
-      expect(unfetchableTemplateUrl(noFix), noFix).toEqual({ kind: 'git-ref', fix: undefined });
+      expect(unfetchableTemplateUrl(noFix), noFix).toEqual({ fix: undefined });
     }
   });
 
   it('refuses a .zip or .git URL followed by a query or fragment', () => {
     expect(unfetchableTemplateUrl('https://example.org/t.zip?raw=1')).toEqual({
-      kind: 'url-suffix',
       fix: 'https://example.org/t.zip',
     });
   });
 
   it('refuses a tarball, which myst does not unpack', () => {
     expect(unfetchableTemplateUrl(`https://github.com/o/r/archive/${sha}.tar.gz`)).toEqual({
-      kind: 'not-zip',
       fix: `https://github.com/o/r/archive/${sha}.zip`,
     });
   });

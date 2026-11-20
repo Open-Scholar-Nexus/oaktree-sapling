@@ -260,7 +260,7 @@ export function checkTemplates(
       out.push({
         check: 'template-unfetchable',
         severity: 'error',
-        message: msg.validate.templateUnfetchable(layer, value, problem),
+        message: msg.validate.templateUnfetchable(layer, value, problem.fix),
         klass: 'config',
       });
     } else if (isFloatingTemplate(value)) {

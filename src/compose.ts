@@ -58,14 +58,11 @@ export function isInstanceRelativeTemplate(value: string): boolean {
 }
 
 /**
- * Why myst cannot fetch the template URL `value`, with the URL to use instead when oak can
- * work it out; undefined when myst can, or oak cannot tell. myst-templates downloads a URL that
- * ends in `.zip`, or in `.git` (as the `main` branch's zip), and reads any other URL as a
- * template listing, which it parses as JSON.
+ * A template URL myst cannot fetch, with the URL to use when oak can work it out; undefined
+ * when myst can, or oak cannot tell. myst downloads only a URL ending in `.zip` or `.git`, and
+ * parses any other as a JSON template listing.
  */
-export function unfetchableTemplateUrl(
-  value: string,
-): { kind: 'git-ref' | 'url-suffix' | 'not-zip'; fix?: string } | undefined {
+export function unfetchableTemplateUrl(value: string): { fix?: string } | undefined {
   if (!isBrandAssetUrl(value)) return undefined;
   let url: URL;
   try {
@@ -79,15 +76,12 @@ export function unfetchableTemplateUrl(
     const ref = url.hash.slice(1);
     // Suggested only for a commit: a ref name may be a branch, whose zip floats.
     const sha = /^[0-9a-f]{7,40}$/.test(ref);
-    const zip = github && sha ? `${path.slice(0, -4)}/archive/${ref}.zip` : undefined;
-    return ref ? { kind: 'git-ref', fix: zip } : { kind: 'url-suffix', fix: path };
+    if (!ref) return { fix: path };
+    return { fix: github && sha ? `${path.slice(0, -4)}/archive/${ref}.zip` : undefined };
   }
-  if (path.endsWith('.zip') && !value.endsWith('.zip')) return { kind: 'url-suffix', fix: path };
+  if (path.endsWith('.zip') && !value.endsWith('.zip')) return { fix: path };
   const tar = /\.(tar\.gz|tgz)$/.exec(path);
-  if (tar) {
-    const fix = github ? path.slice(0, -tar[0].length) + '.zip' : undefined;
-    return { kind: 'not-zip', fix };
-  }
+  if (tar) return { fix: github ? path.slice(0, -tar[0].length) + '.zip' : undefined };
   return undefined;
 }
 
