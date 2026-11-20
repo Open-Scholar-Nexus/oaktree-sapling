@@ -92,7 +92,6 @@ export async function runBuild(input: RunBuildInput): Promise<RunBuildResult> {
     throw new UserError(msg.build.noEngineTypstTemplate(typstTemplate));
   }
 
-  // A template URL myst cannot fetch is refused before myst runs, with the reason.
   const unfetchable =
     buildsPdf && typstTemplate ? unfetchableTemplateUrl(typstTemplate) : undefined;
   if (unfetchable) throw new UserError(msg.build.templateUnfetchable(typstTemplate!, unfetchable));
