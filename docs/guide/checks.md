@@ -52,7 +52,7 @@ The checks are [Curvenote](https://curvenote.com)'s, from its open-source [`@cur
 
 `exports-exist` needs a built PDF, which the Journal checks do not make, so it reports that it could not run and never blocks.
 
-Any of MyST's own [build rules](https://github.com/jupyter-book/mystmd/blob/main/packages/myst-common/src/ruleids.ts) can be listed too, such as `math-renders` or `image-exists`: the check fails when the build warns under that rule.
+Any of MyST's own [build rules](https://github.com/jupyter-book/mystmd/blob/main/packages/myst-common/src/ruleids.ts) can be listed too, such as `math-renders` or `reference-target-resolves`: each warning MyST gives under that rule while it reads the paper is a failing row, and a rule with no warning adds no row. The image rules, such as `image-exists`, never add a row: MyST raises them only while it copies the images into a build, and the checks read the paper without building it. A [check file](#journal-checks) can test image paths instead.
 
 A check fails, with a link to this section, when its id is neither a check above nor the path of a [check file](#journal-checks), or when an option has the wrong type, such as `max: lots`. An option the check does not have, such as a misspelled `maxx`, adds a warning, and the check runs without it.
 
@@ -72,7 +72,7 @@ checks:
   optional: true
 ```
 
-The path must start with `./`, be relative to the root of the journal repository, stay inside it and end in `.mjs`. `checks/` is the usual folder. The path names the check's row in the report, so renaming the file renames the row. The entry's other fields, except `optional`, reach the check as its options.
+The path must start with `./`, be relative to the root of the journal repository, stay inside it and end in `.mjs`. `checks/` is the usual folder. The path names the check's row in the report, so renaming the file renames the row. The entry's fields, except `optional`, reach the check as its options, `id` included, as Curvenote's checks get them.
 
 oak runs check files from v0.3.0. A paper pinned to an older version reports the path as an unknown check id, which blocks its merge, so you may want to list a new check file as `optional: true` until the journal's papers have [moved to that version](pins.md).
 
@@ -149,6 +149,8 @@ MyST moves a frontmatter `abstract:` into a part, and the same goes for the othe
 The tree follows [MyST's document structure](https://mystmd.org/spec), from the MyST version in the paper's oak, so a MyST upgrade may change the shape of a node. oak adds fields to `paper` and never renames or removes one. Each check gets its own copy of every field of `paper`, so a check that changes one leaves the next check unaffected.
 
 A check file can import Node's built-in modules, such as `node:path`, and other files in the journal repository. CI clones the journal repository without installing anything, so an import of a package fails there, even when it works on your machine.
+
+A check runs inside `oak validate`, with the paper's folder as its working directory. It can read the paper's files under `paper.root` and use `fetch`, within the [time limit](#changing-the-set). It also sees the environment `oak validate` runs in, which differs between your machine and the pull request checks, so read the repository from `paper.repo`, which is set in both.
 
 ### Testing a check file
 
