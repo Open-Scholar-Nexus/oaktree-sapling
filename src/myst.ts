@@ -29,10 +29,12 @@ import type { MystEdge, StartOpts } from './materialize.js';
 import type { ResolvedProject } from './compose.js';
 import { readFileFrontmatter, type PaperFromMyst, type Parts } from './journal-checks.js';
 
-/** Each frontmatter part's tree, as Curvenote's checks read it: a part that is not one block of
- *  text is left out, as {@link resolveFrontmatterParts} does. */
-function partTrees(session: ISession, frontmatter: { parts?: unknown } | undefined): Parts {
-  const resolved = resolveFrontmatterParts(session, frontmatter as never) ?? {};
+/** Each frontmatter part's tree, from {@link resolveFrontmatterParts}, as Curvenote's checks read it. */
+function partTrees(
+  session: ISession,
+  frontmatter: Parameters<typeof resolveFrontmatterParts>[1],
+): Parts {
+  const resolved = resolveFrontmatterParts(session, frontmatter) ?? {};
   return Object.fromEntries(Object.entries(resolved).map(([name, { mdast }]) => [name, mdast]));
 }
 

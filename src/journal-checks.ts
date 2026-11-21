@@ -3,7 +3,7 @@
  * relative `./` path into the journal repository [R208].
  *
  * A check file loads from the journal clone, where myst-cli is not installed, so it gets
- * {@link Paper}: plain data and two helpers.
+ * {@link Paper}: plain data and helpers.
  */
 import { readFileSync, statSync } from 'node:fs';
 import { extname, isAbsolute, relative, resolve } from 'node:path';
@@ -96,7 +96,7 @@ export function readFileFrontmatter(file: string): Record<string, any> | null {
  * to the nodes a directive makes, such as a figure or an `{image}`. Undefined for a node in no
  * page's `mdast`.
  */
-export function positionFinder(paper: Pick<Paper, 'pages'>): Paper['positionOf'] {
+function positionFinder(paper: Pick<Paper, 'pages'>): Paper['positionOf'] {
   return (target) => {
     if (target.position) return target.position;
     for (const page of paper.pages) {
