@@ -146,8 +146,6 @@ Each entry of `pages` holds:
 
 MyST moves a frontmatter `abstract:` into a part, and the same goes for the other parts, such as `data_availability:` and `acknowledgments:`. An `abstract:` in `myst.yml` is in `projectParts.abstract`, one in a page's frontmatter in that page's `parts.abstract`. `project.parts` and a page's `frontmatter.parts` hold only the location of each part, not its text. A part's `position` counts lines from the start of the part's own text, so it does not point at a line of the file. A `+++ {"part": "abstract"}` block stays in `mdast`, as a `block` node with `data.part` set to `abstract`.
 
-`projectParts`, `config`, `repo`, `journal`, `positionOf`, and each page's `parts` and `fileFrontmatter` come with oak v0.4.0. A paper pinned to v0.3.0 gets a `paper` without them, so a check file that reads one should allow for it until the journal's papers have [moved to v0.4.0](pins.md).
-
 The tree follows [MyST's document structure](https://mystmd.org/spec), from the MyST version in the paper's oak, so a MyST upgrade may change the shape of a node. oak adds fields to `paper` and never renames or removes one. Each check gets its own copy of every field of `paper`, so a check that changes one leaves the next check unaffected.
 
 A check file can import Node's built-in modules, such as `node:path`, and other files in the journal repository. CI clones the journal repository without installing anything, so an import of a package fails there, even when it works on your machine.
@@ -185,7 +183,7 @@ checks:
   warn_in: [isp-micropublication-2025]
 ```
 
-A paper's edition is the `edition` in its `myst.yml`. The same shape works for CRediT roles, testing each author's `roles` in place of `orcid`. The check reads only `project`, so it runs on papers pinned to v0.3.0 too.
+A paper's edition is the `edition` in its `myst.yml`. The same shape works for CRediT roles, testing each author's `roles` in place of `orcid`.
 
 ### Testing a check file
 
