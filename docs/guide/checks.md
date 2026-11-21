@@ -56,6 +56,7 @@ Any of MyST's own [build rules](https://github.com/jupyter-book/mystmd/blob/main
 
 A check fails, with a link to this section, when its id is neither a check above nor the path of a [check file](#journal-checks), or when an option has the wrong type, such as `max: lots`. An option the check does not have, such as a misspelled `maxx`, adds a warning, and the check runs without it.
 
+(check-time-limit)=
 oak waits up to two minutes for each check. A check still running then, such as `links-resolve` waiting on a server that does not answer, shows as an `error` row, and oak moves on to the next check.
 
 (journal-checks)=
@@ -126,13 +127,13 @@ export default {
 | `root` | The paper's folder, an absolute path. |
 | `project` | The project frontmatter, such as `title`, `authors` and `keywords`, with the journal's settings merged in. |
 | `config` | The paper's `myst.yml` as the author wrote it, without the journal's settings. |
-| `repo` | The paper's repository, as `owner/name`, or `null` when oak cannot tell. It is the `--repo` of `oak validate`, else the repository a GitHub Actions run is for, else the repository the `origin` git remote points to. In the pull request checks it is the paper's repository, also for a pull request from a fork. |
+| `repo` | The paper's repository, as `owner/name`, found as [`oak validate --repo`](../reference/cli.md#validate) says, or `null` when oak cannot tell. In the pull request checks it is the paper's repository, also for a pull request from a fork. |
 | `journal` | The journal repository the check file comes from: `root`, its folder as an absolute path; `config`, its `journal.yml` with oak's defaults filled in; and `registry`, the entries of `registry/papers.yml` that oak accepts, or an empty list when it has none. |
 | `projectParts` | The content of each part the project frontmatter sets, as a tree, by part name. |
 | `pages` | One entry per page, in table-of-contents order and starting with the root page, which Curvenote's checks read as the article. |
 | `toText(node)` | The text of a node and everything under it. |
 | `selectAll(selector, node)` | The nodes under `node` that match a selector such as `'heading'`, from [`unist-util-select`](https://github.com/syntax-tree/unist-util-select). |
-| `positionOf(node)` | A `position` for a result about `node`: the node's own, else one on the line of the nearest node before it on its page that has one. MyST gives no `position` to the nodes a directive makes, such as a figure or an `{image}`, so a result about one of them points at the line before it. `undefined` for a node that is in no page's `mdast`. |
+| `positionOf(node)` | A `position` for a result about `node`: the node's own. A node a directive makes, such as a figure or an `{image}`, has none, so it gets the first line of the nearest node before it on its page that has one. `undefined` for a node in no page's `mdast`. |
 
 Each entry of `pages` holds:
 
@@ -140,39 +141,24 @@ Each entry of `pages` holds:
 |---|---|
 | `file` | The page's file, an absolute path. |
 | `frontmatter` | Its frontmatter as MyST reads it: the project's fields, such as `authors` and `keywords`, fill in what the page does not set, and a first `# Heading` becomes the `title`. |
-| `fileFrontmatter` | The frontmatter block at the top of its file, as written. It is `{}` when the page has none, and `null` when the block is not valid YAML or the page is not a `.md` file. List MyST's `frontmatter-is-yaml` rule to block a page whose block is not valid YAML. |
+| `fileFrontmatter` | The frontmatter block at the top of its file, as written, with the keys MyST does not know, and without the project's fields. It is `{}` when the page has none, and `null` when the block is not valid YAML or the page is not a `.md` file. List MyST's `frontmatter-is-yaml` rule to block a page whose block is not valid YAML. |
 | `mdast` | Its content, as a tree. |
 | `parts` | The content of each part its frontmatter sets, as a tree, by part name. |
 
-MyST moves a frontmatter `abstract:` into a part, and the same goes for the other parts, such as `data_availability:` and `acknowledgments:`. An `abstract:` in `myst.yml` is in `projectParts.abstract`, one in a page's frontmatter in that page's `parts.abstract`. `project.parts` and a page's `frontmatter.parts` hold only the location of each part, not its text. A part's `position` counts lines from the start of the part's own text, so it does not point at a line of the file. A `+++ {"part": "abstract"}` block stays in `mdast`, as a `block` node with `data.part` set to `abstract`.
+MyST moves a frontmatter `abstract:` into a part, and the same goes for the other parts, such as `data_availability:` and `acknowledgments:`. An `abstract:` in `myst.yml` is in `projectParts.abstract`, one in a page's frontmatter in that page's `parts.abstract`. `project.parts` and a page's `frontmatter.parts` hold each part's location. A part's `position` counts lines from the start of the part's own text, so it does not point at a line of the file. A `+++ {"part": "abstract"}` block stays in `mdast`, as a `block` node with `data.part` set to `abstract`.
 
 The tree follows [MyST's document structure](https://mystmd.org/spec), from the MyST version in the paper's oak, so a MyST upgrade may change the shape of a node. oak adds fields to `paper` and never renames or removes one. Each check gets its own copy of every field of `paper`, so a check that changes one leaves the next check unaffected.
 
 A check file can import Node's built-in modules, such as `node:path`, and other files in the journal repository. CI clones the journal repository without installing anything, so an import of a package fails there, even when it works on your machine.
 
-A check runs inside `oak validate`, with the paper's folder as its working directory. It can read the paper's files under `paper.root` and use `fetch`, within the [time limit](#changing-the-set). It also sees the environment `oak validate` runs in, which differs between your machine and the pull request checks, so read the repository from `paper.repo`, which is set in both.
+A check runs inside `oak validate`, with the paper's folder as its working directory. It can read the paper's files under `paper.root` and use `fetch`, within the [time limit](#check-time-limit). It also sees the environment `oak validate` runs in, which differs between your machine and the pull request checks, so read the repository from `paper.repo`, which is the paper's repository in both.
 
-(check-per-edition)=
 ### A check that depends on the edition
 
 A check file can read the paper's edition and choose how strict to be. This one asks every author for an ORCID, and makes a missing one a warning for the papers of the editions its `warn_in` option names, such as an edition already published:
 
-```js
-// Every author has an ORCID. In the editions `warn_in` names, a missing one is a warning.
-export default {
-  validate(paper, options) {
-    const edition = paper.project.options?.['oaktree-sapling']?.edition;
-    const optional = (options.warn_in ?? []).includes(edition);
-    const missing = (paper.project.authors ?? []).filter((author) => !author.orcid);
-    if (missing.length === 0) return { status: 'pass', message: 'Every author has an ORCID' };
-    return missing.map((author) => ({
-      status: 'fail',
-      message: `${author.name} does not have an ORCID`,
-      help: 'Add an orcid to the author in myst.yml',
-      optional,
-    }));
-  },
-};
+```{literalinclude} ../../test/journal-checks/orcid-by-edition.mjs
+:language: js
 ```
 
 List it in place of `authors-have-orcid`:
@@ -197,7 +183,7 @@ It runs the journal's checks, check files included, as they are on disk, uncommi
 
 ### When a check file breaks
 
-A check file that is missing, does not load, has no `validate`, throws, does not finish within two minutes, or returns a result oak cannot read shows one `error` row under its path, with the reason and a link to this section. It blocks the merge unless the entry is `optional: true`, and the other checks still run. A check file pushed to the journal repository runs on every open paper pull request's next run, so try it with `oak validate` first.
+A check file that is missing, does not load, has no `validate`, throws, [times out](#check-time-limit), or returns a result oak cannot read shows one `error` row under its path, with the reason and a link to this section. It blocks the merge unless the entry is `optional: true`, and the other checks still run. A check file pushed to the journal repository runs on every open paper pull request's next run, so try it with `oak validate` first.
 
 (validate-runs-paper-code)=
 ## `oak validate` runs the paper's code
