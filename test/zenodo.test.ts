@@ -5,7 +5,7 @@
  * including moving from sandbox to production.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { mkdtempSync, writeFileSync, mkdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, writeFileSync, mkdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -83,6 +83,11 @@ const fakeGit: GitContext = {
     return '42';
   },
   async fetchCommit() {},
+  async showFile(root, _commit, path) {
+    // The working tree stands in for the commit.
+    const file = join(root, path);
+    return existsSync(file) ? readFileSync(file, 'utf8') : null;
+  },
   async originRepo() {
     return null;
   },
@@ -1732,6 +1737,33 @@ describe('journal.zip', () => {
     expect(z.uploaded).toContain('journal.zip');
     expect(z.uploaded).toContain('myst.oak.yml');
     expect(z.provenance[0]).toMatchObject({ journal_repo: 'o/journal', journal_commit: COMMIT });
+  });
+
+  it('reads the edition at the journal commit the build used', async () => {
+    const root = builtPaper(STAMPED);
+    const mystPath = join(root, 'myst.yml');
+    writeFileSync(
+      mystPath,
+      readFileSync(mystPath, 'utf8') +
+        '  options:\n    oaktree-sapling:\n      version: v1.0.0\n      edition: e\n',
+    );
+    const journalRoot = mkdtempSync(join(tmpdir(), 'oak-journal-'));
+    mkdirSync(join(journalRoot, 'editions'));
+    writeFileSync(join(journalRoot, 'editions', 'e.yml'), 'project:\n  venue: Venue Now\n');
+    const { git } = recordingGit('o/journal');
+    const shown: string[] = [];
+    git.showFile = async (_root, commit, path) => {
+      shown.push(`${commit}:${path}`);
+      return 'project:\n  venue: Venue Then\n';
+    };
+    const z = zenodo();
+    const out = await publish(root, git, z.api, journalRoot);
+    expect(out.exitCode).toBe(0);
+    expect(shown).toEqual([`${COMMIT}:editions/e.yml`]);
+    const put = z.calls.find((c) => c.method === 'PUT' && !c.url.includes('/bucket/'))!;
+    const md = (put.opts as { json: { metadata: { description: string } } }).json.metadata;
+    expect(md.description).toContain('Venue Then');
+    expect(md.description).not.toContain('Venue Now');
   });
 
   it("matches the clone's repo case-insensitively, as GitHub does", async () => {

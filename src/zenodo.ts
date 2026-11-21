@@ -24,6 +24,7 @@ import { createHash } from 'node:crypto';
 import AdmZip from 'adm-zip';
 import { fillProjectFrontmatter, validateProjectFrontmatter, type Name } from 'myst-frontmatter';
 import {
+  parseYaml,
   readDoc,
   readJournalConfig,
   writeDoc,
@@ -44,7 +45,7 @@ import {
   EDITION_ID,
 } from './schema.js';
 import * as msg from './messages.js';
-import { annotate } from './messages.js';
+import { annotate, UserError } from './messages.js';
 import { err, ok, type Outcome } from './result.js';
 
 export const ZENODO_PROD = 'https://zenodo.org/api';
@@ -168,6 +169,8 @@ export interface GitContext {
   /** Makes <commit> available in <root>, fetching it from origin when the clone lacks it;
    *  throws when it cannot. */
   fetchCommit(repoRoot: string, commit: string): Promise<void>;
+  /** <path> as <commit> has it, or null when <commit> has no such file. */
+  showFile(repoRoot: string, commit: string, path: string): Promise<string | null>;
   /** owner/repo from <root>'s origin remote, or null. */
   originRepo(repoRoot: string): Promise<string | null>;
   /** The pull request that introduced <sha>, via `gh api`; null when there is none or
@@ -980,20 +983,27 @@ function assertEngineArchive(zipPath: string): void {
  * ------------------------------------------------------------------------ */
 
 /** Reads the journal's `zenodo:` block and `paper_links` from `<instanceRoot>/journal.yml`, and
- *  the `project` of the paper's `editions/<edition>.yml`. A new journal, or a build with no
- *  journal, gets empty defaults. A journal.yml oak cannot read, or a missing edition file,
- *  throws, so a deposit never goes out without the journal's settings. */
-export function loadJournalDeposit(
+ *  the `project` of the paper's `editions/<edition>.yml`, at `at.commit` when given. A new
+ *  journal, or a build with no journal, gets empty defaults. A journal.yml oak cannot read, or a
+ *  missing edition file, throws, so a deposit never goes out without the journal's settings. */
+export async function loadJournalDeposit(
   instanceRoot: string | null,
   project: any,
-): { zenodo: ZenodoConfig; paperLinks: PaperLink[]; editionProject?: unknown } {
+  at?: { git: GitContext; commit: string },
+): Promise<{ zenodo: ZenodoConfig; paperLinks: PaperLink[]; editionProject?: unknown }> {
   const journal = instanceRoot ? readJournalConfig(instanceRoot) : null;
   const edition = EDITION_ID.safeParse(project?.options?.['oaktree-sapling']?.edition);
   let editionProject: unknown;
   if (instanceRoot && edition.success) {
-    const path = join(instanceRoot, 'editions', `${edition.data}.yml`);
-    if (!existsSync(path)) throw new Error(msg.workflow.depositEditionMissing(edition.data, path));
-    editionProject = readDoc(path).toJS()?.project;
+    const rel = `editions/${edition.data}.yml`;
+    const path = at ? `${rel} at ${at.commit}` : join(instanceRoot, rel);
+    const text = at
+      ? await at.git.showFile(instanceRoot, at.commit, rel)
+      : existsSync(path)
+        ? readFileSync(path, 'utf8')
+        : null;
+    if (text === null) throw new UserError(msg.workflow.depositEditionMissing(edition.data, path));
+    editionProject = parseYaml(text, path).toJS()?.project;
   }
   return {
     zenodo: journal?.zenodo ?? ZenodoConfig.parse({}),
@@ -1070,7 +1080,7 @@ export async function cmdPrepare(input: PrepareInput): Promise<Outcome> {
     doc2.setIn(['project', 'date'], new Date().toISOString().slice(0, 10));
   }
 
-  const deposit = loadJournalDeposit(instanceRoot, project);
+  const deposit = await loadJournalDeposit(instanceRoot, project);
   const { community } = deposit.zenodo;
   if (community && !(await findCommunity(api, community))) {
     return err(2, msg.workflow.zenodoCommunityMissing(community));
@@ -1245,7 +1255,13 @@ async function fillDraft(input: UploadInput, engineZip: string): Promise<Outcome
   }
   process.stderr.write(`[upload] reusing existing draft ${dep.id}\n`);
 
-  const { zenodo, paperLinks, editionProject } = loadJournalDeposit(instanceRoot, project);
+  // The edition as the build read it, from the journal commit `journal.zip` holds.
+  const at = journal?.root ? { git, commit: journal.commit } : undefined;
+  const { zenodo, paperLinks, editionProject } = await loadJournalDeposit(
+    instanceRoot,
+    project,
+    at,
+  );
   // A review set here survives the legacy metadata update below.
   if (input.publish) {
     // Zenodo refuses to publish a draft that has a review, such as one an earlier run set.
@@ -1404,7 +1420,7 @@ export async function cmdStatus(input: StatusInput): Promise<Outcome> {
     paperId: project.id ? String(project.id) : undefined,
     githubUrl: project.github ?? '',
     siteUrl: input.siteUrl ?? defaultSiteUrl(repoFromGithubUrl(project.github ?? ''), instanceRoot),
-    ...loadJournalDeposit(instanceRoot, project),
+    ...(await loadJournalDeposit(instanceRoot, project)),
     abstractParas: abstractParagraphs(repoRoot),
     extraDescParas: zenodoExtraParagraphs(repoRoot),
   });
