@@ -70,7 +70,7 @@ When `journal.yml` sets `zenodo.community`, `oak release` asks Zenodo to have th
 A paper repository that is its own journal (`instance_repo: "."` in `pins.yml`)[^own-journal] gets no `journal.zip`, because its journal files are in `source.zip` at the same commit; the provenance names the paper's repository and commit as the journal's. A paper built with `--no-instance` has no journal to archive.
 
 [^own-journal]: Planned, in development.
-[^legacy-communities]: Zenodo's legacy deposit API, which oak uses for the rest of the record, has a `communities` field, which takes effect only when that API publishes the record.
+[^legacy-communities]: oak leaves the `communities` field of Zenodo's legacy deposit API, which it uses for the rest of the record, unset.
 
 (r114)=
 

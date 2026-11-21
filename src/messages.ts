@@ -1220,6 +1220,9 @@ export const workflow = {
   depositReviewSubmitted:
     'the draft is submitted to a Zenodo community for review. Cancel that request on Zenodo, ' +
     'then run --publish-without-review again.',
+  depositLicenceMissing:
+    'the paper has no license, so it cannot be deposited as open access. Set one, such as ' +
+    'CC-BY-4.0, in myst.yml or the edition.',
   depositLicenceUnknown: (name: string | undefined): string =>
     `the paper's license "${name ?? ''}" is not a licence Zenodo knows. Set it to an SPDX id, ` +
     `such as CC-BY-4.0, in myst.yml or the edition.`,

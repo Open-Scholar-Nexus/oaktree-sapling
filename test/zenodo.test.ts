@@ -258,6 +258,7 @@ describe('buildMetadata', () => {
     const md = buildMetadata({
       project: {
         title: 'T',
+        license: 'CC-BY-4.0',
         affiliations: [{ id: 'brown', name: 'Brown University' }],
         authors: [
           { name: 'Ada', affiliations: ['Inst A', { name: 'Inst B' }, 'brown'] },
@@ -283,6 +284,7 @@ describe('buildMetadata', () => {
     const md = buildMetadata({
       project: {
         title: 'T',
+        license: 'CC-BY-4.0',
         authors: [
           'Ada Lovelace',
           { name: { given: 'Ada', family: 'Lovelace' } },
@@ -333,8 +335,11 @@ describe('buildMetadata', () => {
       expect(md.description).toContain('Edition Funder');
     });
 
-    it('refuses a licence Zenodo does not know, naming it', () => {
+    it('refuses a licence Zenodo does not know, naming it, and a paper with no licence', () => {
       expect(() => meta({ license: 'My custom licence' })).toThrow('"My custom licence"');
+      expect(() =>
+        buildMetadata({ project: { title: 'T' }, githubUrl: 'https://github.com/o/r', zenodo: {} }),
+      ).toThrow('has no license');
     });
 
     it("keeps what the paper's myst.yml sets, and adds its keywords to the edition's", () => {
@@ -355,7 +360,7 @@ describe('buildMetadata', () => {
     };
     const withOptions = (options: Record<string, unknown>, links = [yt]) =>
       buildMetadata({
-        project: { title: 'T', options },
+        project: { title: 'T', license: 'CC-BY-4.0', options },
         githubUrl: 'https://github.com/o/r',
         zenodo: {},
         paperLinks: links,
@@ -757,6 +762,7 @@ function withBuild(mystPath: string, abstract = 'The abstract.'): void {
 const BARE_MYST = `project:
   id: fixture-2026-sample-paper
   title: A Paper
+  license: CC-BY-4.0
   authors:
   - name: Ada
 `;
@@ -783,7 +789,6 @@ describe('cmdPrepare', () => {
     expect(out.exitCode).toBe(0);
     const post = calls.find((c) => c.method === 'POST')!;
     const md = (post.opts as { json: { metadata: Record<string, unknown> } }).json.metadata;
-    expect(md.license).toBe('cc-by-sa-4.0');
     expect(md.description).toContain('Edition Venue');
 
     await expect(

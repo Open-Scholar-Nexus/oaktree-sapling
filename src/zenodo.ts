@@ -573,8 +573,9 @@ export function buildMetadata(input: MetadataInput): Record<string, unknown> {
 
   const keywords = fm.keywords ?? [];
   const licence = fm.license?.content;
-  if (licence && !licence.id) throw new UserError(msg.workflow.depositLicenceUnknown(licence.name));
-  const licenseId = (licence?.id ?? 'cc-by-4.0').toLowerCase();
+  if (!licence) throw new UserError(msg.workflow.depositLicenceMissing);
+  if (!licence.id) throw new UserError(msg.workflow.depositLicenceUnknown(licence.name));
+  const licenseId = licence.id.toLowerCase();
 
   const related: Array<Record<string, string>> = [
     { identifier: githubUrl, relation: 'isVersionOf', scheme: 'url' },
