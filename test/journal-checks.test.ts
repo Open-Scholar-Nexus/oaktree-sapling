@@ -291,3 +291,27 @@ describe('positionOf', () => {
     ]);
   });
 });
+
+describe('the edition-aware example in the docs', () => {
+  const entry = { id: './orcid-by-edition.mjs', warn_in: ['2025'] };
+  function paperIn(edition: string): Paper {
+    const paper = handBuiltPaper();
+    paper.project = {
+      options: { 'oaktree-sapling': { version: 'v0.4.0', edition } },
+      authors: [{ name: 'Ada', orcid: '0000-0002-1825-0097' }, { name: 'Bo' }],
+    };
+    return paper;
+  }
+
+  it('warns for a paper in an edition warn_in names', async () => {
+    expect(await run([entry], paperIn('2025'))).toMatchObject([
+      { status: 'fail', message: 'Bo does not have an ORCID', optional: true },
+    ]);
+  });
+
+  it('blocks for a paper in another edition', async () => {
+    const out = await run([entry], paperIn('2026'));
+    expect(out).toMatchObject([{ status: 'fail', message: 'Bo does not have an ORCID' }]);
+    expect(toCheckRun(out).conclusion).toBe('failure');
+  });
+});
