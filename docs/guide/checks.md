@@ -56,9 +56,6 @@ Any of MyST's own [build rules](https://github.com/jupyter-book/mystmd/blob/main
 
 A check fails, with a link to this section, when its id is neither a check above nor the path of a [check file](#journal-checks), or when an option has the wrong type, such as `max: lots`. An option the check does not have, such as a misspelled `maxx`, adds a warning, and the check runs without it.
 
-(check-time-limit)=
-oak waits up to two minutes for each check. A check still running then, such as `links-resolve` waiting on a server that does not answer, shows as an `error` row, and oak moves on to the next check.
-
 (journal-checks)=
 ## Custom checks
 
@@ -150,6 +147,9 @@ MyST moves a frontmatter `abstract:` into a part, and the same goes for the othe
 The tree follows [MyST's document structure](https://mystmd.org/spec), from the MyST version in the paper's oak, so a MyST upgrade may change the shape of a node. oak adds fields to `paper` and never renames or removes one. Each check gets its own copy of `paper`'s data, so a check that changes it leaves the next check unaffected.
 
 A check file can import Node's built-in modules, such as `node:path`, and other files in the journal repository. CI clones the journal repository without installing anything, so an import of a package fails there, even when it works on your machine.
+
+(check-time-limit)=
+oak waits up to two minutes for each check file. A check file still running then, such as one whose `fetch` waits on a server that does not answer, shows as an `error` row, and oak moves on to the next check.
 
 A check runs inside `oak validate`, with the paper's folder as its working directory. It can read the paper's files under `paper.root` and use `fetch`, within the [time limit](#check-time-limit). It also sees the environment `oak validate` runs in, which differs between your machine and the pull request checks, so read the repository from `paper.repo`.
 

@@ -154,7 +154,7 @@ describe('a paper oak cannot read', () => {
   });
 });
 
-describe('a check that does not finish in time', () => {
+describe('a check file that does not finish in time', () => {
   it('is an error row, keeps its optional, and the next check still runs', async () => {
     const out = await runChecks(
       session,

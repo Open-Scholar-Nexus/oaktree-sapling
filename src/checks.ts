@@ -50,7 +50,7 @@ export interface JournalCheck {
   [k: string]: unknown;
 }
 
-/** How long one check may take before oak reports it as an error and runs the next. */
+/** How long one check file may take before oak reports it as an error and runs the next. */
 const CHECK_TIMEOUT_MS = 120_000;
 
 /** What {@link runChecks} needs besides the session and the checks. */
@@ -84,10 +84,11 @@ async function withinTime<T>(work: () => Promise<T>, ms: number): Promise<T> {
  * Runs the journal's checks against a processed myst session (`MystEdge.withProjectSession`).
  * Each result gets the check's id, and `optional` when the journal set it. A catalog check's
  * options get Curvenote's defaults and types, as Curvenote's own runner gives them. An unknown
- * id, an option Curvenote rejects, a check that throws or takes longer than the time limit, and
- * a broken check file each become one error result, so a misconfigured journal shows up in the
- * report and the remaining checks still run. An option Curvenote ignores adds an optional error
- * row, a warning. A `./` id runs a check file from `journalRoot` on `readPaper()`'s data.
+ * id, an option Curvenote rejects, a check that throws, a check file that takes longer than the
+ * time limit, and a broken check file each become one error result, so a misconfigured journal
+ * shows up in the report and the remaining checks still run. An option Curvenote ignores adds an
+ * optional error row, a warning. A `./` id runs a check file from `journalRoot` on
+ * `readPaper()`'s data.
  */
 export async function runChecks(
   session: ISession,
@@ -102,9 +103,10 @@ export async function runChecks(
     const flag = optional ? { optional: true } : {};
     let results: CheckResult[];
     try {
-      results = await withinTime(async () => {
+      results = await (async () => {
         if (isCheckFile(check.id)) {
-          return runCheckFile(journalRoot, check.id, check, () => (paper ??= readPaper()));
+          const read = () => (paper ??= readPaper());
+          return withinTime(() => runCheckFile(journalRoot, check.id, check, read), timeoutMs);
         }
         const { catalog, validateCheck } = await (curvenote ??= curvenoteChecks());
         const impl = catalog.find((c) => c.id === check.id);
@@ -129,7 +131,7 @@ export async function runChecks(
           });
         }
         return [await impl.validate(session, options)].flat();
-      }, timeoutMs);
+      })();
     } catch (e) {
       const message = e instanceof UserError ? e.message : messages.pr.checkThrew(firstLine(e));
       out.push({ id: check.id, status: CheckStatus.error, message, ...flag });
