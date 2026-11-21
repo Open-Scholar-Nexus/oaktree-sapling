@@ -468,7 +468,7 @@ describe.skipIf(bundleState() === 'absent')('oak validate, what a check file rea
   }, 60_000);
 
   it('places a figure, which has no position of its own, on the line before it', () => {
-    const line = index.split('\n').findIndex((l) => l.startsWith('One trivial section')) + 1;
+    const line = index.split('\n').findIndex((l) => l.startsWith('One short section')) + 1;
     expect(seen().figure).toEqual({ own: false, line });
   }, 60_000);
 
