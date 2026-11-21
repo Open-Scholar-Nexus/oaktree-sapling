@@ -1255,7 +1255,7 @@ async function fillDraft(input: UploadInput, engineZip: string): Promise<Outcome
   }
   process.stderr.write(`[upload] reusing existing draft ${dep.id}\n`);
 
-  // The edition as the build read it, from the journal commit `journal.zip` holds.
+  // The journal commit the build used.
   const at = journal?.root ? { git, commit: journal.commit } : undefined;
   const { zenodo, paperLinks, editionProject } = await loadJournalDeposit(
     instanceRoot,
