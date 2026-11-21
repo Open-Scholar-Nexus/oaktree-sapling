@@ -124,3 +124,23 @@
     opacity: 1;
   }
 }
+
+/* Landing page (index.md). The hero logo is contained, so it keeps its shape beside the text. */
+.landing-hero .myst-landing-split-img-image img {
+  object-fit: contain;
+  padding: 3rem;
+}
+/* Each landing block pads 5-7rem above and below; trimmed so the hero, pillars and docs cards read as one page. */
+.landing-hero .myst-landing-split-img-content-wrapper {
+  padding-bottom: 2rem;
+}
+.landing-pillars .myst-landing-centered-inner {
+  padding-top: 2rem;
+  padding-bottom: 2rem;
+}
+.landing-docs .myst-landing-justified {
+  padding-top: 2rem;
+}
+.landing-pillars .myst-card p {
+  margin-block: 0.5rem;
+}
