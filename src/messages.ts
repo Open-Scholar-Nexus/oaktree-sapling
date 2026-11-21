@@ -785,6 +785,11 @@ export const build = {
 export const schema = {
   editionId: 'must be a plain name (letters, digits, . _ -)',
   engineVersion: 'must be a release tag like v1.2.3 or v1.2.3-dev.4',
+  paperLinkOption:
+    'must be a myst.yml option name: lowercase letters, digits and _, starting with a letter',
+  paperLinkRelation:
+    'must be a DataCite relation as Zenodo spells it, such as isSupplementedBy. See ' +
+    docsUrl(DOCS.fileJournalYml),
 };
 
 export const start = {
@@ -1181,13 +1186,45 @@ export const workflow = {
     `version starts with New version on its Zenodo record.`,
   prepareNoDowngrade: (doi: string): string =>
     `project.doi is the production DOI ${doi}; refusing to replace it with a sandbox one.`,
-  prepareDepositPublished: (id: number | string): string =>
-    `Zenodo already has a published deposit for this paper (${id}), so no new DOI was ` +
-    `reserved. Copy its concept DOI into project.doi in myst.yml.`,
-  /** An author's ORCID left out of the deposit (zenodo.ts `buildMetadata`). */
-  orcidSkipped: (name: string, orcid: string): string =>
-    `the ORCID of ${name} (${orcid}) is not a valid ORCID or is the template's ` +
-    `placeholder, so the deposit leaves it out. Fix it in myst.yml.`,
+  prepareDepositPublished: (conceptDoi: string): string =>
+    `Zenodo already has a published deposit for this paper, with the concept DOI ` +
+    `${conceptDoi}, so no new DOI was reserved. Copy that DOI into project.doi in myst.yml.`,
+  /** The template's placeholder ORCID, left out of the deposit (zenodo.ts `buildMetadata`). */
+  orcidPlaceholder: (name: string, orcid: string): string =>
+    `the ORCID of ${name} (${orcid}) is the template's placeholder, so the deposit leaves it ` +
+    `out. Fix it in myst.yml.`,
+  /** `why` is mystmd's own message, which names the author. */
+  orcidInvalid: (why: string): string =>
+    `${why}. The deposit leaves this ORCID out. Fix it in myst.yml.`,
+  /** A journal.yml `paper_links` entry whose paper option is not a web address. */
+  paperLinkSkipped: (option: string, value: unknown): string => {
+    const shown = typeof value === 'string' ? value : (JSON.stringify(value) ?? String(value));
+    return (
+      `project.options.${option} in myst.yml is not an http(s) address ` +
+      `(${JSON.stringify(shown.slice(0, 80))}), so the deposit description leaves out ` +
+      `that link. Fix it in myst.yml.`
+    );
+  },
+  depositEditionMissing: (edition: string, path: string): string =>
+    `myst.yml names the edition "${edition}", and the journal has no ${path}. Fix the edition ` +
+    `in myst.yml.`,
+  zenodoCommunityMissing: (slug: string): string =>
+    `Zenodo has no community "${slug}", which journal.yml names as zenodo.community. Fix the ` +
+    `name there; it is the last part of the community's address on Zenodo.`,
+  zenodoCommunityLaterVersion: (slug: string): string =>
+    `the record is not in the Zenodo community "${slug}", and Zenodo reviews a first version ` +
+    `only. An editor can submit the published record to it on Zenodo.`,
+  zenodoCommunitySkipped: (slug: string): string =>
+    `--publish-without-review: the Zenodo community "${slug}" does not review this version. ` +
+    `An editor can submit the record to it on Zenodo.`,
+  depositReviewSubmitted:
+    'the draft is submitted to a Zenodo community for review. Cancel that request on Zenodo, ' +
+    'then run --publish-without-review again.',
+  depositLicenceMissing:
+    'the paper has no license. Set one, such as CC-BY-4.0, in myst.yml or the edition.',
+  depositLicenceUnknown: (name: string | undefined): string =>
+    `the paper's license "${name ?? ''}" is not a licence Zenodo knows. Set it to an SPDX id, ` +
+    `such as CC-BY-4.0, in myst.yml or the edition.`,
 
   // oak release status, in its --json result
   statusNoDoi: 'no DOI in myst.yml yet: run oak release reserve-doi and merge its pull request',
@@ -1614,8 +1651,6 @@ export const conformance = {
 
 /** The fixed labels in a Zenodo record's description (zenodo.ts `buildMetadata`). */
 export const zenodoRecord = {
-  recording: 'Video recording',
-  watchRecording: 'Watch on YouTube',
   website: 'Project Website',
   repository: 'Repository',
   venue: 'Venue',

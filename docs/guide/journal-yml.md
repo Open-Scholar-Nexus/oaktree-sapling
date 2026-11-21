@@ -42,17 +42,52 @@ typst_template: ./typst-template
 
 A paper can set its own template in its `myst.yml` (`exports[].template`). It takes precedence over the journal's, and the Journal checks flag it for the editors.
 
-## Zenodo community and description
+(zenodo-community)=
+## Zenodo community
 
-Every deposit can join a [Zenodo community](https://help.zenodo.org/docs/communities/) and carry a paragraph about the journal after the abstract in its description:
+A journal's papers can join a [Zenodo community](https://help.zenodo.org/docs/communities/):
 
 ```yaml
 zenodo:
   community: my-journal
+```
+
+`community` is the community's identifier, the last part of its address on Zenodo. An editor submits a paper's first version to the community ([publish on Zenodo](publish.md#publish-on-zenodo)). Once the community accepts it, later versions stay in the community.
+
+(zenodo-description)=
+## Zenodo description
+
+A deposit's description is the paper's abstract, followed by links to the paper's website and repository, and its venue and funding when its `myst.yml` or its [edition](../reference/files.md#file-editions) sets them. The journal can add a paragraph of its own after the abstract:
+
+```yaml
+zenodo:
   description_blurb: Published in My Journal.
 ```
 
-`community` is the community's identifier, the last part of its address on Zenodo. Both apply from the next [published version](publish.md).
+Each [paper link](#paper-links) a paper sets is added to the description, with the label from `journal.yml` and the address from the paper's `myst.yml`.
+
+(paper-links)=
+## Paper links
+
+A journal can name links that each paper sets for itself, such as a recording of a talk:
+
+```yaml
+paper_links:
+  - option: youtube
+    label: Seminar recording
+    text: Watch on YouTube
+    relation: isSupplementedBy
+```
+
+Each entry reads the web address a paper sets as `project.options.<option>` in its `myst.yml`, and adds a line `<label>: <text>` to the Zenodo description, with `<text>` linking to that address. With this example, a paper that sets
+
+```yaml
+project:
+  options:
+    youtube: https://youtu.be/<video>
+```
+
+has the line **Seminar recording: Watch on YouTube** in its Zenodo description. `relation` is optional: it also lists the address among the Zenodo record's related works, with that relation (the [`paper_links` reference](../reference/files.md#file-journal-yml) lists the values). If a paper does not set the option, its description does not contain the line. If the value is not an `http` or `https` address, the description does not contain it either, and the deposit prints a warning. A journal's PDF template can read the same option to show the link in the PDF.
 
 (live-previews)=
 ## Live previews

@@ -44,6 +44,7 @@ project:
         - file: reference/files.md
         - file: reference/cli.md
         - file: reference/secrets.md
+        - file: reference/zenodo-authors.md
     - title: Design
       children:
         - file: design/index.md

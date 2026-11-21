@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parse } from 'yaml';
 import {
@@ -19,6 +21,7 @@ import {
   toJsonSchemas,
   parseZenodoDoi,
 } from '../src/schema.js';
+import { readJournalConfig } from '../src/yaml-io.js';
 
 const read = (rel: string) =>
   parse(readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8'));
@@ -114,10 +117,54 @@ describe('fixtures parse against the schemas', () => {
   });
 });
 
+describe('paper_links in journal.yml', () => {
+  const journalWithLinks = (links: string): string => {
+    const root = mkdtempSync(join(tmpdir(), 'oak-journal-'));
+    writeFileSync(join(root, 'journal.yml'), `name: J\npaper_links:\n${links}`);
+    return root;
+  };
+
+  it('accepts an entry with or without a relation', () => {
+    const root = journalWithLinks(
+      '    - { option: youtube, label: Seminar recording, text: Watch on YouTube, relation: isSupplementedBy }\n' +
+        '    - { option: slides_2, label: Slides, text: Open the slides }\n',
+    );
+    expect(readJournalConfig(root)?.paper_links).toEqual([
+      {
+        option: 'youtube',
+        label: 'Seminar recording',
+        text: 'Watch on YouTube',
+        relation: 'isSupplementedBy',
+      },
+      { option: 'slides_2', label: 'Slides', text: 'Open the slides' },
+    ]);
+  });
+
+  it.each([
+    ['a bad option name', '{ option: You-Tube, label: L, text: T }', 'paper_links.0.option'],
+    [
+      'an unknown relation',
+      '{ option: youtube, label: L, text: T, relation: isFunOf }',
+      'relation',
+    ],
+    ['an empty label', "{ option: youtube, label: '', text: T }", 'paper_links.0.label'],
+  ])('refuses %s when journal.yml is read, naming the file', (_, entry, says) => {
+    const root = journalWithLinks(`    - ${entry}\n`);
+    expect(() => readJournalConfig(root)).toThrow(join(root, 'journal.yml'));
+    expect(() => readJournalConfig(root)).toThrow(says);
+  });
+});
+
 describe('JournalConfig additive-only', () => {
   it('ignores an unknown top-level key instead of rejecting', () => {
     const j = JournalConfig.parse({ name: 'X', future_field: 42 });
     expect(j.name).toBe('X');
+  });
+
+  it('accepts a paper link with a key from a newer oak', () => {
+    const links = [{ option: 'youtube', label: 'L', text: 'T', future_field: 42 }];
+    const j = JournalConfig.parse({ name: 'X', paper_links: links });
+    expect(j.paper_links[0]!.option).toBe('youtube');
   });
 });
 

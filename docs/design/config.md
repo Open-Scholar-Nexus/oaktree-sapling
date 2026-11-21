@@ -16,7 +16,9 @@ project:
   id: my-paper
   title: My paper
   authors:
-    - name: Ada Lovelace
+    - name:
+        given: Ada
+        family: Lovelace
   options:
     oaktree-sapling:
       version: v0.4.0

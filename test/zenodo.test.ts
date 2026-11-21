@@ -5,7 +5,7 @@
  * including moving from sandbox to production.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { mkdtempSync, writeFileSync, mkdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, writeFileSync, mkdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -57,7 +57,10 @@ function fakeTransport(handler: (r: Recorded) => { status?: number; json: unknow
     async request(method, url, opts): Promise<TransportResponse> {
       const rec = { method, url, opts };
       calls.push(rec);
-      const { status = 200, json } = handler(rec);
+      let { status = 200, json } = handler(rec);
+      // A draft has no files unless the handler lists some.
+      if (method === 'GET' && /\/depositions\/\d+\/files$/.test(url) && !Array.isArray(json))
+        json = [];
       const text = JSON.stringify(json);
       return { ok: status >= 200 && status < 300, status, text, json: () => json };
     },
@@ -80,10 +83,28 @@ const fakeGit: GitContext = {
     return '42';
   },
   async fetchCommit() {},
+  async showFile(root, _commit, path) {
+    // The working tree stands in for the commit.
+    const file = join(root, path);
+    return existsSync(file) ? readFileSync(file, 'utf8') : null;
+  },
   async originRepo() {
     return null;
   },
 };
+
+/** Collects what is written to stderr until the test ends, one entry per write. */
+function captureStderr(): () => string[] {
+  const lines: string[] = [];
+  vi.spyOn(process.stderr, 'write').mockImplementation((c) => {
+    lines.push(String(c));
+    return true;
+  });
+  return () => lines;
+}
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 const dep = (over: Partial<Deposition> = {}): Deposition => ({
   id: 1,
@@ -188,14 +209,13 @@ describe('buildMetadata', () => {
     ],
   };
 
-  it('leaves out community and blurb for a new journal, and keeps the GitHub and id related identifiers', () => {
+  it('leaves out the blurb for a new journal, and keeps the GitHub and id related identifiers', () => {
     const md = buildMetadata({
       project,
       paperId: project.id,
       githubUrl: 'https://github.com/o/r',
       zenodo: {},
     });
-    expect(md.communities).toBeUndefined();
     // Without a journal blurb the description is only the repo and site lines.
     expect(md.description).not.toContain('Program');
     const related = md.related_identifiers as Array<Record<string, string>>;
@@ -203,22 +223,228 @@ describe('buildMetadata', () => {
     expect(related.map((r) => r.identifier)).toContain('https://github.com/o/r');
   });
 
-  it("adds the journal's blurb and community when journal.yml sets them", () => {
+  it("adds the journal's blurb and the code repository, and no communities field", () => {
     const md = buildMetadata({
       project,
       paperId: project.id,
       githubUrl: 'https://github.com/o/r',
       zenodo: { community: 'fixture-community', description_blurb: 'Made by the Fixture Journal.' },
     });
-    expect(md.communities).toEqual([{ identifier: 'fixture-community' }]);
+    expect(md.communities).toBeUndefined();
+    expect(JSON.stringify(md)).not.toContain('fixture-community');
     expect(md.description).toContain('Made by the Fixture Journal.');
+    expect(md.custom).toEqual({ 'code:codeRepository': 'https://github.com/o/r' });
   });
 
-  it('drops placeholder or invalid ORCIDs and keeps valid ones', () => {
-    const md = buildMetadata({ project, githubUrl: 'https://github.com/o/r', zenodo: {} });
-    const creators = md.creators as Array<Record<string, string>>;
+  it('drops placeholder or malformed ORCIDs with a warning, and keeps valid ones', () => {
+    const warnings = captureStderr();
+    const authors = [...project.authors, { name: 'Bad Orcid', orcid: '1234' }];
+    const md = buildMetadata({
+      project: { ...project, authors },
+      githubUrl: 'https://github.com/o/r',
+      zenodo: {},
+    });
+    const creators = md.creators as Array<Record<string, unknown>>;
     expect(creators[0]!.orcid).toBe('0000-0002-1825-0097');
     expect(creators[1]!.orcid).toBeUndefined();
+    expect(creators[2]!.orcid).toBeUndefined();
+    expect(warnings()).toEqual([
+      expect.stringMatching(/ORCID "1234" is not valid.*authors\.2.*leaves this ORCID out/),
+      expect.stringMatching(/Placeholder \(0000-0000-0000-0000\) is the template's placeholder/),
+    ]);
+  });
+
+  it('sends every affiliation as a list, from a string, an object or a project affiliation id', () => {
+    const md = buildMetadata({
+      project: {
+        title: 'T',
+        license: 'CC-BY-4.0',
+        affiliations: [{ id: 'brown', name: 'Brown University' }],
+        authors: [
+          { name: 'Ada', affiliations: ['Inst A', { name: 'Inst B' }, 'brown'] },
+          { name: 'Bo', affiliation: 'Solo Inst' },
+          { name: 'Cy' },
+        ],
+      },
+      githubUrl: 'https://github.com/o/r',
+      zenodo: {},
+    });
+    const creators = md.creators as Array<Record<string, unknown>>;
+    expect(creators[0]!.affiliations).toEqual([
+      { name: 'Inst A' },
+      { name: 'Inst B' },
+      { name: 'Brown University' },
+    ]);
+    expect(creators[1]!.affiliations).toEqual([{ name: 'Solo Inst' }]);
+    expect(creators[2]!.affiliations).toBeUndefined();
+    expect(creators.some((c) => 'affiliation' in c)).toBe(false);
+  });
+
+  it('writes each name as "Family, Given", split as MyST parses it', () => {
+    const md = buildMetadata({
+      project: {
+        title: 'T',
+        license: 'CC-BY-4.0',
+        authors: [
+          'Ada Lovelace',
+          { name: { given: 'Ada', family: 'Lovelace' } },
+          { name: { first: 'Vincent', particle: 'van', surname: 'Gogh' } },
+          { name: { forename: 'Ludwig', 'dropping-particle': 'van', last: 'Beethoven' } },
+          { name: { given: 'Martin Luther', family: 'King', suffix: 'Jr.' } },
+          { name: 'Josiah Carberry' },
+          { name: 'Plato' },
+          { name: { given: 'Ada', family: 'Lovelace, Countess' } },
+        ],
+      },
+      githubUrl: 'https://github.com/o/r',
+      zenodo: {},
+    });
+    expect((md.creators as Array<{ name: string }>).map((c) => c.name)).toEqual([
+      'Lovelace, Ada',
+      'Lovelace, Ada',
+      'van Gogh, Vincent',
+      'Beethoven, Ludwig van',
+      'King Jr., Martin Luther',
+      'Carberry, Josiah',
+      'Plato',
+      // Two commas: Zenodo keeps the whole name as the family name.
+      'Lovelace, Countess, Ada',
+    ]);
+  });
+
+  describe("the paper's edition", () => {
+    const edition = {
+      venue: 'Edition Venue 2025',
+      license: 'CC-BY-SA-4.0',
+      funding: 'Edition Funder',
+      keywords: ['edition'],
+    };
+    const meta = (project: Record<string, unknown>) =>
+      buildMetadata({
+        project: { title: 'T', ...project },
+        editionProject: edition,
+        githubUrl: 'https://github.com/o/r',
+        zenodo: {},
+      });
+
+    it("fills the venue, licence, funding and keywords the paper's myst.yml leaves unset", () => {
+      const md = meta({});
+      expect(md.license).toBe('cc-by-sa-4.0');
+      expect(md.keywords).toEqual(['edition']);
+      expect(md.description).toContain('Edition Venue 2025');
+      expect(md.description).toContain('Edition Funder');
+    });
+
+    it('refuses a licence Zenodo does not know, naming it, and a paper with no licence', () => {
+      expect(() => meta({ license: 'My custom licence' })).toThrow('"My custom licence"');
+      expect(() =>
+        buildMetadata({ project: { title: 'T' }, githubUrl: 'https://github.com/o/r', zenodo: {} }),
+      ).toThrow('has no license');
+    });
+
+    it("keeps what the paper's myst.yml sets, and adds its keywords to the edition's", () => {
+      const md = meta({ license: 'CC-BY-4.0', venue: 'Paper Venue', keywords: ['paper'] });
+      expect(md.license).toBe('cc-by-4.0');
+      expect(md.keywords).toEqual(['edition', 'paper']);
+      expect(md.description).toContain('Paper Venue');
+      expect(md.description).not.toContain('Edition Venue');
+    });
+  });
+
+  describe("the journal's paper links", () => {
+    const yt = {
+      option: 'youtube',
+      label: 'Seminar recording',
+      text: 'Watch on YouTube',
+      relation: 'isSupplementedBy' as const,
+    };
+    const withOptions = (options: Record<string, unknown>, links = [yt]) =>
+      buildMetadata({
+        project: { title: 'T', license: 'CC-BY-4.0', options },
+        githubUrl: 'https://github.com/o/r',
+        zenodo: {},
+        paperLinks: links,
+      });
+
+    it('adds a line and a related identifier from the paper option', () => {
+      const md = withOptions({ youtube: 'https://youtu.be/x?a=1&b=2' });
+      expect(md.description).toContain(
+        '<p>Seminar recording: <a href="https://youtu.be/x?a=1&amp;b=2">Watch on YouTube</a></p>',
+      );
+      expect(md.related_identifiers).toContainEqual({
+        identifier: 'https://youtu.be/x?a=1&b=2',
+        relation: 'isSupplementedBy',
+        scheme: 'url',
+      });
+    });
+
+    it('sends the address as the URL parser normalizes it', () => {
+      const md = withOptions({ youtube: ' https://YouTu.be/x\ty ' });
+      expect(md.description).toContain('<a href="https://youtu.be/xy">');
+      const related = md.related_identifiers as Array<Record<string, string>>;
+      expect(related.map((r) => r.identifier)).toContain('https://youtu.be/xy');
+    });
+
+    it('adds only the line when the link has no relation', () => {
+      const { relation: _, ...plain } = yt;
+      const md = withOptions({ youtube: 'https://youtu.be/x' }, [plain]);
+      expect(md.description).toContain('Watch on YouTube');
+      const related = md.related_identifiers as Array<Record<string, string>>;
+      expect(related.map((r) => r.identifier)).not.toContain('https://youtu.be/x');
+    });
+
+    it('skips a missing option quietly, and a value that is not an http(s) address with a warning', () => {
+      for (const [options, warned] of [
+        [{}, false],
+        [{ youtube: 'javascript:alert(1)' }, true],
+        [{ youtube: 'not a url' }, true],
+      ] as const) {
+        const warnings = captureStderr();
+        const md = withOptions(options);
+        expect(md.description).not.toContain('Seminar recording');
+        expect(JSON.stringify(md.related_identifiers)).not.toContain('isSupplementedBy');
+        expect(warnings()).toEqual(
+          warned ? [expect.stringContaining('project.options.youtube')] : [],
+        );
+      }
+    });
+  });
+
+  it('reads the venue as a string or an object, skips one with no title, and escapes it', () => {
+    const description = (venue: unknown, githubUrl = 'g') =>
+      String(buildMetadata({ project: { ...project, venue }, githubUrl, zenodo: {} }).description);
+    expect(description('My <b>Venue</b>')).toContain('<p>Venue: My &lt;b&gt;Venue&lt;/b&gt;</p>');
+    expect(description({ title: 'Other', short_title: 'O' })).toContain('<p>Venue: Other</p>');
+    expect(description({ short_title: 'O' })).not.toContain('Venue:');
+    expect(description(undefined, 'https://github.com/o/r"x')).toContain(
+      'href="https://github.com/o/r&quot;x"',
+    );
+  });
+
+  it('writes funding as its statement, else each award as its sources, id and name', () => {
+    const md = buildMetadata({
+      project: {
+        ...project,
+        affiliations: [{ id: 'nsf', name: 'National Science Foundation' }],
+        funding: [
+          { statement: 'Funded by the <Fixture> Trust.', awards: [{ id: 'ignored' }] },
+          {
+            awards: [
+              { id: 'G-1', name: 'Big grant', sources: ['nsf'], recipients: ['Ada'] },
+              { name: 'Travel award' },
+            ],
+          },
+        ],
+      },
+      githubUrl: 'https://github.com/o/r',
+      zenodo: {},
+    });
+    const funding = String(md.description).match(/<p>Funding: [^<]*<\/p>/g);
+    expect(funding).toEqual([
+      '<p>Funding: Funded by the &lt;Fixture&gt; Trust.</p>',
+      '<p>Funding: National Science Foundation, G-1, Big grant</p>',
+      '<p>Funding: Travel award</p>',
+    ]);
   });
 });
 
@@ -536,11 +762,55 @@ function withBuild(mystPath: string, abstract = 'The abstract.'): void {
 const BARE_MYST = `project:
   id: fixture-2026-sample-paper
   title: A Paper
+  license: CC-BY-4.0
   authors:
   - name: Ada
 `;
 
 describe('cmdPrepare', () => {
+  it("sends what the paper's edition file sets, and refuses an edition the journal lacks", async () => {
+    const journal = mkdtempSync(join(tmpdir(), 'oak-journal-'));
+    writeFileSync(join(journal, 'journal.yml'), 'name: J\n');
+    mkdirSync(join(journal, 'editions'));
+    writeFileSync(
+      join(journal, 'editions', 'e.yml'),
+      'version: 1\nproject:\n  venue: Edition Venue\n  license: CC-BY-SA-4.0\n',
+    );
+    const paper = (edition: string) =>
+      paperRepo(
+        BARE_MYST +
+          `  options:\n    oaktree-sapling:\n      version: v1.0.0\n      edition: ${edition}\n`,
+      );
+    const { transport, calls } = fakeTransport(({ method }) =>
+      method === 'POST' ? { json: dep({ id: 5, conceptrecid: 5 }) } : { json: [] },
+    );
+    const api = new ZenodoApi(transport, true, 't');
+    const out = await cmdPrepare({ mystPath: paper('e'), repo: 'o/r', api, instanceRoot: journal });
+    expect(out.exitCode).toBe(0);
+    const post = calls.find((c) => c.method === 'POST')!;
+    const md = (post.opts as { json: { metadata: Record<string, unknown> } }).json.metadata;
+    expect(md.description).toContain('Edition Venue');
+
+    await expect(
+      cmdPrepare({ mystPath: paper('gone'), repo: 'o/r', api, instanceRoot: journal }),
+    ).rejects.toThrow(join(journal, 'editions', 'gone.yml'));
+  });
+
+  it('refuses a journal community Zenodo does not have, before creating a draft', async () => {
+    const mystPath = paperRepo(BARE_MYST);
+    const { api, calls } = legacyZenodo();
+    const out = await cmdPrepare({
+      mystPath,
+      repo: 'o/r',
+      api,
+      instanceRoot: journalWithCommunity('no-such-community'),
+    });
+    expect(out.exitCode).toBe(2);
+    expect(String(out.result.message)).toContain('Zenodo has no community "no-such-community"');
+    expect(calls.some((c) => c.method === 'POST')).toBe(false);
+    expect(parseDocument(readFileSync(mystPath, 'utf8')).getIn(['project', 'doi'])).toBeUndefined();
+  });
+
   it('creates a draft and stamps doi/github/date into the working-tree myst.yml', async () => {
     const mystPath = paperRepo(BARE_MYST);
     const { transport, calls } = fakeTransport(({ method }) => {
@@ -593,6 +863,26 @@ describe('cmdPrepare', () => {
     });
     expect(up.exitCode).toBe(0);
     expect(up.result.concept_doi).toBe('10.5281/zenodo.8');
+  });
+
+  it('refuses a paper Zenodo already published, naming its concept DOI', async () => {
+    const urn = { identifier: paperUrn('fixture-2026-sample-paper') };
+    const published = dep({
+      id: 6,
+      conceptrecid: 4,
+      submitted: true,
+      metadata: { related_identifiers: [urn] },
+    });
+    const { transport, calls } = fakeTransport(() => ({ json: [published] }));
+    const out = await cmdPrepare({
+      mystPath: paperRepo(BARE_MYST),
+      repo: 'o/r',
+      api: new ZenodoApi(transport, true, 't'),
+      instanceRoot: null,
+    });
+    expect(out.exitCode).toBe(3);
+    expect(String(out.result.message)).toContain('concept DOI 10.5072/zenodo.4');
+    expect(calls.every((c) => c.method === 'GET')).toBe(true);
   });
 
   it('forbids replacing production with sandbox', async () => {
@@ -674,6 +964,47 @@ describe('the Project Website link', () => {
     expect((await preparedMetadata('')).description).not.toContain('Project Website');
   });
 });
+
+/**
+ * A legacy-API Zenodo holding draft 5 of concept 5, whose files are `files` and whose
+ * InvenioRDM view is `rdm`. Records every call and the names deleted and uploaded.
+ */
+function legacyZenodo(files: string[] = [], rdm: Record<string, unknown> = {}) {
+  const uploaded: string[] = [];
+  const deleted: string[] = [];
+  const { transport, calls } = fakeTransport((r) => {
+    const path = new URL(r.url).pathname;
+    if (path === '/api/deposit/depositions/5/files' && r.method === 'GET') {
+      return { json: files.map((filename, i) => ({ id: `f${i}`, filename })) };
+    }
+    if (path.startsWith('/api/deposit/depositions/5/files/') && r.method === 'DELETE') {
+      deleted.push(files[Number(path.split('/f').pop())]!);
+      return { status: 201, json: null };
+    }
+    if (path === '/api/records/5/draft')
+      return { json: { id: '5', versions: { index: 1 }, ...rdm } };
+    if (path === '/api/communities/fixture-community') return { json: { id: 'c0ffee' } };
+    if (path.startsWith('/api/communities/')) return { status: 404, json: {} };
+    if (path.endsWith('/actions/publish')) return { json: dep({ id: 5, submitted: true }) };
+    if (r.method === 'PUT' && path.startsWith('/bucket/')) {
+      uploaded.push(decodeURIComponent(path.split('/').pop()!));
+      return { json: {} };
+    }
+    if (r.method === 'GET' && path === '/api/deposit/depositions') {
+      return { json: [dep({ id: 5, conceptrecid: 5 })] };
+    }
+    if (path === '/api/deposit/depositions/5') return { json: dep({ id: 5, conceptrecid: 5 }) };
+    return { json: {} };
+  });
+  return { api: new ZenodoApi(transport, true, 't'), calls, uploaded, deleted };
+}
+
+/** A journal checkout whose journal.yml names `community`. */
+function journalWithCommunity(community: string): string {
+  const root = mkdtempSync(join(tmpdir(), 'oak-journal-'));
+  writeFileSync(join(root, 'journal.yml'), `name: J\nzenodo:\n  community: ${community}\n`);
+  return root;
+}
 
 describe('cmdUpload', () => {
   it('populates the reserved draft: metadata overwrite + all bundle files uploaded', async () => {
@@ -928,6 +1259,152 @@ describe('cmdUpload', () => {
       published: true,
       record_url: 'https://sandbox.zenodo.org/records/5',
     });
+  });
+
+  /** A built paper ready to upload against concept DOI 10.5072/zenodo.5, built against the
+   *  journal `o/journal` when `journal` is set. */
+  function readyPaper(journal = false): string {
+    const mystPath = paperRepo(
+      BARE_MYST + '  doi: 10.5072/zenodo.5\n  github: https://github.com/o/r\n',
+    );
+    writeFileSync(mystPath.replace('myst.yml', 'paper.pdf'), '%PDF');
+    withBuild(mystPath);
+    if (journal) {
+      const doc = parseDocument('version: 1\n');
+      doc.setIn(['project', 'options', 'oaktree-sapling'], {
+        version: 'v1.0.0',
+        edition: 'e',
+        journal: { repo: 'o/journal', commit: 'a'.repeat(40) },
+      });
+      writeFileSync(mystPath.replace('myst.yml', 'myst.oak.yml'), doc.toString());
+    }
+    return mystPath;
+  }
+  function upload(
+    mystPath: string,
+    api: ZenodoApi,
+    over: { instanceRoot?: string | null; publish?: boolean } = {},
+  ) {
+    return cmdUpload({
+      mystPath,
+      pdf: mystPath.replace('myst.yml', 'paper.pdf'),
+      tag: 'v1.0.0',
+      bundleOut: mystPath.replace('myst.yml', '_bundle'),
+      api,
+      git: { ...fakeGit, originRepo: async () => 'o/journal' },
+      instanceRoot: over.instanceRoot ?? null,
+      engineRoot: mystPath.replace('myst.yml', ''),
+      publish: over.publish,
+    });
+  }
+
+  it('removes every file the draft holds before uploading the bundle ([R28])', async () => {
+    captureStderr();
+    const z = legacyZenodo(['paper.pdf', 'template.zip']);
+    const out = await upload(readyPaper(), z.api);
+    expect(out.exitCode).toBe(0);
+    expect(z.deleted.sort()).toEqual(['paper.pdf', 'template.zip']);
+    expect(z.uploaded).toContain('paper.pdf');
+    expect(z.uploaded).not.toContain('template.zip');
+    const methods = z.calls.map((c) => `${c.method} ${new URL(c.url).pathname}`);
+    const lastDelete = methods.map((m) => m.startsWith('DELETE')).lastIndexOf(true);
+    const firstUpload = methods.findIndex((m) => m.startsWith('PUT /bucket/'));
+    expect(lastDelete).toBeLessThan(firstUpload);
+    expect(methods[lastDelete]).toBe('DELETE /api/deposit/depositions/5/files/f1');
+  });
+
+  it("requests the journal's community for a first version only", async () => {
+    captureStderr();
+    const journal = journalWithCommunity('fixture-community');
+    const reviewOf = (z: ReturnType<typeof legacyZenodo>) =>
+      z.calls.filter((c) => c.url.includes('/draft/review'));
+
+    const first = legacyZenodo();
+    expect((await upload(readyPaper(true), first.api, { instanceRoot: journal })).exitCode).toBe(0);
+    expect(reviewOf(first).map((c) => [c.method, new URL(c.url).pathname, c.opts.json])).toEqual([
+      [
+        'PUT',
+        '/api/records/5/draft/review',
+        { receiver: { community: 'c0ffee' }, type: 'community-submission' },
+      ],
+    ]);
+    const read = first.calls.find((c) => c.url.includes('/api/records/5/draft'))!;
+    expect(read.method).toBe('GET');
+    expect(read.opts.headers?.Accept).toBe('application/vnd.inveniordm.v1+json');
+
+    // A draft already up for the community, or already in it, is left as it is.
+    for (const rdm of [
+      { parent: { review: { receiver: { community: 'c0ffee' } } } },
+      { parent: { communities: { ids: ['c0ffee'] } } },
+    ]) {
+      const z = legacyZenodo([], rdm);
+      expect((await upload(readyPaper(true), z.api, { instanceRoot: journal })).exitCode).toBe(0);
+      expect(reviewOf(z)).toHaveLength(0);
+    }
+
+    // Zenodo takes no review for a later version, which stays in its first version's communities.
+    const warnings = captureStderr();
+    const next = legacyZenodo([], { versions: { index: 2 } });
+    expect((await upload(readyPaper(true), next.api, { instanceRoot: journal })).exitCode).toBe(0);
+    expect(reviewOf(next)).toHaveLength(0);
+    expect(warnings().join('')).toContain('Zenodo reviews a first version only');
+  });
+
+  it('refuses a community Zenodo does not have, naming journal.yml', async () => {
+    captureStderr();
+    const z = legacyZenodo();
+    const out = await upload(readyPaper(true), z.api, {
+      instanceRoot: journalWithCommunity('no-such-community'),
+    });
+    expect(out.exitCode).toBe(2);
+    expect(String(out.result.message)).toContain('Zenodo has no community "no-such-community"');
+    expect(z.calls.filter((c) => c.method !== 'GET')).toEqual([]);
+  });
+
+  it('skips the community with a warning under --publish-without-review', async () => {
+    const warnings = captureStderr();
+    const z = legacyZenodo();
+    const out = await upload(readyPaper(true), z.api, {
+      instanceRoot: journalWithCommunity('fixture-community'),
+      publish: true,
+    });
+    expect(out.exitCode).toBe(0);
+    expect(z.calls.some((c) => c.url.includes('/draft/review'))).toBe(false);
+    expect(z.calls.some((c) => c.url.includes('/api/communities/'))).toBe(false);
+    expect(z.calls.some((c) => c.url.endsWith('/actions/publish'))).toBe(true);
+    expect(warnings().join('')).toContain(
+      'the Zenodo community "fixture-community" does not review this version',
+    );
+  });
+
+  it('removes a review an earlier run set before --publish-without-review publishes', async () => {
+    captureStderr();
+    const z = legacyZenodo([], { parent: { review: { receiver: { community: 'c0ffee' } } } });
+    const out = await upload(readyPaper(true), z.api, {
+      instanceRoot: journalWithCommunity('fixture-community'),
+      publish: true,
+    });
+    expect(out.exitCode).toBe(0);
+    const urls = z.calls.map((c) => `${c.method} ${new URL(c.url).pathname}`);
+    const removed = urls.indexOf('DELETE /api/records/5/draft/review');
+    expect(removed).toBeGreaterThan(-1);
+    expect(removed).toBeLessThan(urls.indexOf('POST /api/deposit/depositions/5/actions/publish'));
+  });
+
+  it('refuses --publish-without-review while the draft is submitted for review', async () => {
+    captureStderr();
+    const z = legacyZenodo([], {
+      parent: { review: { receiver: { community: 'c0ffee' }, status: 'submitted' } },
+    });
+    const out = await upload(readyPaper(true), z.api, {
+      instanceRoot: journalWithCommunity('fixture-community'),
+      publish: true,
+    });
+    expect(out.exitCode).toBe(2);
+    expect(String(out.result.message)).toContain('Cancel that request on Zenodo');
+    expect(z.calls.some((c) => c.method === 'DELETE' || c.url.endsWith('/actions/publish'))).toBe(
+      false,
+    );
   });
 
   it('errors when the API environment disagrees with the committed DOI prefix', async () => {
@@ -1285,6 +1762,33 @@ describe('journal.zip', () => {
     expect(z.uploaded).toContain('journal.zip');
     expect(z.uploaded).toContain('myst.oak.yml');
     expect(z.provenance[0]).toMatchObject({ journal_repo: 'o/journal', journal_commit: COMMIT });
+  });
+
+  it('reads the edition at the journal commit the build used', async () => {
+    const root = builtPaper(STAMPED);
+    const mystPath = join(root, 'myst.yml');
+    writeFileSync(
+      mystPath,
+      readFileSync(mystPath, 'utf8') +
+        '  options:\n    oaktree-sapling:\n      version: v1.0.0\n      edition: e\n',
+    );
+    const journalRoot = mkdtempSync(join(tmpdir(), 'oak-journal-'));
+    mkdirSync(join(journalRoot, 'editions'));
+    writeFileSync(join(journalRoot, 'editions', 'e.yml'), 'project:\n  venue: Venue Now\n');
+    const { git } = recordingGit('o/journal');
+    const shown: string[] = [];
+    git.showFile = async (_root, commit, path) => {
+      shown.push(`${commit}:${path}`);
+      return 'project:\n  venue: Venue Then\n';
+    };
+    const z = zenodo();
+    const out = await publish(root, git, z.api, journalRoot);
+    expect(out.exitCode).toBe(0);
+    expect(shown).toEqual([`${COMMIT}:editions/e.yml`]);
+    const put = z.calls.find((c) => c.method === 'PUT' && !c.url.includes('/bucket/'))!;
+    const md = (put.opts as { json: { metadata: { description: string } } }).json.metadata;
+    expect(md.description).toContain('Venue Then');
+    expect(md.description).not.toContain('Venue Now');
   });
 
   it("matches the clone's repo case-insensitively, as GitHub does", async () => {

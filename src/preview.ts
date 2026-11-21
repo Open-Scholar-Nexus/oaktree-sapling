@@ -46,7 +46,7 @@ export const STICKY_PREVIEW = 'oak-preview';
 export const LABEL_ZENODO_FAILED = 'zenodo-publish-failed';
 
 /* --------------------------------------------------------------------------
- * journal.yml `preview:` settings, read as loadJournalZenodo reads `zenodo:`
+ * journal.yml `preview:` settings, read as loadJournalDeposit reads `zenodo:`
  * ------------------------------------------------------------------------ */
 
 /** Reads `preview:` from `<instanceRoot>/journal.yml`, with the schema defaults when absent. A

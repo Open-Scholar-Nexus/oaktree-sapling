@@ -189,6 +189,27 @@ export const PreviewConfig = z
   .loose();
 export type PreviewConfig = z.infer<typeof PreviewConfig>;
 
+/** The DataCite relation types a paper link may use, in the camelCase Zenodo's legacy deposit API
+ *  takes. */
+export const ZENODO_RELATIONS = (
+  'isCitedBy cites isSupplementTo isSupplementedBy isContinuedBy continues ' +
+  'isDescribedBy describes isNewVersionOf isPreviousVersionOf isPartOf hasPart ' +
+  'isReferencedBy references isDocumentedBy documents isCompiledBy compiles ' +
+  'isVariantFormOf isOriginalFormOf isIdenticalTo isReviewedBy reviews ' +
+  'isDerivedFrom isSourceOf requires isRequiredBy'
+).split(' ') as [string, ...string[]];
+
+/** A link a paper can set as `project.options.<option>`, which the deposit description shows. */
+export const PaperLink = z
+  .object({
+    option: z.string().regex(/^[a-z][a-z0-9_]*$/, msg.schema.paperLinkOption),
+    label: z.string().min(1),
+    text: z.string().min(1),
+    /** When set, the record also lists the URL among its related works, with this relation. */
+    relation: z.enum(ZENODO_RELATIONS, { error: msg.schema.paperLinkRelation }).optional(),
+  })
+  .loose();
+
 export const ZenodoConfig = z
   .object({
     /** Optional Zenodo community identifier; a new journal has none. */
@@ -198,6 +219,7 @@ export const ZenodoConfig = z
   })
   .loose();
 export type ZenodoConfig = z.infer<typeof ZenodoConfig>;
+export type PaperLink = z.infer<typeof PaperLink>;
 
 /**
  * An editorial check the journal turns on, by id, with its options. It lives in the journal
@@ -229,6 +251,7 @@ export const JournalConfig = z
     typst_template: z.string().optional(),
     preview: PreviewConfig.prefault({}),
     zenodo: ZenodoConfig.prefault({}),
+    paper_links: z.array(PaperLink).default([]),
     /** The editorial checks `oak validate` runs. */
     checks: z.array(Check).default([]),
   })

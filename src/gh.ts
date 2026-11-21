@@ -236,6 +236,15 @@ export const realGitContext: GitContext = {
       git(repoRoot, ['fetch', '--depth', '1', '--quiet', 'origin', commit]);
     }
   },
+  async showFile(repoRoot, commit, path) {
+    if (!COMMIT_ID.test(commit)) throw new Error(`not a full commit id: ${commit}`);
+    try {
+      git(repoRoot, ['cat-file', '-e', `${commit}:${path}`], { quiet: true });
+    } catch {
+      return null;
+    }
+    return git(repoRoot, ['show', `${commit}:${path}`]);
+  },
   async originRepo(repoRoot) {
     return originRepo(repoRoot);
   },
