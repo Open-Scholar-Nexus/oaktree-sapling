@@ -22,7 +22,7 @@ import { join, resolve, basename, relative, isAbsolute } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
 import AdmZip from 'adm-zip';
-import { validateProjectFrontmatter, type Name } from 'myst-frontmatter';
+import { fillProjectFrontmatter, validateProjectFrontmatter, type Name } from 'myst-frontmatter';
 import {
   readDoc,
   readJournalConfig,
@@ -41,6 +41,7 @@ import {
   sameRepo,
   zenodoDoiPrefix,
   type PaperLink,
+  EDITION_ID,
 } from './schema.js';
 import * as msg from './messages.js';
 import { annotate } from './messages.js';
@@ -499,6 +500,8 @@ function warn(message: string): void {
 
 export interface MetadataInput {
   project: any;
+  /** The `project` of the paper's edition file, which fills what `project` leaves unset. */
+  editionProject?: unknown;
   paperId?: string;
   githubUrl: string;
   siteUrl?: string;
@@ -520,6 +523,7 @@ export interface MetadataInput {
 export function buildMetadata(input: MetadataInput): Record<string, unknown> {
   const {
     project,
+    editionProject,
     paperId,
     githubUrl,
     siteUrl,
@@ -533,7 +537,12 @@ export function buildMetadata(input: MetadataInput): Record<string, unknown> {
 
   // MyST reads the frontmatter as it does for its own output: names parsed, affiliations as ids.
   const messages: { errors?: Array<{ property: string; message: string }> } = {};
-  const fm = validateProjectFrontmatter(project, { property: 'project', messages });
+  const opts = { property: 'project', messages };
+  const own = validateProjectFrontmatter(project, opts);
+  // The edition fills what the paper leaves unset, as MyST's `extends:` does.
+  const fm = editionProject
+    ? fillProjectFrontmatter(own, validateProjectFrontmatter(editionProject, opts), opts)
+    : own;
   // MyST drops a malformed ORCID; its other errors are mystmd's to report at build.
   for (const e of messages.errors ?? []) {
     if (e.property === 'orcid') warn(msg.workflow.orcidInvalid(e.message));
@@ -553,8 +562,8 @@ export function buildMetadata(input: MetadataInput): Record<string, unknown> {
     creators.push(c);
   }
 
-  const keywords = (project.keywords ?? []).map((k: unknown) => String(k));
-  const licenseId = String(project.license ?? 'cc-by-4.0').toLowerCase();
+  const keywords = fm.keywords ?? [];
+  const licenseId = (fm.license?.content?.id ?? 'cc-by-4.0').toLowerCase();
 
   const related: Array<Record<string, string>> = [
     { identifier: githubUrl, relation: 'isVersionOf', scheme: 'url' },
@@ -570,7 +579,7 @@ export function buildMetadata(input: MetadataInput): Record<string, unknown> {
   if (zenodo.description_blurb) desc.push(`<p>${escapeHtml(zenodo.description_blurb)}</p>`);
   if (extraDescParas) desc.push(...extraDescParas.map((p) => `<p>${escapeHtml(p)}</p>`));
   for (const link of paperLinks ?? []) {
-    const value = project.options?.[link.option];
+    const value = fm.options?.[link.option];
     if (value === undefined || value === null || value === '') continue;
     const url = httpUrl(value);
     if (!url) {
@@ -605,7 +614,7 @@ export function buildMetadata(input: MetadataInput): Record<string, unknown> {
   const md: Record<string, unknown> = {
     upload_type: 'publication',
     publication_type: 'article',
-    title: String(project.title),
+    title: String(fm.title ?? project.title),
     creators,
     description: desc.join(''),
     license: licenseId,
@@ -616,7 +625,7 @@ export function buildMetadata(input: MetadataInput): Record<string, unknown> {
   };
   if (keywords.length) md.keywords = keywords;
   if (version !== undefined) md.version = version;
-  const pubdate = publicationDate ?? project.date;
+  const pubdate = publicationDate ?? fm.date;
   if (pubdate) md.publication_date = String(pubdate);
   return md;
 }
@@ -970,17 +979,26 @@ function assertEngineArchive(zipPath: string): void {
  * journal.yml `zenodo:` and `paper_links:` settings
  * ------------------------------------------------------------------------ */
 
-/** Reads the journal's `zenodo:` block and `paper_links` from `<instanceRoot>/journal.yml`. A new
- *  journal, or a build with no journal, gets empty defaults. A journal.yml oak cannot read
+/** Reads the journal's `zenodo:` block and `paper_links` from `<instanceRoot>/journal.yml`, and
+ *  the `project` of the paper's `editions/<edition>.yml`. A new journal, or a build with no
+ *  journal, gets empty defaults. A journal.yml oak cannot read, or a missing edition file,
  *  throws, so a deposit never goes out without the journal's settings. */
-export function loadJournalDeposit(instanceRoot: string | null): {
-  zenodo: ZenodoConfig;
-  paperLinks: PaperLink[];
-} {
+export function loadJournalDeposit(
+  instanceRoot: string | null,
+  project: any,
+): { zenodo: ZenodoConfig; paperLinks: PaperLink[]; editionProject?: unknown } {
   const journal = instanceRoot ? readJournalConfig(instanceRoot) : null;
+  const edition = EDITION_ID.safeParse(project?.options?.['oaktree-sapling']?.edition);
+  let editionProject: unknown;
+  if (instanceRoot && edition.success) {
+    const path = join(instanceRoot, 'editions', `${edition.data}.yml`);
+    if (!existsSync(path)) throw new Error(msg.workflow.depositEditionMissing(edition.data, path));
+    editionProject = readDoc(path).toJS()?.project;
+  }
   return {
     zenodo: journal?.zenodo ?? ZenodoConfig.parse({}),
     paperLinks: journal?.paper_links ?? [],
+    editionProject,
   };
 }
 
@@ -1052,7 +1070,7 @@ export async function cmdPrepare(input: PrepareInput): Promise<Outcome> {
     doc2.setIn(['project', 'date'], new Date().toISOString().slice(0, 10));
   }
 
-  const deposit = loadJournalDeposit(instanceRoot);
+  const deposit = loadJournalDeposit(instanceRoot, project);
   const { community } = deposit.zenodo;
   if (community && !(await findCommunity(api, community))) {
     return err(2, msg.workflow.zenodoCommunityMissing(community));
@@ -1227,7 +1245,7 @@ async function fillDraft(input: UploadInput, engineZip: string): Promise<Outcome
   }
   process.stderr.write(`[upload] reusing existing draft ${dep.id}\n`);
 
-  const { zenodo, paperLinks } = loadJournalDeposit(instanceRoot);
+  const { zenodo, paperLinks, editionProject } = loadJournalDeposit(instanceRoot, project);
   // A review set here survives the legacy metadata update below.
   if (input.publish) {
     // Zenodo refuses to publish a draft that has a review, such as one an earlier run set.
@@ -1239,6 +1257,7 @@ async function fillDraft(input: UploadInput, engineZip: string): Promise<Outcome
   }
   const md = buildMetadata({
     project,
+    editionProject,
     paperId: project.id ? String(project.id) : undefined,
     githubUrl,
     siteUrl,
@@ -1385,7 +1404,7 @@ export async function cmdStatus(input: StatusInput): Promise<Outcome> {
     paperId: project.id ? String(project.id) : undefined,
     githubUrl: project.github ?? '',
     siteUrl: input.siteUrl ?? defaultSiteUrl(repoFromGithubUrl(project.github ?? ''), instanceRoot),
-    ...loadJournalDeposit(instanceRoot),
+    ...loadJournalDeposit(instanceRoot, project),
     abstractParas: abstractParagraphs(repoRoot),
     extraDescParas: zenodoExtraParagraphs(repoRoot),
   });

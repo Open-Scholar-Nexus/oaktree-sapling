@@ -305,6 +305,38 @@ describe('buildMetadata', () => {
     ]);
   });
 
+  describe("the paper's edition", () => {
+    const edition = {
+      venue: 'Edition Venue 2025',
+      license: 'CC-BY-SA-4.0',
+      funding: 'Edition Funder',
+      keywords: ['edition'],
+    };
+    const meta = (project: Record<string, unknown>) =>
+      buildMetadata({
+        project: { title: 'T', ...project },
+        editionProject: edition,
+        githubUrl: 'https://github.com/o/r',
+        zenodo: {},
+      });
+
+    it("fills the venue, licence, funding and keywords the paper's myst.yml leaves unset", () => {
+      const md = meta({});
+      expect(md.license).toBe('cc-by-sa-4.0');
+      expect(md.keywords).toEqual(['edition']);
+      expect(md.description).toContain('Edition Venue 2025');
+      expect(md.description).toContain('Edition Funder');
+    });
+
+    it("keeps what the paper's myst.yml sets, and adds its keywords to the edition's", () => {
+      const md = meta({ license: 'CC-BY-4.0', venue: 'Paper Venue', keywords: ['paper'] });
+      expect(md.license).toBe('cc-by-4.0');
+      expect(md.keywords).toEqual(['edition', 'paper']);
+      expect(md.description).toContain('Paper Venue');
+      expect(md.description).not.toContain('Edition Venue');
+    });
+  });
+
   describe("the journal's paper links", () => {
     const yt = {
       option: 'youtube',
@@ -721,6 +753,35 @@ const BARE_MYST = `project:
 `;
 
 describe('cmdPrepare', () => {
+  it("sends what the paper's edition file sets, and refuses an edition the journal lacks", async () => {
+    const journal = mkdtempSync(join(tmpdir(), 'oak-journal-'));
+    writeFileSync(join(journal, 'journal.yml'), 'name: J\n');
+    mkdirSync(join(journal, 'editions'));
+    writeFileSync(
+      join(journal, 'editions', 'e.yml'),
+      'version: 1\nproject:\n  venue: Edition Venue\n  license: CC-BY-SA-4.0\n',
+    );
+    const paper = (edition: string) =>
+      paperRepo(
+        BARE_MYST +
+          `  options:\n    oaktree-sapling:\n      version: v1.0.0\n      edition: ${edition}\n`,
+      );
+    const { transport, calls } = fakeTransport(({ method }) =>
+      method === 'POST' ? { json: dep({ id: 5, conceptrecid: 5 }) } : { json: [] },
+    );
+    const api = new ZenodoApi(transport, true, 't');
+    const out = await cmdPrepare({ mystPath: paper('e'), repo: 'o/r', api, instanceRoot: journal });
+    expect(out.exitCode).toBe(0);
+    const post = calls.find((c) => c.method === 'POST')!;
+    const md = (post.opts as { json: { metadata: Record<string, unknown> } }).json.metadata;
+    expect(md.license).toBe('cc-by-sa-4.0');
+    expect(md.description).toContain('Edition Venue');
+
+    await expect(
+      cmdPrepare({ mystPath: paper('gone'), repo: 'o/r', api, instanceRoot: journal }),
+    ).rejects.toThrow(join(journal, 'editions', 'gone.yml'));
+  });
+
   it('refuses a journal community Zenodo does not have, before creating a draft', async () => {
     const mystPath = paperRepo(BARE_MYST);
     const { api, calls } = legacyZenodo();

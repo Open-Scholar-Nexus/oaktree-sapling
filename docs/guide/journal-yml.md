@@ -57,7 +57,7 @@ zenodo:
 (zenodo-description)=
 ## Zenodo description
 
-A deposit's description is the paper's abstract, followed by links to the paper's website and repository, and its venue and funding when its `myst.yml` sets them. The journal can add a paragraph of its own after the abstract:
+A deposit's description is the paper's abstract, followed by links to the paper's website and repository, and its venue and funding when its `myst.yml` or its [edition](../reference/files.md#file-editions) sets them. The journal can add a paragraph of its own after the abstract:
 
 ```yaml
 zenodo:

@@ -1204,6 +1204,9 @@ export const workflow = {
       `that link. Fix it in myst.yml.`
     );
   },
+  depositEditionMissing: (edition: string, path: string): string =>
+    `myst.yml names the edition "${edition}", and the journal has no ${path}. Fix the edition ` +
+    `in myst.yml.`,
   zenodoCommunityMissing: (slug: string): string =>
     `Zenodo has no community "${slug}", which journal.yml names as zenodo.community. Fix the ` +
     `name there; it is the last part of the community's address on Zenodo.`,
