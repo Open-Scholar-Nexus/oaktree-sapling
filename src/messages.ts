@@ -785,7 +785,8 @@ export const build = {
 export const schema = {
   editionId: 'must be a plain name (letters, digits, . _ -)',
   engineVersion: 'must be a release tag like v1.2.3 or v1.2.3-dev.4',
-  paperLinkOption: 'must be a myst.yml option name: lowercase letters, digits and _',
+  paperLinkOption:
+    'must be a myst.yml option name: lowercase letters, digits and _, starting with a letter',
   paperLinkRelation:
     'must be a DataCite relation as Zenodo spells it, such as isSupplementedBy. See ' +
     docsUrl(DOCS.fileJournalYml),
@@ -1214,9 +1215,14 @@ export const workflow = {
     `the record is not in the Zenodo community "${slug}", and Zenodo reviews a first version ` +
     `only. An editor can submit the published record to it on Zenodo.`,
   zenodoCommunitySkipped: (slug: string): string =>
-    `--publish-without-review publishes with no review by the Zenodo community "${slug}". ` +
-    `A first version published this way is in no community; an editor can submit it to ` +
-    `"${slug}" on Zenodo.`,
+    `--publish-without-review: the Zenodo community "${slug}" does not review this version. ` +
+    `An editor can submit the record to it on Zenodo.`,
+  depositReviewSubmitted:
+    'the draft is submitted to a Zenodo community for review. Cancel that request on Zenodo, ' +
+    'then run --publish-without-review again.',
+  depositLicenceUnknown: (name: string | undefined): string =>
+    `the paper's license "${name ?? ''}" is not a licence Zenodo knows. Set it to an SPDX id, ` +
+    `such as CC-BY-4.0, in myst.yml or the edition.`,
 
   // oak release status, in its --json result
   statusNoDoi: 'no DOI in myst.yml yet: run oak release reserve-doi and merge its pull request',

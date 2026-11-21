@@ -189,7 +189,7 @@ export type Deposition = Record<string, any>;
 interface RdmDraft {
   parent?: {
     communities?: { ids?: string[] };
-    review?: { receiver?: { community?: string } } | null;
+    review?: { receiver?: { community?: string }; status?: string } | null;
   };
   versions?: { index?: number };
 }
@@ -294,10 +294,16 @@ export class ZenodoApi {
     return res.json() as RdmDraft;
   }
 
-  /** A community's id from its slug, the last part of its address. */
-  async communityId(slug: string): Promise<string> {
-    const res = await this.call('GET', `/communities/${encodeURIComponent(slug)}`);
-    return String((res.json() as { id: string }).id);
+  /** A community's id from its slug, the last part of its address, or null when Zenodo has no
+   *  such community. */
+  async communityId(slug: string): Promise<string | null> {
+    try {
+      const res = await this.call('GET', `/communities/${encodeURIComponent(slug)}`);
+      return String((res.json() as { id: string }).id);
+    } catch (e) {
+      if (e instanceof ZenodoError && e.status === 404) return null;
+      throw e;
+    }
   }
 
   async deleteReview(depId: string | number): Promise<void> {
@@ -566,7 +572,9 @@ export function buildMetadata(input: MetadataInput): Record<string, unknown> {
   }
 
   const keywords = fm.keywords ?? [];
-  const licenseId = (fm.license?.content?.id ?? 'cc-by-4.0').toLowerCase();
+  const licence = fm.license?.content;
+  if (licence && !licence.id) throw new UserError(msg.workflow.depositLicenceUnknown(licence.name));
+  const licenseId = (licence?.id ?? 'cc-by-4.0').toLowerCase();
 
   const related: Array<Record<string, string>> = [
     { identifier: githubUrl, relation: 'isVersionOf', scheme: 'url' },
@@ -633,16 +641,6 @@ export function buildMetadata(input: MetadataInput): Record<string, unknown> {
   return md;
 }
 
-/** The community's id, or null when Zenodo has no community with that slug. */
-async function findCommunity(api: ZenodoApi, slug: string): Promise<string | null> {
-  try {
-    return await api.communityId(slug);
-  } catch (e) {
-    if (e instanceof ZenodoError && e.status === 404) return null;
-    throw e;
-  }
-}
-
 /**
  * Makes the journal's community the reviewer of a paper's first-version draft, so the editor's
  * Submit for review on Zenodo sends the draft there. The legacy `communities` field applies only
@@ -653,9 +651,9 @@ async function requestCommunity(
   depId: string | number,
   slug: string,
 ): Promise<string | null> {
-  const draft = await api.getRdmDraft(depId);
-  const id = await findCommunity(api, slug);
+  const id = await api.communityId(slug);
   if (!id) return msg.workflow.zenodoCommunityMissing(slug);
+  const draft = await api.getRdmDraft(depId);
   if ((draft.parent?.communities?.ids ?? []).includes(id)) return null;
   if (draft.parent?.review?.receiver?.community === id) return null;
   if ((draft.versions?.index ?? 1) > 1) {
@@ -996,14 +994,15 @@ export async function loadJournalDeposit(
   let editionProject: unknown;
   if (instanceRoot && edition.success) {
     const rel = `editions/${edition.data}.yml`;
-    const path = at ? `${rel} at ${at.commit}` : join(instanceRoot, rel);
+    const file = join(instanceRoot, rel);
+    const where = at ? `${rel} at ${at.commit}` : file;
     const text = at
       ? await at.git.showFile(instanceRoot, at.commit, rel)
-      : existsSync(path)
-        ? readFileSync(path, 'utf8')
+      : existsSync(file)
+        ? readFileSync(file, 'utf8')
         : null;
-    if (text === null) throw new UserError(msg.workflow.depositEditionMissing(edition.data, path));
-    editionProject = parseYaml(text, path).toJS()?.project;
+    if (text === null) throw new UserError(msg.workflow.depositEditionMissing(edition.data, where));
+    editionProject = parseYaml(text, where).toJS()?.project;
   }
   return {
     zenodo: journal?.zenodo ?? ZenodoConfig.parse({}),
@@ -1082,7 +1081,7 @@ export async function cmdPrepare(input: PrepareInput): Promise<Outcome> {
 
   const deposit = await loadJournalDeposit(instanceRoot, project);
   const { community } = deposit.zenodo;
-  if (community && !(await findCommunity(api, community))) {
+  if (community && !(await api.communityId(community))) {
     return err(2, msg.workflow.zenodoCommunityMissing(community));
   }
 
@@ -1265,7 +1264,9 @@ async function fillDraft(input: UploadInput, engineZip: string): Promise<Outcome
   // A review set here survives the legacy metadata update below.
   if (input.publish) {
     // Zenodo refuses to publish a draft that has a review, such as one an earlier run set.
-    if ((await api.getRdmDraft(dep.id)).parent?.review) await api.deleteReview(dep.id);
+    const review = (await api.getRdmDraft(dep.id)).parent?.review;
+    if (review?.status === 'submitted') return err(2, msg.workflow.depositReviewSubmitted);
+    if (review) await api.deleteReview(dep.id);
     if (zenodo.community) warn(msg.workflow.zenodoCommunitySkipped(zenodo.community));
   } else if (zenodo.community) {
     const refused = await requestCommunity(api, dep.id, zenodo.community);

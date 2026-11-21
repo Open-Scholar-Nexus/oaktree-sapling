@@ -52,7 +52,7 @@ zenodo:
   community: my-journal
 ```
 
-`community` is the community's identifier, the last part of its address on Zenodo. An editor submits a paper's first version to the community ([publish on Zenodo](publish.md#publish-on-zenodo)), and later versions stay in it.
+`community` is the community's identifier, the last part of its address on Zenodo. An editor submits a paper's first version to the community ([publish on Zenodo](publish.md#publish-on-zenodo)). Once the community accepts it, later versions stay in the community.
 
 (zenodo-description)=
 ## Zenodo description

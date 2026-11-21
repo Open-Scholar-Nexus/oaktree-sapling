@@ -333,6 +333,10 @@ describe('buildMetadata', () => {
       expect(md.description).toContain('Edition Funder');
     });
 
+    it('refuses a licence Zenodo does not know, naming it', () => {
+      expect(() => meta({ license: 'My custom licence' })).toThrow('"My custom licence"');
+    });
+
     it("keeps what the paper's myst.yml sets, and adds its keywords to the edition's", () => {
       const md = meta({ license: 'CC-BY-4.0', venue: 'Paper Venue', keywords: ['paper'] });
       expect(md.license).toBe('cc-by-4.0');
@@ -1364,7 +1368,7 @@ describe('cmdUpload', () => {
     expect(z.calls.some((c) => c.url.includes('/api/communities/'))).toBe(false);
     expect(z.calls.some((c) => c.url.endsWith('/actions/publish'))).toBe(true);
     expect(warnings().join('')).toContain(
-      'publishes with no review by the Zenodo community "fixture-community"',
+      'the Zenodo community "fixture-community" does not review this version',
     );
   });
 
@@ -1380,6 +1384,22 @@ describe('cmdUpload', () => {
     const removed = urls.indexOf('DELETE /api/records/5/draft/review');
     expect(removed).toBeGreaterThan(-1);
     expect(removed).toBeLessThan(urls.indexOf('POST /api/deposit/depositions/5/actions/publish'));
+  });
+
+  it('refuses --publish-without-review while the draft is submitted for review', async () => {
+    captureStderr();
+    const z = legacyZenodo([], {
+      parent: { review: { receiver: { community: 'c0ffee' }, status: 'submitted' } },
+    });
+    const out = await upload(readyPaper(true), z.api, {
+      instanceRoot: journalWithCommunity('fixture-community'),
+      publish: true,
+    });
+    expect(out.exitCode).toBe(2);
+    expect(String(out.result.message)).toContain('Cancel that request on Zenodo');
+    expect(z.calls.some((c) => c.method === 'DELETE' || c.url.endsWith('/actions/publish'))).toBe(
+      false,
+    );
   });
 
   it('errors when the API environment disagrees with the committed DOI prefix', async () => {

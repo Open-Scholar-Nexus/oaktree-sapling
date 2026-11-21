@@ -189,7 +189,8 @@ export const PreviewConfig = z
   .loose();
 export type PreviewConfig = z.infer<typeof PreviewConfig>;
 
-/** DataCite relation types, in the camelCase Zenodo's legacy deposit API takes. */
+/** The DataCite relation types a paper link may use, in the camelCase Zenodo's legacy deposit API
+ *  takes. */
 export const ZENODO_RELATIONS = (
   'isCitedBy cites isSupplementTo isSupplementedBy isContinuedBy continues ' +
   'isDescribedBy describes isNewVersionOf isPreviousVersionOf isPartOf hasPart ' +
