@@ -47,8 +47,6 @@ export interface Paper {
   repo: string | null;
   /** The journal repository the check file comes from, as `oak validate` reads it. */
   journal: {
-    /** Absolute path to the journal repository. */
-    root: string;
     /** `journal.yml`, with oak's defaults filled in. */
     config: JournalConfig;
     /** The entries of `registry/papers.yml` oak accepts; empty when there is no registry. */
@@ -59,7 +57,7 @@ export interface Paper {
   pages: PaperPage[];
   toText(node: GenericNode | GenericNode[]): string;
   selectAll(selector: string, node: GenericNode): GenericNode[];
-  /** See {@link positionFinder}. */
+  /** See {@link positionIn}. */
   positionOf(node: GenericNode): GenericNode['position'];
 }
 
@@ -91,33 +89,25 @@ export function readFileFrontmatter(file: string): Record<string, any> | null {
 }
 
 /**
- * `positionOf(node)` for one copy of the paper: the node's own `position`, else a position on the
- * line of the nearest node before it in its page's `mdast` that has one. MyST gives no `position`
- * to the nodes a directive makes, such as a figure or an `{image}`. Undefined for a node in no
- * page's `mdast`.
+ * The node's own `position`, else one on the start line of the nearest node before it in its
+ * page's `mdast` that has one. MyST gives no `position` to the nodes a directive makes, such as a
+ * figure or an `{image}`. Undefined for a node in no page's `mdast`.
  */
-function positionFinder(paper: Pick<Paper, 'pages'>): Paper['positionOf'] {
-  return (target) => {
-    if (target.position) return target.position;
-    for (const page of paper.pages) {
-      let line: number | undefined;
-      let found = false;
-      const visit = (node: GenericNode): void => {
-        if (found) return;
-        line = node.position?.start.line ?? line;
-        if (node === target) {
-          found = true;
-          return;
-        }
-        for (const child of node.children ?? []) visit(child);
-      };
-      visit(page.mdast);
-      if (found) {
-        return line ? { start: { line, column: 1 }, end: { line, column: 1 } } : undefined;
-      }
-    }
-    return undefined;
+function positionIn(pages: PaperPage[], target: GenericNode): GenericNode['position'] {
+  if (target.position) return target.position;
+  let line: number | undefined;
+  // Preorder walk; true once `target` is reached, with `line` the last start line seen.
+  const reach = (node: GenericNode): boolean => {
+    line = node.position?.start.line ?? line;
+    return node === target || (node.children ?? []).some(reach);
   };
+  for (const page of pages) {
+    line = undefined;
+    if (reach(page.mdast)) {
+      return line ? { start: { line, column: 1 }, end: { line, column: 1 } } : undefined;
+    }
+  }
+  return undefined;
 }
 
 /** Whether a `checks:` id names a check file: it starts with `./` or `../`, the prefix rule of
@@ -197,7 +187,7 @@ export async function runCheckFile(
   try {
     const { toText, selectAll, ...data } = readPaper();
     const copy = structuredClone(data);
-    own = { ...copy, toText, selectAll, positionOf: positionFinder(copy) };
+    own = { ...copy, toText, selectAll, positionOf: (node) => positionIn(copy.pages, node) };
   } catch (e) {
     throw new UserError(messages.pr.checkFilePaperUnreadable(firstLine(e)));
   }

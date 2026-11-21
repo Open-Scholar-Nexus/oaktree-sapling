@@ -49,7 +49,7 @@ import {
 import { materializeDerived, type MystEdge } from './materialize.js';
 import { depositCollisions, RESERVED_DEPOSIT_NAMES } from './zenodo.js';
 import type { ComposeInput } from './compose.js';
-import type { Paper, PaperData } from './journal-checks.js';
+import type { PaperData } from './journal-checks.js';
 
 export interface FsProbes {
   existsProbe(path: string): boolean;
@@ -751,11 +751,9 @@ export async function runValidate(
         (session) => {
           const readPaper = (): PaperData => ({
             ...input.edge.paperForChecks(session, input.paperRoot),
-            config: (readDoc(authorMyst).toJS() ?? {}) as Paper['config'],
+            config: readDoc(authorMyst).toJS() ?? {},
             repo,
-            // Check files come only from a journal repository, so `instanceRoot` is set here.
             journal: {
-              root: input.instanceRoot!,
               config: journal,
               registry: loadRegistry(input.instanceRoot, probes).registry ?? [],
             },

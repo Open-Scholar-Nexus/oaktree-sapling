@@ -26,7 +26,7 @@ function handBuiltPaper(): Paper {
     projectParts: {},
     config: { project: { title: 'A Paper' } },
     repo: 'owner/paper',
-    journal: { root: '/journal', config: { name: 'A Journal' } as never, registry: [] },
+    journal: { config: { name: 'A Journal' } as never, registry: [] },
     pages: [
       {
         file: '/paper/index.md',
@@ -300,13 +300,10 @@ describe('the edition-aware example in the docs', () => {
     return paper;
   }
 
-  it('warns for a paper in an edition warn_in names', async () => {
+  it('warns for a paper in an edition warn_in names, and blocks for one in another', async () => {
     expect(await run([entry], paperIn('2025'))).toMatchObject([
       { status: 'fail', message: 'Bo does not have an ORCID', optional: true },
     ]);
-  });
-
-  it('blocks for a paper in another edition', async () => {
     const out = await run([entry], paperIn('2026'));
     expect(out).toMatchObject([{ status: 'fail', message: 'Bo does not have an ORCID' }]);
     expect(toCheckRun(out).conclusion).toBe('failure');

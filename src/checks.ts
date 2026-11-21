@@ -51,7 +51,7 @@ export interface JournalCheck {
 }
 
 /** How long one check may take before oak reports it as an error and runs the next. */
-export const CHECK_TIMEOUT_MS = 120_000;
+const CHECK_TIMEOUT_MS = 120_000;
 
 /** What {@link runChecks} needs besides the session and the checks. */
 export interface RunChecksContext {

@@ -483,7 +483,6 @@ describe.skipIf(bundleState() === 'absent')('oak validate, what a check file rea
   it('gets the journal settings and registry', () => {
     expect(seen()).toMatchObject({
       journalName: 'Fixture Journal',
-      journalRoot: journal,
       registryIds: ['fixture-2026-sample-paper'],
     });
   }, 60_000);
