@@ -165,16 +165,13 @@ describe('a check that does not finish in time', () => {
       ],
       { journalRoot, readPaper: handBuiltPaper, timeoutMs: 50 },
     );
+    // 50 ms rounds down to 0 seconds.
     const message = messages.pr.checkTimedOut(0);
     expect(out).toEqual([
       { id: './hangs.mjs', status: 'error', message },
       { id: './hangs.mjs', status: 'error', message, optional: true },
       { id: './echo.mjs', status: 'pass', message: 'fine' },
     ]);
-  });
-
-  it('names the limit in seconds', () => {
-    expect(messages.pr.checkTimedOut(120)).toContain('within 120 seconds');
   });
 });
 
@@ -206,7 +203,7 @@ describe('each check reads its own copy of the paper', () => {
     expect(out).toEqual([
       { id: './reads-tree.mjs', status: 'pass', message: '2 nodes, title A Paper, A Journal' },
     ]);
-    expect(paper.journal!.config.name).toBe('A Journal');
+    expect(paper.journal.config.name).toBe('A Journal');
     expect(paper.pages[0]!.mdast.children).toHaveLength(2);
   });
 

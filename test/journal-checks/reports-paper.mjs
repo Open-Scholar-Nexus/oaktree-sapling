@@ -17,9 +17,9 @@ export default {
       fileFrontmatter: index.fileFrontmatter,
       configTitle: paper.config.project?.title,
       repo: paper.repo,
-      journalName: paper.journal?.config.name,
-      journalRoot: paper.journal?.root,
-      registryIds: paper.journal?.registry.map((e) => e.id),
+      journalName: paper.journal.config.name,
+      journalRoot: paper.journal.root,
+      registryIds: paper.journal.registry.map((e) => e.id),
     };
     return { status: 'pass', message: JSON.stringify(seen) };
   },

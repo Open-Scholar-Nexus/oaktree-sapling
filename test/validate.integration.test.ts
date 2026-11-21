@@ -438,7 +438,12 @@ describe.skipIf(bundleState() === 'absent')('oak validate, what a check file rea
   }
 
   const journal = journalWithReporter();
+  /** The reporter's output, from one `oak validate` run shared by the tests below. */
+  let output: any;
   function seen(): any {
+    return (output ??= runReporter());
+  }
+  function runReporter(): any {
     const paper = paperWithFrontmatter();
     const r = spawnSync(
       'node',
@@ -451,12 +456,11 @@ describe.skipIf(bundleState() === 'absent')('oak validate, what a check file rea
   }
 
   it("gets the content of the project's and the page's frontmatter parts", () => {
-    expect(seen()).toMatchObject({
-      projectParts: {
-        abstract: 'A short plain-language abstract for the engine release-safety fixture paper.',
-      },
-      pageParts: { data_availability: 'At the archive.' },
+    const { projectParts, pageParts } = seen();
+    expect(projectParts).toMatchObject({
+      abstract: 'A short plain-language abstract for the engine release-safety fixture paper.',
     });
+    expect(pageParts).toEqual({ data_availability: 'At the archive.' });
   }, 60_000);
 
   it("gets the page's frontmatter as written beside the one MyST fills in, and myst.yml", () => {
