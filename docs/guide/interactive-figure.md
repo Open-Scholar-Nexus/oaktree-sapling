@@ -83,6 +83,8 @@ Seedling height over three weeks.
 
 `#fig-growth` is the cell's label. The text inside the directive is the caption. `:label:` is the name the text refers to the figure by, as in `[](#fig-growth-curve)`.
 
+MyST's guide covers the other ways to embed a notebook output, in [Outputs as Figures](https://mystmd.org/guide/reuse-jupyter-outputs#outputs-as-figures).
+
 ## 6. Check the result
 
 1. Run `oak start`, open the address it prints, and hover over a point of the chart. A tooltip shows the point's values. The chart loads its drawing code from `cdn.jsdelivr.net`, so the browser has to be online.
