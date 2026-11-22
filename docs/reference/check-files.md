@@ -35,8 +35,6 @@ Its types in oak's source are [`PaperData` and `Paper`](src:src/journal-checks.t
 | `selectAll(selector, node)` | The nodes under `node` that match a selector such as `'heading'`, from [`unist-util-select`](https://github.com/syntax-tree/unist-util-select). |
 | `positionOf(node)` | A `position` for a result about `node`: the node's own. A node a directive makes, such as a figure or an `{image}`, has none, so it gets the first line of the nearest node before it on its page that has one. `undefined` for a node in no page's `mdast`. |
 
-oak adds fields to `paper` and never renames or removes one.
-
 (ref-check-files-pages)=
 ### Pages
 
