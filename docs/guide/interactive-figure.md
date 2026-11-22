@@ -1,17 +1,15 @@
 (guide-interactive-figure)=
 # Interactive figures
 
-A figure can be an interactive chart on the paper's website and a static image in its PDF. The chart is made with [Altair](https://altair-viz.github.io) in a Jupyter notebook, in one cell that saves the chart in both forms. The build reads what the notebook has saved, and shows the chart on the website and the image in the PDF.
+A figure can be rendered as an interactive chart on the paper's website and as a static image in its PDF. The chart is made with [Altair](https://altair-viz.github.io) in a Jupyter notebook, in one cell that saves the chart in both forms. The build reads what the notebook has saved, and shows the chart on the website and the image in the PDF.
 
 ## 1. Install the packages
 
 ```bash
-pip install "altair<6" vl-convert-python
+pip install altair vl-convert-python
 ```
 
-Altair makes the chart, and `vl-convert-python` turns it into an image. Altair 5 runs on Python 3.13 and older; on Python 3.14, `import altair` fails with a `TypeError`.
-
-Altair saves a chart in a format called Vega-Lite. Altair 6 writes version 6 of it and the paper's website draws version 5, so with Altair 6 installed the chart does not draw on the website.
+Altair makes the chart, and `vl-convert-python` turns it into an image.
 
 ## 2. Write the cell
 
@@ -46,7 +44,7 @@ Give the cell the tag `remove-input`, which hides its code where the website sho
 
 SVG is a vector image, so it stays sharp at any size on the page. If the PDF needs a PNG, replace the `image/svg+xml` line with `"image/png": vlc.vegalite_to_png(chart.to_json(), ppi=300)`. At the default of 72 ppi the image is a few hundred pixels wide and looks blurry at the width the PDF prints it.
 
-Altair puts a `…` menu at the corner of the chart. Readers use it to save the figure as an image and to open the chart's definition, with its data, so keep the menu.
+Altair puts a `…` menu at the corner of the chart. Readers use it to save the figure as SVG or PNG, and to see the chart's definition and data or open them in the Vega Editor. Leave the menu in place.
 
 ## 3. Run the cell and save the notebook
 
