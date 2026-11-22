@@ -52,7 +52,9 @@ The checks are [Curvenote](https://curvenote.com)'s, from its open-source [`@cur
 
 `exports-exist` needs a built PDF, which the Journal checks do not make, so it reports that it could not run and never blocks.
 
-Any of MyST's own [build rules](https://github.com/jupyter-book/mystmd/blob/main/packages/myst-common/src/ruleids.ts) can be listed too, such as `math-renders` or `reference-target-resolves`: the check adds a failing row for each warning MyST gives under that rule. The image rules, such as `image-exists`, never add a row: MyST raises them only while it copies the images into a build, and the checks read the paper without building it. A [check file](#journal-checks) can test image paths instead.
+Any of MyST's own [build rules](https://github.com/jupyter-book/mystmd/blob/main/packages/myst-common/src/ruleids.ts) can be listed too, such as `math-renders` or `reference-target-resolves`: the check adds a failing row for each warning MyST gives under that rule.[^image-rules]
+
+[^image-rules]: The image rules, such as `image-exists`, never add a row: MyST raises them only while it copies the images into a build, and the checks read the paper without building it. A [check file](#journal-checks) can test image paths instead.
 
 A check fails, with a link to this section, when its id is neither a check above nor the path of a [check file](#journal-checks), or when an option has the wrong type, such as `max: lots`. An option the check does not have, such as a misspelled `maxx`, adds a warning, and the check runs without it.
 
