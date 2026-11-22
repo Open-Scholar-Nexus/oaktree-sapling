@@ -108,52 +108,7 @@ export default {
 };
 ```
 
-`validate` returns a result, a list of results, or a promise of either. An empty list adds no row. A result is a [Curvenote](https://www.npmjs.com/package/@curvenote/check-definitions) `CheckResult`, and oak reads these of its fields:
-
-| field | |
-|---|---|
-| `status` | `pass`, `fail` or `error`. Required. |
-| `message` | The text of the row. Required. |
-| `help` | How to fix it, added to the annotation. |
-| `file` | The page, as `paper.pages[].file`. |
-| `position` | Where in the page, as a node's `position`. With `file`, the message shows on that line of the pull request's diff. |
-| `optional` | `true` makes this result a warning. |
-
-`paper` has these fields:
-
-| field | |
-|---|---|
-| `root` | The paper's folder, an absolute path. |
-| `project` | The project frontmatter, such as `title`, `authors` and `keywords`, with the journal's settings merged in. |
-| `config` | The paper's `myst.yml` as the author wrote it, without the journal's settings. |
-| `repo` | The paper's repository, as `owner/name`, or `null` when oak cannot tell. On your machine it comes from [`--repo`](../reference/cli.md#validate), else the clone's `origin`. In the pull request checks it is the paper's repository, also for a pull request from a fork. |
-| `journal` | The journal repository the check file comes from: `config`, its `journal.yml` with oak's defaults filled in, and `registry`, the entries of `registry/papers.yml` that oak accepts, or an empty list when it has none. |
-| `projectParts` | The content of each part the project frontmatter sets, as a tree, by part name. |
-| `pages` | One entry per page, in table-of-contents order and starting with the root page, which Curvenote's checks read as the article. |
-| `toText(node)` | The text of a node and everything under it. |
-| `selectAll(selector, node)` | The nodes under `node` that match a selector such as `'heading'`, from [`unist-util-select`](https://github.com/syntax-tree/unist-util-select). |
-| `positionOf(node)` | A `position` for a result about `node`: the node's own. A node a directive makes, such as a figure or an `{image}`, has none, so it gets the first line of the nearest node before it on its page that has one. `undefined` for a node in no page's `mdast`. |
-
-Each entry of `pages` holds:
-
-| field | |
-|---|---|
-| `file` | The page's file, an absolute path. |
-| `frontmatter` | Its frontmatter as MyST reads it: the project's fields, such as `authors` and `keywords`, fill in what the page does not set, and a first `# Heading` becomes the `title`. |
-| `fileFrontmatter` | The frontmatter block at the top of its file, as written, with the keys MyST does not know, and without the project's fields. It is `{}` when the page has none, and `null` when the block is not a YAML mapping or the page is not a `.md` file. List MyST's `frontmatter-is-yaml` rule to block a page whose block is not valid YAML. |
-| `mdast` | Its content, as a tree. |
-| `parts` | The content of each part its frontmatter sets, as a tree, by part name. |
-
-MyST moves a frontmatter `abstract:` into a part, and the same goes for the other parts, such as `data_availability:` and `acknowledgments:`. An `abstract:` in `myst.yml` is in `projectParts.abstract`, one in a page's frontmatter in that page's `parts.abstract`. `project.parts` and a page's `frontmatter.parts` hold each part's location. A part's `position` counts lines from the start of the part's own text, so it does not point at a line of the file. A `+++ {"part": "abstract"}` block stays in `mdast`, as a `block` node with `data.part` set to `abstract`.
-
-The tree follows [MyST's document structure](https://mystmd.org/spec), from the MyST version in the paper's oak, so a MyST upgrade may change the shape of a node. oak adds fields to `paper` and never renames or removes one. Each check gets its own copy of `paper`'s data, so a check that changes it leaves the next check unaffected.
-
-A check file can import Node's built-in modules, such as `node:path`, and other files in the journal repository. CI clones the journal repository without installing anything, so an import of a package fails there, even when it works on your machine.
-
-(check-time-limit)=
-oak waits up to two minutes for each check file. A check file still running then, such as one whose `fetch` waits on a server that does not answer, shows as an `error` row, and oak moves on to the next check.
-
-A check runs inside `oak validate`, with the paper's folder as its working directory. It can read the paper's files under `paper.root` and use `fetch`, within the [time limit](#check-time-limit). It also sees the environment `oak validate` runs in, which differs between your machine and the pull request checks, so read the repository from `paper.repo`.
+`validate` gets `paper` and returns a result or a list of results. The [check file reference](../reference/check-files.md) lists what a result and `paper` hold, and what a check file can import.
 
 ### A check that depends on the edition
 
@@ -185,7 +140,7 @@ It runs the journal's checks, check files included, as they are on disk, uncommi
 
 ### When a check file breaks
 
-A check file that is missing, does not load, has no `validate`, throws, [times out](#check-time-limit), or returns a result oak cannot read shows one `error` row under its path, with the reason and a link to this section. It blocks the merge unless the entry is `optional: true`, and the other checks still run. A check file pushed to the journal repository runs on every open paper pull request's next run, so try it with `oak validate` first.
+A check file that is missing, does not load, has no `validate`, throws, [times out](../reference/check-files.md#check-time-limit), or returns a result oak cannot read shows one `error` row under its path, with the reason and a link to this section. It blocks the merge unless the entry is `optional: true`, and the other checks still run. A check file pushed to the journal repository runs on every open paper pull request's next run, so try it with `oak validate` first.
 
 (validate-runs-paper-code)=
 ## `oak validate` runs the paper's code
