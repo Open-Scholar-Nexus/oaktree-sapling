@@ -1,7 +1,7 @@
 (guide-interactive-figure)=
 # Interactive figures
 
-A figure can be rendered as an interactive chart on the paper's website and as a static image in its PDF. Any plotting library works if it can save a chart both as HTML that draws it and as an image. This guide uses [Altair](https://altair-viz.github.io). Altair describes a chart and its data in a format called Vega-Lite, and `vl-convert-python` draws the image from that same description with no browser installed, so the image in the PDF matches the chart on the website.
+A figure can be rendered as an interactive chart on the paper's website and as a static image in its PDF. Any plotting library works, if it can save a chart both as an image and as HTML. This guide uses [Altair](https://altair-viz.github.io). Altair describes a chart and its data in a format called Vega-Lite, which the website draws in the browser, and the package `vl-convert-python` draws the image from that same description without a browser, so the image in the PDF matches the chart on the website.
 
 The chart is made in a Jupyter notebook, in one cell that saves it in both forms. The build reads what the notebook has saved, and shows the chart on the website and the image in the PDF.
 
@@ -38,23 +38,23 @@ display(
 )
 ```
 
-`display(..., raw=True)` saves the two outputs as the cell gives them. `text/html` is the interactive chart, which the website shows. `image/svg+xml` is the image the PDF shows; with the `text/html` output alone, the PDF has the caption and no figure.
+`display(..., raw=True)` saves the two outputs as the cell gives them. `text/html` is the interactive chart, for the website. `image/svg+xml` is the image the PDF shows.
 
 `#| label: fig-growth` names the cell, and the paper embeds the figure by that name.
 
 Give the cell the tag `remove-input`, which hides its code where the website shows the notebook.
 
-SVG is a vector image, so it stays sharp at any size on the page. If the PDF needs a PNG, replace the `image/svg+xml` line with `"image/png": vlc.vegalite_to_png(chart.to_json(), ppi=300)`. At the default of 72 ppi the image is a few hundred pixels wide and looks blurry at the width the PDF prints it.
+If the PDF needs a PNG, replace the `image/svg+xml` line with `"image/png": vlc.vegalite_to_png(chart.to_json(), ppi=300)`.
 
-Altair puts a `…` menu at the corner of the chart. Readers use it to save the figure as SVG or PNG, and to see the chart's definition and data or open them in the Vega Editor. Leave the menu in place.
+Altair puts a `…` menu at the corner of the chart, to save the figure as SVG or PNG, and to see the chart's definition and data or open them in the Vega Editor.
 
 ## 3. Run the cell and save the notebook
 
-The build reads the outputs saved in `figure.ipynb` and does not run the notebook. Run the cell, save the notebook, and commit it with its output. After a change to the chart or its data, run the cell and save again.
+When you [build your paper](#build) with `oak build`, your `figure.ipynb` notebook isn't run, so its outputs must be saved: run the cell, save the notebook, and commit it with its output. After a change to the chart or its data, run the cell and save again.
 
 ## 4. List the notebook in `myst.yml`
 
-In the paper's `myst.yml`, add a `toc` under `project`:
+When `myst.yml` has a `toc`, the paper can embed a figure only from a file the `toc` lists. In the paper's `myst.yml`, add a `toc` under `project`:
 
 ```yaml
 project:
@@ -64,11 +64,9 @@ project:
       hidden: true
 ```
 
-The paper can embed a figure only from a file the `toc` lists. `hidden: true` keeps the notebook out of the links between the website's pages. The notebook still has a page of its own, at `/figure`, and the figure links to it as its source.
+`hidden: true` keeps the notebook out of the links between the website's pages. The notebook still has a page of its own, at `/figure`, and the figure links to it as its source.
 
-A paper with no `toc` also builds the figure. MyST then makes a page of every document in the folder, and the paper's page ends with a link to the notebook as the next page.
-
-With a `toc` that leaves `figure.ipynb` out, the figure is empty on the website and in the PDF, and the build still passes.
+With a `toc` without `figure.ipynb`, the figure will be empty on the website and in the PDF (the build still passes).
 
 ## 5. Embed the figure
 
@@ -83,16 +81,14 @@ Seedling height over three weeks.
 
 `#fig-growth` is the cell's label. The text inside the directive is the caption. `:label:` is the name the text refers to the figure by, as in `[](#fig-growth-curve)`.
 
-MyST's guide covers the other ways to embed a notebook output, in [Outputs as Figures](https://mystmd.org/guide/reuse-jupyter-outputs#outputs-as-figures).
-
 ## 6. Check the result
 
 1. Run `oak start`, open the address it prints, and hover over a point of the chart. A tooltip shows the point's values. The chart loads its drawing code from `cdn.jsdelivr.net`, so the browser has to be online.
-2. Run `oak build` and open `_build/exports/paper.pdf`. The figure is in it as an image, above its caption.
+2. Run `oak build` and open `_build/exports/paper.pdf`. The figure is in it as an image, with its caption.
 
 ## The thumbnail
 
-The journal's website shows the file `thumbnails/thumbnail.png` beside the paper, whatever figures the paper has. To use the chart as that picture, save it as a PNG from the notebook, then commit the file:
+To use the chart as the paper's thumbnail, save it as a PNG from the notebook, then commit the file:
 
 ```python
 with open("thumbnails/thumbnail.png", "wb") as f:
