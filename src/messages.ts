@@ -1055,8 +1055,8 @@ export const pr = {
       : `unknown check id "${id}"; the ids journal.yml can list, and how to change the set: ` +
         `${docsUrl(DOCS.checksChanging)}`,
   checkThrew: (message: string): string =>
-    `the check stopped with an error: ${message.replace(/\.$/, '')}. To show this as a ` +
-    `warning, mark the check optional: ${docsUrl(DOCS.checksChanging)}`,
+    `the check stopped with an error: ${message.replace(/\.$/, '')}. See ` +
+    `${docsUrl(DOCS.checksChanging)}`,
   checkTimedOut: (seconds: number): string =>
     `the check did not finish within ${seconds} seconds, so oak stopped waiting for it. See ` +
     `${docsUrl(DOCS.checksJournal)}`,
