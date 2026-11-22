@@ -10,7 +10,8 @@ import { extname, isAbsolute, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { z } from 'zod';
 import { CheckStatus, type CheckResult } from '@curvenote/check-definitions';
-import type { GenericNode, GenericParent } from 'myst-common';
+import { toText, type GenericNode, type GenericParent } from 'myst-common';
+import { selectAll } from 'unist-util-select';
 import * as messages from './messages.js';
 import { UserError, firstLine } from './messages.js';
 import { parseYaml } from './yaml-io.js';
@@ -34,8 +35,9 @@ export interface PaperPage {
   parts: Parts;
 }
 
-/** What a check file's `validate` gets. Fields are only ever added [R208]. */
-export interface Paper {
+/** The paper's data, which `readPaper` builds once per run and each check file gets a copy of.
+ *  Fields are only ever added [R208]. */
+export interface PaperData {
   /** Absolute path to the paper folder. */
   root: string;
   /** The project frontmatter as MyST resolved it. */
@@ -56,16 +58,18 @@ export interface Paper {
   /** One per page, in table-of-contents order: the root page, which Curvenote's checks read as
    *  the article, then the rest. */
   pages: PaperPage[];
+}
+
+/** What a check file's `validate` gets: its copy of the data, plus helpers. */
+export interface Paper extends PaperData {
   toText(node: GenericNode | GenericNode[]): string;
   selectAll(selector: string, node: GenericNode): GenericNode[];
   /** See {@link positionIn}. */
   positionOf(node: GenericNode): GenericNode['position'];
 }
 
-/** What `readPaper` builds once per run; each check file gets a copy plus {@link Paper.positionOf}. */
-export type PaperData = Omit<Paper, 'positionOf'>;
-
-/** The fields of {@link Paper} that come from MyST's processed project (`MystEdge.paperForChecks`). */
+/** The fields of {@link PaperData} that come from MyST's processed project
+ *  (`MystEdge.paperForChecks`). */
 export type PaperFromMyst = Omit<PaperData, 'config' | 'repo' | 'journal'>;
 
 /**
@@ -186,8 +190,7 @@ export async function runCheckFile(
   const check = await importCheckFile(resolveCheckFile(journalRoot, id));
   let own: Paper;
   try {
-    const { toText, selectAll, ...data } = readPaper();
-    const copy = structuredClone(data);
+    const copy = structuredClone(readPaper());
     own = { ...copy, toText, selectAll, positionOf: (node) => positionIn(copy.pages, node) };
   } catch (e) {
     throw new UserError(messages.pr.checkFilePaperUnreadable(firstLine(e)));

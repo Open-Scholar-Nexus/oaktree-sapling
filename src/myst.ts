@@ -23,8 +23,6 @@ import {
 } from 'myst-cli';
 import type { ISession } from 'myst-cli';
 import { resolve } from 'node:path';
-import { toText } from 'myst-common';
-import { selectAll } from 'unist-util-select';
 import type { MystEdge, StartOpts } from './materialize.js';
 import type { ResolvedProject } from './compose.js';
 import { readFileFrontmatter, type PaperFromMyst, type Parts } from './journal-checks.js';
@@ -153,8 +151,6 @@ export function createMystEdge(): MystEdge {
         project: projectConfig,
         projectParts: partTrees(session, projectConfig),
         pages,
-        toText,
-        selectAll,
       };
     },
   };

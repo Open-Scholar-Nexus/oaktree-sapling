@@ -9,17 +9,15 @@ import { fileURLToPath } from 'node:url';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { toText } from 'myst-common';
-import { selectAll } from 'unist-util-select';
 import { runChecks, toCheckRun, type JournalCheck } from '../src/checks.js';
-import { readFileFrontmatter, type Paper } from '../src/journal-checks.js';
+import { readFileFrontmatter, type PaperData } from '../src/journal-checks.js';
 import * as messages from '../src/messages.js';
 import { DOCS, docsUrl } from '../src/docs-links.js';
 
 const journalRoot = fileURLToPath(new URL('./journal-checks', import.meta.url));
 const session = {} as never;
 
-function handBuiltPaper(): Paper {
+function handBuiltPaper(): PaperData {
   return {
     root: '/paper',
     project: { title: 'A Paper' },
@@ -42,12 +40,10 @@ function handBuiltPaper(): Paper {
         parts: {},
       },
     ],
-    toText,
-    selectAll,
   };
 }
 
-function run(checks: JournalCheck[], paper: Paper = handBuiltPaper()) {
+function run(checks: JournalCheck[], paper: PaperData = handBuiltPaper()) {
   return runChecks(session, checks, { journalRoot, readPaper: () => paper });
 }
 
@@ -256,7 +252,7 @@ describe("a page's frontmatter as written", () => {
 describe('positionOf', () => {
   const at = (line: number) => ({ start: { line, column: 1 }, end: { line, column: 1 } });
   /** A figure and an `{image}` as MyST makes them from directives: with no `position`. */
-  function paperWithDirectives(): Paper {
+  function paperWithDirectives(): PaperData {
     const paper = handBuiltPaper();
     paper.pages[0]!.mdast = {
       type: 'root',
@@ -291,7 +287,7 @@ describe('positionOf', () => {
 
 describe('the edition-aware example in the docs', () => {
   const entry = { id: './orcid-by-edition.mjs', warn_in: ['2025'] };
-  function paperIn(edition: string): Paper {
+  function paperIn(edition: string): PaperData {
     const paper = handBuiltPaper();
     paper.project = {
       options: { 'oaktree-sapling': { version: 'v0.4.0', edition } },
