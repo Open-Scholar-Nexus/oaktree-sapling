@@ -110,6 +110,22 @@ export default {
 
 `validate` gets `paper` and returns a result or a list of results. The [check file reference](../reference/check-files.md) lists what a result and `paper` hold, and what a check file can import.
 
+### Seeing what a check gets
+
+A page's content is a tree of MyST nodes. To see the nodes for a piece of markdown, such as a figure or a bold line, paste it into the [MyST sandbox](https://mystmd.org/sandbox).
+
+To see the whole `paper` for a real paper, list this check file and [run it](#testing-a-check-file). It writes `paper.json` into the paper's folder and adds no row:
+
+```js
+import { writeFileSync } from 'node:fs';
+export default {
+  validate(paper) {
+    writeFileSync('paper.json', JSON.stringify(paper, null, 2));
+    return [];
+  },
+};
+```
+
 ### A check that depends on the edition
 
 A check file can read the paper's edition and choose how strict to be. This one asks every author for an ORCID, and makes a missing one a warning for the papers of the editions its `warn_in` option names, such as an edition already published:
