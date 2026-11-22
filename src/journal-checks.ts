@@ -191,6 +191,7 @@ export async function runCheckFile(
   let own: Paper;
   try {
     const copy = structuredClone(readPaper());
+    // Add the helpers to the copy.
     own = { ...copy, toText, selectAll, positionOf: (node) => positionIn(copy.pages, node) };
   } catch (e) {
     throw new UserError(messages.pr.checkFilePaperUnreadable(firstLine(e)));

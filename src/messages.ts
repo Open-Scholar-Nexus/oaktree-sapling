@@ -1058,8 +1058,8 @@ export const pr = {
     `the check stopped with an error: ${message.replace(/\.$/, '')}. To show this as a ` +
     `warning, mark the check optional: ${docsUrl(DOCS.checksChanging)}`,
   checkTimedOut: (seconds: number): string =>
-    `the check did not finish within ${seconds} seconds, so oak stopped waiting for it. To ` +
-    `show this as a warning, mark the check optional: ${docsUrl(DOCS.checksChanging)}`,
+    `the check did not finish within ${seconds} seconds, so oak stopped waiting for it. See ` +
+    `${docsUrl(DOCS.checksJournal)}`,
   checkOptionsIgnored: (problems: string[]): string =>
     `the check ran without some of its options: ${problems.join('; ')}. Fix them in ` +
     `journal.yml: ${docsUrl(DOCS.checksChanging)}`,

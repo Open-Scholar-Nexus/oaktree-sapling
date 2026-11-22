@@ -82,13 +82,8 @@ async function withinTime<T>(work: () => Promise<T>, ms: number): Promise<T> {
 
 /**
  * Runs the journal's checks against a processed myst session (`MystEdge.withProjectSession`).
- * Each result gets the check's id, and `optional` when the journal set it. A catalog check's
- * options get Curvenote's defaults and types, as Curvenote's own runner gives them. An unknown
- * id, an option Curvenote rejects, a check that throws, a check file that takes longer than the
- * time limit, and a broken check file each become one error result, so a misconfigured journal
- * shows up in the report and the remaining checks still run. An option Curvenote ignores adds an
- * optional error row, a warning. A `./` id runs a check file from `journalRoot` on
- * `readPaper()`'s data.
+ * Each result gets the check's id, and `optional` when the journal set it. A check that cannot
+ * run becomes one error row, and the rest still run.
  */
 export async function runChecks(
   session: ISession,

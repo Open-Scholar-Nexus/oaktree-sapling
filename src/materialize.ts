@@ -76,8 +76,8 @@ export interface MystEdge {
     fn: (session: ISession) => Promise<T>,
     configFile?: string,
   ): Promise<T>;
-  /** The fields of a check file's `paper` that come from a session `withProjectSession`
-   *  processed for the paper at `root` [R208]. */
+  /** The part of a check file's `paper` MyST provides: the paper at `root`, read from a
+   *  `withProjectSession` session [R208]. */
   paperForChecks(session: ISession, root: string): PaperFromMyst;
 }
 
