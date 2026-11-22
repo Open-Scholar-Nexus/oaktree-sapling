@@ -43,6 +43,7 @@ project:
       children:
         - file: reference/files.md
         - file: reference/cli.md
+        - file: reference/check-files.md
         - file: reference/secrets.md
         - file: reference/zenodo-authors.md
     - title: Design

@@ -409,6 +409,85 @@ describe.skipIf(bundleState() === 'absent')("oak validate, the journal's check f
   }, 60_000);
 });
 
+describe.skipIf(bundleState() === 'absent')('oak validate, what a check file reads', () => {
+  beforeAll(assertBundleNotStale);
+
+  const id = './checks/reports-paper.mjs';
+
+  /** A copy of the fixture journal that lists `test/journal-checks/reports-paper.mjs`. */
+  function journalWithReporter(): string {
+    const dir = mkdtempSync(join(tmpdir(), 'oak-val-reporter-'));
+    cpSync(fixtureInstance, dir, { recursive: true });
+    mkdirSync(join(dir, 'checks'));
+    copyFileSync(join(engineDir, 'test', 'journal-checks', basename(id)), join(dir, id));
+    const journalYml = readFileSync(join(dir, 'journal.yml'), 'utf8');
+    writeFileSync(join(dir, 'journal.yml'), `${journalYml}  - id: ${id}\n`);
+    return dir;
+  }
+
+  /** The fixture paper's index.md, given frontmatter with a part and a figure at the end. */
+  const index =
+    `---\ndata_availability: At the archive.\n---\n` +
+    readFileSync(join(fixturePaper, 'index.md'), 'utf8') +
+    '\n:::{figure} figure.png\nA caption.\n:::\n';
+  function paperWithFrontmatter(): string {
+    const dir = mkdtempSync(join(tmpdir(), 'oak-val-reporter-paper-'));
+    for (const f of ['bib.bib', 'myst.yml']) copyFileSync(join(fixturePaper, f), join(dir, f));
+    writeFileSync(join(dir, 'index.md'), index);
+    return dir;
+  }
+
+  const journal = journalWithReporter();
+  /** The reporter's output, from one `oak validate` run shared by the tests below. */
+  let output: any;
+  function seen(): any {
+    return (output ??= runReporter());
+  }
+  function runReporter(): any {
+    const paper = paperWithFrontmatter();
+    const r = spawnSync(
+      'node',
+      [bundle, 'validate', '--paper', paper, '--instance', journal, '--repo', repo, '--json'],
+      { encoding: 'utf8' },
+    );
+    const row = JSON.parse(r.stdout).checks.find((c: any) => c.id === id);
+    expect(row).toMatchObject({ status: 'pass' });
+    return JSON.parse(row.message);
+  }
+
+  it("gets the content of the project's and the page's frontmatter parts", () => {
+    const { projectParts, pageParts } = seen();
+    expect(projectParts).toMatchObject({
+      abstract: 'A short plain-language abstract for the engine release-safety fixture paper.',
+    });
+    expect(pageParts).toEqual({ data_availability: 'At the archive.' });
+  }, 60_000);
+
+  it("gets the page's frontmatter as written beside the one MyST fills in, and myst.yml", () => {
+    const { pageKeys, fileFrontmatter, configTitle } = seen();
+    // MyST copies the project's authors and keywords into the page's frontmatter.
+    expect(pageKeys).toEqual(expect.arrayContaining(['authors', 'keywords']));
+    expect(fileFrontmatter).toEqual({ data_availability: 'At the archive.' });
+    expect(configTitle).toBe('A Fixture Paper for Engine Release Safety');
+  }, 60_000);
+
+  it('places a figure, which has no position of its own, on the line before it', () => {
+    const line = index.split('\n').findIndex((l) => l.startsWith('One short section')) + 1;
+    expect(seen().figure).toEqual({ own: false, line });
+  }, 60_000);
+
+  it('gets the repository --repo names', () => {
+    expect(seen()).toMatchObject({ repo });
+  }, 60_000);
+
+  it('gets the journal settings and registry', () => {
+    expect(seen()).toMatchObject({
+      journalName: 'Fixture Journal',
+      registryIds: ['fixture-2026-sample-paper'],
+    });
+  }, 60_000);
+});
+
 describe.skipIf(bundleState() === 'absent')("oak validate, a catalog check's options", () => {
   beforeAll(assertBundleNotStale);
 

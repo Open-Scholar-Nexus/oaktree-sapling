@@ -17,16 +17,24 @@ import {
   findCurrentProjectAndLoad,
   findCurrentSiteAndLoad,
   filterPages,
+  resolveFrontmatterParts,
   selectFile,
   selectors,
 } from 'myst-cli';
 import type { ISession } from 'myst-cli';
 import { resolve } from 'node:path';
-import { toText } from 'myst-common';
-import { selectAll } from 'unist-util-select';
 import type { MystEdge, StartOpts } from './materialize.js';
 import type { ResolvedProject } from './compose.js';
-import type { Paper } from './journal-checks.js';
+import { readFileFrontmatter, type PaperFromMyst, type Parts } from './journal-checks.js';
+
+/** Each frontmatter part's tree, from {@link resolveFrontmatterParts}, as Curvenote's checks read it. */
+function partTrees(
+  session: ISession,
+  frontmatter: Parameters<typeof resolveFrontmatterParts>[1],
+): Parts {
+  const resolved = resolveFrontmatterParts(session, frontmatter) ?? {};
+  return Object.fromEntries(Object.entries(resolved).map(([name, { mdast }]) => [name, mdast]));
+}
 
 export function createMystEdge(): MystEdge {
   /**
@@ -119,7 +127,7 @@ export function createMystEdge(): MystEdge {
         process.chdir(prev);
       }
     },
-    paperForChecks(session: ISession, root: string): Paper {
+    paperForChecks(session: ISession, root: string): PaperFromMyst {
       const state = session.store.getState();
       const project = selectors.selectLocalProject(state, root);
       if (!project) throw new Error(`myst has no processed project at ${root}`);
@@ -128,14 +136,21 @@ export function createMystEdge(): MystEdge {
         const data = selectFile(session, file);
         if (!data) throw new Error(`myst has not processed ${file}`);
         // `file` is relative to the paper root, the cwd `withProjectSession` loaded it from.
-        return { file: resolve(root, file), frontmatter: data.frontmatter, mdast: data.mdast };
+        const abs = resolve(root, file);
+        return {
+          file: abs,
+          frontmatter: data.frontmatter,
+          fileFrontmatter: readFileFrontmatter(abs),
+          mdast: data.mdast,
+          parts: partTrees(session, data.frontmatter),
+        };
       });
+      const projectConfig = selectors.selectLocalProjectConfig(state, root) ?? {};
       return {
         root,
-        project: selectors.selectLocalProjectConfig(state, root) ?? {},
+        project: projectConfig,
+        projectParts: partTrees(session, projectConfig),
         pages,
-        toText,
-        selectAll,
       };
     },
   };

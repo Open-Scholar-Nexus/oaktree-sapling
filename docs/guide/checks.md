@@ -52,7 +52,9 @@ The checks are [Curvenote](https://curvenote.com)'s, from its open-source [`@cur
 
 `exports-exist` needs a built PDF, which the Journal checks do not make, so it reports that it could not run and never blocks.
 
-Any of MyST's own [build rules](https://github.com/jupyter-book/mystmd/blob/main/packages/myst-common/src/ruleids.ts) can be listed too, such as `math-renders` or `image-exists`: the check fails when the build warns under that rule.
+Any of MyST's own [build rules](https://github.com/jupyter-book/mystmd/blob/main/packages/myst-common/src/ruleids.ts) can be listed too, such as `math-renders` or `reference-target-resolves`: the check adds a failing row for each warning MyST gives under that rule.[^image-rules]
+
+[^image-rules]: The image rules, such as `image-exists`, never add a row: MyST raises them only while it copies the images into a build, and the checks read the paper without building it. A [check file](#journal-checks) can test image paths instead.
 
 A check fails, with a link to this section, when its id is neither a check above nor the path of a [check file](#journal-checks), or when an option has the wrong type, such as `max: lots`. An option the check does not have, such as a misspelled `maxx`, adds a warning, and the check runs without it.
 
@@ -70,7 +72,7 @@ checks:
   optional: true
 ```
 
-The path must start with `./`, be relative to the root of the journal repository, stay inside it and end in `.mjs`. `checks/` is the usual folder. The path names the check's row in the report, so renaming the file renames the row. The entry's other fields, except `optional`, reach the check as its options.
+The path must start with `./`, be relative to the root of the journal repository, stay inside it and end in `.mjs`. `checks/` is the usual folder. The path names the check's row in the report, so renaming the file renames the row. The entry's fields, except `optional`, reach the check as its options, `id` included.
 
 oak runs check files from v0.3.0. A paper pinned to an older version reports the path as an unknown check id, which blocks its merge, so you may want to list a new check file as `optional: true` until the journal's papers have [moved to that version](pins.md).
 
@@ -106,32 +108,41 @@ export default {
 };
 ```
 
-`validate` returns a result, a list of results, or a promise of either. An empty list adds no row. A result is a [Curvenote](https://www.npmjs.com/package/@curvenote/check-definitions) `CheckResult`, and oak reads these of its fields:
+`validate` gets `paper` and returns a result or a list of results. The [check file reference](../reference/check-files.md) lists the fields of a result and of `paper`, and what a check file can import.
 
-| field | |
-|---|---|
-| `status` | `pass`, `fail` or `error`. Required. |
-| `message` | The text of the row. Required. |
-| `help` | How to fix it, added to the annotation. |
-| `file` | The page, as `paper.pages[].file`. |
-| `position` | Where in the page, as a node's `position`. With `file`, the message shows on that line of the pull request's diff. |
-| `optional` | `true` makes this result a warning. |
+### Seeing what a check gets
 
-`paper` holds the paper as MyST processed it:
+A page's content is a tree of MyST nodes. To see the nodes for a piece of markdown, such as a figure or a bold line, paste it into the [MyST sandbox](https://mystmd.org/sandbox).
 
-| field | |
-|---|---|
-| `root` | The paper's folder, an absolute path. |
-| `project` | The project frontmatter, such as `title`, `authors` and `keywords`. |
-| `pages` | One `{ file, frontmatter, mdast }` per page, in table-of-contents order and starting with the root page, which Curvenote's checks read as the article: its absolute path, its own frontmatter, and its content as a tree. |
-| `toText(node)` | The text of a node and everything under it. |
-| `selectAll(selector, node)` | The nodes under `node` that match a selector such as `'heading'`, from [`unist-util-select`](https://github.com/syntax-tree/unist-util-select). |
+To see the whole `paper` for a real paper, list this check file and [run it](#testing-a-check-file). It writes `paper.json` into the paper's folder and adds no row:
 
-MyST moves an `abstract:` to `parts.abstract`: of `project` when `myst.yml` sets it, of the page's `frontmatter` when the page does. A `+++ {"part": "abstract"}` block stays in `mdast`, as a `block` node with `data.part` set to `abstract`.
+```js
+import { writeFileSync } from 'node:fs';
+export default {
+  validate(paper) {
+    writeFileSync('paper.json', JSON.stringify(paper, null, 2));
+    return [];
+  },
+};
+```
 
-The tree follows [MyST's document structure](https://mystmd.org/spec), from the MyST version in the paper's oak, so a MyST upgrade may change the shape of a node. oak adds fields to `paper` and never renames or removes one. Each check gets its own copy of `project` and `pages`, so a check that changes them leaves the next one unaffected.
+### A check that depends on the edition
 
-A check file can import Node's built-in modules, such as `node:path`, and other files in the journal repository. CI clones the journal repository without installing anything, so an import of a package fails there, even when it works on your machine.
+A check file can read the paper's edition and choose how strict to be. This one asks every author for an ORCID, and makes a missing one a warning for the papers of the editions its `warn_in` option names, such as an edition already published:
+
+```{literalinclude} ../../test/journal-checks/orcid-by-edition.mjs
+:language: js
+```
+
+List it in place of `authors-have-orcid`:
+
+```yaml
+checks:
+- id: ./checks/orcid-by-edition.mjs
+  warn_in: [isp-micropublication-2025]
+```
+
+A paper's edition is the `edition` in its `myst.yml`. The same shape works for CRediT roles, testing each author's `roles` in place of `orcid`.
 
 ### Testing a check file
 
@@ -145,7 +156,7 @@ It runs the journal's checks, check files included, as they are on disk, uncommi
 
 ### When a check file breaks
 
-A check file that is missing, does not load, has no `validate`, throws, or returns a result oak cannot read shows one `error` row under its path, with the reason and a link to this section. It blocks the merge unless the entry is `optional: true`, and the other checks still run. A check file pushed to the journal repository runs on every open paper pull request's next run, so try it with `oak validate` first.
+A check file that is missing, does not load, has no `validate`, throws, [times out](../reference/check-files.md#check-time-limit), or returns a result oak cannot read shows one `error` row under its path, with the reason and a link to this section. It blocks the merge unless the entry is `optional: true`, and the other checks still run. A check file pushed to the journal repository runs on every open paper pull request's next run, so try it with `oak validate` first.
 
 (validate-runs-paper-code)=
 ## `oak validate` runs the paper's code

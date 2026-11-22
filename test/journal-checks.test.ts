@@ -6,24 +6,30 @@
  */
 import { describe, it, expect } from 'vitest';
 import { fileURLToPath } from 'node:url';
-import { toText } from 'myst-common';
-import { selectAll } from 'unist-util-select';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { runChecks, toCheckRun, type JournalCheck } from '../src/checks.js';
-import type { Paper } from '../src/journal-checks.js';
+import { readFileFrontmatter, type PaperData } from '../src/journal-checks.js';
 import * as messages from '../src/messages.js';
 import { DOCS, docsUrl } from '../src/docs-links.js';
 
 const journalRoot = fileURLToPath(new URL('./journal-checks', import.meta.url));
 const session = {} as never;
 
-function handBuiltPaper(): Paper {
+function handBuiltPaper(): PaperData {
   return {
     root: '/paper',
     project: { title: 'A Paper' },
+    projectParts: {},
+    config: { project: { title: 'A Paper' } },
+    repo: 'owner/paper',
+    journal: { config: { name: 'A Journal' } as never, registry: [] },
     pages: [
       {
         file: '/paper/index.md',
         frontmatter: {},
+        fileFrontmatter: {},
         mdast: {
           type: 'root',
           children: [
@@ -31,15 +37,14 @@ function handBuiltPaper(): Paper {
             { type: 'paragraph', children: [{ type: 'text', value: 'Two' }] },
           ],
         },
+        parts: {},
       },
     ],
-    toText,
-    selectAll,
   };
 }
 
-function run(checks: JournalCheck[], paper: Paper = handBuiltPaper()) {
-  return runChecks(session, checks, journalRoot, () => paper);
+function run(checks: JournalCheck[], paper: PaperData = handBuiltPaper()) {
+  return runChecks(session, checks, { journalRoot, readPaper: () => paper });
 }
 
 const pass = { status: 'pass', message: 'fine' };
@@ -121,14 +126,12 @@ describe('loading and options', () => {
 
 describe('a paper oak cannot read', () => {
   it('every check file sends the author to the editors', async () => {
-    const out = await runChecks(
-      session,
-      [{ id: './echo.mjs' }, { id: './throws.mjs' }],
+    const out = await runChecks(session, [{ id: './echo.mjs' }, { id: './throws.mjs' }], {
       journalRoot,
-      () => {
+      readPaper: () => {
         throw new Error('no project');
       },
-    );
+    });
     const message = messages.pr.checkFilePaperUnreadable('no project');
     expect(out).toEqual([
       { id: './echo.mjs', status: 'error', message },
@@ -137,10 +140,34 @@ describe('a paper oak cannot read', () => {
   });
 
   it('is not read for a check file that does not load', async () => {
-    const out = await runChecks(session, [{ id: './missing.mjs' }], journalRoot, () => {
-      throw new Error('unreachable');
+    const out = await runChecks(session, [{ id: './missing.mjs' }], {
+      journalRoot,
+      readPaper: () => {
+        throw new Error('unreachable');
+      },
     });
     expect(out[0]!.message).toBe(messages.pr.checkFileMissing(`${journalRoot}/missing.mjs`));
+  });
+});
+
+describe('a check file that does not finish in time', () => {
+  it('is an error row, keeps its optional, and the next check still runs', async () => {
+    const out = await runChecks(
+      session,
+      [
+        { id: './hangs.mjs' },
+        { id: './hangs.mjs', optional: true },
+        { id: './echo.mjs', result: pass },
+      ],
+      { journalRoot, readPaper: handBuiltPaper, timeoutMs: 50 },
+    );
+    // 50 ms rounds down to 0 seconds.
+    const message = messages.pr.checkTimedOut(0);
+    expect(out).toEqual([
+      { id: './hangs.mjs', status: 'error', message },
+      { id: './hangs.mjs', status: 'error', message, optional: true },
+      { id: './echo.mjs', status: 'pass', message: 'fine' },
+    ]);
   });
 });
 
@@ -170,8 +197,9 @@ describe('each check reads its own copy of the paper', () => {
     const paper = handBuiltPaper();
     const out = await run([{ id: './edits-tree.mjs' }, { id: './reads-tree.mjs' }], paper);
     expect(out).toEqual([
-      { id: './reads-tree.mjs', status: 'pass', message: '2 nodes, title A Paper' },
+      { id: './reads-tree.mjs', status: 'pass', message: '2 nodes, title A Paper, A Journal' },
     ]);
+    expect(paper.journal.config.name).toBe('A Journal');
     expect(paper.pages[0]!.mdast.children).toHaveLength(2);
   });
 
@@ -192,5 +220,88 @@ describe('each check reads its own copy of the paper', () => {
         message: 'bad',
       },
     ]);
+  });
+});
+
+describe("a page's frontmatter as written", () => {
+  const dir = mkdtempSync(join(tmpdir(), 'oak-file-frontmatter-'));
+  const read = (name: string, text: string) => {
+    writeFileSync(join(dir, name), text);
+    return readFileFrontmatter(join(dir, name));
+  };
+
+  it('is the block at the top of the file, without the fields MyST fills in', () => {
+    expect(read('a.md', '---\ntitle: T\nauthors: [A]\n---\n# Body\n')).toEqual({
+      title: 'T',
+      authors: ['A'],
+    });
+  });
+
+  it('is empty for a page without one, or with an empty one', () => {
+    expect(read('b.md', '# Body\n\n---\ntitle: T\n---\n')).toEqual({});
+    expect(read('c.md', '---\n---\n# Body\n')).toEqual({});
+  });
+
+  it('is null when the block is not a YAML mapping, or the page is not markdown', () => {
+    expect(read('d.md', '---\ntitle: [unclosed\n---\n')).toBeNull();
+    expect(read('e.md', '---\n- a list\n---\n')).toBeNull();
+    expect(read('f.ipynb', '{"cells": []}')).toBeNull();
+  });
+});
+
+describe('positionOf', () => {
+  const at = (line: number) => ({ start: { line, column: 1 }, end: { line, column: 1 } });
+  /** A figure and an `{image}` as MyST makes them from directives: with no `position`. */
+  function paperWithDirectives(): PaperData {
+    const paper = handBuiltPaper();
+    paper.pages[0]!.mdast = {
+      type: 'root',
+      position: { start: { line: 1, column: 1 }, end: { line: 12, column: 1 } },
+      children: [
+        { type: 'paragraph', position: at(3), children: [{ type: 'text', value: 'Text' }] },
+        {
+          type: 'container',
+          kind: 'figure',
+          children: [
+            { type: 'image', url: 'in-figure.png' },
+            { type: 'caption', children: [{ type: 'paragraph', position: at(7), children: [] }] },
+          ],
+        },
+        { type: 'image', url: 'directive.png' },
+        { type: 'image', url: 'markdown.png', position: at(11) },
+      ],
+    };
+    return paper;
+  }
+
+  it("is a node's own position, else the line of the nearest node before it that has one", async () => {
+    const out = await run([{ id: './image-positions.mjs' }], paperWithDirectives());
+    expect(out.map((r) => [r.message, r.position?.start.line])).toEqual([
+      ['in-figure.png', 3],
+      ['directive.png', 7],
+      ['markdown.png', 11],
+      ['made', undefined],
+    ]);
+  });
+});
+
+describe('the edition-aware example in the docs', () => {
+  const entry = { id: './orcid-by-edition.mjs', warn_in: ['2025'] };
+  function paperIn(edition: string): PaperData {
+    const paper = handBuiltPaper();
+    paper.project = {
+      options: { 'oaktree-sapling': { version: 'v0.4.0', edition } },
+      authors: [{ name: 'Ada', orcid: '0000-0002-1825-0097' }, { name: 'Bo' }],
+    };
+    return paper;
+  }
+
+  it('warns for a paper in an edition warn_in names, and blocks for one in another', async () => {
+    expect(await run([entry], paperIn('2025'))).toMatchObject([
+      { status: 'fail', message: 'Bo does not have an ORCID', optional: true },
+    ]);
+    const out = await run([entry], paperIn('2026'));
+    expect(out).toMatchObject([{ status: 'fail', message: 'Bo does not have an ORCID' }]);
+    expect(toCheckRun(out).conclusion).toBe('failure');
   });
 });
