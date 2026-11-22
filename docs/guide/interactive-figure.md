@@ -1,7 +1,9 @@
 (guide-interactive-figure)=
 # Interactive figures
 
-A figure can be rendered as an interactive chart on the paper's website and as a static image in its PDF. The chart is made with [Altair](https://altair-viz.github.io) in a Jupyter notebook, in one cell that saves the chart in both forms. The build reads what the notebook has saved, and shows the chart on the website and the image in the PDF.
+A figure can be rendered as an interactive chart on the paper's website and as a static image in its PDF. Any plotting library works if it can save a chart both as HTML that draws it and as an image. This guide uses [Altair](https://altair-viz.github.io). Altair describes a chart and its data in a format called Vega-Lite, and `vl-convert-python` draws the image from that same description with no browser installed, so the image in the PDF matches the chart on the website.
+
+The chart is made in a Jupyter notebook, in one cell that saves it in both forms. The build reads what the notebook has saved, and shows the chart on the website and the image in the PDF.
 
 ## 1. Install the packages
 
