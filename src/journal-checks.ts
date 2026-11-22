@@ -23,7 +23,8 @@ export type Parts = Record<string, GenericParent>;
 export interface PaperPage {
   /** Absolute path to the page's file. */
   file: string;
-  /** The frontmatter as MyST resolved it, with the project's fields filled in. */
+  /** The frontmatter as MyST resolved it: fields the page does not set, such as `authors` and
+   *  `keywords`, come from the project frontmatter in `myst.yml`. */
   frontmatter: Record<string, any>;
   /** The frontmatter block at the top of the file, as written; see {@link readFileFrontmatter}. */
   fileFrontmatter: Record<string, any> | null;
