@@ -1,7 +1,7 @@
 (ref-check-files)=
 # Check files
 
-A check file is a JavaScript module in the journal repository that `journal.yml` lists under `checks:` by its path ([how to write one](../guide/checks.md#journal-checks)). Its default export has a `validate(paper, options)` function. `options` holds the fields of the check's entry in `journal.yml`, except `optional`, `id` included.
+A check file is a JavaScript module in the journal repository that `journal.yml` lists under `checks:` by its path ([how to write one](../guide/checks.md#journal-checks)). Its default export has a `validate(paper, options)` function. `options` has the fields of the check's entry in `journal.yml`, except `optional`, `id` included.
 
 (ref-check-files-results)=
 ## Results
@@ -19,6 +19,8 @@ A check file is a JavaScript module in the journal repository that `journal.yml`
 
 (ref-check-files-paper)=
 ## `paper`
+
+Its types in oak's source are [`PaperData` and `Paper`](src:src/journal-checks.ts@PaperData).
 
 | field | |
 |---|---|
@@ -38,7 +40,7 @@ oak adds fields to `paper` and never renames or removes one.
 (ref-check-files-pages)=
 ### Pages
 
-Each entry of `paper.pages` holds:
+Each entry of `paper.pages` has these fields. Its type in oak's source is [`PaperPage`](src:src/journal-checks.ts@PaperPage).
 
 | field | |
 |---|---|
@@ -58,7 +60,7 @@ A paper's metadata comes from `myst.yml` and from the block at the top of each p
 - `config` is `myst.yml` as written. `project` is its `project:` section with the journal's settings merged in.
 - A page's `fileFrontmatter` is its block as written. Its `frontmatter` is that block as MyST reads it: MyST drops the keys it does not know, fills in the fields the page does not set, such as `authors` and `keywords`, from the project frontmatter, and takes the `title` from a first `# Heading`.
 
-Some frontmatter keys hold content: `abstract:`, `data_availability:`, `acknowledgments:` and the other parts. MyST moves each into a part of its own, and `project.parts` and a page's `frontmatter.parts` then hold only where the part is. The part's content is in `projectParts` when `myst.yml` sets it, and in the page's `parts` when the page does. A part's `position` counts lines from the start of the part's own text, not of the file. A `+++ {"part": "abstract"}` block in a page's body stays in `mdast`, as a `block` node with `data.part` set to `abstract`.
+Some frontmatter keys are content, not settings: `abstract:`, `data_availability:`, `acknowledgments:` and the other parts. MyST moves each into a part of its own, and leaves only a pointer to it in `project.parts` or the page's `frontmatter.parts`. The part's content is in `projectParts` when `myst.yml` sets it, and in the page's `parts` when the page does. A part's `position` counts lines from the start of the part's own text, not of the file. A `+++ {"part": "abstract"}` block in a page's body stays in `mdast`, as a `block` node with `data.part` set to `abstract`.
 
 (ref-check-files-running)=
 ## Where a check runs

@@ -108,7 +108,7 @@ export default {
 };
 ```
 
-`validate` gets `paper` and returns a result or a list of results. The [check file reference](../reference/check-files.md) lists what a result and `paper` hold, and what a check file can import.
+`validate` gets `paper` and returns a result or a list of results. The [check file reference](../reference/check-files.md) lists the fields of a result and of `paper`, and what a check file can import.
 
 ### Seeing what a check gets
 
