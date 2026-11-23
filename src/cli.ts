@@ -88,33 +88,33 @@ function assetOverridesFrom(argv: string[]): ComposeInput['assetOverrides'] {
 }
 
 /** The journal repo a verb composes from, and how the derived config records it. */
-type ResolvedInstance = { root: string | null; stamp: JournalStamp | undefined };
+type ResolvedJournal = { root: string | null; stamp: JournalStamp | undefined };
 
 /**
- * Where the journal repo is: none with `--no-instance`, else `--instance`, else a cached
- * clone of pins.yml's `instance_repo`, else this repo when `instance_repo` is `.` or absent
+ * Where the journal repo is: none with `--no-journal`, else `--journal`, else a cached
+ * clone of pins.yml's `journal_repo`, else this repo when `journal_repo` is `.` or absent
  * and a `journal.yml` sits beside the paper. pins.yml is editor-gated and that `journal.yml` is
  * not, so the pin comes first. Every verb that reads journal settings finds it here, `deposit`
- * and `deploy-preview` included, in CI too: `ci/run.sh` passes no `--instance`.
+ * and `deploy-preview` included, in CI too: `ci/run.sh` passes no `--journal`.
  *
  * Returns a root, with the {@link JournalStamp} the derived config records for it, or an error
  * string, and never exits, so `oak validate` can report the error.
  */
-async function resolveInstanceRoot(
+async function resolveJournalRoot(
   argv: string[],
   paperRoot: string,
   verb: msg.JournalVerb,
-): Promise<ResolvedInstance | { error: string }> {
-  if (has(argv, 'no-instance')) return { root: null, stamp: undefined };
-  const explicit = flag(argv, 'instance');
+): Promise<ResolvedJournal | { error: string }> {
+  if (has(argv, 'no-journal')) return { root: null, stamp: undefined };
+  const explicit = flag(argv, 'journal');
   // Refused, since the error below would ask for the flag that was just passed.
-  if (explicit === '') throw new UserError(msg.flagNeedsValue('instance'));
+  if (explicit === '') throw new UserError(msg.flagNeedsValue('journal'));
   const { cachedJournal, journalStamp } = await import('./gh.js');
   const found = (root: string) => ({ root, stamp: journalStamp(root, paperRoot) });
   if (explicit) return found(resolve(explicit));
   let journalRepo: string | undefined;
   try {
-    journalRepo = (await import('./pinned.js')).readPinsValue(paperRoot, 'instance_repo').value;
+    journalRepo = (await import('./pinned.js')).readPinsValue(paperRoot, 'journal_repo').value;
   } catch (err) {
     // A pins.yml with a YAML error (`readDoc`) is returned, so `oak validate` reports it and
     // deploy-preview falls back to the artifact link.
@@ -123,7 +123,7 @@ async function resolveInstanceRoot(
   }
   if (!journalRepo || journalRepo === '.') {
     if (existsSync(join(paperRoot, 'journal.yml'))) return found(paperRoot);
-    return { error: msg.build.noInstance(verb, paperRoot) };
+    return { error: msg.build.noJournal(verb, paperRoot) };
   }
   try {
     const cache = cachedJournal(journalRepo, paperRoot);
@@ -136,7 +136,7 @@ async function resolveInstanceRoot(
     return found(cache.root);
   } catch (err) {
     const why = err instanceof Error ? err.message : String(err);
-    return { error: msg.build.instanceCloneFailed(verb, journalRepo, why) };
+    return { error: msg.build.journalCloneFailed(verb, journalRepo, why) };
   }
 }
 
@@ -163,13 +163,13 @@ function isJournalRepo(root: string): boolean {
 function materializeInputFrom(
   argv: string[],
   paperRoot: string,
-  instance: ResolvedInstance,
+  journal: ResolvedJournal,
 ): Omit<MaterializeInput, 'edge'> {
   return {
     paperRoot,
     engineRoot: engineRoot(),
-    instanceRoot: instance.root,
-    journalStamp: instance.stamp,
+    journalRoot: journal.root,
+    journalStamp: journal.stamp,
     baseUrl: flag(argv, 'base-url') ?? '',
     assetOverrides: assetOverridesFrom(argv),
   };
@@ -183,7 +183,7 @@ async function buildPaper(argv: string[]): Promise<{ paperRoot: string; resolved
     process.stderr.write(annotate('error', msg.build.inJournalRepo(paperRoot)) + '\n');
     process.exit(2);
   }
-  const resolved = await resolveInstanceRoot(argv, paperRoot, 'build');
+  const resolved = await resolveJournalRoot(argv, paperRoot, 'build');
   if ('error' in resolved) {
     process.stderr.write(resolved.error + '\n');
     process.exit(2);
@@ -316,7 +316,7 @@ async function cmdStart(argv: string[]): Promise<number> {
     return await never();
   }
 
-  const resolved = await resolveInstanceRoot(argv, paperRoot, 'start');
+  const resolved = await resolveJournalRoot(argv, paperRoot, 'start');
   if ('error' in resolved) {
     process.stderr.write(resolved.error + '\n');
     return 2;
@@ -452,7 +452,7 @@ const RELEASE_VALUE_FLAGS = [
   'myst',
   'token',
   'site-url',
-  'instance',
+  'journal',
   'bundle-out',
 ];
 
@@ -511,7 +511,7 @@ async function sandboxFromDoi(
 async function zenodoSetup(
   argv: string[],
   verb: 'release reserve-doi' | 'release status',
-): Promise<{ api: ZenodoApi; mystPath: string; instanceRoot: string | null } | number> {
+): Promise<{ api: ZenodoApi; mystPath: string; journalRoot: string | null } | number> {
   const z = await import('./zenodo.js');
   const mystPath = mystPathOf(argv);
   const sandbox = has(argv, 'sandbox');
@@ -524,13 +524,13 @@ async function zenodoSetup(
     process.stderr.write(why + '\n');
     return 2;
   }
-  const instance = await resolveInstanceRoot(argv, dirname(mystPath), verb);
-  if ('error' in instance) {
-    process.stderr.write(instance.error + '\n');
+  const journal = await resolveJournalRoot(argv, dirname(mystPath), verb);
+  if ('error' in journal) {
+    process.stderr.write(journal.error + '\n');
     return 2;
   }
   const api = new z.ZenodoApi(z.createFetchTransport(), sandbox, token);
-  return { api, mystPath, instanceRoot: instance.root };
+  return { api, mystPath, journalRoot: journal.root };
 }
 
 /** `oak release reserve-doi`: reserves the DOI and opens the DOI pull request. Documented at
@@ -538,7 +538,7 @@ async function zenodoSetup(
 async function cmdReleaseReserveDoi(argv: string[]): Promise<number> {
   const setup = await zenodoSetup(argv, 'release reserve-doi');
   if (typeof setup === 'number') return setup;
-  const { api, mystPath, instanceRoot } = setup;
+  const { api, mystPath, journalRoot } = setup;
   const z = await import('./zenodo.js');
   const gh = await import('./gh.js');
   const repo = gh.currentRepo(flag(argv, 'repo'), dirname(mystPath));
@@ -547,7 +547,7 @@ async function cmdReleaseReserveDoi(argv: string[]): Promise<number> {
     return 2;
   }
   const siteUrl = flag(argv, 'site-url') ?? process.env.SITE_URL;
-  const out = await z.cmdPrepare({ mystPath, repo, siteUrl, api, instanceRoot });
+  const out = await z.cmdPrepare({ mystPath, repo, siteUrl, api, journalRoot });
   // Open the DOI pull request for the myst.yml write. Without a gh login the write is
   // left for the editor to commit.
   if (out.exitCode === 0 && !gh.ghLoggedIn()) {
@@ -704,9 +704,9 @@ async function cmdReleaseDeposit(argv: string[]): Promise<number> {
     return 2;
   }
   // The deposit archives this journal and reads its `zenodo:`.
-  const instance = await resolveInstanceRoot(argv, paperRoot, 'release deposit');
-  if ('error' in instance) {
-    process.stderr.write(instance.error + '\n');
+  const journal = await resolveJournalRoot(argv, paperRoot, 'release deposit');
+  if ('error' in journal) {
+    process.stderr.write(journal.error + '\n');
     return 2;
   }
   // `source.zip` and the provenance are HEAD's, and the metadata the working tree's myst.yml.
@@ -746,7 +746,7 @@ async function cmdReleaseDeposit(argv: string[]): Promise<number> {
     bundleOut,
     api,
     git: gh.realGitContext,
-    instanceRoot: instance.root,
+    journalRoot: journal.root,
     engineRoot: engineRoot(),
     publish,
     ...builtHere,
@@ -850,7 +850,7 @@ function runChild(
 }
 
 /** The flags `oak release` passes on to the subcommands it hands to the pinned oak. */
-const RELEASE_SUBCOMMAND_FLAGS = ['token', 'site-url', 'instance'] as const;
+const RELEASE_SUBCOMMAND_FLAGS = ['token', 'site-url', 'journal'] as const;
 
 /**
  * `oak release [--repo owner/paper] vX [--sandbox] [--yes] [--publish-without-review]` from the
@@ -908,8 +908,8 @@ async function cmdReleaseVersion(argv: string[]): Promise<number> {
   const passOn = RELEASE_SUBCOMMAND_FLAGS.flatMap((name) => {
     const value = flag(argv, name);
     if (value === undefined) return [];
-    return [`--${name}`, name === 'instance' ? resolve(value) : value];
-  }).concat(has(argv, 'no-instance') ? ['--no-instance'] : []);
+    return [`--${name}`, name === 'journal' ? resolve(value) : value];
+  }).concat(has(argv, 'no-journal') ? ['--no-journal'] : []);
   // The token is printed as a placeholder for the editor to fill in.
   const rerun = [
     'oak release --repo',
@@ -1060,12 +1060,12 @@ async function cmdDeployPreview(argv: string[]): Promise<number> {
   const { eventHeadSha } = await import('./artifact.js');
   const siteDir = resolve(argv.find((a) => !a.startsWith('--')) ?? 'site');
   const paper = flag(argv, 'paper');
-  const instance = await resolveInstanceRoot(argv, resolve(paper ?? '.'), 'deploy-preview');
+  const journal = await resolveJournalRoot(argv, resolve(paper ?? '.'), 'deploy-preview');
   const out = await preview.cmdDeployPreview(
     {
       siteDir,
       repoRoot: resolve('.'),
-      instanceRoot: 'error' in instance ? { problem: instance.error } : instance.root,
+      journalRoot: 'error' in journal ? { problem: journal.error } : journal.root,
       repo: gh.currentRepo(flag(argv, 'repo')),
       serverUrl: process.env.GITHUB_SERVER_URL ?? 'https://github.com',
       artifactRunId: process.env.PAPER_BUILD_RUN_ID,
@@ -1189,7 +1189,7 @@ async function cmdValidate(argv: string[]): Promise<number> {
     process.stderr.write(annotate('error', text) + '\n');
     return writeFailureReport(reportPath, paperRoot, msg.workflow.validateCouldNotRun, text, 2);
   }
-  const resolved = await resolveInstanceRoot(argv, paperRoot, 'validate');
+  const resolved = await resolveJournalRoot(argv, paperRoot, 'validate');
   if ('error' in resolved) {
     process.stderr.write(annotate('error', resolved.error) + '\n');
     return writeFailureReport(
@@ -1200,7 +1200,7 @@ async function cmdValidate(argv: string[]): Promise<number> {
       2,
     );
   }
-  const instanceRoot = resolved.root;
+  const journalRoot = resolved.root;
   const strict = has(argv, 'strict');
 
   const gh = await import('./gh.js');
@@ -1415,7 +1415,7 @@ async function cmdBootstrap(argv: string[]): Promise<number> {
   const gh = await import('./gh.js');
   const bootstrap = await import('./bootstrap.js');
   const paperTemplateRoot = bootstrap.paperTemplateRoot(engineRoot());
-  const instanceTemplateRoot = bootstrap.instanceTemplateRoot(engineRoot());
+  const journalTemplateRoot = bootstrap.journalTemplateRoot(engineRoot());
   const siteTemplateRoot = bootstrap.siteTemplateRoot(engineRoot());
   const mystRange = bootstrap.engineMystRange(engineRoot());
 
@@ -1425,8 +1425,8 @@ async function cmdBootstrap(argv: string[]): Promise<number> {
     return 2;
   }
   gh.assertRepoName(repo, '--repo');
-  const instance = flag(rest, 'instance');
-  if (instance && instance !== '.') gh.assertRepoName(instance, '--instance');
+  const journal = flag(rest, 'journal');
+  if (journal && journal !== '.') gh.assertRepoName(journal, '--journal');
   // Malformed arguments are refused before any gh call.
   const external = sub === 'journal' && !has(rest, 'co-located');
   if (sub === 'journal') {
@@ -1462,7 +1462,7 @@ async function cmdBootstrap(argv: string[]): Promise<number> {
   const deps = {
     prov: gh.realProvisioner,
     paperTemplateRoot,
-    instanceTemplateRoot,
+    journalTemplateRoot,
     siteTemplateRoot,
     mystRange,
     log: (m: string) => process.stderr.write(m + '\n'),
@@ -1476,7 +1476,7 @@ async function cmdBootstrap(argv: string[]): Promise<number> {
         repo,
         from: flag(rest, 'from'),
         sourceRef: flag(rest, 'source-ref'),
-        instance,
+        journal,
         // No default: the edition must be one the journal already has.
         edition: flag(rest, 'edition'),
         engineVersion,

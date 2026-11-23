@@ -31,14 +31,14 @@ cpSync(join(engineDir, 'test', 'fixture-paper'), fixturePaper, {
   recursive: true,
   filter: (src) => !src.endsWith('myst.oak.yml'),
 });
-const fixtureInstance = join(engineDir, 'test', 'fixture-instance');
+const fixtureJournal = join(engineDir, 'test', 'fixture-journal');
 const repo = 'open-scholar-nexus/fixture-sample-paper';
 
 /** Runs `oak validate --json`, capturing stdout and stderr separately. */
 function spawnValidate(paper: string): { exitCode: number; stdout: string; stderr: string } {
   const r = spawnSync(
     'node',
-    [bundle, 'validate', '--paper', paper, '--instance', fixtureInstance, '--repo', repo, '--json'],
+    [bundle, 'validate', '--paper', paper, '--journal', fixtureJournal, '--repo', repo, '--json'],
     { encoding: 'utf8' },
   );
   return { exitCode: r.status ?? 1, stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
@@ -123,8 +123,8 @@ describe.skipIf(bundleState() === 'absent')(
           'validate',
           '--paper',
           fixturePaper,
-          '--instance',
-          fixtureInstance,
+          '--journal',
+          fixtureJournal,
           '--repo',
           repo,
           '--report',
@@ -146,7 +146,7 @@ describe.skipIf(bundleState() === 'absent')(
       const reportPath = join(tmp, 'report.json');
       const r = spawnSync(
         'node',
-        [bundle, 'validate', '--paper', failingPaper(), '--instance', fixtureInstance].concat([
+        [bundle, 'validate', '--paper', failingPaper(), '--journal', fixtureJournal].concat([
           '--repo',
           repo,
           '--report',
@@ -162,7 +162,7 @@ describe.skipIf(bundleState() === 'absent')(
       const reportPath = join(tmpdir(), 'oak-no-such-dir', 'nested', 'report.json');
       const r = spawnSync(
         'node',
-        [bundle, 'validate', '--paper', fixturePaper, '--instance', fixtureInstance].concat([
+        [bundle, 'validate', '--paper', fixturePaper, '--journal', fixtureJournal].concat([
           '--repo',
           repo,
           '--report',
@@ -180,7 +180,7 @@ describe.skipIf(bundleState() === 'absent')(
       writeFileSync(eventPath, JSON.stringify({ pull_request: { number: 42 } }));
       const r = spawnSync(
         'node',
-        [bundle, 'validate', '--paper', fixturePaper, '--instance', fixtureInstance].concat([
+        [bundle, 'validate', '--paper', fixturePaper, '--journal', fixtureJournal].concat([
           '--repo',
           repo,
           '--report',
@@ -234,7 +234,7 @@ describe.skipIf(bundleState() === 'absent')('the COMPOSED view reaches the check
   }, 60_000);
 });
 
-// Finding the journal repo. With `instance_repo: .` the action passes no `--instance`, so
+// Finding the journal repo. With `journal_repo: .` the action passes no `--journal`, so
 // validate looks for a journal.yml beside the paper; with none, it still writes a report.
 describe.skipIf(bundleState() === 'absent')(
   'oak validate, finding the journal repo and reporting a crash',
@@ -266,21 +266,21 @@ describe.skipIf(bundleState() === 'absent')(
       expect(String(written.errors[0])).toContain('no journal repo found');
     }, 60_000);
 
-    it('the error names pins.yml and what `instance_repo: .` means', () => {
+    it('the error names pins.yml and what `journal_repo: .` means', () => {
       const r = spawnSync('node', [bundle, 'validate', '--paper', paperOnly()], {
         encoding: 'utf8',
       });
       expect(r.status).toBe(2);
-      expect(r.stderr).toContain('instance_repo');
-      expect(r.stderr).toContain('--no-instance');
+      expect(r.stderr).toContain('journal_repo');
+      expect(r.stderr).toContain('--no-journal');
     }, 60_000);
 
     it('uses a journal.yml beside the paper as the journal repo', () => {
-      // What `instance_repo: .` means: the journal.yml sits beside the paper.
+      // What `journal_repo: .` means: the journal.yml sits beside the paper.
       const dir = mkdtempSync(join(tmpdir(), 'oak-val-colo-'));
       for (const f of ['bib.bib', 'index.md', 'myst.yml'])
         copyFileSync(join(fixturePaper, f), join(dir, f));
-      cpSync(fixtureInstance, dir, { recursive: true });
+      cpSync(fixtureJournal, dir, { recursive: true });
       const report = join(dir, 'report.json');
       const r = spawnSync(
         'node',
@@ -297,10 +297,10 @@ describe.skipIf(bundleState() === 'absent')(
       expect((out.notes ?? []).join(' ')).not.toMatch(/uncomposed/i);
     }, 60_000);
 
-    it('--no-instance still checks the paper on its own', () => {
+    it('--no-journal still checks the paper on its own', () => {
       const r = spawnSync(
         'node',
-        [bundle, 'validate', '--paper', paperOnly(), '--no-instance', '--json'],
+        [bundle, 'validate', '--paper', paperOnly(), '--no-journal', '--json'],
         {
           encoding: 'utf8',
         },
@@ -321,7 +321,7 @@ describe.skipIf(bundleState() === 'absent')("oak validate, the journal's check f
   /** A copy of the fixture journal that also lists the example check files. */
   function journalWithCheckFiles(optional: boolean): string {
     const dir = mkdtempSync(join(tmpdir(), 'oak-val-checkfiles-'));
-    cpSync(fixtureInstance, dir, { recursive: true });
+    cpSync(fixtureJournal, dir, { recursive: true });
     mkdirSync(join(dir, 'checks'));
     for (const id of checkFiles) {
       copyFileSync(join(engineDir, 'test', 'journal-checks', basename(id)), join(dir, id));
@@ -345,7 +345,7 @@ describe.skipIf(bundleState() === 'absent')("oak validate, the journal's check f
   ): { exitCode: number; out: any } {
     const r = spawnSync(
       'node',
-      [bundle, 'validate', '--paper', paper, '--instance', journal, '--repo', repo, '--json'],
+      [bundle, 'validate', '--paper', paper, '--journal', journal, '--repo', repo, '--json'],
       { encoding: 'utf8', env: { ...process.env, GITHUB_WORKSPACE: workspace } },
     );
     return { exitCode: r.status ?? 1, out: JSON.parse(r.stdout) };
@@ -417,7 +417,7 @@ describe.skipIf(bundleState() === 'absent')('oak validate, what a check file rea
   /** A copy of the fixture journal that lists `test/journal-checks/reports-paper.mjs`. */
   function journalWithReporter(): string {
     const dir = mkdtempSync(join(tmpdir(), 'oak-val-reporter-'));
-    cpSync(fixtureInstance, dir, { recursive: true });
+    cpSync(fixtureJournal, dir, { recursive: true });
     mkdirSync(join(dir, 'checks'));
     copyFileSync(join(engineDir, 'test', 'journal-checks', basename(id)), join(dir, id));
     const journalYml = readFileSync(join(dir, 'journal.yml'), 'utf8');
@@ -447,7 +447,7 @@ describe.skipIf(bundleState() === 'absent')('oak validate, what a check file rea
     const paper = paperWithFrontmatter();
     const r = spawnSync(
       'node',
-      [bundle, 'validate', '--paper', paper, '--instance', journal, '--repo', repo, '--json'],
+      [bundle, 'validate', '--paper', paper, '--journal', journal, '--repo', repo, '--json'],
       { encoding: 'utf8' },
     );
     const row = JSON.parse(r.stdout).checks.find((c: any) => c.id === id);
@@ -493,7 +493,7 @@ describe.skipIf(bundleState() === 'absent')("oak validate, a catalog check's opt
 
   it("get Curvenote's defaults and types; a wrong one is an error row, an unknown one a warning", () => {
     const journal = mkdtempSync(join(tmpdir(), 'oak-val-options-'));
-    cpSync(fixtureInstance, journal, { recursive: true });
+    cpSync(fixtureJournal, journal, { recursive: true });
     const journalYml = readFileSync(join(journal, 'journal.yml'), 'utf8').replace(
       '  - id: keywords-defined\n',
       '  - id: keywords-defined\n' +
@@ -505,17 +505,7 @@ describe.skipIf(bundleState() === 'absent')("oak validate, a catalog check's opt
     writeFileSync(join(journal, 'journal.yml'), journalYml);
     const r = spawnSync(
       'node',
-      [
-        bundle,
-        'validate',
-        '--paper',
-        fixturePaper,
-        '--instance',
-        journal,
-        '--repo',
-        repo,
-        '--json',
-      ],
+      [bundle, 'validate', '--paper', fixturePaper, '--journal', journal, '--repo', repo, '--json'],
       { encoding: 'utf8' },
     );
     const rows = JSON.parse(r.stdout).checks.filter((c: any) => c.id === 'keywords-length');

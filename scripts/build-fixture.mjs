@@ -34,8 +34,8 @@ execFileSync(
     'build',
     '--paper',
     tmp,
-    '--instance',
-    join(engineDir, 'test', 'fixture-instance'),
+    '--journal',
+    join(engineDir, 'test', 'fixture-journal'),
     '--exports-only', // PDF only: the HTML export needs a theme downloaded from the network
   ],
   // The fixture pins another version, so this oak builds it itself (handOff in src/pinned.ts).

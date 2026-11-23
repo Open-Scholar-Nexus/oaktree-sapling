@@ -27,7 +27,7 @@ import { dirname, isAbsolute, join } from 'node:path';
 import {
   resolveBrandAssetPath,
   isBrandAssetUrl,
-  isInstanceRelativeTemplate,
+  isJournalRelativeTemplate,
   unfetchableTemplateUrl,
 } from './compose.js';
 import {
@@ -111,10 +111,10 @@ export function checkLayout(
 /** Warns when the brand has no favicon that resolves: the site still renders, with a
  *  default icon. A URL resolves for HTML, so it passes. */
 export function checkBrandFavicon(
-  input: { instanceRoot: string | null; favicon?: string },
+  input: { journalRoot: string | null; favicon?: string },
   probes: FsProbes,
 ): IdCheckResult {
-  const { instanceRoot, favicon } = input;
+  const { journalRoot, favicon } = input;
   if (!favicon) {
     return {
       ok: false,
@@ -123,7 +123,7 @@ export function checkBrandFavicon(
     };
   }
   if (isBrandAssetUrl(favicon)) return { ok: true };
-  const resolved = instanceRoot ? resolveBrandAssetPath(instanceRoot, favicon) : favicon;
+  const resolved = journalRoot ? resolveBrandAssetPath(journalRoot, favicon) : favicon;
   return probes.existsProbe(resolved)
     ? { ok: true }
     : { ok: false, severity: 'warn', message: msg.validate.brandFaviconUnresolved(favicon) };
@@ -132,10 +132,10 @@ export function checkBrandFavicon(
 /** Warns when the brand's PDF watermark (`project.options.logo`) is absent, a URL (typst cannot
  *  fetch) or a local file that does not resolve [R62]. */
 export function checkBrandWatermark(
-  input: { instanceRoot: string | null; logo?: string },
+  input: { journalRoot: string | null; logo?: string },
   probes: FsProbes,
 ): IdCheckResult {
-  const { instanceRoot, logo } = input;
+  const { journalRoot, logo } = input;
   if (!logo) {
     return {
       ok: false,
@@ -150,7 +150,7 @@ export function checkBrandWatermark(
       message: msg.validate.brandWatermarkIsUrl(logo),
     };
   }
-  const resolved = instanceRoot ? resolveBrandAssetPath(instanceRoot, logo) : logo;
+  const resolved = journalRoot ? resolveBrandAssetPath(journalRoot, logo) : logo;
   return probes.existsProbe(resolved)
     ? { ok: true }
     : { ok: false, severity: 'warn', message: msg.validate.brandWatermarkUnresolved(logo) };
@@ -224,7 +224,7 @@ export function isFloatingTemplate(value: string): boolean {
     return value.endsWith('.git');
   }
   // A local path is committed and reviewed, so it does not float.
-  if (isAbsolute(value) || isInstanceRelativeTemplate(value)) return false;
+  if (isAbsolute(value) || isJournalRelativeTemplate(value)) return false;
   // A bare template name resolves against the live template API, so it floats.
   return true;
 }
@@ -239,10 +239,10 @@ export function isFloatingTemplate(value: string): boolean {
  * it is the journal's call.
  */
 export function checkTemplates(
-  input: { instanceRoot: string | null; authorTemplate?: string; journalTemplate?: string },
+  input: { journalRoot: string | null; authorTemplate?: string; journalTemplate?: string },
   probes: FsProbes,
 ): NamedFinding[] {
-  const { instanceRoot, authorTemplate, journalTemplate } = input;
+  const { journalRoot, authorTemplate, journalTemplate } = input;
   const out: NamedFinding[] = [];
   const warn = (check: string, message: string) =>
     out.push({ check, severity: 'warn', message, klass: 'config' });
@@ -273,9 +273,9 @@ export function checkTemplates(
   // Only `./` or `../` is a path, so a bare `templates/typst` goes to myst as a name and fails
   // later in a confusing way. Warn when a directory with that name exists: then a path was
   // meant.
-  if (journalTemplate && instanceRoot && !isBrandAssetUrl(journalTemplate)) {
-    const bare = !isAbsolute(journalTemplate) && !isInstanceRelativeTemplate(journalTemplate);
-    if (bare && probes.existsProbe(join(instanceRoot, journalTemplate))) {
+  if (journalTemplate && journalRoot && !isBrandAssetUrl(journalTemplate)) {
+    const bare = !isAbsolute(journalTemplate) && !isJournalRelativeTemplate(journalTemplate);
+    if (bare && probes.existsProbe(join(journalRoot, journalTemplate))) {
       warn('template-name-ambiguous', msg.validate.templateNameAmbiguous(journalTemplate));
     }
   }
@@ -291,11 +291,11 @@ function emptyJournal(): JournalConfig {
   return JournalConfig.parse({ name: 'unknown' });
 }
 
-/** null means the journal repo has no `journal.yml`: broken, unlike `--no-instance`. */
-function loadJournal(instanceRoot: string | null, probes: FsProbes): JournalConfig | null {
-  if (instanceRoot) {
-    if (!probes.existsProbe(join(instanceRoot, 'journal.yml'))) return null;
-    return readJournalConfig(instanceRoot);
+/** null means the journal repo has no `journal.yml`: broken, unlike `--no-journal`. */
+function loadJournal(journalRoot: string | null, probes: FsProbes): JournalConfig | null {
+  if (journalRoot) {
+    if (!probes.existsProbe(join(journalRoot, 'journal.yml'))) return null;
+    return readJournalConfig(journalRoot);
   }
   return emptyJournal();
 }
@@ -303,11 +303,11 @@ function loadJournal(instanceRoot: string | null, probes: FsProbes): JournalConf
 /** The registry's valid entries, or null when the journal repo has none, plus a warning for
  *  each entry skipped (see {@link readRegistry}). */
 function loadRegistry(
-  instanceRoot: string | null,
+  journalRoot: string | null,
   probes: FsProbes,
 ): { registry: Registry | null; warnings: string[] } {
-  if (!instanceRoot) return { registry: null, warnings: [] };
-  const p = join(instanceRoot, 'registry', 'papers.yml');
+  if (!journalRoot) return { registry: null, warnings: [] };
+  const p = join(journalRoot, 'registry', 'papers.yml');
   if (!probes.existsProbe(p)) return { registry: null, warnings: [] };
   const read = readRegistry(readDoc(p).toJS());
   if (!read) return { registry: [], warnings: [msg.validate.registryNotList] };
@@ -435,7 +435,7 @@ export function expandLayers(
 export function runOakChecks(
   input: {
     paperRoot: string;
-    instanceRoot: string | null;
+    journalRoot: string | null;
     /** The composed project before compose's second step [R82]: the author's config with the
      *  `extends:` chain, without the fields that step adds (`output`, `template`,
      *  `site.template`, brand asset paths). `oak build` has this view when it runs these checks.
@@ -451,14 +451,14 @@ export function runOakChecks(
   },
   probes: FsProbes = realFs,
 ): NamedFinding[] {
-  const { paperRoot, instanceRoot, project, repo, engineRoot, edition } = input;
+  const { paperRoot, journalRoot, project, repo, engineRoot, edition } = input;
   const findings: NamedFinding[] = [];
   const add = (check: string, klass: FindingKlass, r: IdCheckResult) => {
     if (!r.ok) findings.push({ check, severity: r.severity, message: r.message, klass });
   };
 
-  const loaded = loadJournal(instanceRoot, probes);
-  const { registry, warnings: registryWarnings } = loadRegistry(instanceRoot, probes);
+  const loaded = loadJournal(journalRoot, probes);
+  const { registry, warnings: registryWarnings } = loadRegistry(journalRoot, probes);
   for (const message of registryWarnings) {
     findings.push({ check: 'registry-entry', severity: 'warn', message, klass: 'config' });
   }
@@ -468,7 +468,7 @@ export function runOakChecks(
     findings.push({
       check: 'journal-config',
       severity: 'error',
-      message: msg.validate.journalMissing(instanceRoot!),
+      message: msg.validate.journalMissing(journalRoot!),
       klass: 'config',
     });
   }
@@ -476,7 +476,7 @@ export function runOakChecks(
 
   // Both id keys are optional. The placeholder id is oak's (ENGINE_ID_SENTINEL); the pattern is
   // the journal's to set, so oak reports a missing one.
-  if (instanceRoot && loaded && !loaded.id_pattern) {
+  if (journalRoot && loaded && !loaded.id_pattern) {
     findings.push({
       check: 'id-policy',
       severity: 'warn',
@@ -542,12 +542,12 @@ export function runOakChecks(
   }
 
   // The layers set different keys: MyST gives a key two of them set no stable winner [R72].
-  if (engineRoot && instanceRoot && edition) {
+  if (engineRoot && journalRoot && edition) {
     const { layers, unreadable } = expandLayers(
       [
         { name: 'paper-base.yml', path: join(engineRoot, 'paper-base.yml') },
-        { name: `editions/${edition}.yml`, path: join(instanceRoot, 'editions', `${edition}.yml`) },
-        { name: 'brand/brand.yml', path: join(instanceRoot, 'brand', 'brand.yml') },
+        { name: `editions/${edition}.yml`, path: join(journalRoot, 'editions', `${edition}.yml`) },
+        { name: 'brand/brand.yml', path: join(journalRoot, 'brand', 'brand.yml') },
       ],
       probes,
     );
@@ -569,16 +569,16 @@ export function runOakChecks(
     }
   }
 
-  const brand = instanceRoot ? readBrandAssetOptions(instanceRoot) : { site: {}, project: {} };
+  const brand = journalRoot ? readBrandAssetOptions(journalRoot) : { site: {}, project: {} };
   add(
     'brand-favicon',
     'brand',
-    checkBrandFavicon({ instanceRoot, favicon: brand.site.favicon }, probes),
+    checkBrandFavicon({ journalRoot, favicon: brand.site.favicon }, probes),
   );
   add(
     'brand-watermark',
     'brand',
-    checkBrandWatermark({ instanceRoot, logo: brand.project.logo }, probes),
+    checkBrandWatermark({ journalRoot, logo: brand.project.logo }, probes),
   );
 
   // The author's template is read from their own myst.yml [R82]: the composed export carries
@@ -587,7 +587,7 @@ export function runOakChecks(
   findings.push(
     ...checkTemplates(
       {
-        instanceRoot,
+        journalRoot,
         authorTemplate: readAuthorTypstTemplate(paperRoot),
         journalTemplate: journal.typst_template,
       },
@@ -649,7 +649,7 @@ export interface ValidateResult {
 export async function runValidate(
   input: {
     paperRoot: string;
-    instanceRoot: string | null;
+    journalRoot: string | null;
     edge: MystEdge;
     /** oak's checkout and the edition, for the [R72] check and the composed view. */
     engineRoot?: string | null;
@@ -671,18 +671,18 @@ export async function runValidate(
 
   // Validates the config `oak build` reads [R71]: the author's myst.yml merged with paper-base
   // and the journal's settings [R82]. The thumbnail and the typst export come from paper-base,
-  // so oak checks them only after the merge. A bare local run or `--no-instance` has
+  // so oak checks them only after the merge. A bare local run or `--no-journal` has
   // no journal to merge, and validates the author's myst.yml as it is.
   let project: { id?: string; exports?: Array<Record<string, unknown>>; thumbnail?: string };
   let configFile: string | undefined;
   let composeFailure: string | undefined;
-  const composable = !!input.engineRoot && !!input.instanceRoot;
+  const composable = !!input.engineRoot && !!input.journalRoot;
   if (composable) {
     try {
       const materialized = await materializeDerived({
         paperRoot: input.paperRoot,
         engineRoot: input.engineRoot!,
-        instanceRoot: input.instanceRoot,
+        journalRoot: input.journalRoot,
         baseUrl: '', // no site is built here; compose only needs it for the build env
         assetOverrides: input.assetOverrides,
         edge: input.edge,
@@ -706,7 +706,7 @@ export async function runValidate(
   const oakFindings = runOakChecks(
     {
       paperRoot: input.paperRoot,
-      instanceRoot: input.instanceRoot,
+      journalRoot: input.journalRoot,
       project,
       repo,
       engineRoot: input.engineRoot ?? null,
@@ -734,7 +734,7 @@ export async function runValidate(
   // skipped. `runChecks` turns a check that throws into its own error row; a project myst cannot
   // load becomes one check error here. oak's checks already block on missing journal settings;
   // the empty default only keeps the result's shape.
-  const journal = loadJournal(input.instanceRoot, probes) ?? emptyJournal();
+  const journal = loadJournal(input.journalRoot, probes) ?? emptyJournal();
   let checks: EngineCheckResult[] = [];
   const structuralErrors = errors.filter((f) => f.klass === 'structural');
   // Checks whose precondition is unmet are reported, not run [R82]; see splitUnrunnableChecks.
@@ -755,10 +755,10 @@ export async function runValidate(
             repo,
             journal: {
               config: journal,
-              registry: loadRegistry(input.instanceRoot, probes).registry ?? [],
+              registry: loadRegistry(input.journalRoot, probes).registry ?? [],
             },
           });
-          return runChecks(session, runnable, { journalRoot: input.instanceRoot, readPaper });
+          return runChecks(session, runnable, { journalRoot: input.journalRoot, readPaper });
         },
         configFile, // the composed config, when there is one
       );

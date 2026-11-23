@@ -93,11 +93,11 @@ export function readDoc(path: string): Document {
   return parseYaml(readFileSync(path, 'utf8'), path);
 }
 
-/** The journal's settings from `<instanceRoot>/journal.yml`, checked against
+/** The journal's settings from `<journalRoot>/journal.yml`, checked against
  *  {@link JournalConfig}, or null when the file is absent. Throws a {@link UserError} naming the
  *  file for bad YAML or a bad setting. */
-export function readJournalConfig(instanceRoot: string): JournalConfig | null {
-  const path = join(instanceRoot, 'journal.yml');
+export function readJournalConfig(journalRoot: string): JournalConfig | null {
+  const path = join(journalRoot, 'journal.yml');
   if (!existsSync(path)) return null;
   const parsed = JournalConfig.safeParse(readDoc(path).toJS() ?? {});
   if (!parsed.success) throw new UserError(msg.journalInvalid(path, firstLine(parsed.error)));
@@ -137,15 +137,15 @@ export function readEngineCoordinateRaw(
   return { version, edition };
 }
 
-/** Reads the asset fields from `<instanceRoot>/brand/brand.yml` itself, not the merged config,
+/** Reads the asset fields from `<journalRoot>/brand/brand.yml` itself, not the merged config,
  *  so only the brand's own assets are resolved against the journal root and a paper's relative
  *  path is left alone [R62]. Returns `site.options` (HTML) and `project.options.logo` (the PDF
  *  watermark); empty when absent. */
-export function readBrandAssetOptions(instanceRoot: string): {
+export function readBrandAssetOptions(journalRoot: string): {
   site: Record<string, string>;
   project: Record<string, string>;
 } {
-  const brandPath = join(instanceRoot, 'brand', 'brand.yml');
+  const brandPath = join(journalRoot, 'brand', 'brand.yml');
   const empty = { site: {}, project: {} };
   if (!existsSync(brandPath)) return empty;
   const doc = readDoc(brandPath);
@@ -163,11 +163,11 @@ export function readBrandAssetOptions(instanceRoot: string): {
   };
 }
 
-/** Reads the journal's `typst_template:` from `<instanceRoot>/journal.yml` [R76]. brand.yml is a
+/** Reads the journal's `typst_template:` from `<journalRoot>/journal.yml` [R76]. brand.yml is a
  *  myst config layer and myst warns about unknown keys there, so the setting lives in journal.yml,
  *  which myst never reads. */
-export function readJournalTypstTemplate(instanceRoot: string): string | undefined {
-  return readJournalConfig(instanceRoot)?.typst_template || undefined;
+export function readJournalTypstTemplate(journalRoot: string): string | undefined {
+  return readJournalConfig(journalRoot)?.typst_template || undefined;
 }
 
 /** Reads the author's own typst `template:` from `<paperRoot>/myst.yml`. The composed config

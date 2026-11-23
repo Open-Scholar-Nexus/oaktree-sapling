@@ -76,7 +76,7 @@ describe('runBuild: the two-pass orchestrator ([R52])', () => {
     const res = await runBuild({
       paperRoot,
       engineRoot,
-      instanceRoot: '.instance',
+      journalRoot: '.journal',
       baseUrl: '/fixture-sample-paper',
       edge,
     });
@@ -91,8 +91,8 @@ describe('runBuild: the two-pass orchestrator ([R52])', () => {
     const doc = parseDocument(readFileSync(join(paperRoot, DERIVED_CONFIG_FILE), 'utf8'));
     // extends chain written in pass 1
     expect(doc.getIn(['extends', 0])).toBe(`${engineRoot}/paper-base.yml`);
-    expect(doc.getIn(['extends', 1])).toBe('.instance/editions/fixture-edition.yml');
-    expect(doc.getIn(['extends', 2])).toBe('.instance/brand/brand.yml');
+    expect(doc.getIn(['extends', 1])).toBe('.journal/editions/fixture-edition.yml');
+    expect(doc.getIn(['extends', 2])).toBe('.journal/brand/brand.yml');
     // the full typst entry in myst.oak.yml (oak's template, articles kept)
     expect(doc.getIn(['project', 'exports', 0, 'template'])).toBe(
       join(engineRoot, 'templates', 'typst'),
@@ -114,7 +114,7 @@ describe('runBuild: the two-pass orchestrator ([R52])', () => {
     await runBuild({
       paperRoot,
       engineRoot: '.engine',
-      instanceRoot: '.instance',
+      journalRoot: '.journal',
       baseUrl: '',
       assetOverrides: { typstTemplate: '/local/typst', siteTemplate: null },
       edge,
@@ -126,14 +126,14 @@ describe('runBuild: the two-pass orchestrator ([R52])', () => {
 
   it("picks up the journal's typst_template and absolutizes it ([R76])", async () => {
     const paperRoot = tmpPaper();
-    const instanceRoot = mkdtempSync(join(tmpdir(), 'oak-instance-'));
-    writeFileSync(join(instanceRoot, 'journal.yml'), 'name: J\ntypst_template: ./typst-template\n');
+    const journalRoot = mkdtempSync(join(tmpdir(), 'oak-journal-'));
+    writeFileSync(join(journalRoot, 'journal.yml'), 'name: J\ntypst_template: ./typst-template\n');
 
     const { edge } = fakeEdge();
     const res = await runBuild({
       paperRoot,
       engineRoot: '.engine',
-      instanceRoot,
+      journalRoot,
       baseUrl: '',
       // the journal's template wins over the one in oak's checkout
       edge,
@@ -141,7 +141,7 @@ describe('runBuild: the two-pass orchestrator ([R52])', () => {
 
     const doc = parseDocument(readFileSync(join(paperRoot, DERIVED_CONFIG_FILE), 'utf8'));
     expect(doc.getIn(['project', 'exports', 0, 'template'])).toBe(
-      join(instanceRoot, 'typst-template'),
+      join(journalRoot, 'typst-template'),
     );
     // nothing was overridden, so no override warning
     expect(res.warnings.join(' ')).not.toMatch(/overrides the journal/);
@@ -156,7 +156,7 @@ describe('runBuild: the two-pass orchestrator ([R52])', () => {
     await runBuild({
       paperRoot,
       engineRoot: tmpEngine(),
-      instanceRoot: '.instance',
+      journalRoot: '.journal',
       baseUrl: '/p',
       edge,
     });
@@ -173,7 +173,7 @@ describe('runBuild: the two-pass orchestrator ([R52])', () => {
       runBuild({
         paperRoot,
         engineRoot,
-        instanceRoot: '.instance',
+        journalRoot: '.journal',
         baseUrl: '/p',
         edge: fakeEdge().edge,
       });
@@ -195,7 +195,7 @@ describe("an install missing oak's typst template", () => {
     const run = runBuild({
       paperRoot: tmpPaper(),
       engineRoot: '.engine',
-      instanceRoot: '.instance',
+      journalRoot: '.journal',
       baseUrl: '',
       edge,
       ...extra,
@@ -231,7 +231,7 @@ describe('a typst template URL myst cannot fetch', () => {
     const run = runBuild({
       paperRoot: tmpPaper(),
       engineRoot: '.engine',
-      instanceRoot: '.instance',
+      journalRoot: '.journal',
       baseUrl: '',
       assetOverrides: { typstTemplate: url },
       buildOpts,
@@ -269,7 +269,7 @@ describe('a build whose export myst did not write', () => {
     const done = runBuild({
       paperRoot,
       engineRoot: '.engine',
-      instanceRoot: '.instance',
+      journalRoot: '.journal',
       baseUrl: '',
       assetOverrides: { typstTemplate: '/local/typst' },
       edge,
@@ -333,7 +333,7 @@ describe('a missing version key is a sentence, not a stack', () => {
     const err = await runBuild({
       paperRoot,
       engineRoot: '.engine',
-      instanceRoot: '.instance',
+      journalRoot: '.journal',
       baseUrl: '',
       edge: fakeEdge().edge,
     }).catch((e) => e);
@@ -353,7 +353,7 @@ describe('a missing version key is a sentence, not a stack', () => {
       const err = await runBuild({
         paperRoot,
         engineRoot: '.engine',
-        instanceRoot: '.instance',
+        journalRoot: '.journal',
         baseUrl: '',
         edge: fakeEdge().edge,
       }).catch((e) => e);
@@ -371,7 +371,7 @@ describe('runStart: compose, then hand off to myst', () => {
     await runStart({
       paperRoot,
       engineRoot: '.engine',
-      instanceRoot: '.instance',
+      journalRoot: '.journal',
       baseUrl: '',
       startOpts: { port: 3210 },
       edge,
@@ -400,7 +400,7 @@ describe('runStart: compose, then hand off to myst', () => {
     await runStart({
       paperRoot,
       engineRoot: '.engine',
-      instanceRoot: '.instance',
+      journalRoot: '.journal',
       baseUrl: '',
       edge,
     });

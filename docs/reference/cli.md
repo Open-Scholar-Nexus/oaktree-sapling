@@ -10,7 +10,7 @@
 
 `oak build` builds the paper's website and PDF into `_build/`. It first writes `myst.oak.yml`, the paper's settings combined with the journal's, and builds from it. It runs the `oak` version the paper names ([which version runs](#pins-local)). In a journal repository it refuses: the [**Journal site**](#file-site-workflow) workflow builds the journal website, and [`oak start`](#start) or MyST's own `myst start` previews it.
 
-`--instance <dir>`, `--no-instance`
+`--journal <dir>`, `--no-journal`
 : Build with the journal repository at `<dir>`, or without the journal's settings. See [previewing with other settings](../guide/journal-settings.md#previewing-with-other-settings).
 
 `--exports-only`
@@ -34,7 +34,7 @@ It takes the flags of [`oak build`](#build) that apply, and passes `--port`, `--
 (validate)=
 ### validate
 
-`oak validate` runs oak's own checks and the journal's [editorial checks](../guide/checks.md) on the `myst.oak.yml` that [`oak build`](#build) would write, and prints what fails. Without the journal repository, with `--no-instance` or when it cannot be found, it checks the paper's own `myst.yml`, and the Check Run says so in a note. It runs the paper's plugin code ([read this first](../guide/checks.md#validate-runs-paper-code)).
+`oak validate` runs oak's own checks and the journal's [editorial checks](../guide/checks.md) on the `myst.oak.yml` that [`oak build`](#build) would write, and prints what fails. Without the journal repository, with `--no-journal` or when it cannot be found, it checks the paper's own `myst.yml`, and the Check Run says so in a note. It runs the paper's plugin code ([read this first](../guide/checks.md#validate-runs-paper-code)).
 
 It exits 0 when nothing blocks the merge, 1 when a check fails, and 2 when it cannot run.
 
