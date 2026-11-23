@@ -7,11 +7,13 @@
  */
 import { cpSync, existsSync, mkdtempSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, relative } from 'node:path';
+import { join, posix, relative } from 'node:path';
 import * as msg from './messages.js';
 import { UserError } from './messages.js';
 import { pollUntil } from './poll.js';
-import { DOI_BRANCH, parseZenodoDoi } from './schema.js';
+import { parsePaperTag, PINS_REL, type PaperTag } from './projects.js';
+import { compareEngineVersions, doiBranch, parseZenodoDoi } from './schema.js';
+import { MIN_ENGINE_KEY } from './upgrade.js';
 import { DERIVED_CONFIG_FILE, parseYaml } from './yaml-io.js';
 import type { DepositState } from './zenodo.js';
 
@@ -208,8 +210,8 @@ export const BUILD_WAIT = { tries: 180, intervalMs: 15_000 };
 /** What {@link runRelease} does on GitHub, with the editor's gh login (`realReleaseSource` in
  *  gh.ts). The git calls run in the temporary clone `clone` returns. */
 export interface ReleaseSource extends Pick<CiBuildSource, 'tagCommit' | 'pushRuns' | 'jobs'> {
-  /** The repo's tags starting with `v`. */
-  vTags(repo: string): string[];
+  /** The repo's version tags, `vX.Y.Z` and `<id>/vX.Y.Z` ({@link parsePaperTag}). */
+  versionTags(repo: string): string[];
   /** Clones `repo` into a new temporary folder named for `tag` (clean.ts `clonePrefix`), and
    *  returns it. */
   clone(repo: string, tag: string): string;
@@ -240,6 +242,8 @@ export interface ReleaseSource extends Pick<CiBuildSource, 'tagCommit' | 'pushRu
 
 export interface ReleaseInput {
   repo: string;
+  /** `vX.Y.Z` for the paper of a paper repository, `<id>/vX.Y.Z` for the paper `papers/<id>` of
+   *  a co-located one. */
   tag: string;
   /** `--sandbox`: where a first deposit reserves the DOI. */
   sandbox: boolean;
@@ -255,11 +259,12 @@ export interface ReleaseDeps {
   /** Throws a UserError when `version`, the oak myst.yml pins, is older than the first that has
    *  `oak release reserve-doi` and `oak release deposit` (pinned.ts `DEPOSIT_MIN_VERSION`). */
   checkPin(version: string): void;
-  /** Reserves the DOI: `oak release reserve-doi` with the pinned oak in `clone`, on the default
-   *  branch, which opens the DOI pull request. */
-  reserveDoi(clone: string, sandbox: boolean): Promise<SubcommandRun>;
-  /** Fills the Zenodo draft: `oak release deposit` with the pinned oak in `clone`, at the tag. */
-  deposit(clone: string): Promise<SubcommandRun>;
+  /** Reserves the DOI: `oak release reserve-doi` with the pinned oak for the paper at
+   *  `paperRoot` in the clone, on the default branch, which opens the DOI pull request. */
+  reserveDoi(paperRoot: string, sandbox: boolean): Promise<SubcommandRun>;
+  /** Fills the Zenodo draft: `oak release deposit` with the pinned oak for the paper at
+   *  `paperRoot` in the clone, at the tag. */
+  deposit(paperRoot: string): Promise<SubcommandRun>;
   confirm(plan: string[]): Promise<boolean>;
   sleep(ms: number): Promise<void>;
   /** A step that happened (progress.ts `log`). */
@@ -338,9 +343,12 @@ function guarded(src: ReleaseSource): ReleaseSource {
  * rerun after a stop continues where the earlier run stopped:
  * 1. The tag exists: wait for its Deposit version run, then deposit at the tag, unless the tag's
  *    GitHub release already holds {@link DEPOSITED_ASSET}.
- * 2. No tag, and `myst.yml` on the default branch has a DOI: tag the branch head, then as 1.
- * 3. No tag and no DOI: reserve the DOI, which pushes {@link DOI_BRANCH} and opens its pull
- *    request; merge it at the commit pushed, tag the merge commit, then as 1.
+ * 2. No tag, and the paper's `myst.yml` on the default branch has a DOI: tag the branch head, then
+ *    as 1.
+ * 3. No tag and no DOI: reserve the DOI, which pushes the paper's DOI branch ({@link doiBranch})
+ *    and opens its pull request; merge it at the commit pushed, tag the merge commit, then as 1.
+ * The tag names the paper: `vX.Y.Z` the one at the root of a paper repository, `<id>/vX.Y.Z` the
+ * folder `papers/<id>` of a co-located one.
  * Checks that need no write (token, Zenodo draft, sandbox against the committed DOI) run before
  * the confirmation and the first write. Returns the {@link ReleaseOutcome}, whose code
  * is 0 done or declined, 1 a bug, 2 a step failed, 3 a wait reached its limit; throws a
@@ -389,11 +397,21 @@ async function releaseFrom(
 
   const tagged = src.tagCommit(clone, tag);
   const head = src.head(clone);
-  const { doi, pin } = committed(src, clone, tagged ?? head.sha);
+  const at = tagged ?? head.sha;
+  const where = tagged ? `at ${tag}` : 'on the default branch';
+  const paper = paperOf(src, clone, at, input, where);
+  const branch = doiBranch(paper.id);
+  const { doi, pin } = committed(src, clone, at, paper.paperDir);
   const sandbox = doi ? doi.sandbox : input.sandbox;
 
   // Every refusal comes before anything is asked or changed.
-  if (!pin) throw new UserError(msg.workflow.releaseNotPaper(repo, tagged ? tag : null));
+  if (!pin) {
+    throw new UserError(
+      paper.id
+        ? msg.workflow.releaseNoPaperHere(repo, paper.paperDir, where)
+        : msg.workflow.releaseNotPaper(repo, tagged ? tag : null),
+    );
+  }
   if (tagged && !doi) throw new UserError(msg.workflow.releaseTagNoDoi(tag, repo));
   if (doi && input.sandbox && !doi.sandbox) {
     throw new UserError(msg.workflow.releaseSandboxWithProdDoi(doi.doi));
@@ -402,8 +420,18 @@ async function releaseFrom(
     deps.log(msg.workflow.releaseAlreadyDeposited(tag));
     return { code: 0, reason: 'already-deposited' };
   }
-  // The subcommands run with the pinned oak, so a pin they refuse is refused before the tag.
+  // The subcommands run with the pinned oak, and the workflows with pins.yml's minimum, so a pin
+  // either refuses is refused before the tag.
   deps.checkPin(pin);
+  if (paper.minEngine && (compareEngineVersions(pin, paper.minEngine) ?? -1) < 0) {
+    throw new UserError(
+      msg.workflow.releaseBelowMinEngine(
+        posix.join(paper.paperDir, 'myst.yml'),
+        pin,
+        paper.minEngine,
+      ),
+    );
+  }
   if (!deps.hasToken(sandbox)) throw new UserError(msg.workflow.noZenodoToken('release', sandbox));
   if (doi) await assertDraftFor(doi, tag, deps);
 
@@ -414,11 +442,11 @@ async function releaseFrom(
     sha = tagged;
   } else {
     const plan = [
-      msg.workflow.releasePlanHeader(repo),
+      msg.workflow.releasePlanHeader(repo, paper.id),
       ...(doi
         ? [msg.workflow.releasePlanTagAt(tag, head.sha, head.subject)]
         : [
-            msg.workflow.releasePlanReserve(sandbox, src.openPr(repo, DOI_BRANCH) !== null),
+            msg.workflow.releasePlanReserve(sandbox, src.openPr(repo, branch) !== null),
             msg.workflow.releasePlanMerge,
             msg.workflow.releasePlanTagMerge(tag),
           ]),
@@ -428,7 +456,7 @@ async function releaseFrom(
     ];
     if (!(await deps.confirm(plan))) return { code: 0, reason: 'declined' };
     // With a DOI committed, the tag goes on the head the plan showed; else on the DOI merge.
-    sha = doi ? head.sha : await reserveAndMerge(clone, input, src, deps);
+    sha = doi ? head.sha : await reserveAndMerge(clone, paper, input, src, deps);
     src.createTag(repo, tag, sha);
     deps.log(msg.workflow.releaseTagged(tag, sha));
   }
@@ -441,7 +469,7 @@ async function releaseFrom(
   src.fetch(clone);
   src.checkout(clone, `refs/tags/${tag}`);
   deps.status(msg.workflow.releaseDepositing);
-  const depositRun = await deps.deposit(clone);
+  const depositRun = await deps.deposit(join(clone, paper.paperDir));
   const result = succeeded('oak release deposit', depositRun, deps);
   const url = String(result.record_url ?? result.draft_url);
   // Published by an earlier run: nothing was uploaded, and the files are on the record.
@@ -487,18 +515,20 @@ function succeeded(name: string, run: SubcommandRun, deps: ReleaseDeps): Record<
  */
 async function reserveAndMerge(
   clone: string,
+  paper: PaperTag,
   input: ReleaseInput,
   src: ReleaseSource,
   deps: ReleaseDeps,
 ): Promise<string> {
   const { repo } = input;
   deps.status(msg.workflow.releaseReserving);
-  const run = await deps.reserveDoi(clone, input.sandbox);
+  const branch = doiBranch(paper.id);
+  const run = await deps.reserveDoi(join(clone, paper.paperDir), input.sandbox);
   const reserved = succeeded('oak release reserve-doi', run, deps);
   deps.log(msg.workflow.releaseReserved(reserved.concept_doi));
   // Both messages point at its output, which says why.
-  const pushed = src.pushedHead(clone, DOI_BRANCH);
-  const pr = pushed ? src.openPr(repo, DOI_BRANCH) : null;
+  const pushed = src.pushedHead(clone, branch);
+  const pr = pushed ? src.openPr(repo, branch) : null;
   if (!pushed || !pr) {
     deps.showLog(run.log);
     throw new UserError(
@@ -529,15 +559,46 @@ interface CommittedDoi {
   sandbox: boolean;
 }
 
-/** The Zenodo DOI and the oak version `myst.yml` holds at commit `ref`, each null when absent. */
+/**
+ * The paper `input.tag` names ({@link parsePaperTag}), with pins.yml's `min_engine_version`, both
+ * read at commit `ref`. A `<id>/vX.Y.Z` tag needs a co-located repository, and a co-located
+ * repository such a tag, so each refusal says which form to use; `where` says where `ref` is.
+ */
+function paperOf(
+  src: ReleaseSource,
+  clone: string,
+  ref: string,
+  input: ReleaseInput,
+  where: string,
+): PaperTag & { minEngine: string | null } {
+  // cmdReleaseVersion checked the form.
+  const paper = parsePaperTag(input.tag);
+  if (!paper) throw new Error(`not a version tag: ${input.tag}`);
+  const text = src.fileAt(clone, ref, PINS_REL);
+  const pins = text === null ? null : parseYaml(text, `${PINS_REL} at ${ref.slice(0, 12)}`);
+  const colocated = pins?.get('journal_repo') === '.';
+  if (colocated && !paper.id) {
+    throw new UserError(msg.workflow.releaseNeedsPaperId(input.repo, input.tag, where));
+  }
+  if (!colocated && paper.id) {
+    throw new UserError(msg.workflow.releaseNotColocated(input.repo, input.tag, where));
+  }
+  const min = pins?.get(MIN_ENGINE_KEY);
+  return { ...paper, minEngine: typeof min === 'string' && min ? min : null };
+}
+
+/** The Zenodo DOI and the oak version the paper's `myst.yml`, in `paperDir`, holds at commit
+ *  `ref`, each null when absent. */
 function committed(
   src: ReleaseSource,
   clone: string,
   ref: string,
+  paperDir: string,
 ): { doi: CommittedDoi | null; pin: string | null } {
-  const text = src.fileAt(clone, ref, 'myst.yml');
+  const path = posix.join(paperDir, 'myst.yml');
+  const text = src.fileAt(clone, ref, path);
   if (text === null) return { doi: null, pin: null };
-  const doc = parseYaml(text, `myst.yml at ${ref.slice(0, 12)}`);
+  const doc = parseYaml(text, `${path} at ${ref.slice(0, 12)}`);
   const version = doc.getIn(['project', 'options', 'oaktree-sapling', 'version']);
   const pin = typeof version === 'string' && version ? version : null;
   const doi = doc.getIn(['project', 'doi']);
@@ -560,7 +621,7 @@ async function assertDraftFor(doi: CommittedDoi, tag: string, deps: ReleaseDeps)
     );
   }
   if (state.kind === 'none') throw new UserError(msg.workflow.releaseNoRecord(doi.doi));
-  if (state.kind === 'published' && state.version !== tag.slice(1)) {
+  if (state.kind === 'published' && state.version !== parsePaperTag(tag)!.version.slice(1)) {
     throw new UserError(msg.workflow.releaseNeedsNewVersion(tag, state.recordUrl));
   }
 }

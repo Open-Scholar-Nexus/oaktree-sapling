@@ -70,6 +70,6 @@ oak start
 
 In the journal repository, `oak start` serves the website with MyST as it is, the same way the **Journal site** workflow builds it. On a paper repository it does more; [Processing MyST markdown](../design/index.md#processing-myst) explains what oaktree-sapling adds around MyST.
 
-:::{dropdown} Having the journal and its paper in one repository
-`oak bootstrap journal --co-located` is meant to put the journal's settings and a single paper in one repository, with no journal website. It is still being built and does not work yet, but we're planning for it.
+:::{dropdown} Having the journal and its papers in one repository
+`oak bootstrap journal --co-located` puts the journal's settings, its website and every paper in one repository, each paper in a folder of its own. See [A journal with its papers in one repository](../guide/co-located.md).
 :::

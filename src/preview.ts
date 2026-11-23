@@ -12,6 +12,7 @@ import { readJournalConfig } from './yaml-io.js';
 import * as msg from './messages.js';
 import { annotate, firstLine, stickyMarker } from './messages.js';
 import { JournalConfig, type PreviewConfig } from './schema.js';
+import { folderId } from './projects.js';
 import { resolvePaperDir, takePaperDir, takePrNumber, verifyPrHead } from './artifact.js';
 import { ok, type Outcome } from './result.js';
 
@@ -104,12 +105,14 @@ const slug = (x: string): string =>
 
 /** Expands `{repo}` and `{pr}` into a Cloudflare Pages branch alias (lowercase `[a-z0-9-]`, at
  *  most 28 characters). `{repo}` takes the remaining length last, so a long name never cuts off
- *  `{pr}`, and a truncated name is hashed so papers sharing one Pages project stay distinct. */
-export function previewBranch(pattern: string, repo: string, pr: string): string {
+ *  `{pr}`, and a truncated name is hashed so papers sharing one Pages project stay distinct. A
+ *  co-located paper's id joins the repo name in `{repo}`, so each paper of a pull request gets
+ *  its own. */
+export function previewBranch(pattern: string, repo: string, pr: string, paper?: string): string {
   const shortRepo = repo.includes('/') ? repo.slice(repo.indexOf('/') + 1) : repo;
   const withPr = pattern.replaceAll('{pr}', pr);
   const fixed = slug(withPr.replaceAll('{repo}', ''));
-  const full = slug(shortRepo);
+  const full = slug(paper ? `${shortRepo}-${paper}` : shortRepo);
   let name = full;
   if (fixed.length + full.length > BRANCH_MAX) {
     const digest = createHash('sha256').update(full).digest('hex').slice(0, 4);
@@ -130,8 +133,10 @@ export function planPreview(input: {
   cf: { apiToken?: string; accountId?: string };
   repo: string;
   pr: string;
+  /** A co-located paper's id; absent for the paper at a repository root. */
+  paper?: string;
 }): PreviewPlan {
-  const { preview, cf, repo, pr } = input;
+  const { preview, cf, repo, pr, paper } = input;
   if (preview.provider !== 'cloudflare') {
     return { mode: 'artifact', reason: msg.workflow.previewProviderIsNot(preview.provider) };
   }
@@ -146,16 +151,28 @@ export function planPreview(input: {
     accountId: cf.accountId,
     apiToken: cf.apiToken,
     projectName: preview.cf_project_name,
-    branch: previewBranch(preview.branch_pattern, repo, pr),
+    branch: previewBranch(preview.branch_pattern, repo, pr, paper),
   };
 }
 
-export function previewComment(url: string): string {
-  return [stickyMarker(STICKY_PREVIEW), msg.pr.previewDeployed(url)].join('\n');
+/** A sticky header for one paper: `header` itself for the paper at a repository root, which
+ *  keeps the comments posted before co-located papers existed, else `header:<id>`. */
+export function paperSticky(header: string, paper?: string): string {
+  return paper ? `${header}:${paper}` : header;
 }
 
-export function artifactComment(runUrl: string, reason: string): string {
-  return [stickyMarker(STICKY_PREVIEW), msg.pr.previewArtifact(runUrl, reason)].join('\n');
+export function previewComment(url: string, paper?: string): string {
+  return [
+    stickyMarker(paperSticky(STICKY_PREVIEW, paper)),
+    msg.pr.previewDeployed(url, paper),
+  ].join('\n');
+}
+
+export function artifactComment(runUrl: string, reason: string, paper?: string): string {
+  return [
+    stickyMarker(paperSticky(STICKY_PREVIEW, paper)),
+    msg.pr.previewArtifact(runUrl, reason, paper),
+  ].join('\n');
 }
 
 /* --------------------------------------------------------------------------
@@ -204,6 +221,8 @@ export async function cmdDeployPreview(
     return ok({ preview: 'skipped', reason: msg.workflow.previewNoPrNumberReason });
   }
   verifyPrHead(repo, pr, input.verifiedHead, (r, n) => deps.gh.prHead(r, n));
+  const id = folderId(paper) ?? undefined;
+  const header = paperSticky(STICKY_PREVIEW, id);
 
   // Strip fork-controlled Pages control files before any deploy path ([R154]).
   const stripped = stripPagesControlFiles(siteDir);
@@ -221,7 +240,7 @@ export async function cmdDeployPreview(
     : `${serverUrl}/${repo ?? ''}/actions`;
   const plan = problem
     ? ({ mode: 'artifact', reason: problem } as PreviewPlan)
-    : planPreview({ preview, cf, repo: repo ?? 'paper', pr });
+    : planPreview({ preview, cf, repo: repo ?? 'paper', pr, paper: id });
 
   let outcome: Record<string, unknown>;
   if (plan.mode === 'cloudflare') {
@@ -233,7 +252,7 @@ export async function cmdDeployPreview(
         projectName: plan.projectName,
         branch: plan.branch,
       });
-      deps.gh.sticky(repoRoot, pr, STICKY_PREVIEW, previewComment(url));
+      deps.gh.sticky(repoRoot, pr, header, previewComment(url, id));
       outcome = { preview: 'cloudflare', url, branch: plan.branch };
     } catch (e) {
       // A Cloudflare failure still gives the reviewer the artifact link. A gh failure below is
@@ -243,8 +262,8 @@ export async function cmdDeployPreview(
       deps.gh.sticky(
         repoRoot,
         pr,
-        STICKY_PREVIEW,
-        artifactComment(runUrl, msg.workflow.cloudflareDegradedReason(failure)),
+        header,
+        artifactComment(runUrl, msg.workflow.cloudflareDegradedReason(failure), id),
       );
       outcome = {
         preview: 'artifact',
@@ -252,7 +271,7 @@ export async function cmdDeployPreview(
       };
     }
   } else {
-    deps.gh.sticky(repoRoot, pr, STICKY_PREVIEW, artifactComment(runUrl, plan.reason));
+    deps.gh.sticky(repoRoot, pr, header, artifactComment(runUrl, plan.reason, id));
     outcome = { preview: 'artifact', reason: plan.reason };
   }
 

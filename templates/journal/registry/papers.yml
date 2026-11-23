@@ -4,4 +4,9 @@
 # - id:       j-2026-example
 #   location: owner/example-paper
 #   site_url: https://journal.example.org/example
+#
+# A paper in this repository's papers/ folder (a co-located journal) is listed by its folder:
+#
+# - id:       j-2026-other
+#   location: ./papers/j-2026-other
 []

@@ -29,11 +29,11 @@
  *   templates/paper/.github/actions/engine/action.yml
  *                                             the `::error::` lines for a bad pin, printed before
  *                                             any oak is fetched
- *   templates/journal/README.md ............ what a journal editor reads first
- *   templates/journal/journal.yml .......... the journal's settings and their comments
- *   templates/journal/brand/brand.yml ...... the branding settings and their comments
- *   templates/journal/editions/edition.yml . the edition template
- *   templates/journal/registry/papers.yml .. the paper list's header comment
+ *   templates/journal/README.md ............. what a journal editor reads first
+ *   templates/journal/journal.yml ........... the journal's settings and their comments
+ *   templates/journal/brand/brand.yml ....... the branding settings and their comments
+ *   templates/journal/editions/edition.yml .. the edition template
+ *   templates/journal/registry/papers.yml ... the paper list's header comment
  *   templates/site/myst.yml ................. the journal website's config comments
  *   templates/site/pages/index.md ........... the journal website's landing page
  *   templates/site/.github/workflows/site.yml the website job and its failure annotation
@@ -134,21 +134,24 @@ export const usage = (): string =>
   `                    a public repo with the journal's settings, branding, website and\n` +
   `                    list of published papers; each paper is in a repo of its own that\n` +
   `                    points back at it\n` +
-  `      --co-located  not ready: one repo for the journal and its papers, with no journal\n` +
-  `                    website; for now, with a single paper\n` +
+  `      --co-located  one repo for the journal, its website and its papers, each paper in\n` +
+  `                    papers/<paper id>/\n` +
   `  oak bootstrap paper   --repo <owner/name> --journal <owner/journal-repo> --edition <id>\n` +
   `                        [--from <author-url> [--source-ref <ref>]]\n` +
   `                        [--engine-repo <owner/name>] [--engine-version <tag>] [--owner <@user|@org/team>]\n` +
   `                        [--private] [--no-require-checks] [--yes]\n` +
   `                        [--zenodo-token <token>] [--zenodo-token-sandbox <token>]\n` +
   `                        [--cf-token <token>] [--cf-account <id>]\n` +
-  `      --journal    the journal repo this paper belongs to ('.' only if the journal\n` +
-  `                    settings are in this same repo); --edition names one of its editions\n` +
+  `      --journal     the journal repo this paper belongs to; --edition names one of its\n` +
+  `                    editions\n` +
   `      --zenodo-token, --zenodo-token-sandbox, --cf-token, --cf-account\n` +
   `                    the Zenodo and Cloudflare secrets to set on the repo; journal --co-located\n` +
   `                    takes them too. See ${docsUrl(DOCS.bootstrap)}\n` +
   `  Both bootstrap subcommands: --engine-version naming another oak version runs that version's\n` +
   `  bootstrap, fetched once into ~/.cache/oak.\n` +
+  `  oak add-paper --repo <owner/journal> --id <paper id> [--edition <id>] [--yes]\n` +
+  `                    in a co-located journal: fork it, add papers/<paper id>/ from the\n` +
+  `                    starter manuscript, and open the pull request an editor merges\n` +
   `  oak upgrade (--repo <owner/name> | --paper <dir>) [--to <tag>] [--files-only] [--yes]\n` +
   `                    move a paper repo to a newer engine version, as a pull request\n` +
   `\n` +
@@ -190,6 +193,11 @@ export const usage = (): string =>
   `  oak post-checks --report <path> --repo <owner/repo> --sha <headsha> --base <branch>\n` +
   `                  --verified-head <headsha>\n` +
   `  oak deploy-preview <site> [--verified-head <headsha>] [--journal <dir> | --no-journal] [--repo <owner/repo>]\n` +
+  `  oak papers (--for build|check | --tag <tag> | --id <paper id> | --id-env)\n` +
+  `                    the papers a workflow run works on, as JSON\n` +
+  `  oak assemble --builds <dir> [--base-url <path>]\n` +
+  `                    in a co-located repo: build the journal website and mount each listed\n` +
+  `                    paper's build at /<paper id>/\n` +
   `  oak conformance reset   --repo <owner/name>\n` +
   `  oak conformance run   --repo <owner/name> --tag <vX.Y.Z> [--fork-repo <owner/name>]\n` +
   `                        [--run-id <id>] [--record <path>]\n` +
@@ -319,7 +327,8 @@ export const bootstrap = {
   // refusals, before anything is created
   journalRequired:
     'oak bootstrap paper: pass --journal <owner/journal-repo>, the journal this paper ' +
-    'belongs to (`--journal .` for a repo with its own journal.yml). ' +
+    'belongs to (a journal with its papers in one repo is set up with oak bootstrap journal ' +
+    '--co-located). ' +
     docsUrl(DOCS.paperJournalLink),
 
   editionRequired: (journal: string): string =>
@@ -330,8 +339,8 @@ export const bootstrap = {
     docsUrl(DOCS.fileEditions),
 
   noSiteNeedsExternal:
-    '--no-site does not apply with --co-located: a co-located journal never gets a ' +
-    'website (an index over many papers in one repo is separate, unbuilt work).',
+    '--no-site does not apply with --co-located: the website is where a co-located journal ' +
+    'publishes its papers, each at /<paper id>/.',
 
   ghMissing:
     'oak bootstrap: the GitHub CLI (gh) is not on PATH. Install it, run `gh auth login`, ' +
@@ -344,7 +353,7 @@ export const bootstrap = {
   paperPlanHeader: (mode: 'ingest' | 'bare', repo: string): string =>
     `bootstrap paper (${mode === 'ingest' ? "importing an author's repo" : 'new, empty paper'}): ${repo}`,
   journalPlanHeader: (external: boolean, repo: string): string =>
-    `bootstrap journal (${external ? 'its own repo; papers in other repos' : 'journal and paper in one repo'}): ${repo}`,
+    `bootstrap journal (${external ? 'its own repo; papers in other repos' : 'journal, website and papers in one repo'}): ${repo}`,
 
   planRepoExists: '  ✓ repo exists',
   planCreateRepo: (isPrivate: boolean): string =>
@@ -363,7 +372,8 @@ export const bootstrap = {
   planSeedJournal: (withSite: boolean): string =>
     `  ○ commit to main: the journal's settings, branding and paper list${withSite ? ', plus the journal website' : ''} (${docsUrl(DOCS.files)})`,
   planSeedCoLocated:
-    "  ○ commit to main: the journal's settings, a starter paper and the workflows that build and check it",
+    "  ○ commit to main: the journal's settings, branding and paper list, the journal website, " +
+    'an empty papers/ folder, and the workflows that build, check and publish each paper',
 
   /** A rerun that changes an answer does not commit to main again, so it would succeed
    *  while changing nothing. */
@@ -407,7 +417,7 @@ export const bootstrap = {
   descriptionJournal:
     'Journal settings, branding and paper list, created by `oak bootstrap journal`',
   descriptionCoLocated:
-    'Journal and paper in one repo, created by `oak bootstrap journal --co-located`',
+    'Journal, website and papers in one repo, created by `oak bootstrap journal --co-located`',
 
   // the running log
   logCreated: (repo: string): string => `  ✓ created ${repo}`,
@@ -426,7 +436,7 @@ export const bootstrap = {
     `  ✓ created branch rule '${name}': changes to main need a pull request approved by a code owner`,
   logTagRuleExists: (name: string): string => `  ✓ tag rule '${name}' already exists`,
   logTagRuleCreated: (name: string): string =>
-    `  ✓ created tag rule '${name}': only editors can create the v* tags that publish a version`,
+    `  ✓ created tag rule '${name}': only editors can create tags, which publish a version`,
   logPagesExists: '  ✓ GitHub Pages already enabled',
   logPagesEnabled: '  ✓ GitHub Pages enabled (published by a workflow)',
   logHomepageExists: (url: string): string => `  ✓ repo website link already set (${url})`,
@@ -436,9 +446,9 @@ export const bootstrap = {
   logActionsPrsAllowed:
     '  ✓ Actions allowed to open pull requests (the DOI write-back is one of them)',
   logZenodoEnvExists:
-    "  ✓ the 'zenodo-publish' environment already restricts its secrets to v* tags",
+    "  ✓ the 'zenodo-publish' environment already restricts its secrets to v* and */v* tags",
   logZenodoEnvCreated:
-    "  ✓ created the 'zenodo-publish' environment: only v* tags may use its secrets",
+    "  ✓ created the 'zenodo-publish' environment: only v* and */v* tags may use its secrets",
   logMainEnvExists: (env: string): string =>
     `  ✓ the '${env}' environment already restricts its secrets to main`,
   logMainEnvCreated: (env: string): string =>
@@ -488,8 +498,9 @@ export const bootstrap = {
 
   runbookForkApproval:
     `The first time someone opens a pull request from their own fork, GitHub asks an editor to ` +
-    `approve the workflow run before it starts: one click in the repo's Actions tab, per new ` +
-    `contributor. There is no way to switch this off.`,
+    `approve the workflow run before it starts: one click in the repo's Actions tab, until ` +
+    `something of theirs has been merged here. Which contributors need it is set in the repo's ` +
+    `Settings > Actions > General.`,
 
   // Authors work from a fork, so oak invites no one.
   runbookAuthorAccess: (repo: string): string =>
@@ -500,6 +511,13 @@ export const bootstrap = {
 
   runbookStartHere: `Next: clone the repo and edit journal.yml and brand/. See ${docsUrl(DOCS.journalStart)}`,
 
+  runbookAddPaper: (repo: string): string =>
+    `An author adds a paper with oak add-paper --repo ${repo} --id <paper id>, which opens a pull ` +
+    `request from their fork; merging it adds the paper as a draft, and listing it in ` +
+    `registry/papers.yml publishes it. See ${docsUrl(DOCS.colocated)}`,
+  runbookColocatedSite: (siteUrl: string): string =>
+    `The website goes live at ${siteUrl} a few minutes after the first "Build paper" run on main ` +
+    'finishes (Actions tab).',
   runbookSite: (siteUrl: string): string =>
     `The website goes live at ${siteUrl} a few minutes after the first "Journal site" run ` +
     'finishes (Actions tab).',
@@ -535,8 +553,8 @@ export const upgrade = {
     `changed. Check the network and \`gh auth status\`, or pass --to <tag>.`,
 
   /** `--files-only` would leave a version the engine action refuses. */
-  badPin: (pin: string): string =>
-    `oak upgrade: myst.yml pins ${JSON.stringify(pin.slice(0, 60))}, not a release tag like ` +
+  badPin: (pin: string, file = 'myst.yml'): string =>
+    `oak upgrade: ${file} pins ${JSON.stringify(pin.slice(0, 60))}, not a release tag like ` +
     `v1.2.3 or v1.2.3-dev.4, and --files-only leaves it; nothing was changed. Run it without ` +
     `--files-only, which moves the version too.`,
 
@@ -547,9 +565,9 @@ export const upgrade = {
     `a newer release.`,
 
   /** The pin this run leaves is older than the workflows it leaves need. */
-  belowMinimum: (pin: string, min: string, filesOnly: boolean): string =>
+  belowMinimum: (pin: string, min: string, filesOnly: boolean, file = 'myst.yml'): string =>
     `oak upgrade: the workflows need engine ${min} or newer, and this run would leave ` +
-    `myst.yml at ${pin}; nothing was changed. ` +
+    `${file} at ${pin}; nothing was changed. ` +
     (filesOnly
       ? `Run it without --files-only, which moves the version too.`
       : `Pass --to <tag> naming ${min} or newer.`),
@@ -561,8 +579,8 @@ export const upgrade = {
         ? ' (--to)'
         : `: the newest release of ${engineRepo} right now, no --to given (pass --to <tag> to pick one)`
     }`,
-  planBumpVersion: (from: string, target: string): string =>
-    `  ○ set the engine version in myst.yml: ${from || '(unset)'} → ${target}`,
+  planBumpVersion: (from: string, target: string, file = 'myst.yml'): string =>
+    `  ○ set the engine version in ${file}: ${from || '(unset)'} → ${target}`,
   planResync: (count: number, target: string, files: string): string =>
     `  ○ restore ${count} engine-managed file(s) that no longer match the ${target} template: ${files}`,
   planFilesMatch: (target: string): string =>
@@ -576,8 +594,8 @@ export const upgrade = {
 
   prTitle: (target: string): string => `Upgrade engine to ${target}`,
   prBodyHeader: (target: string): string => `Moves this repo to engine \`${target}\`.`,
-  prBodyVersion: (target: string): string =>
-    `- sets \`project.options.oaktree-sapling.version\` → \`${target}\` in myst.yml`,
+  prBodyVersion: (target: string, files: string[] = ['myst.yml']): string =>
+    `- sets the engine version → \`${target}\` in ${files.map((f) => `\`${f}\``).join(', ')}`,
   prBodyFiles: (target: string): string =>
     `- restores these engine-managed files to their ${target} version (a code owner must approve changes under \`.github/\`):`,
   planExtraFiles: (extra: string[]): string =>
@@ -705,12 +723,12 @@ export const build = {
   badEdition: (got: string, mystPath: string): string =>
     `project.options.oaktree-sapling.edition is ${JSON.stringify(got.slice(0, 40))} in ${mystPath}. ` +
     `It names a file (editions/<edition>.yml), so it must be a plain name: letters, digits, . _ -`,
-  /** No journal repo found: pins.yml names none (`journal_repo: .` or absent, which means the
-   *  same) and no journal.yml sits beside the paper. */
+  /** No journal repo found: pins.yml names none, or names this repo (`journal_repo: .`) and no
+   *  journal.yml sits there. */
   noJournal: (verb: JournalVerb, paperRoot: string): string =>
-    `oak ${verb}: no journal repo found. .github/actions/engine/pins.yml names none ` +
-    `(\`journal_repo: "."\` means the journal.yml sits in this repo), and there is no ` +
-    `journal.yml at ${paperRoot}.\n` +
+    `oak ${verb}: no journal repo found. .github/actions/engine/pins.yml names none, or ` +
+    `names this repo (\`journal_repo: "."\`) and there is no journal.yml at ${paperRoot} ` +
+    `or the repository root.\n` +
     `Set journal_repo in pins.yml to the journal's owner/repo (\`oak bootstrap paper ` +
     `--journal\` writes it), or pass --journal <path to a clone of the journal> or ` +
     `--no-journal for ` +
@@ -895,6 +913,11 @@ export const validate = {
   strayMystYml: (path: string): string =>
     `extra myst.yml at "${path}": a paper repo has one, at its root`,
   idMissing: 'project.id is missing',
+  idFolderMismatch: (dir: string, id: string): string =>
+    `${dir} holds project.id "${id}"; a paper's folder is named by its id, so rename the folder ` +
+    `or change the id to match`,
+  idFolderBadName: (dir: string): string =>
+    `${dir} is not a paper id: a paper folder's name is its id, made of letters, digits, - and _`,
 
   // brand
   brandNoFavicon:
@@ -915,6 +938,9 @@ export const validate = {
     `brand typst watermark "${logo}" does not resolve to a file`,
 
   // how the run happened: notes, which never fail the check
+  noteDraft:
+    'this paper is not listed in registry/papers.yml yet, so the editorial checks report ' +
+    'warnings; they block once an editor lists it. The id checks block either way.',
   noteUncomposed:
     "checked the paper's own myst.yml ONLY: the journal's settings were not available to this " +
     'run, so whatever the journal, its edition or its branding add (the cover image, the PDF ' +
@@ -1010,6 +1036,105 @@ export const validate = {
   needsBuildArtifacts: 'requires build artifacts; run `oak build` first',
 };
 
+// ── oak papers ──
+
+export const papers = {
+  usage:
+    'oak papers: usage: oak papers (--for build|check | --tag <tag> | --id <paper id> | --id-env)',
+  tagNamesNoPaper: (tag: string, colocated: boolean): string =>
+    `oak papers: tag ${JSON.stringify(tag.slice(0, 80))} names no paper of this repository; ` +
+    (colocated
+      ? 'tag <paper id>/vX.Y.Z, naming a folder in papers/.'
+      : 'tag vX.Y.Z in a paper repository.'),
+  idInPaperRepo:
+    'oak papers: this is a paper repository, with its one paper at the root; leave the paper id empty.',
+  unknownId: (id: string): string =>
+    `oak papers: ${JSON.stringify(id.slice(0, 80))} is not one of this repository's papers; ` +
+    'give the id its folder in papers/ is named by.',
+};
+
+// ── oak add-paper ──
+
+export const addPaper = {
+  usage:
+    'oak add-paper: usage: oak add-paper --repo <owner/journal> --id <paper id> [--edition <id>] [--yes]',
+  badId: (id: string): string =>
+    `oak add-paper: ${JSON.stringify(id.slice(0, 60))} is not a paper id: letters, digits, - and _, ` +
+    `starting with a letter or digit. It names the paper's folder, its tags and its Zenodo record.`,
+  noEdition: (id: string): string =>
+    `oak add-paper: the id ${id} carries no year to take the edition from; pass --edition <id>, ` +
+    `one of the journal's editions/<id>.yml.`,
+  badEdition: (edition: string): string =>
+    `oak add-paper: --edition ${JSON.stringify(edition.slice(0, 60))} is not an edition id (letters, digits, . _ -).`,
+  notColocated: (repo: string): string =>
+    `oak add-paper: ${repo} has no papers/ folder, so it is not a co-located journal; a paper ` +
+    `repository of its own is set up with oak bootstrap paper.`,
+  idRefused: (why: string): string => `oak add-paper: ${why}`,
+  idTaken: (id: string, repo: string): string =>
+    `oak add-paper: ${repo} already has papers/${id}; pick another id. A merged submission claims its id.`,
+  unknownEdition: (edition: string, repo: string, given: boolean): string =>
+    `oak add-paper: ${repo} has no editions/${edition}.yml` +
+    (given ? '' : ', the edition the year in the id names') +
+    '; pass --edition naming one of its editions.',
+  noEngineVersion: (repo: string): string =>
+    `oak add-paper: .github/actions/engine/pins.yml in ${repo} names no engine_version, so the ` +
+    `new paper would pin no engine; an editor runs oak upgrade on the journal first.`,
+  planHeader: (repo: string, id: string): string => `add-paper ${id} to ${repo}`,
+  planEdition: (edition: string, given: boolean): string =>
+    `  --edition  ${edition}${given ? '' : ' (default: the year in the id; it can change later, in myst.yml)'}`,
+  planFork: (fork: string, branch: string): string =>
+    `  ○ fork the journal as ${fork}, if you have no fork yet, and push branch ${branch} to it`,
+  planSeed: (dir: string, version: string): string =>
+    `  ○ commit the starter manuscript as ${dir}/, pinned to engine ${version}`,
+  planPr: (repo: string): string =>
+    `  ○ open a pull request to ${repo}: an editor merges it as a draft, which the website does not show yet`,
+  aborted: 'nothing was forked, pushed or opened.',
+  commitMessage: (id: string): string => `feat: add ${id}`,
+  logPushed: (fork: string, branch: string): string => `  ✓ pushed ${branch} to ${fork}`,
+  logPrOpened: (url: string): string => `  ✓ opened ${url}`,
+  prTitle: (id: string): string => `Submission of interest: ${id}`,
+  prBody: (id: string, dir: string): string =>
+    [
+      `Adds \`${dir}/\`, the starter manuscript for \`${id}\`. Merging it adds the paper as a draft: ` +
+        `it is on main, and the website shows it once an editor lists it in \`registry/papers.yml\`.`,
+      '',
+      'Until then the editorial checks report warnings; the id checks must pass. Later changes ' +
+        'come as pull requests that change this folder only.',
+    ].join('\n'),
+};
+
+// ── oak assemble ──
+
+export const assemble = {
+  usage: 'oak assemble: usage: oak assemble --builds <folder of paper builds> [--base-url <path>]',
+  badBuildFolder: (name: string): string =>
+    `oak assemble: ${JSON.stringify(name.slice(0, 80))} is not a paper build; each folder is ` +
+    `named paper-build-<paper id>, as the Build paper workflow uploads it.`,
+  oneBuild: (listed: number): string =>
+    `oak assemble: the builds folder holds one paper's site, but registry/papers.yml lists ` +
+    `${listed} papers here, so it cannot tell which paper it is.`,
+  registryNotList:
+    'oak assemble: registry/papers.yml is not a list of entries, so no paper could be mounted: ' +
+    docsUrl(DOCS.fileRegistry),
+  missingBuilds: (ids: string[]): string =>
+    `oak assemble: registry/papers.yml lists ${ids.join(', ')}, with no build; a listed paper ` +
+    `that does not build holds back the website, which keeps its last deployment.`,
+  unlisted: (id: string): string =>
+    `oak assemble: ${id} is built but not listed in registry/papers.yml, so it is left out.`,
+  noSite: (html: string): string =>
+    `oak assemble: the journal website built no ${html}/index.html; check pages/ and the toc in myst.yml.`,
+  clash: (id: string): string =>
+    `oak assemble: the journal website already serves /${id}/, so paper ${id} cannot be mounted ` +
+    `there; rename the website's page or folder.`,
+  mounted: (id: string, path: string): string => `oak assemble: ${id} at ${path}`,
+  stepFailed: (command: string, status: number | null): string =>
+    `oak assemble: ${command} failed (exit ${status ?? 'signal'}) building the journal website; its output is above.`,
+  galleryNotLoaded:
+    'oak assemble: the gallery plugin did not load: check the pinned plugin URL in myst.yml (a bad tag 404s silently).',
+  fileUnresolved:
+    'oak assemble: a file in the config did not resolve: paths in brand/brand.yml start at the repo root, as in brand/logo.svg.',
+};
+
 // ── Pull request comments and the Check Run ──
 
 /** The hidden first line of a comment oak edits in place. `realGhPr.sticky` (gh.ts) finds the
@@ -1019,21 +1144,21 @@ export function stickyMarker(header: string): string {
 }
 
 export const pr = {
-  previewDeployed: (url: string): string =>
+  previewDeployed: (url: string, paper?: string): string =>
     [
-      '**Preview deployed** 🚀',
+      paper ? `**Preview of \`${paper}\` deployed** 🚀` : '**Preview deployed** 🚀',
       '',
       `${url}`,
       '',
       '_Updated on every push to this pull request._',
     ].join('\n'),
 
-  previewArtifact: (runUrl: string, reason: string): string =>
+  previewArtifact: (runUrl: string, reason: string, paper?: string): string =>
     [
-      '**Preview build ready** 📦',
+      paper ? `**Preview build of \`${paper}\` ready** 📦` : '**Preview build ready** 📦',
       '',
       'No Cloudflare preview is configured, so the built site is attached to its "Build paper" run as',
-      `the **paper-build** artifact; open the run and scroll to **Artifacts**: ${runUrl}`,
+      `the **${paper ? `paper-build-${paper}` : 'paper-build'}** artifact; open the run and scroll to **Artifacts**: ${runUrl}`,
       '',
       `_(${reason}.)_`,
     ].join('\n'),
@@ -1098,6 +1223,35 @@ export const pr = {
   checkRunNote: (note: string): string => `> ⚠️ ${note}`,
   gatedMore: (n: number): string => `, +${n} more`,
 
+  // ── several papers in one repository ───────────────────────────────────────────────────
+  /** The comment's line naming the papers a pull request changes. */
+  checksPapers: (ids: string[]): string =>
+    `Paper${ids.length === 1 ? '' : 's'} checked: ${ids.map((i) => `\`${i}\``).join(', ')}`,
+  checksNoPaper: 'This pull request changes no paper.',
+  /** A section of the combined Check Run for one paper. */
+  checksPaperSection: (id: string, title: string): string => `#### \`${id}\`: ${title}`,
+  checkRunTitlePapers: (titles: string[]): string => titles.join('; '),
+  checkRunTitleNoPaper: 'no paper changed',
+  forkRefusedTitle: 'refused: a pull request from a fork may change only one paper',
+  forkUnlisted:
+    'GitHub did not list every file this pull request changes, so oak cannot tell that it ' +
+    'changes one paper only.',
+  forkOutsidePapers: (files: string[]): string =>
+    `A pull request from a fork may change files in one papers/<id>/ folder only; ` +
+    `this one also changes ${files
+      .slice(0, 5)
+      .map((f) => `\`${f}\``)
+      .join(', ')}${files.length > 5 ? `, +${files.length - 5} more` : ''}.`,
+  forkNoPaper:
+    'A pull request from a fork must change one papers/<id>/ folder; this one changes none.',
+  forkSeveralPapers: (papers: string[]): string =>
+    `A pull request from a fork may change only one paper; this one changes ` +
+    `${papers.map((p) => `\`${p}\``).join(', ')}. Open one pull request per paper.`,
+  forkWrongReport: (expected: string, got: string[]): string =>
+    `This pull request changes \`${expected}\`, but its checks report covers ` +
+    `${got.length ? got.map((p) => `\`${p}\``).join(', ') : 'no paper'}; the report was not ` +
+    `made for this change.`,
+
   /** A pull request that edits the files the checks run from. A warning, never a failure:
    *  upgrade pull requests edit them too. */
   gatedWarning: (shown: string, more: string): string =>
@@ -1116,6 +1270,13 @@ export const pr = {
 
 export const workflow = {
   // release reserve-doi and status
+  releaseUnknownPaper: (verb: string, dir: string): string =>
+    `oak ${verb}: ${dir} is not one of this repository's papers (papers/<id>/myst.yml); name a paper by its folder.`,
+  badPaperFolder: (dir: string): string =>
+    `${dir} holds a myst.yml but is not named by a paper id (letters, digits, - and _, starting ` +
+    `with a letter or digit); rename the folder to the paper's project.id.`,
+  badPaperId: (source: string, got: string): string =>
+    `${source} takes a paper id (letters, digits, - and _), not ${JSON.stringify(got.slice(0, 60))}.`,
   badRepoName: (source: string, got: string): string =>
     `${source} takes a GitHub repo as owner/name, not ${JSON.stringify(got.slice(0, 60))}.`,
 
@@ -1124,10 +1285,15 @@ export const workflow = {
     `${why} Until then the preview falls back to an artifact link; nothing else in this run ` +
     `depends on it`,
 
+  postChecksPrsDiffer: (prs: string[]): string =>
+    `oak post-checks: the reports name different pull requests (${prs.join(', ')}). They come ` +
+    `from the pull_request job's artifacts, which are corrupt or hostile; nothing was posted.`,
   postChecksBadReport: (path: string): string =>
     `${path} is not a checks report (no checkRun.conclusion). It comes from the ` +
     `pull_request job's artifact, which is truncated, corrupt or hostile; nothing was posted.`,
 
+  previewNoSite: (dir: string): string =>
+    `oak deploy-preview: no built site in ${dir}; this pull request builds no paper, so there is no preview.`,
   previewBadPrNumber: (got: string): string =>
     `.pr-number is not a pull request number (${JSON.stringify(got.slice(0, 40))}). It ` +
     `comes from the build artifact, which is corrupt or hostile.`,
@@ -1240,7 +1406,8 @@ export const workflow = {
     `project.doi is a ${doiIsSandbox ? 'sandbox' : 'production'} DOI, but this run talks to ` +
     `${doiIsSandbox ? 'production Zenodo' : 'the Zenodo sandbox'}.`,
   uploadBadTag: (tag: string): string =>
-    `the tag must be a paper version like v1.2.3, not ${JSON.stringify(tag.slice(0, 40))}.`,
+    `the tag must be a paper version like v1.2.3, or <paper id>/v1.2.3 in a co-located ` +
+    `repository, not ${JSON.stringify(tag.slice(0, 80))}.`,
   uploadNoPdf: (pdf: string): string => `PDF not found: ${pdf}`,
   uploadNoGithub:
     'project.github missing from myst.yml. oak release reserve-doi writes it beside project.doi, ' +
@@ -1293,13 +1460,15 @@ export const workflow = {
 
   /** The DOI pull request `gh.openDoiPr` opens. GitHub starts no checks on a pull request a
    *  workflow opens, so in Actions the body says why. */
-  doiPrTitle: 'Reserve Zenodo DOI',
-  doiCommitMessage: (conceptDoi: string): string => `chore: reserve Zenodo DOI ${conceptDoi}`,
+  doiPrTitle: (paper?: string): string =>
+    paper ? `Reserve Zenodo DOI for ${paper}` : 'Reserve Zenodo DOI',
+  doiCommitMessage: (conceptDoi: string, paper?: string): string =>
+    `chore: reserve Zenodo DOI ${conceptDoi}${paper ? ` for ${paper}` : ''}`,
   doiPrChecksSkipped:
     'Journal checks skipped: an automated change that writes only the reserved DOI',
-  doiPrBody: (conceptDoi: string, byWorkflow: boolean): string =>
+  doiPrBody: (conceptDoi: string, byWorkflow: boolean, mystPath = 'myst.yml'): string =>
     [
-      `Writes the reserved concept DOI \`${conceptDoi}\` into \`myst.yml\`. Merge before tagging.`,
+      `Writes the reserved concept DOI \`${conceptDoi}\` into \`${mystPath}\`. Merge before tagging.`,
       ...(byWorkflow
         ? [
             '',
@@ -1307,8 +1476,8 @@ export const workflow = {
             '<summary>Why are the checks not running?</summary>',
             '',
             'GitHub starts no checks on a pull request a workflow opens. This one changes only ' +
-              'the DOI in `myst.yml`, so the workflow skipped the Journal checks, and the other ' +
-              'checks are not needed to merge. If the Journal checks are missing, close and ' +
+              `the DOI in \`${mystPath}\`, so the workflow skipped the Journal checks, and the ` +
+              'other checks are not needed to merge. If the Journal checks are missing, close and ' +
               'reopen this pull request to run them.',
             '',
             '</details>',
@@ -1319,7 +1488,13 @@ export const workflow = {
   // release deposit
   releaseNoTag: 'oak release deposit: --tag vX.Y.Z is required',
   releaseBadTag: (tag: string): string =>
-    `oak release deposit: --tag must be a paper version like v1.2.3, not ${JSON.stringify(tag.slice(0, 40))}.`,
+    `oak release deposit: tag ${JSON.stringify(tag.slice(0, 80))} is not a version tag; tag vX.Y.Z ` +
+    `in a paper repository, or <paper id>/vX.Y.Z for papers/<paper id> in a co-located one.`,
+  releaseNoPaperFolder: (tag: string, dir: string): string =>
+    `oak release deposit: tag ${tag} names ${dir}, which holds no paper (no myst.yml); delete the ` +
+    `tag and tag the paper by the name of its folder.`,
+  releaseTagOtherPaper: (tag: string, paper: string): string =>
+    `oak release deposit: tag ${tag} names another paper than --paper ${paper}; a tag releases the paper it names.`,
   /** `verb` is `release deposit`. */
   noDoi: (verb: string): string =>
     `oak ${verb}: project.doi missing; run oak release reserve-doi and merge its pull request first.`,
@@ -1394,10 +1569,11 @@ export const workflow = {
 
   // oak release from the terminal (release.ts `runRelease`)
   releaseNoTagList: (repo: string, tags: string[]): string =>
-    `oak release: name the version to publish, as in oak release v1.2.3. ` +
+    `oak release: name the version to publish, as in oak release v1.2.3, or oak release ` +
+    `<paper id>/v1.2.3 for a paper of a co-located journal. ` +
     (tags.length
       ? `Tags on ${repo}: ${tags.slice(-20).join(', ')}${tags.length > 20 ? ` (the last 20 of ${tags.length})` : ''}.`
-      : `${repo} has no v* tags yet.`),
+      : `${repo} has no version tags yet.`),
   releaseNoRepo:
     'oak release: pass --repo owner/name, or run it in a clone of the paper repo, whose origin ' +
     'names the repo.',
@@ -1410,8 +1586,8 @@ export const workflow = {
     'oak release: gh is not logged in. oak release pushes, merges and tags on GitHub as you; ' +
     'run gh auth login, then run this again.',
   releaseUnknownWord: (word: string): string =>
-    `oak release: ${JSON.stringify(word.slice(0, 40))} is neither a version like v1.2.3 nor a ` +
-    `subcommand of oak release (reserve-doi, deposit, status).\n${seeHelp}`,
+    `oak release: ${JSON.stringify(word.slice(0, 40))} is neither a version like v1.2.3 or ` +
+    `<paper id>/v1.2.3 nor a subcommand of oak release (reserve-doi, deposit, status).\n${seeHelp}`,
   releaseInActions:
     'oak release: publishing a version runs from the terminal; in GitHub Actions the workflows ' +
     'run its subcommands, oak release reserve-doi and oak release deposit.',
@@ -1431,6 +1607,22 @@ export const workflow = {
     `oak's temporary clone of ${repo} is kept at ${dir} to look into; delete it with oak clean`,
   releaseClonesRemoved: (dirs: string[]): string =>
     `✓ removed the ${dirs.length === 1 ? 'clone' : 'clones'} an earlier run kept: ${dirs.join(', ')}`,
+  /** `where` is `at <tag>` or `on the default branch`. */
+  releaseNeedsPaperId: (repo: string, tag: string, where: string): string =>
+    `oak release: ${repo} is a co-located journal ${where}, so a version names its paper: run ` +
+    `oak release <paper id>/${tag}, with the id of a folder under papers/.`,
+  releaseNotColocated: (repo: string, tag: string, where: string): string =>
+    `oak release: ${tag} names a paper of a co-located journal, but ${repo} is not one ${where} ` +
+    `(its .github/actions/engine/pins.yml has no journal_repo: .). Run oak release ` +
+    `${tag.slice(tag.indexOf('/') + 1)} for the paper of a paper repo.`,
+  releaseNoPaperHere: (repo: string, dir: string, where: string): string =>
+    `oak release: ${repo} has no paper in ${dir} ${where}: no myst.yml there naming an oak ` +
+    `version (project.options.oaktree-sapling.version). Check the paper id in the tag.`,
+  releaseBelowMinEngine: (mystPath: string, pin: string, min: string): string =>
+    `oak release: ${mystPath} pins oak ${pin}, but the workflows need ${min} or newer ` +
+    `(min_engine_version in .github/actions/engine/pins.yml), so the Deposit version build would ` +
+    `fail. Nothing was changed. Run oak upgrade on the paper, merge its pull request, then run ` +
+    `this again.`,
   /** `tag` is the tag that was read, or null for the default branch. */
   releaseNotPaper: (repo: string, tag: string | null): string =>
     `oak release: ${repo} is not an oak paper repo: ` +
@@ -1455,7 +1647,8 @@ export const workflow = {
     `oak release: a GitHub call failed (${why}). Check that gh is logged in with access to the ` +
     `repo, then run this again; it continues where it stopped.`,
 
-  releasePlanHeader: (repo: string): string => `oak release will, on ${repo}:`,
+  releasePlanHeader: (repo: string, id: string | null): string =>
+    `oak release will, on ${repo}${id ? ` for the paper ${id}` : ''}:`,
   releasePlanReserve: (sandbox: boolean, replace: boolean): string =>
     `  reserve a DOI on Zenodo (${sandbox ? 'sandbox' : 'production'}) and ` +
     (replace

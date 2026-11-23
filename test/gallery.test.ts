@@ -5,7 +5,7 @@
  * the network, so it is not tested here.
  */
 import { describe, it, expect, vi } from 'vitest';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 // @ts-expect-error: a plain .mjs consumed by myst at runtime; no types by design.
@@ -124,10 +124,18 @@ describe('paperUrls', () => {
     expect(u.configUrl).toBe('https://raw.githubusercontent.com/me/alpha-paper/HEAD/myst.yml');
   });
 
-  it('refuses a relative path, naming the entry', () => {
-    expect(() => paperUrls(entry({ location: './papers/alpha' }))).toThrow(
-      '"j-2026-alpha": relative paths are not supported (./papers/alpha)',
-    );
+  it('reads a folder in the journal repo from disk, and links it under BASE_URL', () => {
+    vi.stubEnv('BASE_URL', '/journal');
+    try {
+      expect(paperUrls(entry({ location: './papers/alpha/' }))).toEqual({
+        local: true,
+        siteUrl: '/journal/alpha/',
+        configUrl: './papers/alpha/myst.yml',
+        thumbUrl: './papers/alpha/thumbnails/thumbnail.png',
+      });
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it('lowercases the owner in the Pages URL, as GitHub serves it', () => {
@@ -347,5 +355,53 @@ describe('the plugin name is what the site workflow checks', () => {
     // fails to load does not fail `myst build --strict` [R80]. The name must match.
     const plugin = (await import('../plugins/gallery.mjs')).default as { name: string };
     expect(plugin.name).toBe('Paper Gallery');
+  });
+});
+
+describe('a co-located paper (a folder in the journal repo)', () => {
+  /** A journal repo with one paper folder, as the site build sees it: run from its root. */
+  function journalWithFolder(thumbnail: boolean): string {
+    const root = mkdtempSync(join(tmpdir(), 'oak-gallery-colo-'));
+    mkdirSync(join(root, 'papers', 'alpha', 'thumbnails'), { recursive: true });
+    writeFileSync(join(root, 'papers', 'alpha', 'myst.yml'), 'project:\n  title: Folder Alpha\n');
+    if (thumbnail) writeFileSync(join(root, 'papers', 'alpha', 'thumbnails', 'thumbnail.png'), '');
+    return root;
+  }
+
+  it('reads its config and thumbnail from the checkout, with no fetch', async () => {
+    const root = journalWithFolder(true);
+    const cwd = process.cwd();
+    process.chdir(root);
+    try {
+      clearCache();
+      const noFetch = async () => {
+        throw new Error('no network for a folder');
+      };
+      const grid = await renderCards(
+        [entry({ location: './papers/alpha' })],
+        { pageDir: join(root, 'pages') },
+        noFetch,
+      );
+      const card = grid.children[0];
+      expect(card.static).toBe(true);
+      expect(card.url).toBe('/alpha/');
+      expect(card.children[0].children[0].value).toBe('Folder Alpha');
+      expect(card.children[1].url).toBe(
+        join('..', 'papers', 'alpha', 'thumbnails', 'thumbnail.png'),
+      );
+    } finally {
+      process.chdir(cwd);
+    }
+  });
+
+  it('leaves the picture out when the folder has none', async () => {
+    const root = journalWithFolder(false);
+    const cwd = process.cwd();
+    process.chdir(root);
+    try {
+      expect(await thumbnailAvailable(entry({ location: './papers/alpha' }))).toBe(false);
+    } finally {
+      process.chdir(cwd);
+    }
   });
 });

@@ -65,14 +65,17 @@ It prints a line, starting with the time, for each step it completes, and ends w
 
 The subcommands run with the `oak` version the paper pins ([which version runs](#pins-local)), read at the commit each works on: `main` for `reserve-doi`, the tag for `deposit`.
 
-Before changing anything, it lists what it will do and asks to confirm; `--yes` skips the question, except when the paper uses a different engine repository ([which version runs](#pins-local)). `--sandbox` reserves the DOI on the Zenodo sandbox. Without a version, it lists the repository's `v*` tags.
+In a [co-located journal](../guide/co-located.md#co-located-publish), the version names its paper, `oak release <paper id>/vX.Y.Z`, and every step is that paper's: its `papers/<paper id>/myst.yml`, its own DOI pull request, the tag `<paper id>/vX.Y.Z`, and the deposit of that folder.
+
+Before changing anything, it lists what it will do and asks to confirm; `--yes` skips the question, except when the paper uses a different engine repository ([which version runs](#pins-local)). `--sandbox` reserves the DOI on the Zenodo sandbox. Without a version, it lists the repository's version tags.
 
 It refuses, before changing anything:
 
 - a word after `release` that is neither a version nor a subcommand;
 - `--tag` and `--use-local-build`, which belong to `oak release deposit`;
-- a repository whose `myst.yml` names no oak version;
-- a pinned version older than `DEPOSIT_MIN_VERSION`, the first whose subcommands never build beside the Zenodo token ([why](#design-paper-ci-deposit-min));
+- `vX.Y.Z` on a co-located journal, and `<paper id>/vX.Y.Z` on a paper repository;
+- a repository whose `myst.yml`, or the named paper's, names no oak version;
+- a pinned version older than `DEPOSIT_MIN_VERSION`, the first whose subcommands never build beside the Zenodo token ([why](#design-paper-ci-deposit-min)), or than the `min_engine_version` in `.github/actions/engine/pins.yml`, which the workflows need;
 - `--sandbox` once a production DOI is committed;
 - an existing tag whose `myst.yml` holds no DOI;
 - a new tag when the newest version on Zenodo is published with another version, since **New version** was not clicked;
@@ -104,6 +107,9 @@ What `--repo <owner/name>` does depends on the command. `oak release vX` and `oa
 In GitHub Actions, it deposits the build under `_build/`, which the **Deposit version** workflow's first job made. When Zenodo refuses, it opens an issue labelled `zenodo-publish-failed`. With no token for the DOI's environment, it deposits nothing and ends successfully with a notice to run `oak release` from the terminal.
 
 Outside GitHub Actions the clone has to be at the tag, with no changes to tracked files. By default the build is the `release-build` artifact of the tag's **Deposit version** run, downloaded with gh once its build job has passed, whatever the deposit job did. The run has to be a run of `.github/workflows/deposit-version.yml` that the push of that tag started, at the tag's commit, and the artifact has to hold `myst.oak.yml`, `_build/exports` and `_build/site/content`. The provenance records when its build job finished as the build time. It refuses while the build job runs, when it failed, and when the run has no build job or its artifact lacks one of those paths.
+
+`--tag <tag>`
+: The version tag the deposit is for: `vX.Y.Z`, or `<paper id>/vX.Y.Z` for the paper in `papers/<paper id>/` of a [co-located journal](../guide/co-located.md). A tag naming a folder that holds no paper is refused.
 
 (use-local-build)=
 `--use-local-build`
@@ -174,6 +180,11 @@ The pull request goes through the Journal checks and an editor's review like any
 `--files-only`
 : Replaces the files and leaves the version in `myst.yml`.
 
+(add-paper-cli)=
+### add-paper
+
+`oak add-paper --repo <owner/journal> --id <paper id> [--edition <id>]` submits a paper to a [co-located journal](../guide/co-located.md#co-located-submit): it forks the repository with your `gh` login, commits the starter manuscript as `papers/<paper id>/` on a branch of the fork, and opens the pull request. `--edition` defaults to the year in the id.
+
 ## Commands the workflows run
 
 (post-checks)=
@@ -199,6 +210,11 @@ It reads the pull request's number from a file the build left in the site, and r
 With `preview.provider: cloudflare` and `preview.cf_project_name` in [`journal.yml`](files.md#file-journal-yml), and both Cloudflare secrets set, it deploys the site to Cloudflare Pages and comments the preview's address on the pull request. Otherwise the comment links the build's artifact and says why. A failed Cloudflare deploy or an unreadable `journal.yml` also gives the artifact link. The comment is updated on every push.
 
 It fails when the pull request's head is another commit (or when gh cannot post the comment).
+
+(assemble)=
+### assemble
+
+`oak assemble --builds <dir>` builds a co-located journal's website in the current directory and puts each paper `registry/papers.yml` lists at `/<paper id>/`, from its build in `<dir>/paper-build-<paper id>/`. The **Build paper** workflow runs it on every push to `main`.
 
 (conformance)=
 ### conformance

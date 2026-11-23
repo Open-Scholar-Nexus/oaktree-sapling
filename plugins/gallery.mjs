@@ -9,7 +9,8 @@
  * workflow checks the plugin's `name` in the build log, so keep it. A missing thumbnail only
  * drops the picture; the transform runs at `stage: 'document'` so myst downloads it.
  */
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { basename, dirname, relative, resolve } from 'node:path';
 import yaml from 'js-yaml';
 
 /** The paper list, relative to the site build root. The site is the journal repo, so the path
@@ -75,7 +76,8 @@ export function selectEntries(papers, opts = {}) {
 /**
  * A card's site, config and thumbnail URLs. `site_url` takes precedence over the Pages URL. Raw
  * files are read at `HEAD`, so any default branch works; `paper-base.yml` fixes the thumbnail path.
- * Throws for a relative path, which the website does not list yet.
+ * A folder in the journal repo (`./papers/<id>`, a co-located paper) is read from disk, and its
+ * site is `<BASE_URL>/<id>/`, where `oak assemble` mounts it; `local` is true for it.
  */
 export function paperUrls(entry) {
   const id = entry?.id ?? '?';
@@ -91,10 +93,15 @@ export function paperUrls(entry) {
     );
   }
   if (!location.repo) {
-    throw new Error(
-      `paper-cards: registry entry "${id}": relative paths are not supported ` +
-        `(${location.path}); write "owner/name" in ${REGISTRY_PATH}.`,
-    );
+    const folder = location.path.replace(/\/+$/, '');
+    return {
+      local: true,
+      siteUrl:
+        entry.site_url ??
+        `${(process.env.BASE_URL ?? '').replace(/\/+$/, '')}/${basename(folder)}/`,
+      configUrl: `${folder}/myst.yml`,
+      thumbUrl: `${folder}/thumbnails/thumbnail.png`,
+    };
   }
   const { repo } = location;
   const raw = `https://raw.githubusercontent.com/${repo}/HEAD/`;
@@ -119,7 +126,7 @@ export function sandboxDoi(config) {
  * leaves the image out.
  */
 export function cardFrom(entry, config, opts = {}) {
-  const { siteUrl, thumbUrl } = paperUrls(entry);
+  const { siteUrl, thumbUrl, local } = paperUrls(entry);
   const project = config?.project ?? {};
   const title = project.title || entry.id;
   const keywords = project.keywords ?? [];
@@ -127,7 +134,9 @@ export function cardFrom(entry, config, opts = {}) {
 
   const children = [{ type: 'header', children: [{ type: 'text', value: title }] }];
   if (opts.thumbnail !== false) {
-    children.push({ type: 'image', url: thumbUrl, alt: title, width: '100%' });
+    // myst reads a local image relative to the page that shows it.
+    const url = local ? relative(opts.pageDir ?? '.', resolve(thumbUrl)) : thumbUrl;
+    children.push({ type: 'image', url, alt: title, width: '100%' });
   }
   if (keywords.length > 0) {
     children.push({ type: 'paragraph', children: [{ type: 'text', value: keywords.join(' | ') }] });
@@ -140,12 +149,24 @@ export function cardFrom(entry, config, opts = {}) {
       children: [{ type: 'paragraph', children: [{ type: 'text', value: `DOI: ${doi}` }] }],
     });
   }
-  return { type: 'card', url: siteUrl, children };
+  // `static`: a co-located paper is a site of its own beside this one, so the link is a plain
+  // one and never resolved as a page of this site.
+  return { type: 'card', url: siteUrl, ...(local ? { static: true } : {}), children };
 }
 
 /** Fetch one paper's `myst.yml`. Errors name the entry's id and the URL. */
 export async function fetchPaperConfig(entry, fetchImpl = fetch) {
-  const { configUrl } = paperUrls(entry);
+  const { configUrl, local } = paperUrls(entry);
+  if (local) {
+    try {
+      return yaml.load(readFileSync(configUrl, 'utf8'));
+    } catch (err) {
+      throw new Error(
+        `paper-cards: cannot read the config for "${entry.id}" at ${configUrl} ` +
+          `(${err.message}). Fix or remove the entry in ${REGISTRY_PATH}.`,
+      );
+    }
+  }
   let response;
   try {
     response = await fetchImpl(configUrl);
@@ -168,7 +189,8 @@ export async function fetchPaperConfig(entry, fetchImpl = fetch) {
  *  `text/plain` body, which myst refuses as an image, so any non-image answer or network error
  *  is false and the card goes without one. */
 export async function thumbnailAvailable(entry, fetchImpl = fetch) {
-  const { thumbUrl } = paperUrls(entry);
+  const { thumbUrl, local } = paperUrls(entry);
+  if (local) return existsSync(thumbUrl);
   try {
     const response = await fetchImpl(thumbUrl, { method: 'HEAD' });
     const type = response.headers?.get?.('content-type') ?? '';
@@ -232,7 +254,7 @@ export async function renderCards(registry, opts = {}, fetchImpl = fetch) {
             `"${entry.id}"; its card has no picture.`,
         );
       }
-      return cardFrom(entry, config, { thumbnail });
+      return cardFrom(entry, config, { thumbnail, pageDir: opts.pageDir });
     }),
   );
   return { type: 'grid', columns: [1, 1, 2, 3], children: cards };
@@ -255,11 +277,12 @@ const paperCardsDirective = {
 };
 
 function paperCardsTransform(opts, utils) {
-  return async (mdast) => {
+  return async (mdast, vfile) => {
     const nodes = utils.selectAll('paper-cards-ref', mdast);
+    const pageDir = vfile?.path ? dirname(resolve(vfile.path)) : '.';
     await Promise.all(
       nodes.map(async (node) => {
-        const rendered = await renderCards(node.registry, { edition: node.edition });
+        const rendered = await renderCards(node.registry, { edition: node.edition, pageDir });
         delete node.registry;
         delete node.edition;
         Object.assign(node, rendered);

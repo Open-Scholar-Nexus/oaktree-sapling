@@ -115,7 +115,7 @@ describe.skipIf(bundleState() === 'absent')(
     it('explains the journal repo and --co-located in plain words', () => {
       const { stderr } = oak([]);
       expect(stderr).toMatch(/a public repo with the journal's settings/);
-      expect(stderr).toMatch(/--co-located\s+not ready: one repo for the journal and its papers/);
+      expect(stderr).toMatch(/--co-located\s+one repo for the journal, its website and its papers/);
     });
 
     it('documents --json and --verbose', () => {
@@ -923,16 +923,22 @@ describe.skipIf(bundleState() === 'absent')(
       const dir = sandboxPaper();
       const bad = oak(['release', 'deposit', '--tag', 'v1.0.0;x', '--paper', dir], noTokens);
       expect(bad.code).toBe(2);
-      expect(bad.stderr).toContain('oak release deposit: --tag must be a paper version');
+      expect(bad.stderr).toContain('oak release deposit: tag "v1.0.0;x" is not a version tag');
     });
 
     it('refuses a word that is neither a version nor a subcommand, so a typo never starts the flow', () => {
-      for (const word of ['depost', 'v1.0.0;x']) {
+      for (const word of ['depost', 'v1.0.0;x', 'a/b/v1.0.0', 'one/1.0.0']) {
         const r = oak(['release', word, '--tag', 'v1.0.0'], noTokens);
         expect(r.code, word).toBe(2);
-        expect(r.stderr, word).toContain('is neither a version like v1.2.3 nor a subcommand');
+        expect(r.stderr, word).toContain(
+          'is neither a version like v1.2.3 or <paper id>/v1.2.3 nor a subcommand',
+        );
         expect(r.stderr, word).toContain('run oak --help');
       }
+      // A co-located paper's version passes, and meets the next refusal.
+      const r = oak(['release', 'one/v1.0.0', '--tag', 'v1.0.0'], noTokens);
+      expect(r.code).toBe(2);
+      expect(r.stderr).toContain('--tag belongs to oak release deposit alone');
     });
 
     it('the flow refuses in GitHub Actions, pointing at oak upgrade', () => {
