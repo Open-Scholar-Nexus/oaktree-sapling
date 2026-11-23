@@ -12,6 +12,7 @@ project:
   plugins:
     - plugins/source-links.mjs
     - plugins/scroll-code.mjs
+    - plugins/card-links.mjs
   # oak prints links to these pages' labels (src/docs-links.ts), so a broken one fails the build.
   error_rules:
     - rule: reference-target-resolves
@@ -20,9 +21,9 @@ project:
       severity: error
   toc:
     - file: index.md
-    - file: philosophy.md
-    # Holds the chart philosophy.md embeds; an embed resolves only to a file in the toc.
-    - file: philosophy-figure.ipynb
+    - file: why-use-it.md
+    # Holds the chart why-use-it.md embeds; an embed resolves only to a file in the toc.
+    - file: why-use-it-figure.ipynb
       hidden: true
     - title: Getting started
       children:

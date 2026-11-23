@@ -1,9 +1,9 @@
-(philosophy)=
-# Philosophy
+(why-use-it)=
+# Why use it
 
-Oaktree Sapling sets up a journal on free services and on tools a researcher already uses or can learn in an afternoon. The sections below take each of its aims in turn: free, easy, beautiful and reliable. [Limits](#philosophy-limits) lists what it leaves to the journal.
+Oaktree Sapling sets up a journal on free services and on tools a researcher already uses or can learn in an afternoon. The sections below take each of its aims in turn: free, easy, beautiful and reliable. [Limits](#why-limits) lists what it leaves to the journal.
 
-(philosophy-free)=
+(why-free)=
 ## Free to run
 
 A journal set up with Oaktree Sapling has little to run: a paper is built only when it changes, and what readers get is a static website, which costs little to serve[^scope]. So every service it uses is free at its scale: GitHub Actions and Pages for public repositories, Cloudflare Pages for the previews, and Zenodo[^sustainability].
@@ -14,7 +14,7 @@ An author needs a GitHub account. The journal also needs a Cloudflare account fo
 
 [^sustainability]: Of these, GitHub Pages and Cloudflare Pages are the simplest to swap to alternatives. A journal uses a few minutes of build per change, within the free limits of GitHub Actions and of most alternatives. Zenodo mints DOIs and keeps the archived copies; replacing it would need another provider that mints DOIs at no cost, and a deposit in `oak` written for it.
 
-(philosophy-easy)=
+(why-easy)=
 ## Easy to write and review
 
 ### Papers are written in MyST
@@ -31,17 +31,17 @@ GitHub also builds each paper and hosts its website, so the journal has no serve
 
 [^review]: An author who has not used git before has to learn a few steps: fork, commit, push, open a pull request. [Your paper repository](start/paper.md) walks through each one.
 
-(philosophy-beautiful)=
+(why-beautiful)=
 ## Beautiful to read
 
 MyST reads a document into a structure where each figure, equation and citation is known for what it is, so one source becomes both a website and a PDF. The website is where most reading happens: references preview on hover, figures can stay interactive, and a notebook's outputs sit in the paper next to the code that produced them. The PDF is for printing and citing. MyST can also export [JATS XML](https://mystmd.org/guide/creating-jats-xml).
 
 :::{figure} #fig-gccm
-:label: fig-philosophy-gccm
+:label: fig-why-gccm
 An interactive figure from a published paper: cross-map skill between land surface temperature (LST) and each candidate driver of urban heat in Ouagadougou, in both directions, with 95% confidence intervals. Data from [Lindner et al. (2026)](https://impact-scholars.github.io/lindner-2026-ouaga-urban-heat-drivers/), Fig. 1D ([DOI](https://doi.org/10.5281/zenodo.20606263)). Hover over a point for its values; click a legend entry to highlight one direction. In a paper's PDF, the chart is a static image ([how to make one](#guide-interactive-figure)).
 :::
 
-(philosophy-reliable)=
+(why-reliable)=
 ## Reliable over time
 
 ### Published versions go to Zenodo
@@ -54,7 +54,7 @@ Publishing a version deposits it to [Zenodo](https://zenodo.org), which gives it
 
 A paper builds with the engine release named in its `myst.yml`, checked out from the engine repository at that release's tag. If the engine stops being maintained, each paper keeps building with the release it names, for as long as that release and the web theme it downloads stay on GitHub. A journal can also run its papers from its own fork of the engine repository, release tags included, by naming that fork in the paper's [`pins.yml`](<src:templates/paper/.github/actions/engine/pins.yml@"engine_repo:">).
 
-(philosophy-limits)=
+(why-limits)=
 ## Limits
 
 - Review happens in pull requests on public repositories, so anyone can read the reviews, and authors see who wrote them[^blind].

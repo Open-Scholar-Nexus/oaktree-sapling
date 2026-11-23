@@ -28,46 +28,60 @@ Why Oaktree Sapling
 ::::{grid} 1 2 4 4
 
 :::{card}
+:link: why-use-it.md#why-free
 ```{image} brand/icons/free.svg
 :width: 48px
 :align: center
 ```
-**[Free](#philosophy-free)**
+**Free**
 
 Runs on the free tiers of GitHub, Cloudflare and Zenodo.
 :::
 
 :::{card}
+:link: why-use-it.md#why-easy
 ```{image} brand/icons/easy.svg
 :width: 48px
 :align: center
 ```
-**[Easy](#philosophy-easy)**
+**Easy**
 
 Write in Markdown, review in pull requests.
 :::
 
 :::{card}
+:link: why-use-it.md#why-beautiful
 ```{image} brand/icons/beautiful.svg
 :width: 48px
 :align: center
 ```
-**[Beautiful](#philosophy-beautiful)**
+**Beautiful**
 
 Each paper is a website and a PDF.
 :::
 
 :::{card}
+:link: why-use-it.md#why-reliable
 ```{image} brand/icons/reliable.svg
 :width: 48px
 :align: center
 ```
-**[Reliable](#philosophy-reliable)**
+**Reliable**
 
 Each version gets a DOI and an archived copy.
 :::
 
 ::::
+
++++ {"kind": "justified", "class": "landing-in-use"}
+
+In use
+
+## See it in use
+
+Oaktree Sapling grew out of the journal of Neuromatch's Impact Scholars Program.
+
+{button}`Impact Scholars journal <https://impact-scholars.github.io/>`
 
 +++ {"kind": "justified", "class": "landing-docs"}
 
@@ -90,7 +104,7 @@ Documentation
 :::
 
 :::{card} Why it's built this way
-[Philosophy](philosophy.md) · [How it works](design/index.md)
+[Why use it](why-use-it.md) · [How it works](design/index.md)
 :::
 
 ::::
