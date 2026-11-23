@@ -24,7 +24,7 @@ jobs:
   paper:
     runs-on: ubuntu-latest
     outputs:
-      result: ${{ steps.paper.outputs.result }}
+      paper_dir: ${{ fromJSON(steps.paper.outputs.result || '{}').paper_dir }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # The input reaches oak through env:, one value whatever it holds.
@@ -50,7 +50,7 @@ jobs:
       - uses: ./.github/actions/engine
         with:
           args: release reserve-doi ${{ inputs.sandbox && '--sandbox' || '' }}
-          paper-dir: ${{ fromJSON(needs.paper.outputs.result || '{}').paper_dir }}
+          paper-dir: ${{ needs.paper.outputs.paper_dir }}
         env:
           GH_TOKEN: ${{ github.token }}
           ZENODO_TOKEN: ${{ secrets.ZENODO_TOKEN }}

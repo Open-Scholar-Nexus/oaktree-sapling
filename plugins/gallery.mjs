@@ -10,7 +10,7 @@
  * drops the picture; the transform runs at `stage: 'document'` so myst downloads it.
  */
 import { existsSync, readFileSync } from 'node:fs';
-import { basename, dirname, relative, resolve } from 'node:path';
+import { dirname, relative, resolve } from 'node:path';
 import yaml from 'js-yaml';
 
 /** The paper list, relative to the site build root. The site is the journal repo, so the path
@@ -76,8 +76,9 @@ export function selectEntries(papers, opts = {}) {
 /**
  * A card's site, config and thumbnail URLs. `site_url` takes precedence over the Pages URL. Raw
  * files are read at `HEAD`, so any default branch works; `paper-base.yml` fixes the thumbnail path.
- * A folder in the journal repo (`./papers/<id>`, a co-located paper) is read from disk, and its
- * site is `<BASE_URL>/<id>/`, where `oak assemble` mounts it; `local` is true for it.
+ * A folder location must be `./papers/<id>`, a co-located paper: it is read from disk, and its
+ * site is `<BASE_URL>/<id>/`, where `oak assemble` mounts it; `local` is true for it. Throws
+ * for any other folder.
  */
 export function paperUrls(entry) {
   const id = entry?.id ?? '?';
@@ -93,12 +94,18 @@ export function paperUrls(entry) {
     );
   }
   if (!location.repo) {
-    const folder = location.path.replace(/\/+$/, '');
+    // PAPER_ID in the engine's src/projects.ts.
+    const paper = /^\.\/papers\/([A-Za-z0-9][A-Za-z0-9_-]{0,99})\/?$/.exec(location.path)?.[1];
+    if (!paper) {
+      throw new Error(
+        `paper-cards: registry entry "${id}": a folder location must be ./papers/<paper id> ` +
+          `(${location.path}); write "owner/name" for a GitHub repository in ${REGISTRY_PATH}.`,
+      );
+    }
+    const folder = `./papers/${paper}`;
     return {
       local: true,
-      siteUrl:
-        entry.site_url ??
-        `${(process.env.BASE_URL ?? '').replace(/\/+$/, '')}/${basename(folder)}/`,
+      siteUrl: entry.site_url ?? `${(process.env.BASE_URL ?? '').replace(/\/+$/, '')}/${paper}/`,
       configUrl: `${folder}/myst.yml`,
       thumbUrl: `${folder}/thumbnails/thumbnail.png`,
     };

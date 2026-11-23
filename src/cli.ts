@@ -25,7 +25,15 @@ import type { HandoffContext, HandoffDeps, HandoffVerb, PaperVerb } from './pinn
 import * as msg from './messages.js';
 import { annotate, inCI, UserError } from './messages.js';
 import { readDoc } from './yaml-io.js';
-import { findRepoRoot } from './projects.js';
+import {
+  discoverProjects,
+  findRepoRoot,
+  folderId,
+  forkPaper,
+  isColocated,
+  paperDirIn,
+  parsePaperTag,
+} from './projects.js';
 
 // oak only runs as the CJS bundle (ci/run.sh and local runs both call dist/cli.cjs), so
 // `__dirname` is the bundle's directory; @types/node declares it for tsc.
@@ -116,7 +124,6 @@ async function resolveJournalRoot(
   if (explicit === '') throw new UserError(msg.flagNeedsValue('journal'));
   const { cachedJournal, journalStamp } = await import('./gh.js');
   const found = (root: string) => ({ root, stamp: journalStamp(root, paperRoot) });
-  const { findRepoRoot } = await import('./projects.js');
   const repoRoot = findRepoRoot(paperRoot) ?? paperRoot;
   if (explicit) return found(explicit === '.' ? repoRoot : resolve(explicit));
   let journalRepo: string | undefined;
@@ -551,8 +558,6 @@ async function cmdReleaseReserveDoi(argv: string[]): Promise<number> {
   // A co-located paper is one of the repository's papers: the workflow takes its id as input.
   const paperFlag = flag(argv, 'paper');
   if (paperFlag) {
-    const { discoverProjects, findRepoRoot, isColocated, paperDirIn } =
-      await import('./projects.js');
     const root = findRepoRoot(resolve(paperFlag)) ?? resolve('.');
     const dir = paperDirIn(root, resolve(paperFlag));
     if (isColocated(root) && !discoverProjects(root).includes(dir)) {
@@ -695,8 +700,6 @@ async function cmdReleaseDeposit(argv: string[]): Promise<number> {
   // The tag reaches git as a ref, and names the paper: `vX.Y.Z` the one at the repository root,
   // `<id>/vX.Y.Z` the folder `papers/<id>`, which must exist. `--paper`, which ci/run.sh passes,
   // must agree.
-  const { discoverProjects, findRepoRoot, isColocated, parsePaperTag } =
-    await import('./projects.js');
   const paperTag = parsePaperTag(tag);
   if (!paperTag) {
     process.stderr.write(msg.workflow.releaseBadTag(tag) + '\n');
@@ -720,12 +723,11 @@ async function cmdReleaseDeposit(argv: string[]): Promise<number> {
       return 2;
     }
     paperRoot = tagged;
-    if (!flagged) argv = [...argv, '--paper', paperRoot];
   } else if (isColocated(repoRoot)) {
     process.stderr.write(msg.workflow.releaseBadTag(tag) + '\n');
     return 2;
   }
-  const mystPath = mystPathOf(argv);
+  const mystPath = resolve(flag(argv, 'myst') ?? join(paperRoot, 'myst.yml'));
   const env = await sandboxFromDoi(mystPath, 'release deposit');
   if ('error' in env) {
     process.stderr.write(env.error + '\n');
@@ -910,7 +912,6 @@ async function cmdReleaseVersion(argv: string[]): Promise<number> {
   const pinned = await import('./pinned.js');
   const { removeKeptClones } = await import('./clean.js');
   // Checked first, from the arguments alone; the clone says which form the repo takes.
-  const { parsePaperTag } = await import('./projects.js');
   const word = releaseWord(argv)?.word;
   if (word !== undefined && !parsePaperTag(word)) {
     process.stderr.write(msg.workflow.releaseUnknownWord(word) + '\n');
@@ -1431,15 +1432,14 @@ async function cmdPostChecks(argv: string[]): Promise<number> {
   if (pr) artifact.verifyPrHead(repo, pr, verifiedHead, (r, n) => gh.realGhPr.prHead(r, n));
 
   const { cmdPostChecks: run, gatedPathsTouched } = await import('./checks.js');
-  const { forkPaper, folderId, isColocated } = await import('./projects.js');
   const changed = gh.changedFiles(repo, base, verifiedHead);
   const gatedTouched = gatedPathsTouched(changed);
   let report = combineReports(reports);
   const papers = reports.map((r) => r.paper);
   const colocated = isColocated(resolve('.'));
-  // Only editors can push a branch here, so only a fork's pull request is held to one paper.
-  // Without the event (a run by hand), the rule applies.
-  const headRepo = flag(argv, 'head-repo') ?? artifact.eventHeadRepo(process.env);
+  // Only editors can push a branch here, so only a pull request from a fork must change one paper
+  // folder. Without the event (a run by hand), the rule applies.
+  const headRepo = artifact.eventHeadRepo(process.env);
   const { sameRepo } = await import('./schema.js');
   if (colocated && (!headRepo || !sameRepo(headRepo, repo))) {
     const change = forkPaper(changed);
@@ -1487,7 +1487,7 @@ async function cmdAssemble(argv: string[]): Promise<number> {
   return out.exitCode;
 }
 
-/** `oak add-paper --repo <owner/journal> --id <paper id>`: a submission of interest to a
+/** `oak add-paper --repo <owner/journal> --id <paper id>`: an author's submission to a
  *  co-located journal ({@link cmdAddPaper}). */
 async function cmdAddPaper(argv: string[]): Promise<number> {
   const repo = flag(argv, 'repo');
@@ -1618,7 +1618,7 @@ async function cmdBootstrap(argv: string[]): Promise<number> {
   }
   gh.assertRepoName(repo, '--repo');
   const journal = flag(rest, 'journal');
-  if (journal && journal !== '.') gh.assertRepoName(journal, '--journal');
+  if (journal) gh.assertRepoName(journal, '--journal');
   // Malformed arguments are refused before any gh call.
   const external = sub === 'journal' && !has(rest, 'co-located');
   if (sub === 'journal') {

@@ -115,9 +115,9 @@ export function eventHeadRepo(env: GithubEnv): string | undefined {
 
 /**
  * The folders Stage 2 downloaded Stage 1's artifacts into: `dir` itself when it holds one of
- * `markers` (one artifact downloaded by name), else each folder in it that does (several,
- * downloaded by pattern, one folder per artifact). Empty when `dir` is absent: a pattern that matched no
- * artifact downloads nothing.
+ * `markers`, as download-artifact extracts a single artifact there, else each folder in it that
+ * does, one per artifact. Empty when `dir` is absent: a pattern that matched no artifact downloads
+ * nothing.
  */
 export function artifactDirs(dir: string, markers: readonly string[]): string[] {
   if (!existsSync(dir)) return [];

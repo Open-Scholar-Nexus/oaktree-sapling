@@ -1,5 +1,5 @@
 /**
- * add-paper.ts: `oak add-paper`, an author's submission of interest to a co-located journal.
+ * add-paper.ts: `oak add-paper`, an author's submission to a co-located journal.
  * It forks the journal's repository, seeds `papers/<id>/` from the starter manuscript on a
  * branch of the fork, and opens the pull request; an editor merges it as a draft.
  *
@@ -10,7 +10,7 @@ import { existsSync } from 'node:fs';
 import { join, posix } from 'node:path';
 import * as msg from './messages.js';
 import { readDoc, readJournalConfig, writeDoc } from './yaml-io.js';
-import { renderPaperTemplate, ENGINE_VERSION_KEY } from './bootstrap.js';
+import { renderPaperTemplate } from './bootstrap.js';
 import {
   ENGINE_MANAGED_PATHS,
   EDITION_ID,
@@ -18,7 +18,7 @@ import {
   checkIdShape,
   underPaths,
 } from './schema.js';
-import { isColocated, PAPER_ID, PAPERS_DIR } from './projects.js';
+import { ENGINE_VERSION_KEY, isColocated, PAPER_ID, PAPERS_DIR, PINS_REL } from './projects.js';
 import { err, type Outcome } from './result.js';
 
 /** The calls `oak add-paper` makes through git and gh; the real ones are in gh.ts. */
@@ -27,6 +27,8 @@ export interface AddPaperGh {
   authedUser(): string;
   /** A clone of `repo` on a new `branch` started at its default branch. */
   checkout(repo: string, branch: string): string;
+  /** Removes the clone {@link AddPaperGh.checkout} made, once the run is done with it. */
+  discard(dir: string): void;
   /** Forks `repo` to the user's account, or finds the fork already there; returns its name. */
   fork(repo: string): string;
   /** Commits everything under `paths` in the clone and pushes `branch` to `forkRepo`. */
@@ -105,6 +107,22 @@ export async function cmdAddPaper(input: AddPaperInput, deps: AddPaperDeps): Pro
   const user = gh.authedUser();
   const branch = `add-${id}`;
   const dir = gh.checkout(repo, branch);
+  try {
+    return await submit(input, deps, { dir, user, branch, edition });
+  } finally {
+    gh.discard(dir);
+  }
+}
+
+/** The rest of {@link cmdAddPaper}, in the clone `dir`. */
+async function submit(
+  input: AddPaperInput,
+  deps: AddPaperDeps,
+  at: { dir: string; user: string; branch: string; edition: string },
+): Promise<Outcome> {
+  const { repo, id } = input;
+  const { gh } = deps;
+  const { dir, user, branch, edition } = at;
 
   // Checked on the journal's own default branch, as the pull request's checks will.
   if (!isColocated(dir)) return err(2, msg.addPaper.notColocated(repo));
@@ -116,7 +134,7 @@ export async function cmdAddPaper(input: AddPaperInput, deps: AddPaperDeps): Pro
   if (!existsSync(join(dir, 'editions', `${edition}.yml`))) {
     return err(2, msg.addPaper.unknownEdition(edition, repo, input.edition !== undefined));
   }
-  const pins = join(dir, '.github', 'actions', 'engine', 'pins.yml');
+  const pins = join(dir, PINS_REL);
   const version = existsSync(pins) ? readDoc(pins).get(ENGINE_VERSION_KEY) : undefined;
   if (typeof version !== 'string' || !ENGINE_VERSION.test(version)) {
     return err(2, msg.addPaper.noEngineVersion(repo));

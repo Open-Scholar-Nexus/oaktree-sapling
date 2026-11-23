@@ -566,11 +566,11 @@ describe('the launchers carry the paper folder through every workflow', () => {
     // The selection, Stage 2 and the website are the repository's own: the engine reads their
     // papers from the repository or the artifacts.
     const repoLevel = ['papers', 'deploy-preview', 'post-checks', 'assemble'];
-    const fromPapersJob =
-      /^\$\{\{ fromJSON\(needs\.paper\.outputs\.result \|\| '\{\}'\)\.paper_dir \}\}$/;
     for (const [where, args, dir] of calls) {
       if (repoLevel.some((v) => args.startsWith(v))) expect(dir, where).toBeUndefined();
-      else if (dir !== '${{ matrix.paper.dir }}') expect(dir, where).toMatch(fromPapersJob);
+      else if (dir !== '${{ matrix.paper.dir }}') {
+        expect(dir, where).toBe('${{ needs.paper.outputs.paper_dir }}');
+      }
     }
   });
 

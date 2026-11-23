@@ -42,6 +42,8 @@ function fakeGh(dir: string) {
       calls.push(`checkout ${repo} ${branch}`);
       return dir;
     },
+    // Kept, so the tests can read what was written.
+    discard: () => {},
     fork: (repo) => {
       calls.push(`fork ${repo}`);
       return `ada/${repo.split('/')[1]}`;
@@ -81,7 +83,7 @@ describe('cmdAddPaper', () => {
       'checkout acme/journal add-smith-2026-tides',
       'fork acme/journal',
       'push ada/journal add-smith-2026-tides papers/smith-2026-tides',
-      'pr acme/journal ada:add-smith-2026-tides Submission of interest: smith-2026-tides',
+      'pr acme/journal ada:add-smith-2026-tides Add paper smith-2026-tides',
     ]);
     const paper = join(dir, 'papers', 'smith-2026-tides');
     const myst = parseDocument(readFileSync(join(paper, 'myst.yml'), 'utf8'));

@@ -11,7 +11,13 @@ import { existsSync, readdirSync, statSync } from 'node:fs';
 import { basename, dirname, join, posix, relative, resolve, sep } from 'node:path';
 import * as msg from './messages.js';
 import { UserError } from './messages.js';
-import { PAPER_VERSION_TAG } from './schema.js';
+import {
+  PAPER_VERSION_TAG,
+  parseLocation,
+  sameRepo,
+  type Registry,
+  type RegistryEntry,
+} from './schema.js';
 import { readDoc } from './yaml-io.js';
 
 /** The folder holding a co-located repository's papers. */
@@ -20,12 +26,15 @@ export const PAPERS_DIR = 'papers';
 /** A paper folder's name, which is its `project.id`: letters, digits, `_` and `-`, starting with
  *  a letter or digit. No `.` or `/`, so it is one path segment and a valid tag prefix. The engine
  *  action's `ref` step keeps a shell copy, held to this one by `paper id rule parity` in
- *  `test/frozen-guards.test.ts`. */
+ *  `test/workflow-guards.test.ts`. */
 export const PAPER_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$/;
 
 /** The pins.yml key naming the engine a co-located repository's jobs with no paper of their own
  *  run. */
 export const ENGINE_VERSION_KEY = 'engine_version';
+
+/** The pins.yml key naming the oldest engine the workflows beside it run with. */
+export const MIN_ENGINE_KEY = 'min_engine_version';
 
 /** `pins.yml` from a repository's root, as a git path. */
 export const PINS_REL = posix.join('.github', 'actions', 'engine', 'pins.yml');
@@ -64,12 +73,6 @@ export function folderId(paperDir: string): string | null {
   return m && PAPER_ID.test(m[1]!) ? m[1]! : null;
 }
 
-/** `papers/<id>`, or a UserError naming `source` when `id` is not a {@link PAPER_ID}. */
-export function paperDirOf(id: string, source: string): string {
-  if (!PAPER_ID.test(id)) throw new UserError(msg.workflow.badPaperId(source, id));
-  return posix.join(PAPERS_DIR, id);
-}
-
 /** The nearest directory from `dir` up that holds `.git`, or undefined outside a repository. */
 export function findRepoRoot(dir: string): string | undefined {
   for (let d = resolve(dir); ; d = dirname(d)) {
@@ -96,6 +99,29 @@ export function colocatedPaper(paperRoot: string): { dir: string; id: string } |
   if (basename(parent) !== PAPERS_DIR || !PAPER_ID.test(id)) return null;
   if (!isColocated(dirname(parent))) return null;
   return { dir: posix.join(PAPERS_DIR, id), id };
+}
+
+/** The paper's own registry entries: a folder location naming `paperRoot` in the journal repo,
+ *  or, for a paper at a repository root, a location naming its repo. Without a repo those
+ *  cannot be found, so callers pass one (environment or git origin). */
+export function findSelf(
+  registry: Registry | null,
+  repo: string | null,
+  where: { journalRoot: string | null; paperRoot: string },
+): RegistryEntry[] {
+  if (!registry) return [];
+  const inFolder = colocatedPaper(where.paperRoot) !== null;
+  return registry.filter((e) => {
+    const location = parseLocation(e.location);
+    if (!location) return false;
+    if ('path' in location) {
+      return (
+        !!where.journalRoot &&
+        resolve(where.journalRoot, location.path) === resolve(where.paperRoot)
+      );
+    }
+    return !inFolder && !!repo && sameRepo(location.repo, repo);
+  });
 }
 
 /** A version tag: `vX.Y.Z` for the paper at a repository root, `<id>/vX.Y.Z` for

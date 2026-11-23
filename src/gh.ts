@@ -1231,6 +1231,9 @@ export const realAddPaperGh: AddPaperGh = {
     gitRaw(['checkout', '-b', branch], tmp);
     return tmp;
   },
+  discard(dir) {
+    rmSync(dir, { recursive: true, force: true });
+  },
   fork(repo) {
     // Prints nothing on success; an existing fork is reused.
     gh(['repo', 'fork', repo, '--clone=false', '--default-branch-only']);

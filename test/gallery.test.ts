@@ -138,6 +138,13 @@ describe('paperUrls', () => {
     }
   });
 
+  it('throws for a folder that is not ./papers/<paper id>, which oak assemble never mounts', () => {
+    for (const location of ['../alpha', './alpha', './papers/a/b'])
+      expect(() => paperUrls(entry({ location })), location).toThrow(
+        /must be \.\/papers\/<paper id>/,
+      );
+  });
+
   it('lowercases the owner in the Pages URL, as GitHub serves it', () => {
     expect(paperUrls(entry({ location: 'Me/Alpha-Paper' })).siteUrl).toBe(
       'https://me.github.io/Alpha-Paper/',

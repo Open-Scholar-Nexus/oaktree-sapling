@@ -23,9 +23,9 @@ import {
   PAPER_ID,
   parsePaperTag,
   colocatedPaper,
-  paperDirOf,
+  findSelf,
 } from '../src/projects.js';
-import { findSelf, runOakChecks, runValidate, type FsProbes } from '../src/validate.js';
+import { runOakChecks, runValidate, type FsProbes } from '../src/validate.js';
 import { selectPapers } from '../src/papers.js';
 import { combineReports, refusedReport, checksComment, type ChecksReport } from '../src/checks.js';
 import { underPaths, GATED_PATHS } from '../src/schema.js';
@@ -142,11 +142,6 @@ describe('PAPER_ID: a folder name is one path segment and a tag prefix', () => {
     ['$(id)', false],
   ])('%j → %s', (id, ok) => {
     expect(PAPER_ID.test(id)).toBe(ok);
-  });
-
-  it('paperDirOf refuses anything else', () => {
-    expect(paperDirOf('a-2026-x', '--paper')).toBe('papers/a-2026-x');
-    expect(() => paperDirOf('../x', 'paper')).toThrow(/paper id/);
   });
 
   it('folderId reads papers/<id> only', () => {

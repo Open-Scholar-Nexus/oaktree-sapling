@@ -147,7 +147,7 @@ export function parseZenodoDoi(doi: string): { sandbox: boolean; recordId: strin
 /**
  * The journal checkout a build composed from, which the deposit archives as `journal.zip`
  * [R66]. oak writes it into `myst.oak.yml`; a value in the author's `myst.yml` is dropped.
- * Absent for a `--no-journal` build. `repo: "."` is a paper repo that is its own journal, so
+ * Absent for a `--no-journal` build. `repo: "."` is a journal in the paper's own folder, so
  * `source.zip` holds it. `repo` is null for a clone with no GitHub origin, and `commit` is null
  * when the files are not a commit of their own repo (local changes, a folder inside a larger
  * repo, or not a git checkout).

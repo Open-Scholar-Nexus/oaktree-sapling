@@ -11,7 +11,7 @@ oak bootstrap journal --co-located --repo <owner>/<journal-repo> --name "My Jour
 journal.yml  brand/  editions/   the journal's settings
 registry/papers.yml              the papers the website lists
 myst.yml  pages/  package.json   the journal website
-papers/<id>/                     one folder per paper, empty to start with
+papers/                          one folder per paper; none at first
 .github/  CODEOWNERS             the workflows that build, check and publish each paper
 ```
 
@@ -57,7 +57,7 @@ To publish a paper, an editor lists it in `registry/papers.yml` on a branch of t
   location: ./papers/smith-2026-tidal-flats
 ```
 
-That pull request checks every paper, and from then on the paper's editorial checks block. Once it merges, each listed paper builds in a job of its own, and the website goes up with each paper at `https://<owner>.github.io/<journal-repo>/<id>/`. A listed paper that fails to build holds back the next deployment, and the website stays as it was.
+That pull request checks every paper, and from then on the paper's editorial checks block. Once it merges, each listed paper builds in a job of its own, and the website goes up with each paper at `https://<owner>.github.io/<journal-repo>/<id>/`. A listed paper that fails to build stops the next deployment; the website stays as it was.
 
 Depositing works as [with the GitHub workflows](publish.md#with-workflows), with the paper named:
 
@@ -70,7 +70,3 @@ Each paper has its own Zenodo record. [From the terminal](publish.md#from-termin
 ## Engine versions
 
 Each paper pins the engine in its own `myst.yml`, so a published paper keeps building with the engine it was published with. `engine_version` in `.github/actions/engine/pins.yml` is the engine the website build and the workflows that post checks and previews run. `oak upgrade --repo <owner>/<journal-repo>` moves all of them in one pull request; with `--files-only` it updates the workflows and leaves every pin.
-
-## Credit
-
-The layout, one folder per paper and one pull request per paper, comes from the [SciPy Proceedings](https://github.com/scipy-conference/scipy_proceedings) (MIT licence).

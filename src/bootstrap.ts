@@ -16,15 +16,13 @@ import {
   readFileSync,
 } from 'node:fs';
 import { join, dirname, posix } from 'node:path';
-import { isMap, isScalar } from 'yaml';
 import { readDoc } from './yaml-io.js';
+import { isMap, isScalar } from 'yaml';
 import { themeZipUrl } from './assets.js';
 import { LABEL_ZENODO_FAILED } from './preview.js';
 import type { Outcome } from './result.js';
 import { ENGINE_MANAGED_PATHS, pagesUrl, underPaths } from './schema.js';
 import { ENGINE_VERSION_KEY, PAPERS_DIR } from './projects.js';
-
-export { ENGINE_VERSION_KEY };
 
 /* --------------------------------------------------------------------------
  * Settings and template rendering (pure)
@@ -141,29 +139,17 @@ function writeRel(destRoot: string, rel: string, contents: string | Buffer): voi
   writeFileSync(abs, contents);
 }
 
-/** pins.yml with `engine_repo` and `journal_repo` set through the YAML Document API, keeping
- *  comments. */
+/** pins.yml with `engine_repo`, `journal_repo` and `engine_version` set through the YAML
+ *  Document API, keeping comments. A key with no value is removed. */
 export function renderPins(templateRoot: string, answers: TemplateAnswers): string {
   const doc = readDoc(join(templateRoot, RENDER_PINS));
   doc.set('engine_repo', answers.engineRepo);
   if (answers.journalRepo) doc.set('journal_repo', answers.journalRepo);
   else doc.delete('journal_repo');
-  if (answers.repoEngineVersion && doc.has(ENGINE_VERSION_KEY)) {
-    doc.set(ENGINE_VERSION_KEY, answers.repoEngineVersion);
-  } else if (answers.repoEngineVersion && isMap(doc.contents)) {
-    const pair = doc.createPair(ENGINE_VERSION_KEY, answers.repoEngineVersion);
-    if (isScalar(pair.key)) {
-      pair.key.commentBefore = ENGINE_VERSION_COMMENT;
-      pair.key.spaceBefore = true;
-    }
-    doc.contents.items.push(pair);
-  }
+  if (answers.repoEngineVersion) doc.set(ENGINE_VERSION_KEY, answers.repoEngineVersion);
+  else doc.delete(ENGINE_VERSION_KEY);
   return doc.toString();
 }
-
-const ENGINE_VERSION_COMMENT =
-  " The engine this repository's jobs with no paper of their own run (the website, posting\n" +
-  ' checks and previews); each paper pins its own in its myst.yml. oak upgrade moves both.';
 
 /** A gated CODEOWNERS line: indent, path and spacing (1), the path (2), the owner column (3). */
 const CODEOWNERS_LINE = /^(\s*(\S+)\s+)(\S.*)$/;
@@ -672,7 +658,7 @@ export interface BootstrapPaperInput {
   repo: string; // owner/name
   from?: string; // author url (ingest mode); bare when absent
   sourceRef?: string;
-  journal?: string; // owner/name of the journal repo; '.' co-located
+  journal?: string; // owner/name of the journal repo
   /** The paper's edition in its journal. Required (see cmdBootstrapPaper). */
   edition?: string;
   engineVersion: string;

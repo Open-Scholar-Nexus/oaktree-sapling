@@ -23,7 +23,10 @@ jobs:
   papers:
     runs-on: ubuntu-latest
     outputs:
-      result: ${{ steps.papers.outputs.result }}
+      # Read once here; an engine that wrote no result leaves them empty, and no paper runs.
+      papers: ${{ toJSON(fromJSON(steps.papers.outputs.result || '{}').papers) }}
+      count: ${{ fromJSON(steps.papers.outputs.result || '{}').count }}
+      colocated: ${{ fromJSON(steps.papers.outputs.result || '{}').colocated }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -35,11 +38,11 @@ jobs:
 
   validate:
     needs: papers
-    if: ${{ fromJSON(needs.papers.outputs.result || '{}').count > 0 }}
+    if: ${{ needs.papers.outputs.count > 0 }}
     strategy:
       fail-fast: false
       matrix:
-        paper: ${{ fromJSON(needs.papers.outputs.result || '{}').papers }}
+        paper: ${{ fromJSON(needs.papers.outputs.papers) }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

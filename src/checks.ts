@@ -305,7 +305,7 @@ export function refusedReport(report: ChecksReport, reason: string): ChecksRepor
       ...report.checkRun,
       conclusion: 'failure',
       title: messages.pr.forkRefusedTitle,
-      summary: `> ❌ ${reason}\n\n${report.checkRun.summary}`,
+      summary: messages.pr.forkRefusedSummary(reason, report.checkRun.summary),
     },
   };
 }

@@ -24,7 +24,10 @@ jobs:
   papers:
     runs-on: ubuntu-latest
     outputs:
-      result: ${{ steps.papers.outputs.result }}
+      # Read once here; an engine that wrote no result leaves them empty, and no paper runs.
+      papers: ${{ toJSON(fromJSON(steps.papers.outputs.result || '{}').papers) }}
+      count: ${{ fromJSON(steps.papers.outputs.result || '{}').count }}
+      colocated: ${{ fromJSON(steps.papers.outputs.result || '{}').colocated }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -36,11 +39,11 @@ jobs:
 
   build:
     needs: papers
-    if: ${{ fromJSON(needs.papers.outputs.result || '{}').count > 0 }}
+    if: ${{ needs.papers.outputs.count > 0 }}
     strategy:
       fail-fast: false
       matrix:
-        paper: ${{ fromJSON(needs.papers.outputs.result || '{}').papers }}
+        paper: ${{ fromJSON(needs.papers.outputs.papers) }}
     runs-on: ubuntu-latest
     outputs:
       # The starter paper is not deployed to Pages until myst.yml has a real id.
@@ -66,7 +69,7 @@ jobs:
     needs: [papers, build]
     if: >-
       ${{ !cancelled() && github.event_name != 'pull_request' &&
-          fromJSON(needs.papers.outputs.result || '{}').colocated &&
+          needs.papers.outputs.colocated == 'true' &&
           (needs.build.result == 'success' || needs.build.result == 'skipped') }}
     runs-on: ubuntu-latest
     steps:
@@ -88,9 +91,9 @@ jobs:
   deploy-pages:
     if: >-
       ${{ !cancelled() && github.event_name != 'pull_request' &&
-          ((!fromJSON(needs.papers.outputs.result || '{}').colocated && needs.build.result == 'success' &&
+          ((needs.papers.outputs.colocated != 'true' && needs.build.result == 'success' &&
             needs.build.outputs.placeholder != 'true') ||
-           (fromJSON(needs.papers.outputs.result || '{}').colocated && needs.assemble.result == 'success')) }}
+           (needs.papers.outputs.colocated == 'true' && needs.assemble.result == 'success')) }}
     needs: [papers, build, assemble]
     permissions: # set on this job only, so the build job does not get them
       pages: write
@@ -102,7 +105,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: ${{ fromJSON(needs.papers.outputs.result || '{}').colocated && 'journal-site' || 'paper-build' }}
+          name: ${{ needs.papers.outputs.colocated == 'true' && 'journal-site' || 'paper-build' }}
           path: site
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:

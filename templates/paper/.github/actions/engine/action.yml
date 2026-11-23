@@ -30,12 +30,12 @@ runs:
       env:
         PAPER_DIR: ${{ inputs.paper-dir }}
       run: |
-        # A paper id is one path segment: PAPER_ID in the engine's src/projects.ts.
+        # A paper id is one path segment.
         if ! [[ "${PAPER_DIR:-.}" =~ ^(\.|papers/[A-Za-z0-9][A-Za-z0-9_-]{0,99})$ ]]; then
           echo "::error::paper-dir must be . or papers/<paper id>"
           exit 1
         fi
-        # journal_repo: . marks a co-located repository, as isColocated in src/projects.ts.
+        # journal_repo: . marks a co-located repository.
         pins=.github/actions/engine/pins.yml
         if [ "${PAPER_DIR:-.}" = "." ] && [ "$(yq '.journal_repo // ""' "$pins")" = "." ]; then
           myst=$pins
@@ -82,7 +82,6 @@ runs:
           exit 1
         fi
         echo "engine=$engine" >> "$GITHUB_OUTPUT"
-        echo "journal=$(yq '.journal_repo // ""' "$pins")" >> "$GITHUB_OUTPUT"
 
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
@@ -102,7 +101,6 @@ runs:
     - id: dispatch
       shell: bash
       env:
-        JOURNAL_REPO: ${{ steps.pins.outputs.journal }}
         PAPER_DIR: ${{ inputs.paper-dir }}
         ARGS: ${{ inputs.args }}
       run: |

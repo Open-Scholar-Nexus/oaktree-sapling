@@ -6,7 +6,7 @@ This section answers why oaktree-sapling is shaped the way it is. It is for some
 
 ## Repository layout
 
-A journal is spread across repositories: one **journal repository** holding the settings every paper reads, and one repository **per paper**.
+A journal takes one of two layouts. In the first, it is spread across repositories: one **journal repository** holding the settings every paper reads, and one repository **per paper**.
 
 The journal repository holds the journal-level configuration, such as the branding and the editorial checks, and no manuscripts[^files]. Each paper repository holds one manuscript and knows almost nothing about the journal: it builds itself, checking out the engine, building the paper into a website and a PDF, and depositing it to Zenodo when a version is published.
 
@@ -14,7 +14,7 @@ The journal repository holds the journal-level configuration, such as the brandi
 
 So adding a paper means adding a repository. There is no server: each paper's own CI builds, checks and publishes it, which is why a published paper keeps building after the journal moves on. The cost is that a change to how papers build has to reach every paper repository, which is what `oak upgrade` is for.
 
-A journal can also keep everything in one **co-located** repository: the settings, the website, and each paper in a folder `papers/<id>/` that builds in a job of its own, at the engine version it pins. The same workflows run in both layouts, with one paper at the root of a paper repository. [Several papers in one repository](paper-ci.md#design-paper-ci-colocated) covers how they keep one paper's authors from another's; the layout and the one-paper-per-pull-request flow come from the [SciPy Proceedings](https://github.com/scipy-conference/scipy_proceedings) (MIT licence).
+In the second, a journal keeps everything in one **co-located** repository: the settings, the website, and each paper in a folder `papers/<id>/` that builds in a job of its own, at the engine version it pins. The same workflows run in both layouts, with one paper at the root of a paper repository. [Several papers in one repository](paper-ci.md#design-paper-ci-colocated) covers how each paper's code runs apart from the others, and what the editor's review has to catch.
 
 (processing-myst)=
 ## Processing MyST markdown

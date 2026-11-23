@@ -31,8 +31,8 @@ export const BUILD_ARTIFACT_PREFIX = 'paper-build-';
 /**
  * The paper builds Stage 1 left in `dir`, one folder per artifact named
  * `paper-build-<id>`. A folder by any other name, or whose id is not a {@link PAPER_ID}, is
- * refused. When one artifact matches, the download puts its site in `dir` itself; it is then
- * the build of the one paper in `listed`. The id never comes from the build's own files, which
+ * refused. download-artifact extracts a single artifact into `dir` itself, with no folder to
+ * name it, so it is then the build of the one paper in `listed`. The id never comes from the build's own files, which
  * the paper's code wrote.
  */
 export function readBuilds(dir: string, listed: string[]): PaperBuild[] {
@@ -108,7 +108,8 @@ export function assemble(
       recursive: true,
       filter: (src) => !lstatSync(src).isSymbolicLink(),
     });
-    // A push build writes neither, and the site is served.
+    // `.pr-number` and `.paper` describe a pull request build and are never served; a push build
+    // writes neither.
     for (const name of Object.values(SITE_FILES)) rmSync(join(target, name), { force: true });
     deps.log(msg.assemble.mounted(id, `${baseUrl}/${id}/`));
   }

@@ -11,9 +11,8 @@ import { join, posix, relative } from 'node:path';
 import * as msg from './messages.js';
 import { UserError } from './messages.js';
 import { pollUntil } from './poll.js';
-import { parsePaperTag, PINS_REL, type PaperTag } from './projects.js';
+import { MIN_ENGINE_KEY, parsePaperTag, PINS_REL, type PaperTag } from './projects.js';
 import { compareEngineVersions, doiBranch, parseZenodoDoi } from './schema.js';
-import { MIN_ENGINE_KEY } from './upgrade.js';
 import { DERIVED_CONFIG_FILE, parseYaml } from './yaml-io.js';
 import type { DepositState } from './zenodo.js';
 

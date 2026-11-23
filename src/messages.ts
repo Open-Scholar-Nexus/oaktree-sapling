@@ -59,6 +59,9 @@ import type { BuildState } from './release.js';
 
 // ── Output helpers ──
 
+/** What a paper id is made of, as PAPER_ID in projects.ts checks it. */
+const PAPER_ID_RULE = 'letters, digits, - and _, starting with a letter or digit';
+
 /** An age for a person: minutes under an hour, hours under two days, then days. */
 export function age(ms: number): string {
   const minutes = Math.max(0, Math.floor(ms / 60_000));
@@ -334,7 +337,7 @@ export const bootstrap = {
   editionRequired: (journal: string): string =>
     'oak bootstrap paper: pass --edition <id>, the journal edition this paper appears in: ' +
     'the name of a file under editions/ in ' +
-    (journal === '.' ? 'this repo' : `https://github.com/${journal}`) +
+    `https://github.com/${journal}` +
     ', without .yml. ' +
     docsUrl(DOCS.fileEditions),
 
@@ -436,7 +439,7 @@ export const bootstrap = {
     `  ✓ created branch rule '${name}': changes to main need a pull request approved by a code owner`,
   logTagRuleExists: (name: string): string => `  ✓ tag rule '${name}' already exists`,
   logTagRuleCreated: (name: string): string =>
-    `  ✓ created tag rule '${name}': only editors can create tags, which publish a version`,
+    `  ✓ created tag rule '${name}': only editors can create tags, including the version tags that publish`,
   logPagesExists: '  ✓ GitHub Pages already enabled',
   logPagesEnabled: '  ✓ GitHub Pages enabled (published by a workflow)',
   logHomepageExists: (url: string): string => `  ✓ repo website link already set (${url})`,
@@ -916,8 +919,6 @@ export const validate = {
   idFolderMismatch: (dir: string, id: string): string =>
     `${dir} holds project.id "${id}"; a paper's folder is named by its id, so rename the folder ` +
     `or change the id to match`,
-  idFolderBadName: (dir: string): string =>
-    `${dir} is not a paper id: a paper folder's name is its id, made of letters, digits, - and _`,
 
   // brand
   brandNoFavicon:
@@ -1050,7 +1051,7 @@ export const papers = {
     'oak papers: this is a paper repository, with its one paper at the root; leave the paper id empty.',
   unknownId: (id: string): string =>
     `oak papers: ${JSON.stringify(id.slice(0, 80))} is not one of this repository's papers; ` +
-    'give the id its folder in papers/ is named by.',
+    'give the name of its folder in papers/.',
 };
 
 // ── oak add-paper ──
@@ -1059,8 +1060,7 @@ export const addPaper = {
   usage:
     'oak add-paper: usage: oak add-paper --repo <owner/journal> --id <paper id> [--edition <id>] [--yes]',
   badId: (id: string): string =>
-    `oak add-paper: ${JSON.stringify(id.slice(0, 60))} is not a paper id: letters, digits, - and _, ` +
-    `starting with a letter or digit. It names the paper's folder, its tags and its Zenodo record.`,
+    `oak add-paper: ${JSON.stringify(id.slice(0, 60))} is not a paper id (${PAPER_ID_RULE}).`,
   noEdition: (id: string): string =>
     `oak add-paper: the id ${id} carries no year to take the edition from; pass --edition <id>, ` +
     `one of the journal's editions/<id>.yml.`,
@@ -1071,17 +1071,17 @@ export const addPaper = {
     `repository of its own is set up with oak bootstrap paper.`,
   idRefused: (why: string): string => `oak add-paper: ${why}`,
   idTaken: (id: string, repo: string): string =>
-    `oak add-paper: ${repo} already has papers/${id}; pick another id. A merged submission claims its id.`,
+    `oak add-paper: ${repo} already has papers/${id}; pick another id.`,
   unknownEdition: (edition: string, repo: string, given: boolean): string =>
     `oak add-paper: ${repo} has no editions/${edition}.yml` +
     (given ? '' : ', the edition the year in the id names') +
     '; pass --edition naming one of its editions.',
   noEngineVersion: (repo: string): string =>
     `oak add-paper: .github/actions/engine/pins.yml in ${repo} names no engine_version, so the ` +
-    `new paper would pin no engine; an editor runs oak upgrade on the journal first.`,
+    `new paper would pin no engine; ask an editor to run oak upgrade on the journal.`,
   planHeader: (repo: string, id: string): string => `add-paper ${id} to ${repo}`,
   planEdition: (edition: string, given: boolean): string =>
-    `  --edition  ${edition}${given ? '' : ' (default: the year in the id; it can change later, in myst.yml)'}`,
+    `  --edition  ${edition}${given ? '' : ' (default: the year in the id)'}`,
   planFork: (fork: string, branch: string): string =>
     `  ○ fork the journal as ${fork}, if you have no fork yet, and push branch ${branch} to it`,
   planSeed: (dir: string, version: string): string =>
@@ -1092,7 +1092,7 @@ export const addPaper = {
   commitMessage: (id: string): string => `feat: add ${id}`,
   logPushed: (fork: string, branch: string): string => `  ✓ pushed ${branch} to ${fork}`,
   logPrOpened: (url: string): string => `  ✓ opened ${url}`,
-  prTitle: (id: string): string => `Submission of interest: ${id}`,
+  prTitle: (id: string): string => `Add paper ${id}`,
   prBody: (id: string, dir: string): string =>
     [
       `Adds \`${dir}/\`, the starter manuscript for \`${id}\`. Merging it adds the paper as a draft: ` +
@@ -1118,7 +1118,8 @@ export const assemble = {
     docsUrl(DOCS.fileRegistry),
   missingBuilds: (ids: string[]): string =>
     `oak assemble: registry/papers.yml lists ${ids.join(', ')}, with no build; a listed paper ` +
-    `that does not build holds back the website, which keeps its last deployment.`,
+    `that does not build stops the deployment, and the website keeps its last one. Fix the ` +
+    `paper's build, or remove it from registry/papers.yml.`,
   unlisted: (id: string): string =>
     `oak assemble: ${id} is built but not listed in registry/papers.yml, so it is left out.`,
   noSite: (html: string): string =>
@@ -1232,7 +1233,9 @@ export const pr = {
   checksPaperSection: (id: string, title: string): string => `#### \`${id}\`: ${title}`,
   checkRunTitlePapers: (titles: string[]): string => titles.join('; '),
   checkRunTitleNoPaper: 'no paper changed',
-  forkRefusedTitle: 'refused: a pull request from a fork may change only one paper',
+  forkRefusedTitle: 'refused: a pull request from a fork must change one paper folder only',
+  /** The refusal above the summary of the report it replaces. */
+  forkRefusedSummary: (reason: string, summary: string): string => `> ❌ ${reason}\n\n${summary}`,
   forkUnlisted:
     'GitHub did not list every file this pull request changes, so oak cannot tell that it ' +
     'changes one paper only.',
@@ -1273,10 +1276,8 @@ export const workflow = {
   releaseUnknownPaper: (verb: string, dir: string): string =>
     `oak ${verb}: ${dir} is not one of this repository's papers (papers/<id>/myst.yml); name a paper by its folder.`,
   badPaperFolder: (dir: string): string =>
-    `${dir} holds a myst.yml but is not named by a paper id (letters, digits, - and _, starting ` +
-    `with a letter or digit); rename the folder to the paper's project.id.`,
-  badPaperId: (source: string, got: string): string =>
-    `${source} takes a paper id (letters, digits, - and _), not ${JSON.stringify(got.slice(0, 60))}.`,
+    `${dir} holds a myst.yml but is not named by a paper id (${PAPER_ID_RULE}); rename the ` +
+    `folder to the paper's project.id.`,
   badRepoName: (source: string, got: string): string =>
     `${source} takes a GitHub repo as owner/name, not ${JSON.stringify(got.slice(0, 60))}.`,
 

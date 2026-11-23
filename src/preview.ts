@@ -155,8 +155,8 @@ export function planPreview(input: {
   };
 }
 
-/** A sticky header for one paper: `header` itself for the paper at a repository root, which
- *  keeps the comments posted before co-located papers existed, else `header:<id>`. */
+/** A sticky header for one paper: `header` itself for the paper at a repository root, so a
+ *  paper repository's existing preview comment is edited in place, else `header:<id>`. */
 export function paperSticky(header: string, paper?: string): string {
   return paper ? `${header}:${paper}` : header;
 }

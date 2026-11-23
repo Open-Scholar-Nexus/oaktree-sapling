@@ -23,10 +23,15 @@ import {
   renderPins,
   renderCodeowners,
   codeownersColumns,
-  ENGINE_VERSION_KEY,
   type TemplateAnswers,
 } from './bootstrap.js';
-import { discoverProjects, isColocated } from './projects.js';
+import {
+  discoverProjects,
+  ENGINE_VERSION_KEY,
+  isColocated,
+  MIN_ENGINE_KEY,
+  PINS_REL,
+} from './projects.js';
 import * as msg from './messages.js';
 import { firstLine } from './messages.js';
 import { err, type Outcome } from './result.js';
@@ -41,11 +46,6 @@ import type { cmdConformanceReset } from './conformance.js';
 /** The branch prefix; the target tag follows it. Exported for {@link cmdConformanceReset},
  *  which deletes these branches. */
 export const UPGRADE_BRANCH_PREFIX = 'oak/upgrade-';
-
-const PINS_REL = posix.join('.github', 'actions', 'engine', 'pins.yml');
-
-/** The pins.yml key naming the oldest engine the workflows beside it run with. */
-export const MIN_ENGINE_KEY = 'min_engine_version';
 
 /** `min_engine_version` from the pins.yml under `root` (a repo or a template), or null when the
  *  file or the key is absent. */
@@ -287,8 +287,8 @@ export async function cmdUpgrade(input: UpgradeInput, deps: UpgradeDeps): Promis
   const pins = enginePins(repoRoot, answers);
   const badPin = filesOnly ? pins.find((p) => !ENGINE_VERSION.test(p.version)) : undefined;
   if (badPin) return err(2, msg.upgrade.badPin(badPin.version, badPin.file));
-  // In a co-located repository the repository's own engine stands for the pins it moves with.
-  const current = pins.at(-1)!.version;
+  // The repository's own pin: pins.yml's `engine_version` when co-located, else `myst.yml`'s.
+  const current = (pins.find((p) => p.file === PINS_REL) ?? pins[0]!).version;
 
   // The newest release leaves a newer pin alone. A pin that is not an engine version runs
   // nowhere, so it moves.

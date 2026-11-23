@@ -37,8 +37,8 @@ jobs:
 
       # The artifacts come from the fork, so the step reads the pull request number from them and
       # confirms that pull request's head is the commit that was checked. In a co-located
-      # repository it also holds a fork's pull request to one paper. A failed comment only warns;
-      # a failed Check Run fails the step.
+      # repository it also fails a fork's pull request that changes more than one paper folder. A
+      # failed comment only warns; a failed Check Run fails the step.
       # https://scholar.nexus/oaktree-sapling/reference/cli#post-checks
       - uses: ./.github/actions/engine
         with:

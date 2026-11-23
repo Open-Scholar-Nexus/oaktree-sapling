@@ -31,7 +31,7 @@ function run(dir: string, args: string[], env: Record<string, string> = {}) {
   writeFileSync(output, '');
   const r = spawnSync('bash', [join(dir, 'ci', 'run.sh'), ...args], {
     encoding: 'utf8',
-    env: { ...process.env, GITHUB_OUTPUT: output, JOURNAL_REPO: '.', ...env },
+    env: { ...process.env, GITHUB_OUTPUT: output, ...env },
   });
   return {
     code: r.status,
@@ -81,10 +81,9 @@ describe('ci/run.sh', () => {
   it('leaves the journal repo to oak, so it passes no --journal', () => {
     const dir = engine({ status: 'ok' });
     for (const verb of ['build', 'validate', 'release', 'deploy-preview'])
-      expect(
-        run(dir, [verb], { JOURNAL_REPO: 'acme/journal', GITHUB_REPOSITORY: 'acme/paper' }).argv,
-        verb,
-      ).not.toContain('--journal');
+      expect(run(dir, [verb], { GITHUB_REPOSITORY: 'acme/paper' }).argv, verb).not.toContain(
+        '--journal',
+      );
   });
 
   it('serves a co-located paper from /<repo>/<id>, and the assembled site from /<repo>', () => {

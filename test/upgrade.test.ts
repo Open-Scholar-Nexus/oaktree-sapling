@@ -33,8 +33,8 @@ import {
   type UpgradePr,
   type UpgradeDeps,
   ownerFromCodeowners,
-  MIN_ENGINE_KEY,
 } from '../src/upgrade.js';
+import { MIN_ENGINE_KEY } from '../src/projects.js';
 
 const TEMPLATE_ROOT = 'templates/paper';
 const tmp = (p = 'oak-up-') => mkdtempSync(join(tmpdir(), p));

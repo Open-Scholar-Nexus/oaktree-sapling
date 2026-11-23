@@ -24,7 +24,7 @@ import {
   type RegistryEntry,
 } from './schema.js';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
-import { colocatedPaper, findRepoRoot, PAPER_ID } from './projects.js';
+import { colocatedPaper, findRepoRoot, findSelf } from './projects.js';
 import {
   resolveBrandAssetPath,
   isBrandAssetUrl,
@@ -320,29 +320,6 @@ function loadRegistry(
   return { registry: read.entries, warnings };
 }
 
-/** The paper's own registry entries: a folder location naming `paperRoot` in the journal repo,
- *  or, for a paper at a repository root, a location naming its repo. Without a repo those
- *  cannot be found, so callers pass one (environment or git origin). */
-export function findSelf(
-  registry: Registry | null,
-  repo: string | null,
-  where: { journalRoot: string | null; paperRoot: string },
-): RegistryEntry[] {
-  if (!registry) return [];
-  const inFolder = colocatedPaper(where.paperRoot) !== null;
-  return registry.filter((e) => {
-    const location = parseLocation(e.location);
-    if (!location) return false;
-    if ('path' in location) {
-      return (
-        !!where.journalRoot &&
-        resolve(where.journalRoot, location.path) === resolve(where.paperRoot)
-      );
-    }
-    return !inFolder && !!repo && sameRepo(location.repo, repo);
-  });
-}
-
 /* ---- overlapping keys between layers ([R72]) ---------------------------- */
 
 /**
@@ -531,13 +508,10 @@ export function runOakChecks(
     );
     add('id-registered', 'identity', checkOwnEntryId(project.id, own));
     // The folder name is the id, so a second copy of it cannot drift.
-    const folderProblem = !folder
-      ? null
-      : !PAPER_ID.test(folder.id)
-        ? msg.validate.idFolderBadName(folder.dir)
-        : folder.id !== project.id
-          ? msg.validate.idFolderMismatch(folder.dir, project.id)
-          : null;
+    const folderProblem =
+      folder && folder.id !== project.id
+        ? msg.validate.idFolderMismatch(folder.dir, project.id)
+        : null;
     if (folderProblem) {
       findings.push({
         check: 'id-folder',
@@ -738,11 +712,11 @@ export async function runValidate(
   }
   project ??= (await input.edge.loadProject(input.paperRoot)) as typeof project;
 
+  const { registry } = loadRegistry(input.journalRoot, probes);
   // A co-located paper missing from the registry is a draft: its editorial checks only warn,
   // until the editor's registry pull request lists it.
   const draft =
-    colocatedPaper(input.paperRoot) !== null &&
-    findSelf(loadRegistry(input.journalRoot, probes).registry, repo, input).length === 0;
+    colocatedPaper(input.paperRoot) !== null && findSelf(registry, repo, input).length === 0;
   if (draft) notes.push(msg.validate.noteDraft);
 
   // oak's own checks
@@ -798,7 +772,7 @@ export async function runValidate(
             repo,
             journal: {
               config: journal,
-              registry: loadRegistry(input.journalRoot, probes).registry ?? [],
+              registry: registry ?? [],
             },
           });
           return runChecks(session, runnable, { journalRoot: input.journalRoot, readPaper });
