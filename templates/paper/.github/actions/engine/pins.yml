@@ -6,5 +6,9 @@ engine_repo: Open-Scholar-Nexus/oaktree-sapling
 # "." when this repository is the journal
 journal_repo: ghost/CHANGE-ME-journal-repo
 
+# The engine this repository's jobs with no paper of their own run (the website, posting checks and
+# previews); each paper pins its own in its myst.yml. oak upgrade moves both. Co-located only.
+engine_version: v0.0.0
+
 # The oldest engine these workflows run with; the engine action refuses an older one in myst.yml
-min_engine_version: v0.4.0-dev.6 # the first with `oak release deposit`; pinned.ts DEPOSIT_MIN_VERSION
+min_engine_version: v0.5.0-dev.1 # the first with `oak papers`, which the build, check and publishing workflows run

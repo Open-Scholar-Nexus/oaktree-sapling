@@ -16,14 +16,15 @@ import {
   checkIdShape,
   checkIdUniqueness,
   checkOwnEntryId,
-  locationRepo,
+  parseLocation,
   readRegistry,
   sameRepo,
   type IdCheckResult,
   type Registry,
   type RegistryEntry,
 } from './schema.js';
-import { dirname, isAbsolute, join } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import { colocatedPaper, findRepoRoot, findSelf } from './projects.js';
 import {
   resolveBrandAssetPath,
   isBrandAssetUrl,
@@ -319,16 +320,6 @@ function loadRegistry(
   return { registry: read.entries, warnings };
 }
 
-/** The paper's own registry entries, found by its repo. Without a repo they cannot be found,
- *  so callers pass one (environment or git origin). */
-function findSelf(registry: Registry | null, repo: string | null): RegistryEntry[] {
-  if (!registry || !repo) return [];
-  return registry.filter((e) => {
-    const entryRepo = locationRepo(e.location);
-    return !!entryRepo && sameRepo(entryRepo, repo);
-  });
-}
-
 /* ---- overlapping keys between layers ([R72]) ---------------------------- */
 
 /**
@@ -501,15 +492,34 @@ export function runOakChecks(
         id_pattern: journal.id_pattern,
       }),
     );
-    const own = findSelf(registry, repo);
+    const folder = colocatedPaper(paperRoot);
+    const own = findSelf(registry, repo, { journalRoot, paperRoot });
     add(
       'id-uniqueness',
       'identity',
-      checkIdUniqueness(project.id, registry, own.length && repo ? { repo } : undefined, {
-        selfIdentifiable: repo != null,
-      }),
+      checkIdUniqueness(
+        project.id,
+        registry,
+        { ...(repo && !folder ? { repo } : {}), own },
+        {
+          selfIdentifiable: repo != null || folder !== null,
+        },
+      ),
     );
     add('id-registered', 'identity', checkOwnEntryId(project.id, own));
+    // The folder name is the id, so a second copy of it cannot drift.
+    const folderProblem =
+      folder && folder.id !== project.id
+        ? msg.validate.idFolderMismatch(folder.dir, project.id)
+        : null;
+    if (folderProblem) {
+      findings.push({
+        check: 'id-folder',
+        severity: 'error',
+        message: folderProblem,
+        klass: 'identity',
+      });
+    }
   }
 
   for (const r of checkLayout(paperRoot, probes)) {
@@ -702,6 +712,13 @@ export async function runValidate(
   }
   project ??= (await input.edge.loadProject(input.paperRoot)) as typeof project;
 
+  const { registry } = loadRegistry(input.journalRoot, probes);
+  // A co-located paper missing from the registry is a draft: its editorial checks only warn,
+  // until the editor's registry pull request lists it.
+  const draft =
+    colocatedPaper(input.paperRoot) !== null && findSelf(registry, repo, input).length === 0;
+  if (draft) notes.push(msg.validate.noteDraft);
+
   // oak's own checks
   const oakFindings = runOakChecks(
     {
@@ -755,7 +772,7 @@ export async function runValidate(
             repo,
             journal: {
               config: journal,
-              registry: loadRegistry(input.journalRoot, probes).registry ?? [],
+              registry: registry ?? [],
             },
           });
           return runChecks(session, runnable, { journalRoot: input.journalRoot, readPaper });
@@ -774,6 +791,7 @@ export async function runValidate(
       ];
     }
   }
+  if (draft) checks = checks.map((c) => ({ ...c, optional: true }));
 
   // The Check Run's results: oak's findings (errors block, warnings are optional) and the
   // editorial checks' results.
@@ -785,8 +803,14 @@ export async function runValidate(
     optional: opts.strict ? false : f.severity === 'warn',
   }));
   // Curvenote reports absolute paths; they are made relative to `pathBase` (`GITHUB_WORKSPACE`
-  // from `oak validate`), else the paper root, so GitHub can resolve them.
-  const checkRun = toCheckRun([...oakResults, ...checks], opts.pathBase ?? input.paperRoot, notes);
+  // from `oak validate`), else the repository root, so GitHub can resolve them. A path relative to
+  // the paper first gets its folder, `papers/<id>/` in a co-located repository.
+  const checkRun = toCheckRun(
+    [...oakResults, ...checks],
+    opts.pathBase ?? findRepoRoot(input.paperRoot) ?? input.paperRoot,
+    notes,
+    input.paperRoot,
+  );
 
   const blockingCheckFail = checks.some(
     (c) => (c.status === CheckStatus.fail || c.status === CheckStatus.error) && !c.optional,

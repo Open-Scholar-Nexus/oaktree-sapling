@@ -1,6 +1,7 @@
 name: Check paper
 
-# Runs the journal checks with no secrets; post-checks.yml posts the report.
+# Runs the journal checks with no secrets, each paper in a job of its own; post-checks.yml posts
+# the reports as one result.
 # https://scholar.nexus/oaktree-sapling/design/paper-ci#design-paper-ci-two-stages
 
 on:
@@ -18,7 +19,30 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # Which papers this run works on, chosen by oak; holds no secret.
+  papers:
+    runs-on: ubuntu-latest
+    outputs:
+      # Read once here; an engine that wrote no result leaves them empty, and no paper runs.
+      papers: ${{ toJSON(fromJSON(steps.papers.outputs.result || '{}').papers) }}
+      count: ${{ fromJSON(steps.papers.outputs.result || '{}').count }}
+      colocated: ${{ fromJSON(steps.papers.outputs.result || '{}').colocated }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2 # a pull request's changed files: its merge commit against its base
+      - id: papers
+        uses: ./.github/actions/engine
+        with:
+          args: papers --for check
+
   validate:
+    needs: papers
+    if: ${{ needs.papers.outputs.count > 0 }}
+    strategy:
+      fail-fast: false
+      matrix:
+        paper: ${{ fromJSON(needs.papers.outputs.papers) }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -29,10 +53,11 @@ jobs:
         with:
           args: validate --report report.json
           paper-env: true
+          paper-dir: ${{ matrix.paper.dir }}
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: journal-checks
+          name: ${{ matrix.paper.key && format('journal-checks-{0}', matrix.paper.key) || 'journal-checks' }}
           path: |
             report.json
             pr-number

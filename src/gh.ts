@@ -7,6 +7,7 @@ import * as msg from './messages.js';
 import { UserError } from './messages.js';
 import { ENGINE_MANAGED_PATHS, GITHUB_REPO, repoFromGithubUrl } from './schema.js';
 import { clonePrefix } from './clean.js';
+import { colocatedPaper, parsePaperTag } from './projects.js';
 import { execFileSync, spawnSync } from 'node:child_process';
 import {
   cpSync,
@@ -22,13 +23,14 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { parseYaml } from './yaml-io.js';
 import type { GitContext } from './zenodo.js';
-import { COMMIT_ID, DOI_BRANCH, locationRepo, type JournalStamp } from './schema.js';
+import { COMMIT_ID, doiBranch, locationRepo, type JournalStamp } from './schema.js';
 import { LABEL_ZENODO_FAILED, type GhPr, type PagesDeployer } from './preview.js';
 import type { CheckRun } from './checks.js';
 import type { EnvironmentReviewer, Provisioner } from './bootstrap.js';
 import type { UpgradePr } from './upgrade.js';
 import type { ConformanceGh } from './conformance.js';
 import type { CiBuildSource, CiJob, CiRun, ReleaseSource } from './release.js';
+import type { AddPaperGh } from './add-paper.js';
 
 /**
  * git and gh output is captured, so oak's own lines stay apart from what the tools print
@@ -279,7 +281,11 @@ export function journalStamp(
       return { repo: null, commit: null };
     }
     const commit = git(journalRoot, ['rev-parse', 'HEAD'], { quiet: true });
-    const dirty = git(journalRoot, ['status', '--porcelain'], { quiet: true });
+    // The engine action checks oak out at `.engine/`, inside the checkout of a co-located
+    // repository, which is its own journal.
+    const dirty = git(journalRoot, ['status', '--porcelain', '--', ':(exclude,top).engine'], {
+      quiet: true,
+    });
     return { repo: locationRepo(originRepo(journalRoot)), commit: dirty ? null : commit };
   } catch {
     return { repo: null, commit: null };
@@ -314,8 +320,10 @@ export function openDoiPr(
   opts: { conceptDoi: string },
 ): { url: string; sha: string } {
   // One branch name for every version: reserve-doi reserves the concept DOI, and the version
-  // comes from the tag at publish. Reserving again force-pushes the same branch.
-  const branch = DOI_BRANCH;
+  // comes from the tag at publish. Reserving again force-pushes the same branch. Each co-located
+  // paper has its own concept record, so its own branch.
+  const paper = colocatedPaper(repoRoot);
+  const branch = doiBranch(paper?.id ?? null);
   const repo = originRepo(repoRoot);
   const base = repo ? defaultBranch(repo) : 'main';
   // The branch starts at HEAD, so HEAD must be on the base, or the pull request would carry
@@ -328,7 +336,12 @@ export function openDoiPr(
   }
   git(repoRoot, ['checkout', '-B', branch]);
   git(repoRoot, ['add', 'myst.yml']);
-  git(repoRoot, [...BOT_ID, 'commit', '-m', msg.workflow.doiCommitMessage(opts.conceptDoi)]);
+  git(repoRoot, [
+    ...BOT_ID,
+    'commit',
+    '-m',
+    msg.workflow.doiCommitMessage(opts.conceptDoi, paper?.id),
+  ]);
   git(repoRoot, ['push', '-u', 'origin', branch, '--force']);
   const sha = git(repoRoot, ['rev-parse', 'HEAD'], { quiet: true });
   // `--repo`: the git calls use `-C repoRoot`, while `gh` would read the current directory's
@@ -341,9 +354,13 @@ export function openDoiPr(
     '--base',
     base,
     '--title',
-    msg.workflow.doiPrTitle,
+    msg.workflow.doiPrTitle(paper?.id),
     '--body',
-    msg.workflow.doiPrBody(opts.conceptDoi, Boolean(process.env.GITHUB_ACTIONS)),
+    msg.workflow.doiPrBody(
+      opts.conceptDoi,
+      Boolean(process.env.GITHUB_ACTIONS),
+      paper ? `${paper.dir}/myst.yml` : undefined,
+    ),
     '--head',
     branch,
   ];
@@ -429,6 +446,12 @@ export function postCommitComment(repoRoot: string, sha: string, body: string): 
   gh(['api', `repos/${repo}/commits/${sha}/comments`, '-f', `body=${body}`]);
 }
 
+/** The files the checked-out commit changes against its first parent: on a `pull_request` run,
+ *  the merge commit against the base, which needs a checkout with `fetch-depth: 2`. */
+export function changedFromParent(repoRoot: string): string[] {
+  return git(repoRoot, ['diff', '--name-only', 'HEAD^1', 'HEAD']).split('\n').filter(Boolean);
+}
+
 /** Opens a failure issue when publishing fails, labelled for the editors. */
 export function openFailureIssue(repoRoot: string, title: string, body: string): void {
   const repo = originRepo(repoRoot);
@@ -502,8 +525,12 @@ export const realReleaseSource: ReleaseSource = {
   tagCommit: realCiBuildSource.tagCommit,
   pushRuns: realCiBuildSource.pushRuns,
   jobs: realCiBuildSource.jobs,
-  vTags(repo) {
-    return apiList(`repos/${repo}/git/matching-refs/tags/v`, '.[].ref | ltrimstr("refs/tags/")');
+  versionTags(repo) {
+    const tags = apiList(
+      `repos/${repo}/git/matching-refs/tags/`,
+      '.[].ref | ltrimstr("refs/tags/")',
+    );
+    return tags.filter((tag) => parsePaperTag(tag) !== null);
   },
   clone(repo, tag) {
     const dir = mkdtempSync(join(tmpdir(), clonePrefix(repo, tag)));
@@ -1194,6 +1221,49 @@ function sameTreeAsRemote(repoRoot: string, branch: string): boolean {
     git(repoRoot, ['rev-parse', 'FETCH_HEAD^{tree}'])
   );
 }
+
+/** The git and gh calls of `oak add-paper`, with the author's own gh login. */
+export const realAddPaperGh: AddPaperGh = {
+  authedUser,
+  checkout(repo, branch) {
+    const tmp = mkdtempSync(join(tmpdir(), 'oak-add-paper-'));
+    gh(['repo', 'clone', assertRepoName(repo, '--repo'), tmp, '--', '--depth', '1']);
+    gitRaw(['checkout', '-b', branch], tmp);
+    return tmp;
+  },
+  discard(dir) {
+    rmSync(dir, { recursive: true, force: true });
+  },
+  fork(repo) {
+    // Prints nothing on success; an existing fork is reused.
+    gh(['repo', 'fork', repo, '--clone=false', '--default-branch-only']);
+    return `${authedUser()}/${repo.split('/')[1]}`;
+  },
+  commitAndPush(dir, forkRepo, branch, paths, message) {
+    gitRaw(['add', '--', ...paths], dir);
+    gitRaw(['commit', '-m', message], dir);
+    gitRaw(
+      ['push', `https://github.com/${assertRepoName(forkRepo, 'fork')}.git`, `${branch}:${branch}`],
+      dir,
+    );
+  },
+  openPr(repo, opts) {
+    return gh([
+      'pr',
+      'create',
+      '--repo',
+      repo,
+      '--base',
+      defaultBranch(repo),
+      '--head',
+      opts.head,
+      '--title',
+      opts.title,
+      '--body',
+      opts.body,
+    ]);
+  },
+};
 
 /** A value from a YAML file in the test repo on the default branch, read through the
  *  Contents API, so no clone is needed. null when the file or the value is absent, or the

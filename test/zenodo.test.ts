@@ -909,8 +909,8 @@ describe('the Project Website link', () => {
   }
 
   it("defaults to the paper's GitHub Pages URL, also without a journal or a registry", () => {
-    expect(defaultSiteUrl('Acme/paper', null)).toBe('https://acme.github.io/paper/');
-    expect(defaultSiteUrl('acme/acme.github.io', journalWith('[]'))).toBe(
+    expect(defaultSiteUrl('Acme/paper', null, '/paper')).toBe('https://acme.github.io/paper/');
+    expect(defaultSiteUrl('acme/acme.github.io', journalWith('[]'), '/paper')).toBe(
       'https://acme.github.io/',
     );
   });
@@ -920,12 +920,14 @@ describe('the Project Website link', () => {
       '- id: other\n  location: acme/other\n  site_url: https://other.example.org/\n' +
         '- id: mine\n  location: Acme/Paper\n  site_url: https://journal.example.org/mine\n',
     );
-    expect(defaultSiteUrl('acme/paper', journal)).toBe('https://journal.example.org/mine');
-    expect(defaultSiteUrl('acme/third', journal)).toBe('https://acme.github.io/third/');
+    expect(defaultSiteUrl('acme/paper', journal, '/paper')).toBe(
+      'https://journal.example.org/mine',
+    );
+    expect(defaultSiteUrl('acme/third', journal, '/paper')).toBe('https://acme.github.io/third/');
   });
 
   it('is left out without a repo', () => {
-    expect(defaultSiteUrl(null, null)).toBeUndefined();
+    expect(defaultSiteUrl(null, null, '/paper')).toBeUndefined();
   });
 
   /** The metadata `cmdPrepare` sends, for a run given `siteUrl`. */

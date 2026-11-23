@@ -3,15 +3,16 @@
  * `templates/journal/` and `templates/site/` are separate trees, and two pairs land in the
  * same repo:
  *
- *   paper + journal   `oak bootstrap journal --co-located`
  *   site  + journal   `oak bootstrap journal`
+ *   site  + journal + the paper template's launchers   `oak bootstrap journal --co-located`
  *
- * `site` and `paper` are not checked: they never land together, and both have a root `myst.yml`
- * and `.gitignore`. A file in both trees of a checked pair fails here, so a person picks the one
- * bootstrap writes.
+ * The rest of the paper template (its starter paper) never lands beside the site: both have a
+ * root `myst.yml` and `.gitignore`. A file in both trees of a checked pair fails here, so a person
+ * picks the one bootstrap writes.
  */
 import { describe, it, expect } from 'vitest';
 import { stampedFiles, listFiles, STAMP_RENAME } from '../src/bootstrap.js';
+import { ENGINE_MANAGED_PATHS, underPaths } from '../src/schema.js';
 
 const PAPER_ROOT = 'templates/paper';
 const JOURNAL_ROOT = 'templates/journal';
@@ -24,8 +25,10 @@ const overlap = (a: string, b: string) => {
 };
 
 describe('template disjointness invariant', () => {
-  it('--co-located: the paper and journal templates write different paths', () => {
-    expect(overlap(PAPER_ROOT, JOURNAL_ROOT)).toEqual([]);
+  it('--co-located: the launchers, the website and the journal templates write different paths', () => {
+    const launchers = stampedFiles(PAPER_ROOT).filter((r) => underPaths(ENGINE_MANAGED_PATHS, r));
+    const rest = new Set([...stampedFiles(SITE_ROOT), ...stampedFiles(JOURNAL_ROOT)]);
+    expect(launchers.filter((r) => rest.has(r))).toEqual([]);
   });
 
   it('external: the website and journal templates write different paths', () => {

@@ -25,6 +25,15 @@ import type { HandoffContext, HandoffDeps, HandoffVerb, PaperVerb } from './pinn
 import * as msg from './messages.js';
 import { annotate, inCI, UserError } from './messages.js';
 import { readDoc } from './yaml-io.js';
+import {
+  discoverProjects,
+  findRepoRoot,
+  folderId,
+  forkPaper,
+  isColocated,
+  paperDirIn,
+  parsePaperTag,
+} from './projects.js';
 
 // oak only runs as the CJS bundle (ci/run.sh and local runs both call dist/cli.cjs), so
 // `__dirname` is the bundle's directory; @types/node declares it for tsc.
@@ -40,6 +49,9 @@ type Verb =
   | 'clean'
   | 'bootstrap'
   | 'upgrade'
+  | 'assemble'
+  | 'add-paper'
+  | 'papers'
   | 'conformance';
 
 /** oak's root, the directory holding paper-base.yml: the parent of `__dirname`, else
@@ -91,11 +103,12 @@ function assetOverridesFrom(argv: string[]): ComposeInput['assetOverrides'] {
 type ResolvedJournal = { root: string | null; stamp: JournalStamp | undefined };
 
 /**
- * Where the journal repo is: none with `--no-journal`, else `--journal`, else a cached
- * clone of pins.yml's `journal_repo`, else this repo when `journal_repo` is `.` or absent
- * and a `journal.yml` sits beside the paper. pins.yml is editor-gated and that `journal.yml` is
- * not, so the pin comes first. Every verb that reads journal settings finds it here, `deposit`
- * and `deploy-preview` included, in CI too: `ci/run.sh` passes no `--journal`.
+ * Where the journal repo is: none with `--no-journal`, else `--journal` (`.` is the repository
+ * holding the paper), else a cached clone of pins.yml's `journal_repo`, else, when `journal_repo`
+ * is `.`, the `journal.yml` at the root of this co-located repository. Without `journal_repo` the
+ * journal is unknown. pins.yml is editor-gated, so it decides. Every verb that reads journal
+ * settings finds it here, `deposit` and `deploy-preview` included, in CI too: `ci/run.sh` passes
+ * no `--journal`.
  *
  * Returns a root, with the {@link JournalStamp} the derived config records for it, or an error
  * string, and never exits, so `oak validate` can report the error.
@@ -111,7 +124,8 @@ async function resolveJournalRoot(
   if (explicit === '') throw new UserError(msg.flagNeedsValue('journal'));
   const { cachedJournal, journalStamp } = await import('./gh.js');
   const found = (root: string) => ({ root, stamp: journalStamp(root, paperRoot) });
-  if (explicit) return found(resolve(explicit));
+  const repoRoot = findRepoRoot(paperRoot) ?? paperRoot;
+  if (explicit) return found(explicit === '.' ? repoRoot : resolve(explicit));
   let journalRepo: string | undefined;
   try {
     journalRepo = (await import('./pinned.js')).readPinsValue(paperRoot, 'journal_repo').value;
@@ -121,8 +135,11 @@ async function resolveJournalRoot(
     if (!(err instanceof UserError)) throw err;
     return { error: err.message };
   }
-  if (!journalRepo || journalRepo === '.') {
-    if (existsSync(join(paperRoot, 'journal.yml'))) return found(paperRoot);
+  if (!journalRepo) return { error: msg.build.noJournal(verb, paperRoot) };
+  if (journalRepo === '.') {
+    for (const root of [paperRoot, repoRoot]) {
+      if (existsSync(join(root, 'journal.yml'))) return found(root);
+    }
     return { error: msg.build.noJournal(verb, paperRoot) };
   }
   try {
@@ -236,7 +253,9 @@ function finishSite(
     const html = join(paperRoot, '_build', 'html');
     if (existsSync(html)) {
       dropSymlinks(html);
-      artifact.writeStage1Files(html, artifact.SITE_FILES, paperRoot, process.cwd(), process.env);
+      // The build runs in the paper's folder, so the repo root is found, not taken from cwd.
+      const repoRoot = findRepoRoot(paperRoot) ?? process.cwd();
+      artifact.writeStage1Files(html, artifact.SITE_FILES, paperRoot, repoRoot, process.env);
     }
     recordResult({ status: 'ok', placeholder });
   } catch (e) {
@@ -536,6 +555,16 @@ async function zenodoSetup(
 /** `oak release reserve-doi`: reserves the DOI and opens the DOI pull request. Documented at
  *  DOCS.releaseReserveDoi. */
 async function cmdReleaseReserveDoi(argv: string[]): Promise<number> {
+  // A co-located paper is one of the repository's papers: the workflow takes its id as input.
+  const paperFlag = flag(argv, 'paper');
+  if (paperFlag) {
+    const root = findRepoRoot(resolve(paperFlag)) ?? resolve('.');
+    const dir = paperDirIn(root, resolve(paperFlag));
+    if (isColocated(root) && !discoverProjects(root).includes(dir)) {
+      process.stderr.write(msg.workflow.releaseUnknownPaper('release reserve-doi', dir) + '\n');
+      return 2;
+    }
+  }
   const setup = await zenodoSetup(argv, 'release reserve-doi');
   if (typeof setup === 'number') return setup;
   const { api, mystPath, journalRoot } = setup;
@@ -668,9 +697,11 @@ async function cmdReleaseDeposit(argv: string[]): Promise<number> {
     process.stderr.write(msg.workflow.releaseNoTag + '\n');
     return 2;
   }
-  // The tag reaches git as a ref.
-  const { PAPER_VERSION_TAG } = await import('./schema.js');
-  if (!PAPER_VERSION_TAG.test(tag)) {
+  // The tag reaches git as a ref, and names the paper: `vX.Y.Z` the one at the repository root,
+  // `<id>/vX.Y.Z` the folder `papers/<id>`, which must exist. `--paper`, which ci/run.sh passes,
+  // must agree.
+  const paperTag = parsePaperTag(tag);
+  if (!paperTag) {
     process.stderr.write(msg.workflow.releaseBadTag(tag) + '\n');
     return 2;
   }
@@ -678,8 +709,25 @@ async function cmdReleaseDeposit(argv: string[]): Promise<number> {
   const gh = await import('./gh.js');
   const release = await import('./release.js');
 
-  const paperRoot = resolve(flag(argv, 'paper') ?? '.');
-  const mystPath = mystPathOf(argv);
+  const flagged = flag(argv, 'paper');
+  let paperRoot = resolve(flagged ?? '.');
+  const repoRoot = findRepoRoot(paperRoot) ?? paperRoot;
+  if (paperTag.id) {
+    if (!discoverProjects(repoRoot).includes(paperTag.paperDir)) {
+      process.stderr.write(msg.workflow.releaseNoPaperFolder(tag, paperTag.paperDir) + '\n');
+      return 2;
+    }
+    const tagged = resolve(repoRoot, paperTag.paperDir);
+    if (flagged && resolve(flagged) !== tagged) {
+      process.stderr.write(msg.workflow.releaseTagOtherPaper(tag, flagged) + '\n');
+      return 2;
+    }
+    paperRoot = tagged;
+  } else if (isColocated(repoRoot)) {
+    process.stderr.write(msg.workflow.releaseBadTag(tag) + '\n');
+    return 2;
+  }
+  const mystPath = resolve(flag(argv, 'myst') ?? join(paperRoot, 'myst.yml'));
   const env = await sandboxFromDoi(mystPath, 'release deposit');
   if ('error' in env) {
     process.stderr.write(env.error + '\n');
@@ -853,7 +901,7 @@ function runChild(
 const RELEASE_SUBCOMMAND_FLAGS = ['token', 'site-url', 'journal'] as const;
 
 /**
- * `oak release [--repo owner/paper] vX [--sandbox] [--yes] [--publish-without-review]` from the
+ * `oak release [--repo owner/paper] vX|<id>/vX [--sandbox] [--yes] [--publish-without-review]` from the
  * terminal: `runRelease` (release.ts) in a temporary clone, with the editor's gh login, with the
  * Zenodo writes handed to the oak the paper pins. Documented at DOCS.release.
  */
@@ -863,10 +911,9 @@ async function cmdReleaseVersion(argv: string[]): Promise<number> {
   const z = await import('./zenodo.js');
   const pinned = await import('./pinned.js');
   const { removeKeptClones } = await import('./clean.js');
-  // Checked first, from the arguments alone.
-  const { PAPER_VERSION_TAG } = await import('./schema.js');
+  // Checked first, from the arguments alone; the clone says which form the repo takes.
   const word = releaseWord(argv)?.word;
-  if (word !== undefined && !PAPER_VERSION_TAG.test(word)) {
+  if (word !== undefined && !parsePaperTag(word)) {
     process.stderr.write(msg.workflow.releaseUnknownWord(word) + '\n');
     return 2;
   }
@@ -899,7 +946,7 @@ async function cmdReleaseVersion(argv: string[]): Promise<number> {
   const tag = word;
   if (!tag) {
     process.stderr.write(
-      msg.workflow.releaseNoTagList(repo, gh.realReleaseSource.vTags(repo)) + '\n',
+      msg.workflow.releaseNoTagList(repo, gh.realReleaseSource.versionTags(repo)) + '\n',
     );
     return 2;
   }
@@ -928,15 +975,16 @@ async function cmdReleaseVersion(argv: string[]): Promise<number> {
     const run = runChild(cli, args, env, verbose);
     return verbose ? run : progress.during(run);
   };
-  /** Runs `oak release <args> --json` with the oak the clone pins, or with this oak when that is
-   *  the same version, as a child process: oak prints the result itself, from the child's JSON. */
-  const runSubcommand = async (args: string[], clone: string): Promise<SubcommandRun> => {
+  /** Runs `oak release <args> --json` with the oak the paper at `paperRoot` in the clone pins, or
+   *  with this oak when that is the same version, as a child process: oak prints the result
+   *  itself, from the child's JSON. */
+  const runSubcommand = async (args: string[], paperRoot: string): Promise<SubcommandRun> => {
     const childArgs = [...args, '--json'];
     const ctx = await handoffContext('release', childArgs);
     const deps = await handoffDeps(argv);
     let run: SubcommandRun | null = null;
     const code = await pinned.handOff(
-      { ...ctx, paperRoot: clone },
+      { ...ctx, paperRoot },
       {
         ...deps,
         spawn: async (cli, a, env) => (run = await child(cli, a, env)).code,
@@ -985,33 +1033,33 @@ async function cmdReleaseVersion(argv: string[]): Promise<number> {
         checkPin: (version) => {
           if (!process.env[pinned.USE_RUNNING_ENV]) pinned.assertDepositPin('release', version);
         },
-        reserveDoi: (clone, sb) =>
+        reserveDoi: (paperRoot, sb) =>
           runSubcommand(
             [
               'reserve-doi',
               '--myst',
-              join(clone, 'myst.yml'),
+              join(paperRoot, 'myst.yml'),
               '--repo',
               repo,
               ...(sb ? ['--sandbox'] : []),
               ...passOn,
             ],
-            clone,
+            paperRoot,
           ),
-        deposit: (clone) =>
+        deposit: (paperRoot) =>
           runSubcommand(
             [
               'deposit',
               '--tag',
               tag,
               '--paper',
-              clone,
+              paperRoot,
               '--bundle-out',
-              join(clone, '_build', 'bundle'),
+              join(paperRoot, '_build', 'bundle'),
               ...(publish ? ['--publish-without-review'] : []),
               ...passOn,
             ],
-            clone,
+            paperRoot,
           ),
         confirm: makeConfirm(argv),
         sleep: progress.sleep,
@@ -1053,33 +1101,52 @@ async function cmdClean(argv: string[]): Promise<number> {
 }
 
 /** `oak deploy-preview <site> [--verified-head <sha>]`: deploys the build artifact to
- *  Cloudflare Pages, or falls back to a link to it, and posts the preview comment. */
+ *  Cloudflare Pages, or falls back to a link to it, and posts the preview comment. `<site>` is
+ *  one site, or the folder post-checks downloaded several into, one folder per paper, each
+ *  deployed in turn. */
 async function cmdDeployPreview(argv: string[]): Promise<number> {
   const preview = await import('./preview.js');
   const gh = await import('./gh.js');
-  const { eventHeadSha } = await import('./artifact.js');
-  const siteDir = resolve(argv.find((a) => !a.startsWith('--')) ?? 'site');
+  const artifact = await import('./artifact.js');
+  const { artifactDirs, eventHeadSha } = artifact;
+  const siteArg = resolve(argv.find((a) => !a.startsWith('--')) ?? 'site');
+  const sites = artifactDirs(siteArg, ['index.html', artifact.SITE_FILES.pr]);
   const paper = flag(argv, 'paper');
   const journal = await resolveJournalRoot(argv, resolve(paper ?? '.'), 'deploy-preview');
-  const out = await preview.cmdDeployPreview(
-    {
-      siteDir,
-      repoRoot: resolve('.'),
-      journalRoot: 'error' in journal ? { problem: journal.error } : journal.root,
-      repo: gh.currentRepo(flag(argv, 'repo')),
-      serverUrl: process.env.GITHUB_SERVER_URL ?? 'https://github.com',
-      artifactRunId: process.env.PAPER_BUILD_RUN_ID,
-      cf: {
-        apiToken: process.env.CLOUDFLARE_API_TOKEN,
-        accountId: process.env.CLOUDFLARE_ACCOUNT_ID,
+  if (!sites.length) {
+    process.stderr.write(msg.workflow.previewNoSite(siteArg) + '\n');
+    emit(argv, { status: 'ok', preview: 'skipped', reason: msg.workflow.previewNoSite(siteArg) });
+    return 0;
+  }
+  const results: Array<Record<string, unknown>> = [];
+  let exitCode = 0;
+  for (const siteDir of sites) {
+    const out = await preview.cmdDeployPreview(
+      {
+        siteDir,
+        repoRoot: resolve('.'),
+        journalRoot: 'error' in journal ? { problem: journal.error } : journal.root,
+        repo: gh.currentRepo(flag(argv, 'repo')),
+        serverUrl: process.env.GITHUB_SERVER_URL ?? 'https://github.com',
+        artifactRunId: process.env.PAPER_BUILD_RUN_ID,
+        cf: {
+          apiToken: process.env.CLOUDFLARE_API_TOKEN,
+          accountId: process.env.CLOUDFLARE_ACCOUNT_ID,
+        },
+        verifiedHead: flag(argv, 'verified-head') ?? eventHeadSha(process.env),
+        // `--paper` names one paper, so it applies to one site only.
+        ...(sites.length === 1 ? { paper } : {}),
       },
-      verifiedHead: flag(argv, 'verified-head') ?? eventHeadSha(process.env),
-      paper,
-    },
-    { deployer: gh.realPagesDeployer, gh: gh.realGhPr },
+      { deployer: gh.realPagesDeployer, gh: gh.realGhPr },
+    );
+    results.push(out.result);
+    exitCode ||= out.exitCode;
+  }
+  emit(
+    argv,
+    results.length === 1 ? results[0]! : { status: exitCode ? 'error' : 'ok', sites: results },
   );
-  emit(argv, out.result);
-  return out.exitCode;
+  return exitCode;
 }
 
 /** The paper's edition, or null. Never throws: `oak validate` reports a missing or malformed
@@ -1118,7 +1185,7 @@ async function writeReport(
     dirname(path),
     artifact.CHECKS_FILES,
     paperRoot,
-    process.cwd(),
+    findRepoRoot(paperRoot) ?? process.cwd(),
     process.env,
   );
   return true;
@@ -1237,7 +1304,11 @@ async function cmdValidate(argv: string[]): Promise<number> {
         edge: createMystEdge(),
         edition: readEditionQuietly(paperRoot),
       },
-      { strict, repo, pathBase: process.env.GITHUB_WORKSPACE ?? paperRoot },
+      {
+        strict,
+        repo,
+        ...(process.env.GITHUB_WORKSPACE ? { pathBase: process.env.GITHUB_WORKSPACE } : {}),
+      },
     );
   } catch (err) {
     // runValidate catches the faults it can name, so anything here is oak's own; the report
@@ -1295,9 +1366,13 @@ async function cmdValidate(argv: string[]): Promise<number> {
 /** `oak post-checks --report <path> --repo <o/r> --sha <headsha> --base <sha>
  *  --verified-head <sha>`: posts the report
  *  from the trusted `workflow_run` job (checks and pull-requests write). Never reruns validate or
- *  touches myst. The pull request is the `pr-number` beside the report, and is
- *  checked against `--verified-head` before anything is posted. Failing to post the Check Run
- *  fails the job; a failed comment only warns. Needs GH_TOKEN. Documented at DOCS.postChecks. */
+ *  touches myst. `--report` is one report file, or the folder Stage 2 downloaded the reports
+ *  into, one folder per paper; they are posted as one result ({@link combineReports}). The pull
+ *  request is the `pr-number` beside each report, and is checked against `--verified-head`
+ *  before anything is posted. In a co-located repository a pull request from a fork must change
+ *  one paper, and its report must be that paper's ({@link forkPaper}). Failing to post the Check
+ *  Run fails the job; a failed comment only warns. Needs GH_TOKEN. Documented at
+ *  DOCS.postChecks. */
 async function cmdPostChecks(argv: string[]): Promise<number> {
   const reportPath = flag(argv, 'report');
   const gh = await import('./gh.js');
@@ -1312,46 +1387,163 @@ async function cmdPostChecks(argv: string[]): Promise<number> {
     process.stderr.write(msg.workflow.postChecksArgs + '\n');
     return 2;
   }
-  if (!existsSync(reportPath)) {
+  const artifact = await import('./artifact.js');
+  // A folder that is absent holds no report: a pattern that matched no artifact downloads
+  // nothing, when the pull request changes no paper.
+  const isFile = reportPath.endsWith('.json');
+  if (isFile && !existsSync(reportPath)) {
     process.stderr.write(msg.workflow.postChecksNoReport(reportPath) + '\n');
     return 2;
   }
-  // The report comes from the fork's code [R137], so it is untrusted input. A bad one gets a
-  // sentence, not a stack.
-  let report;
-  try {
-    report = JSON.parse(readFileSync(reportPath, 'utf8'));
-  } catch {
-    process.stderr.write(annotate('error', msg.workflow.postChecksBadReport(reportPath)) + '\n');
-    return 1;
-  }
-  const cr = report?.checkRun;
-  if (!cr || typeof cr.conclusion !== 'string') {
-    process.stderr.write(annotate('error', msg.workflow.postChecksBadReport(reportPath)) + '\n');
-    return 1;
-  }
+  const dirs = isFile
+    ? [dirname(resolve(reportPath))]
+    : artifact.artifactDirs(resolve(reportPath), ['report.json']);
 
-  const artifact = await import('./artifact.js');
-  // The Stage 1 engine may write no `paper` file; a malformed one is refused here.
-  const artifactDir = dirname(resolve(reportPath));
-  const paper = artifact.resolvePaperDir(
-    flag(argv, 'paper'),
-    artifact.readPaperDir(artifactDir, artifact.CHECKS_FILES.paper),
-  );
-  const pr = artifact.readPrNumber(artifactDir, artifact.CHECKS_FILES.pr) ?? undefined;
+  // Each report comes from the fork's code [R137], so it is untrusted input. A bad one gets a
+  // sentence, not a stack.
+  const { combineReports, refusedReport } = await import('./checks.js');
+  const reports: import('./checks.js').PaperReport[] = [];
+  const prs = new Set<string>();
+  for (const dir of dirs) {
+    const file = isFile ? resolve(reportPath) : join(dir, 'report.json');
+    let report;
+    try {
+      report = JSON.parse(readFileSync(file, 'utf8'));
+    } catch {
+      process.stderr.write(annotate('error', msg.workflow.postChecksBadReport(file)) + '\n');
+      return 1;
+    }
+    if (!report?.checkRun || typeof report.checkRun.conclusion !== 'string') {
+      process.stderr.write(annotate('error', msg.workflow.postChecksBadReport(file)) + '\n');
+      return 1;
+    }
+    // Stage 1 may run an engine that writes no `paper`; it is read here so a malformed one is
+    // refused.
+    const paper = artifact.resolvePaperDir(
+      dirs.length === 1 ? flag(argv, 'paper') : undefined,
+      artifact.readPaperDir(dir, artifact.CHECKS_FILES.paper),
+    );
+    const pr = artifact.readPrNumber(dir, artifact.CHECKS_FILES.pr);
+    if (pr) prs.add(pr);
+    reports.push({ paper, report });
+  }
+  if (prs.size > 1) throw new UserError(msg.workflow.postChecksPrsDiffer([...prs]));
+  const pr = [...prs][0];
   if (pr) artifact.verifyPrHead(repo, pr, verifiedHead, (r, n) => gh.realGhPr.prHead(r, n));
 
   const { cmdPostChecks: run, gatedPathsTouched } = await import('./checks.js');
-  const gatedTouched = gatedPathsTouched(gh.changedFiles(repo, base, verifiedHead));
+  const changed = gh.changedFiles(repo, base, verifiedHead);
+  const gatedTouched = gatedPathsTouched(changed);
+  let report = combineReports(reports);
+  const papers = reports.map((r) => r.paper);
+  const colocated = isColocated(resolve('.'));
+  // Only editors can push a branch here, so only a pull request from a fork must change one paper
+  // folder. Without the event (a run by hand), the rule applies.
+  const headRepo = artifact.eventHeadRepo(process.env);
+  const { sameRepo } = await import('./schema.js');
+  if (colocated && (!headRepo || !sameRepo(headRepo, repo))) {
+    const change = forkPaper(changed);
+    const refused =
+      'refused' in change
+        ? change.refused
+        : papers.length !== 1 || papers[0] !== change.paper
+          ? msg.pr.forkWrongReport(change.paper, papers)
+          : null;
+    if (refused) report = refusedReport(report, refused);
+  }
   const out = run(
-    { report, repo, sha, pr, gatedTouched },
+    {
+      report,
+      repo,
+      sha,
+      pr,
+      gatedTouched,
+      ...(colocated ? { papers: papers.map((p) => folderId(p) ?? p) } : {}),
+    },
     {
       checkRun: gh.realCheckRun,
       sticky: (root, prNum, header, body) => gh.realGhPr.sticky(root, prNum, header, body),
     },
   );
-  emit(argv, { ...out, pr: pr ?? null, paper });
+  emit(argv, { ...out, pr: pr ?? null, paper: papers.length === 1 ? papers[0] : papers });
   return out.checkRunPosted ? 0 : 1;
+}
+
+/** `oak assemble --builds <dir>`: builds the journal website of a co-located repository, in the
+ *  current directory, and mounts each listed paper's build at `/<id>/` ({@link assemble}). */
+async function cmdAssemble(argv: string[]): Promise<number> {
+  const builds = flag(argv, 'builds');
+  if (!builds) {
+    process.stderr.write(msg.assemble.usage + '\n');
+    return 2;
+  }
+  const { assemble, listedFolderIds, npmSiteBuild, readBuilds } = await import('./assemble.js');
+  const out = assemble(
+    readBuilds(resolve(builds), listedFolderIds(resolve('.'))),
+    { siteRoot: resolve('.'), baseUrl: flag(argv, 'base-url') ?? '' },
+    { buildSite: npmSiteBuild, log: (line) => process.stderr.write(line + '\n') },
+  );
+  emit(argv, out.result);
+  return out.exitCode;
+}
+
+/** `oak add-paper --repo <owner/journal> --id <paper id>`: an author's submission to a
+ *  co-located journal ({@link cmdAddPaper}). */
+async function cmdAddPaper(argv: string[]): Promise<number> {
+  const repo = flag(argv, 'repo');
+  const id = flag(argv, 'id');
+  if (!repo || !id) {
+    process.stderr.write(msg.addPaper.usage + '\n');
+    return 2;
+  }
+  const gh = await import('./gh.js');
+  gh.assertRepoName(repo, '--repo');
+  gh.assertGhReady();
+  const { cmdAddPaper: run } = await import('./add-paper.js');
+  const { paperTemplateRoot } = await import('./bootstrap.js');
+  const edition = flag(argv, 'edition');
+  const out = await run(
+    {
+      repo,
+      id,
+      ...(edition ? { edition } : {}),
+      paperTemplateRoot: paperTemplateRoot(engineRoot()),
+    },
+    {
+      gh: gh.realAddPaperGh,
+      log: (line) => process.stderr.write(line + '\n'),
+      confirm: makeConfirm(argv),
+    },
+  );
+  emit(argv, out.result, narrated);
+  return out.exitCode;
+}
+
+/** `oak papers`: the papers a workflow run works on, in the current directory
+ *  ({@link selectPapers}). `--id-env` reads the id from `PAPER_ID`, so a workflow input reaches
+ *  oak as one value whatever it holds. */
+async function cmdPapers(argv: string[]): Promise<number> {
+  const forWhat = flag(argv, 'for');
+  const tag = flag(argv, 'tag');
+  const id = has(argv, 'id-env') ? (process.env.PAPER_ID ?? '') : flag(argv, 'id');
+  const mode: import('./papers.js').PapersMode | null =
+    forWhat === 'build' || forWhat === 'check'
+      ? { for: forWhat, event: process.env.GITHUB_EVENT_NAME ?? '' }
+      : tag !== undefined
+        ? { tag }
+        : id !== undefined
+          ? { id }
+          : null;
+  if (!mode) {
+    process.stderr.write(msg.papers.usage + '\n');
+    return 2;
+  }
+  const { selectPapers } = await import('./papers.js');
+  const gh = await import('./gh.js');
+  const root = resolve('.');
+  const out = selectPapers(root, mode, () => gh.changedFromParent(root));
+  emit(argv, out.result);
+  return out.exitCode;
 }
 
 /** oak's own repo. */
@@ -1426,7 +1618,7 @@ async function cmdBootstrap(argv: string[]): Promise<number> {
   }
   gh.assertRepoName(repo, '--repo');
   const journal = flag(rest, 'journal');
-  if (journal && journal !== '.') gh.assertRepoName(journal, '--journal');
+  if (journal) gh.assertRepoName(journal, '--journal');
   // Malformed arguments are refused before any gh call.
   const external = sub === 'journal' && !has(rest, 'co-located');
   if (sub === 'journal') {
@@ -1633,6 +1825,8 @@ async function cmdConformance(argv: string[]): Promise<number> {
 }
 
 const VERBS: Verb[] = [
+  'add-paper',
+  'assemble',
   'build',
   'start',
   'validate',
@@ -1640,6 +1834,7 @@ const VERBS: Verb[] = [
   'deploy-preview',
   'release',
   'clean',
+  'papers',
   'bootstrap',
   'upgrade',
   'conformance',
@@ -1766,6 +1961,9 @@ async function main(argv: string[]): Promise<number> {
   if (verb === 'bootstrap') return cmdBootstrap(argv.slice(1));
   if (verb === 'upgrade') return cmdUpgrade(argv.slice(1));
   if (verb === 'conformance') return cmdConformance(argv.slice(1));
+  if (verb === 'assemble') return cmdAssemble(argv.slice(1));
+  if (verb === 'add-paper') return cmdAddPaper(argv.slice(1));
+  if (verb === 'papers') return cmdPapers(argv.slice(1));
   // An unknown command is a short error with a suggestion.
   if (verb) process.stderr.write(msg.unknownCommand(verb, nearestVerb(verb)) + '\n');
   else process.stderr.write(msg.usage());

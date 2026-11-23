@@ -35,7 +35,7 @@ import {
   ZenodoConfig,
   locationRepo,
   pagesUrl,
-  PAPER_VERSION_TAG,
+  parseLocation,
   parseZenodoDoi,
   readRegistry,
   repoFromGithubUrl,
@@ -47,6 +47,7 @@ import {
 import * as msg from './messages.js';
 import { annotate, UserError } from './messages.js';
 import { err, ok, type Outcome } from './result.js';
+import { colocatedPaper, findSelf, parsePaperTag } from './projects.js';
 
 export const ZENODO_PROD = 'https://zenodo.org/api';
 export const ZENODO_SANDBOX = 'https://sandbox.zenodo.org/api';
@@ -333,8 +334,9 @@ export class ZenodoApi {
    * then a full scan when neither found the identifier. The scan depends on a match, not on rows
    * coming back, since `q` matches phrases and a near miss returns rows.
    */
-  async findDeposit(opts: { paperId?: string; githubUrl: string }): Promise<Deposition | null> {
+  async findDeposit(opts: { paperId?: string; githubUrl?: string }): Promise<Deposition | null> {
     const urn = opts.paperId ? paperUrn(opts.paperId) : null;
+    const url = opts.githubUrl;
 
     if (urn) {
       const hit = matchRelated(
@@ -343,14 +345,16 @@ export class ZenodoApi {
       );
       if (hit) return hit;
     }
-    const byUrl = matchRelated(
-      await this.listMyDepositions({ q: `related.identifier:"${opts.githubUrl}"` }),
-      opts.githubUrl,
-    );
-    if (byUrl) return byUrl;
+    if (url) {
+      const byUrl = matchRelated(
+        await this.listMyDepositions({ q: `related.identifier:"${url}"` }),
+        url,
+      );
+      if (byUrl) return byUrl;
+    }
 
     const all = await this.listMyDepositions();
-    return (urn && matchRelated(all, urn)) || matchRelated(all, opts.githubUrl) || null;
+    return (urn && matchRelated(all, urn)) || (url && matchRelated(all, url)) || null;
   }
 
   /** The depositions of a concept DOI, newest first, paged. */
@@ -678,7 +682,7 @@ export interface BundleProvenance {
   version_doi: string;
   review_pr: string | null;
   /** The journal the PDF was built from: what `journal.zip` holds, the paper's own repo and
-   *  commit when it is its own journal, null without one. */
+   *  commit for a journal in the paper's folder, null without one. */
   journal_repo: string | null;
   journal_commit: string | null;
   built_at: string | null;
@@ -824,7 +828,7 @@ export class JournalArchiveError extends Error {}
 
 /** The journal the provenance names, and the checkout `journal.zip` is archived from. */
 export interface JournalArchive {
-  /** null when the paper repo is its own journal, so `source.zip` holds it. */
+  /** null for a journal in the paper's own folder, which `source.zip` holds. */
   root: string | null;
   repo: string | null;
   commit: string;
@@ -833,7 +837,7 @@ export interface JournalArchive {
 /**
  * The journal commit the build used, read from `myst.oak.yml` by {@link readJournalStamp} and
  * fetched into `journalRoot`, so `journal.zip` matches the PDF even when the journal has changed
- * since. `paper` when the paper repo is its own journal; null when built with `--no-journal`.
+ * since. `paper` for a journal in the paper's own folder; null when built with `--no-journal`.
  * Run before anything is written to Zenodo.
  *
  * Throws {@link JournalArchiveError} when the build used a journal this deposit cannot archive.
@@ -1013,22 +1017,22 @@ export async function loadJournalDeposit(
 }
 
 /**
- * The paper's website for the deposit's Project Website link: the `site_url` of the paper's entry
- * in the journal's `registry/papers.yml`, else its GitHub Pages URL ({@link pagesUrl}), which is
- * the rule `paperUrls` in `plugins/gallery.mjs` follows. Undefined without a repo.
+ * The website of the paper at `paperRoot` for the deposit's Project Website link: the `site_url`
+ * of its entry in the journal's `registry/papers.yml` ({@link findSelf}), else its GitHub Pages
+ * URL ({@link pagesUrl}), which is the rule `paperUrls` in `plugins/gallery.mjs` follows. A
+ * co-located paper's Pages URL is the journal's with `<id>/`. Undefined without a repo.
  */
 export function defaultSiteUrl(
   repo: string | null,
   journalRoot: string | null,
+  paperRoot: string,
 ): string | undefined {
   if (!repo) return undefined;
   const path = journalRoot ? join(journalRoot, 'registry', 'papers.yml') : null;
   const entries = path && existsSync(path) ? readRegistry(readDoc(path).toJS())?.entries : null;
-  const own = (entries ?? []).find((e) => {
-    const entryRepo = locationRepo(e.location);
-    return !!e.site_url && !!entryRepo && sameRepo(entryRepo, repo);
-  });
-  return own?.site_url ?? pagesUrl(repo);
+  const own = findSelf(entries ?? null, repo, { journalRoot, paperRoot }).find((e) => e.site_url);
+  const folder = colocatedPaper(paperRoot);
+  return own?.site_url ?? `${pagesUrl(repo)}${folder ? `${folder.id}/` : ''}`;
 }
 
 function projectOf(doc: ReturnType<typeof readDoc>): any {
@@ -1058,7 +1062,7 @@ export interface PrepareInput {
  */
 export async function cmdPrepare(input: PrepareInput): Promise<Outcome> {
   const { mystPath, repo, api, journalRoot } = input;
-  const siteUrl = input.siteUrl ?? defaultSiteUrl(repo, journalRoot);
+  const siteUrl = input.siteUrl ?? defaultSiteUrl(repo, journalRoot, resolve(mystPath, '..'));
   const sandbox = api.sandbox;
   const doc = readDoc(mystPath);
   const project = projectOf(doc);
@@ -1099,9 +1103,10 @@ export async function cmdPrepare(input: PrepareInput): Promise<Outcome> {
   });
   md.prereserve_doi = true;
 
+  // Co-located papers share the repository's URL, so only the id tells their deposits apart.
   const existing = await api.findDeposit({
     paperId: project.id ? String(project.id) : undefined,
-    githubUrl,
+    ...(colocatedPaper(repoRoot) ? {} : { githubUrl }),
   });
   let dep: Deposition;
   if (existing && existing.submitted === false) {
@@ -1182,8 +1187,9 @@ async function fillDraft(input: UploadInput, engineZip: string): Promise<Outcome
   if (!parsed) return err(2, msg.workflow.notZenodoDoi(conceptDoi));
   if (parsed.sandbox !== sandbox)
     return err(2, msg.workflow.uploadWrongEnvironment(parsed.sandbox));
-  if (!PAPER_VERSION_TAG.test(tag)) return err(2, msg.workflow.uploadBadTag(tag));
-  const version = tag.slice(1);
+  const paperTag = parsePaperTag(tag);
+  if (!paperTag) return err(2, msg.workflow.uploadBadTag(tag));
+  const version = paperTag.version.slice(1);
 
   if (!existsSync(pdf)) return err(2, msg.workflow.uploadNoPdf(pdf));
 
@@ -1191,7 +1197,7 @@ async function fillDraft(input: UploadInput, engineZip: string): Promise<Outcome
   if (!githubUrl) return err(2, msg.workflow.uploadNoGithub);
   const repo = repoFromGithubUrl(githubUrl);
   if (!repo) return err(2, msg.workflow.depositBadGithubUrl(mystPath, githubUrl));
-  const siteUrl = input.siteUrl ?? defaultSiteUrl(repo, journalRoot);
+  const siteUrl = input.siteUrl ?? defaultSiteUrl(repo, journalRoot, resolve(mystPath, '..'));
 
   const repoRoot = resolve(mystPath, '..');
 
@@ -1417,7 +1423,9 @@ export async function cmdStatus(input: StatusInput): Promise<Outcome> {
     project,
     paperId: project.id ? String(project.id) : undefined,
     githubUrl: project.github ?? '',
-    siteUrl: input.siteUrl ?? defaultSiteUrl(repoFromGithubUrl(project.github ?? ''), journalRoot),
+    siteUrl:
+      input.siteUrl ??
+      defaultSiteUrl(repoFromGithubUrl(project.github ?? ''), journalRoot, repoRoot),
     ...(await loadJournalDeposit(journalRoot, project)),
     abstractParas: abstractParagraphs(repoRoot),
     extraDescParas: zenodoExtraParagraphs(repoRoot),

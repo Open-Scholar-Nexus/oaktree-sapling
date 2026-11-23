@@ -312,9 +312,9 @@ describe('registry location: one string', () => {
 });
 
 describe('Pins', () => {
-  it('sets journal_repo to "." when it is omitted (the repo is its own journal)', () => {
+  it('leaves journal_repo out when omitted: the journal is unknown, not this repo', () => {
     const p = Pins.parse({ engine_repo: 'open-scholar-nexus/oaktree-sapling' });
-    expect(p.journal_repo).toBe('.');
+    expect(p.journal_repo).toBeUndefined();
   });
 });
 

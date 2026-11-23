@@ -398,9 +398,12 @@ describe('cmdDeployPreview', () => {
   it("takes the paper from the artifact's .paper, and never serves the file", async () => {
     const dir = siteWithPr('7');
     writeFileSync(join(dir, '.paper'), 'papers/one\n');
-    const { gh } = fakeGh();
+    // A co-located paper's comments carry its id.
+    const { gh, stickies } = fakeGh();
     const out = await cmdDeployPreview(baseInput(dir, { cf: {} }), { deployer: okDeployer(), gh });
     expect(out.result.paper).toBe('papers/one');
+    expect(stickies.map((s) => s.header)).toEqual([`${STICKY_PREVIEW}:one`]);
+    expect(stickies[0]!.body).toContain('paper-build-one');
     expect(existsSync(join(dir, '.paper'))).toBe(false);
   });
 

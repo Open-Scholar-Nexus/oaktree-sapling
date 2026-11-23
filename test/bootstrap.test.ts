@@ -3,7 +3,7 @@
  * and myst.yml, the rest copied as is; `--from` restoring the editor's `.github/`; reruns that
  * read before they change; secrets set when given, otherwise listed in the runbook; the bypass
  * for an org team or a personal account; and the two journal setups, external (settings
- * and website, public) and `--co-located` (the paper workflows and a starter paper, no website).
+ * and website, public) and `--co-located` (settings, website and the paper launchers).
  */
 import { describe, it, expect } from 'vitest';
 import { mkdtempSync, readFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
@@ -490,7 +490,7 @@ describe('cmdBootstrapPaper', () => {
     expect(out.exitCode).toBe(2);
     expect(out.result.status).toBe('error');
     expect(String(out.result.error)).toContain('--journal');
-    expect(String(out.result.error)).toContain('--journal .');
+    expect(String(out.result.error)).toContain('oak bootstrap journal --co-located');
     // Nothing was touched: the check precedes every effect.
     expect(calls.createRepo).toHaveLength(0);
     expect(calls.seedBranch).toHaveLength(0);
@@ -623,11 +623,12 @@ describe('cmdBootstrapPaper', () => {
     expect(same).not.toContain('running oak');
   });
 
-  it('--journal . names this repo as the journal, and still bootstraps', async () => {
+  it('--journal . is refused: it marks a co-located repository, set up by bootstrap journal', async () => {
     const { prov, calls } = fakeProv();
     const out = await cmdBootstrapPaper(paperInput({ journal: '.' }), deps(prov));
-    expect(out.exitCode).toBe(0);
-    expect(calls.seedBranch).toHaveLength(1);
+    expect(out.exitCode).toBe(2);
+    expect(String(out.result.error)).toContain('--co-located');
+    expect(calls.seedBranch).toHaveLength(0);
   });
 
   it('the journal lands in pins.yml as journal_repo', async () => {
@@ -714,6 +715,7 @@ describe('cmdBootstrapPaper', () => {
       environments: new Set(['me/paper/zenodo-prepare', 'me/paper/preview']),
       policies: new Set([
         'me/paper/zenodo-publish/v*',
+        'me/paper/zenodo-publish/*/v*',
         'me/paper/zenodo-prepare/main',
         'me/paper/preview/main',
       ]),
@@ -809,6 +811,34 @@ describe('cmdBootstrapPaper', () => {
       'preview/CLOUDFLARE_ACCOUNT_ID',
     ]);
     expect((out.result.runbook as string[]).join('\n')).not.toContain('settings/environments :');
+  });
+
+  it('zenodo-publish admits v* and */v* tags, and a rerun adds the one a repo lacks', async () => {
+    const fresh = fakeProv();
+    await cmdBootstrapPaper(paperInput(), deps(fresh.prov));
+    for (const n of ['v*', '*/v*'])
+      expect(fresh.calls.createBranchPolicy).toContainEqual({
+        r: 'me/paper',
+        e: 'zenodo-publish',
+        n,
+        t: 'tag',
+      });
+    const older = fakeProv({ policies: new Set(['me/paper/zenodo-publish/v*']) });
+    await cmdBootstrapPaper(paperInput(), deps(older.prov));
+    expect(
+      (older.calls.createBranchPolicy as Array<{ e: string; n: string }>)
+        .filter((c) => c.e === 'zenodo-publish')
+        .map((c) => c.n),
+    ).toEqual(['*/v*']);
+  });
+
+  it('the tag ruleset covers every tag, so editors alone create any version tag', async () => {
+    const { prov, calls } = fakeProv();
+    await cmdBootstrapPaper(paperInput(), deps(prov));
+    const body = (calls.createRuleset as Array<{ b: { name: string } }>)
+      .map((c) => c.b)
+      .find((b) => b.name === 'editors-only-v-tags');
+    expect(JSON.stringify(body)).toContain('"include":["~ALL"]');
   });
 
   it('creates zenodo-prepare and preview admitting main only', async () => {
@@ -1118,7 +1148,7 @@ describe('cmdBootstrapJournal', () => {
     expect(calls.setRepoPublic).toHaveLength(1);
   });
 
-  it("--co-located: seeds the paper workflows, a starter paper and the journal's settings, and sets them up", async () => {
+  it("--co-located: seeds the journal's settings, its website and the paper launchers, and sets them up", async () => {
     const { prov, calls } = fakeProv();
     const seedDirs: string[] = [];
     const d = deps(prov);
@@ -1141,27 +1171,44 @@ describe('cmdBootstrapJournal', () => {
       },
       d,
     );
-    expect(calls.createRuleset).toHaveLength(2); // it builds a paper
+    expect(calls.createRuleset).toHaveLength(2); // it builds papers
     expect(calls.setHomepage).toEqual([{ r: 'me/journal', u: 'https://me.github.io/journal/' }]);
-    // The seed holds both the paper workflows and the journal's settings, with
-    // `journal_repo: .` in pins.yml.
+    // Authors of a co-located journal work from forks, so no push-access command is offered.
+    const steps = (out.result.runbook as string[]).join('\n');
+    expect(steps).toContain('approve the workflow run');
+    expect(steps).not.toContain('permission=push');
     const seed = seedDirs[0]!;
-    expect(existsSync(join(seed, '.github/workflows/build-paper.yml'))).toBe(true);
-    expect(existsSync(join(seed, 'myst.yml'))).toBe(true);
-    expect(existsSync(join(seed, 'journal.yml'))).toBe(true);
+    // The journal's settings, its website and the paper launchers, with an empty papers/.
+    for (const f of [
+      'journal.yml',
+      'registry/papers.yml',
+      'myst.yml',
+      'pages/index.md',
+      'package.json',
+      '.github/workflows/build-paper.yml',
+      '.github/actions/engine/action.yml',
+      'CODEOWNERS',
+      'papers/.gitkeep',
+    ])
+      expect(existsSync(join(seed, f)), f).toBe(true);
+    // The launchers deploy the website, so the external journal's site workflow is left out, and
+    // papers come one by one through oak add-paper, so there is no starter paper at the root.
+    expect(existsSync(join(seed, '.github/workflows/site.yml'))).toBe(false);
+    expect(existsSync(join(seed, 'index.md'))).toBe(false);
+    expect(existsSync(join(seed, 'bib.bib'))).toBe(false);
     const pins = parseDocument(readFileSync(join(seed, '.github/actions/engine/pins.yml'), 'utf8'));
     expect(pins.get('journal_repo')).toBe('.');
-    // No website: an index over papers in one repo is not built yet.
-    expect(existsSync(join(seed, 'pages/index.md'))).toBe(false);
-    expect(existsSync(join(seed, '.github/workflows/site.yml'))).toBe(false);
-    expect(existsSync(join(seed, 'package.json'))).toBe(false);
-    const myst = parseDocument(readFileSync(join(seed, 'myst.yml'), 'utf8'));
-    expect(myst.getIn(['project', 'options', 'oaktree-sapling', 'version'])).toBe('v9'); // the starter paper's
-    expect(myst.getIn(['project', 'github'])).toBe('https://github.com/me/journal');
+    expect(pins.get('engine_version')).toBe('v9');
+    const site = parseDocument(readFileSync(join(seed, 'myst.yml'), 'utf8'));
+    expect(site.getIn(['project', 'title'])).toBe('J');
+    expect(site.getIn(['project', 'options', 'oaktree-sapling'])).toBeUndefined();
     const brand = parseDocument(readFileSync(join(seed, 'brand/brand.yml'), 'utf8'));
     expect(brand.getIn(['site', 'options', 'logo_text'])).toBe('J');
-    expect(brand.getIn(['site', 'options', 'logo_url'])).toBeUndefined(); // no website
+    expect(brand.getIn(['site', 'options', 'logo_url'])).toBe('https://me.github.io/journal/');
+    expect(out.result.site_url).toBe('https://me.github.io/journal/');
+    const runbook = (out.result.runbook as string[]).join('\n');
     expect((out.result.runbook as string[])[0]).toMatch(/^Next: /);
+    expect(runbook).toContain('oak add-paper --repo me/journal');
   });
 
   it('a default --edition is shown, with the file it will write', async () => {
@@ -1261,7 +1308,7 @@ describe('cmdBootstrapJournal', () => {
       },
       journalDeps(prov, []),
     );
-    // A co-located journal has no website, so --no-site is refused with the reason.
+    // A co-located journal publishes its papers on its website, so --no-site is refused.
     expect(out.exitCode).toBe(2);
     expect(out.result.status).toBe('error');
     expect(String(out.result.error)).toContain('--co-located');

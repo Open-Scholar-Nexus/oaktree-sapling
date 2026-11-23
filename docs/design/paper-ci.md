@@ -11,7 +11,7 @@ Two terms recur below. A flow that needs a token runs as two workflows: **Stage 
 [^why-indirect]: A fix ships once, in the engine, and reaches every paper without an edit to its workflows.
 
 :::{tip} In short
-An author with push access opens a pull request from a branch. Stage 1 runs their content on a GitHub-hosted runner, a fresh machine discarded after the job, with a read-only token. Their pull request reaches `main` through the `protect-main` rule, which requires the editorial checks to pass and requires an editor's review for any change under `CODEOWNERS`. The author's code runs only in jobs that hold no secret, and every job that holds a secret runs code from `main` or from an editor's `v*` tag.
+An author with push access opens a pull request from a branch. Stage 1 runs their content on a GitHub-hosted runner, a fresh machine discarded after the job, with a read-only token. Their pull request reaches `main` through the `protect-main` rule, which requires the editorial checks to pass and requires an editor's review for any change under `CODEOWNERS`. The author's code runs only in jobs that hold no secret, and every job that holds a secret runs code from `main` or from an editor's version tag.
 
 (r83)=
 A pull request from a fork, the default for an outside contributor, adds a step before anything runs: GitHub holds the run for a maintainer's approval when the contributor has never had anything merged into the repository. That is GitHub's default for a public repository, `oak bootstrap` leaves it there, and the runbook ([code](src:src/messages.ts@runbookForkApproval)) tells the editor to expect the approval click. Once approved, the fork's run builds like any other, and any edit it makes to a gated file needs an editor's review before it can merge. The checks comment also flags ([code](src:src/checks.ts@gatedWarning)) a pull request that touches a gated file, and one whose changed files GitHub could not list in full.
@@ -29,8 +29,9 @@ A pull request from a fork, the default for an outside contributor, adds a step 
 
 - [`build-paper.yml`](src:templates/paper/.github/workflows/build-paper.yml) and [`deploy-preview.yml`](src:templates/paper/.github/workflows/deploy-preview.yml) are the two stages of the site preview. On a push to `main`, `build-paper.yml` also deploys to GitHub Pages.
 - [`check-paper.yml`](src:templates/paper/.github/workflows/check-paper.yml) and [`post-checks.yml`](src:templates/paper/.github/workflows/post-checks.yml) are the two stages of the editorial checks.
-- [`deposit-version.yml`](src:templates/paper/.github/workflows/deposit-version.yml) and [`reserve-doi.yml`](src:templates/paper/.github/workflows/reserve-doi.yml) handle publishing actions, and are started by a `v*` tag and an editor's manual dispatch. Author content reaches them only after it has merged.
+- [`deposit-version.yml`](src:templates/paper/.github/workflows/deposit-version.yml) and [`reserve-doi.yml`](src:templates/paper/.github/workflows/reserve-doi.yml) handle publishing actions, and are started by a version tag and an editor's manual dispatch. Author content reaches them only after it has merged.
 - [`.github/actions/engine/action.yml`](src:templates/paper/.github/actions/engine/action.yml) is the composite action every workflow calls, and [`pins.yml`](src:templates/paper/.github/actions/engine/pins.yml) beside it, which names the engine and journal repositories for the action and for local `oak`.
+- The build, check and publishing workflows open with a job, holding no secret, that runs [`oak papers`](src:src/papers.ts) to choose the papers the run works on: `papers`, or `paper` for the one paper a tag or a dispatch input names. The later jobs read its outputs. In a paper repository that is the paper at `.`; the co-located case is [below](#design-paper-ci-colocated).
 - [`CODEOWNERS`](src:templates/paper/CODEOWNERS), and the optional `paper-environment.yml`, a conda environment the action installs before the engine runs, in the jobs that build.
 
 (design-paper-ci-codeowners)=
@@ -48,11 +49,11 @@ The author changes the content and `myst.yml`, including the engine version, wit
 
 (r92)=
 
-[`CODEOWNERS`](src:templates/paper/CODEOWNERS#L3-L7) tells GitHub who must review a change to the files it names. It only blocks a merge behind a branch rule that requires a code owner's review, and the pull request's workflows still run before anyone reviews it. `oak bootstrap` creates that rule as `protect-main` ([code](src:src/bootstrap.ts@protectMainBody)). Our CODEOWNERS names:
+[`CODEOWNERS`](src:templates/paper/CODEOWNERS#L3-L8) tells GitHub who must review a change to the files it names. It only blocks a merge behind a branch rule that requires a code owner's review, and the pull request's workflows still run before anyone reviews it. `oak bootstrap` creates that rule as `protect-main` ([code](src:src/bootstrap.ts@protectMainBody)). Our CODEOWNERS names:
 
 - `.github/`, so an editor approves any change to the launchers or to `pins.yml`, which could otherwise name a different engine repository, or a journal repository whose MyST plugins run at build time.
 - `CODEOWNERS` itself, so a pull request cannot remove the gate in the same change.
-- `paper-environment.yml`. Installing a conda package runs its install scripts, so the file decides code that runs in every build. The action installs it only in jobs that hold no secret, as [below](#r207).
+- `paper-environment.yml`, and `papers/<id>/paper-environment.yml` in a [co-located](#design-paper-ci-colocated) repository. Installing a conda package runs its install scripts, so the file decides code that runs in every build. The action installs it only in jobs that hold no secret, as [below](#r207).
 - `node_modules/` and `.engine/`. The engine runs from `.engine/` in the paper checkout, so Node looks up any package the bundle does not contain in those two folders, including in the jobs that hold a token.
 
 (design-paper-ci-upgrade)=
@@ -78,13 +79,13 @@ So each flow that needs a token is two workflows, as the figure shows: `build-pa
 
 (r13)=
 
-Permissions are granted per job, so the job that builds author content never holds a write scope. In `build-paper.yml` the workflow default is [`contents: read`](src:templates/paper/.github/workflows/build-paper.yml#L12-L13), and [`pages: write` and `id-token: write`](src:templates/paper/.github/workflows/build-paper.yml#L41-L46) sit on the push-only `deploy-pages` job. Granted at workflow level, they would be held by the `build` job too, which on a push to `main` runs whatever content was just merged, and a plugin in that content could deploy its own site over the paper's.
+Permissions are granted per job, so the job that builds author content never holds a write scope. In `build-paper.yml` the workflow default is [`contents: read`](<src:templates/paper/.github/workflows/build-paper.yml@"permissions:">), and [`pages: write` and `id-token: write`](<src:templates/paper/.github/workflows/build-paper.yml@"set on this job only">) sit on the push-only `deploy-pages` job. Granted at workflow level, they would be held by the `build` job too, which on a push to `main` runs whatever content was just merged, and a plugin in that content could deploy its own site over the paper's.
 
 A branch pull request goes through the same two stages. A check then behaves the same whoever opened the pull request.
 
 (r207)=
 
-Branches cannot reach the tokens at all. A repository secret is readable by every workflow on every branch, and an author with push access can push a branch carrying a workflow of their own, so `oak bootstrap` stores every secret in a GitHub environment instead. The Cloudflare secrets live on `preview` and the Zenodo tokens on `zenodo-prepare`, both admitting only `main`, and on `zenodo-publish`, which admits only `v*` tags; only editors can push one. Each job that reads a secret declares its environment, and a job on any other ref is refused before it starts. Re-running `oak bootstrap` with the values sets them on the environments and deletes the repository-level copies of those secrets.
+Branches cannot reach the tokens at all. A repository secret is readable by every workflow on every branch, and an author with push access can push a branch carrying a workflow of their own, so `oak bootstrap` stores every secret in a GitHub environment instead. The Cloudflare secrets live on `preview` and the Zenodo tokens on `zenodo-prepare`, both admitting only `main`, and on `zenodo-publish`, which admits only version tags (`v*`, and `*/v*` for a [co-located](#design-paper-ci-colocated) paper); only editors can push a tag. Each job that reads a secret declares its environment, and a job on any other ref is refused before it starts. Re-running `oak bootstrap` with the values sets them on the environments and deletes the repository-level copies of those secrets.
 
 Inside those jobs the paper's code never runs. `deposit-version.yml` builds in a job with no secrets and hands the output to the deposit job, whose `oak release deposit` deposits it as it is. The action installs `paper-environment.yml` only when a job asks, and only the build jobs ask. And the engine runs `wrangler` from an empty directory, so a `.npmrc` or `node_modules` in the paper cannot choose which wrangler receives the Cloudflare token.
 
@@ -104,7 +105,7 @@ Two `oak` versions take part in [`oak release`](#release) from the terminal. The
 
 (r91)=
 
-Stage 2 runs in the base context, but everything in the artifact is under the pull request's control: the author's content runs in the job that writes it, and on a pull request GitHub runs the pull request's own copy of the Stage 1 workflow file. So Stage 2 takes every value it can from its own `workflow_run` event, which GitHub populates. For example, `post-checks.yml` [posts the check run](src:templates/paper/.github/workflows/post-checks.yml#L40-L50) on the commit in `workflow_run.head_sha`. A Stage 2 that took the commit from the artifact would put a green check on whichever commit the fork named.
+Stage 2 runs in the base context, but everything in the artifact is under the pull request's control: the author's content runs in the job that writes it, and on a pull request GitHub runs the pull request's own copy of the Stage 1 workflow file. So Stage 2 takes every value it can from its own `workflow_run` event, which GitHub populates. For example, `post-checks.yml` [posts the check run](<src:templates/paper/.github/workflows/post-checks.yml@"--sha">) on the commit in `workflow_run.head_sha`. A Stage 2 that took the commit from the artifact would put a green check on whichever commit the fork named.
 
 (r136)=
 
@@ -126,7 +127,7 @@ The artifact's files are untrusted in the same way its values are. A paper previ
 
 ### Which engine code runs
 
-The composite action [checks the engine out](src:templates/paper/.github/actions/engine/action.yml#L70-L74) from two settings:
+The composite action [checks the engine out](<src:templates/paper/.github/actions/engine/action.yml@"path: .engine">) from two settings:
 
 - `pins.yml` names the engine repository (gated, see [Who can change what](#design-paper-ci-codeowners)).
 - The paper's own `myst.yml` names the version, under `project.options.oaktree-sapling.version`. It is ungated, so an author can move their paper to a newer engine in an ordinary pull request.
@@ -163,6 +164,24 @@ Before any git call, oak checks that the repository is `owner/name` written with
 
 (design-paper-ci-use-running)=
 `OAK_USE_RUNNING=1` makes oak run itself and never fetch the pinned version. Testing an engine change against a paper needs it: a checkout of the engine reports its `package.json` version with `-unreleased+<commit>` added, which matches no pin. `ci/run.sh` sets it, because the engine action has already checked out the pinned version, and oak sets it when it runs a fetched version, so that one runs itself. Child processes inherit it, so it reaches every oak started from there.
+
+(design-paper-ci-colocated)=
+
+### Several papers in one repository
+
+A co-located repository holds the journal's settings, its website and its papers, each paper in `papers/<id>/`, the folder named by its `project.id`. It has the same launchers as a paper repository; a paper repository is the case with one paper, at `.`. `oak papers` lists the papers, and every workflow passes a paper's folder to the engine action as `paper-dir`. The action refuses any `paper-dir` other than `.` or `papers/<id>` before oak runs, since it becomes a path to the paper's environment file.
+
+Whether a repository is co-located is read from its `pins.yml`, which editors gate. A co-located repository's `pins.yml` names the repository itself as the journal (`journal_repo: .`) and must set `engine_version`. A paper repository's names another journal repository, or none, which leaves its journal unknown. A `papers/` folder an author adds to a paper repository changes nothing. `oak papers` refuses a folder in `papers/` that holds a `myst.yml` and is not named by a paper id, so a paper that could be neither built nor checked stops the run.
+
+Each paper is built and checked in a job of its own, at the engine version its own `myst.yml` pins, and installs its own `papers/<id>/paper-environment.yml`, which `CODEOWNERS` gates as it gates the root one. So one paper's plugins and environment never run in another paper's job. On a push to `main` the papers `registry/papers.yml` lists are built; papers the registry does not list are drafts and are not built. The `assemble` job then builds the journal website and copies each paper's build to `/<id>/`, which `ci/run.sh` passes to `oak build` as the base URL. It runs no paper code, and only `deploy-pages` holds the Pages permissions, as in a paper repository.
+
+Every job with no paper of its own (`paper-dir: .`), such as `papers`, `assemble` and both Stage 2 workflows, runs the engine version `engine_version` in `pins.yml` names. Stage 2 cannot take the version from the paper it posts for: a submission's paper folder is not on `main` yet. `pins.yml` is gated, the version is held to the same release-tag rule and `min_engine_version` as a paper's, and `oak upgrade` moves it together with the papers.
+
+Authors work from forks and have no write access, and only editors merge. A pull request from a fork changes files in one `papers/<id>/` folder and nowhere else: [`forkPaper`](src:src/projects.ts) checks this in `post-checks`, on the changed files GitHub's API lists for the commit the `workflow_run` event names, and the Journal checks fail unless the report the artifact carries is that paper's. A pull request from a branch of the repository comes from an editor, since only editors can push one, and may change several papers or the settings; its checks cover every paper it changes, and every paper when it changes anything outside `papers/`.
+
+The one-paper rule keeps a fork from changing the settings or the launchers, and nothing in it keeps one author's pull request away from another author's paper: a fork that changes only someone else's folder passes. What protects a paper from another paper's authors is the editor's review of every pull request before it merges. The checks comment names the paper each pull request changes, so the editor can see whose paper it is.
+
+A version tag names the paper, `<id>/vX.Y.Z`, and `deposit-version.yml` builds and deposits `papers/<id>`. The tag ruleset covers every tag, so only editors create one, and `zenodo-publish` admits `v*` and `*/v*`. In these patterns, as in the `deposit-version.yml` trigger, `*` stops at `/`.
 
 (design-paper-ci-limits)=
 
@@ -214,7 +233,7 @@ The artifact is an interface between two versions of the launchers. Stage 1 runs
 
 (design-paper-ci-min-engine)=
 
-A launcher change that needs a verb or an output an older engine lacks raises `min_engine_version` in [`pins.yml`](src:templates/paper/.github/actions/engine/pins.yml#L9-L10) to the release that adds it, so the [`ref` step](#design-paper-ci-engine-ref) refuses an engine that would skip it.
+A launcher change that needs a verb or an output an older engine lacks raises `min_engine_version` in [`pins.yml`](<src:templates/paper/.github/actions/engine/pins.yml@"min_engine_version:">) to the release that adds it, so the [`ref` step](#design-paper-ci-engine-ref) refuses an engine that would skip it.
 
 (design-paper-ci-concurrency)=
 
@@ -222,11 +241,11 @@ A launcher change that needs a verb or an output an older engine lacks raises `m
 
 (r15)=
 
-Runs are grouped so a new push supersedes an in-flight run for the same pull request, and the group key includes the head repository as well as the branch, in [`build-paper.yml`](src:templates/paper/.github/workflows/build-paper.yml#L15-L18) and [`check-paper.yml`](src:templates/paper/.github/workflows/check-paper.yml#L15-L18). Two forks both working on a branch called `main` would otherwise share a group and cancel each other. A cancelled Stage 1 uploads no artifact, so Stage 2 never fires, and the required check never arrives, so the pull request cannot merge until someone pushes again.
+Runs are grouped so a new push supersedes an in-flight run for the same pull request, and the group key includes the head repository as well as the branch, in [`build-paper.yml`](<src:templates/paper/.github/workflows/build-paper.yml@"group:">) and [`check-paper.yml`](<src:templates/paper/.github/workflows/check-paper.yml@"group:">). Two forks both working on a branch called `main` would otherwise share a group and cancel each other. A cancelled Stage 1 uploads no artifact, so Stage 2 never fires, and the required check never arrives, so the pull request cannot merge until someone pushes again.
 
 (r94)=
 
-Both stages key on the head repository, and the pull request group in each Stage 1 workflow is distinct from its push-to-`main` group. A fork opening a pull request from a branch called `main` would otherwise land in the same group as the repository's own `main` and cancel an in-flight Pages deploy. The Stage 2 keys are in [`deploy-preview.yml`](src:templates/paper/.github/workflows/deploy-preview.yml#L16-L19) and [`post-checks.yml`](src:templates/paper/.github/workflows/post-checks.yml#L18-L21).
+Both stages key on the head repository, and the pull request group in each Stage 1 workflow is distinct from its push-to-`main` group. A fork opening a pull request from a branch called `main` would otherwise land in the same group as the repository's own `main` and cancel an in-flight Pages deploy. The Stage 2 keys are in [`deploy-preview.yml`](<src:templates/paper/.github/workflows/deploy-preview.yml@"group:">) and [`post-checks.yml`](<src:templates/paper/.github/workflows/post-checks.yml@"group:">).
 
 (design-paper-ci-secrets-in-if)=
 

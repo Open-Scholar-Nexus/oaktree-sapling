@@ -65,14 +65,17 @@ It prints a line, starting with the time, for each step it completes, and ends w
 
 The subcommands run with the `oak` version the paper pins ([which version runs](#pins-local)), read at the commit each works on: `main` for `reserve-doi`, the tag for `deposit`.
 
-Before changing anything, it lists what it will do and asks to confirm; `--yes` skips the question, except when the paper uses a different engine repository ([which version runs](#pins-local)). `--sandbox` reserves the DOI on the Zenodo sandbox. Without a version, it lists the repository's `v*` tags.
+In a [co-located journal](../guide/co-located.md#co-located-publish), the version names its paper, `oak release <paper id>/vX.Y.Z`, and every step is that paper's: its `papers/<paper id>/myst.yml`, its own DOI pull request, the tag `<paper id>/vX.Y.Z`, and the deposit of that folder.
+
+Before changing anything, it lists what it will do and asks to confirm; `--yes` skips the question, except when the paper uses a different engine repository ([which version runs](#pins-local)). `--sandbox` reserves the DOI on the Zenodo sandbox. Without a version, it lists the repository's version tags.
 
 It refuses, before changing anything:
 
 - a word after `release` that is neither a version nor a subcommand;
 - `--tag` and `--use-local-build`, which belong to `oak release deposit`;
-- a repository whose `myst.yml` names no oak version;
-- a pinned version older than `DEPOSIT_MIN_VERSION`, the first whose subcommands never build beside the Zenodo token ([why](#design-paper-ci-deposit-min));
+- `vX.Y.Z` on a co-located journal, and `<paper id>/vX.Y.Z` on a paper repository;
+- a repository whose `myst.yml`, or the named paper's, names no oak version;
+- a pinned version older than `DEPOSIT_MIN_VERSION`, the first whose subcommands never build beside the Zenodo token ([why](#design-paper-ci-deposit-min)), or than the `min_engine_version` in `.github/actions/engine/pins.yml`, which the workflows need;
 - `--sandbox` once a production DOI is committed;
 - an existing tag whose `myst.yml` holds no DOI;
 - a new tag when the newest version on Zenodo is published with another version, since **New version** was not clicked;
@@ -105,6 +108,9 @@ In GitHub Actions, it deposits the build under `_build/`, which the **Deposit ve
 
 Outside GitHub Actions the clone has to be at the tag, with no changes to tracked files. By default the build is the `release-build` artifact of the tag's **Deposit version** run, downloaded with gh once its build job has passed, whatever the deposit job did. The run has to be a run of `.github/workflows/deposit-version.yml` that the push of that tag started, at the tag's commit, and the artifact has to hold `myst.oak.yml`, `_build/exports` and `_build/site/content`. The provenance records when its build job finished as the build time. It refuses while the build job runs, when it failed, and when the run has no build job or its artifact lacks one of those paths.
 
+`--tag <tag>`
+: The version tag the deposit is for: `vX.Y.Z`, or `<paper id>/vX.Y.Z` for the paper in `papers/<paper id>/` of a [co-located journal](../guide/co-located.md). A tag naming a folder that holds no paper is refused.
+
 (use-local-build)=
 `--use-local-build`
 : Not recommended: use it only when the **Deposit version** run cannot give you a build. Outside GitHub Actions, it deposits the build under `_build/` in place of that run's, after a warning. oak cannot check that this build was made from the tag: it only refuses one whose PDF or pages are older than the tag's commit, as a build left from an earlier tag is. The build is the editor's own, made at the tag with `oak build` in a shell without the Zenodo token, since it runs the paper's code with the editor's permissions: the plugins `myst.yml` lists ([read them first](../guide/checks.md#validate-runs-paper-code)), and any environment `paper-environment.yml` describes, which the editor sets up. The provenance records this computer's platform and the typst on `PATH`; the engine's typst is built for Linux on x86_64, so elsewhere the PDF comes from the system typst and can differ from the CI build.
@@ -127,12 +133,13 @@ It also shows the size of `~/.cache/oak` (`$XDG_CACHE_HOME/oak` when set), which
 (bootstrap)=
 ### bootstrap
 
-`oak bootstrap journal` creates a journal repository, and `oak bootstrap paper` a paper repository, on GitHub, from the templates in `oak`. Both print a plan, with every default they took, and ask before changing anything. Running the same command again finishes a run that stopped partway. Files already on `main` are left as they are. How to use them: [Create a journal](../start/setup.md) and [Add a paper](../guide/add-paper.md).
+`oak bootstrap journal` creates a journal repository, and `oak bootstrap paper` a paper repository, on GitHub, from the templates in `oak`. `oak bootstrap journal --co-located` creates a [co-located journal](../guide/co-located.md): the journal's settings, its website, an empty `papers/` folder and the paper workflows, in one repository. Both print a plan, with every default they took, and ask before changing anything. Running the same command again finishes a run that stopped partway. Files already on `main` are left as they are. How to use them: [Create a journal](../start/setup.md) and [Add a paper](../guide/add-paper.md).
 
 Each template file is copied, except for these values, which bootstrap fills in:
 
 - In a paper repository: the engine version and the edition, under `project.options.oaktree-sapling` in `myst.yml`; the repository's address, as `project.github`; the engine repository and the journal repository, in `.github/actions/engine/pins.yml`; the owner, in `CODEOWNERS`.
 - In a journal repository: the journal's name, in `journal.yml`, the brand's `logo_text`, the edition's `venue`, the website's title and the heading of `pages/index.md`; the website's address, as the brand's `logo_url`; the edition, as the name of the edition file.
+- In a co-located journal: the values of a journal repository, and in `pins.yml` the engine repository, `journal_repo: .` and the engine version as `engine_version`.
 - In the journal website: the address of the `paper-cards` plugin at the engine version, the theme, and the range of MyST versions in `package.json`. See [the journal website's versions](../guide/pins.md#site-pins).
 
 Bootstrap also sets up the repository on GitHub: [what it sets up](../guide/add-paper.md#what-it-sets-up).
@@ -157,12 +164,12 @@ Bootstrap also sets up the repository on GitHub: [what it sets up](../guide/add-
 `--cf-token <token>`, `--cf-account <id>`
 : Set as the secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` on the `preview` environment.
 
-Without a token flag, bootstrap uses the environment variable with the secret's name, if set. Only `oak bootstrap paper` takes the token flags: `oak bootstrap journal` refuses them, since the journal repository publishes nothing. Once an environment holds a secret, bootstrap deletes a repository-level copy of it, which every branch could read. At the end, it lists the secrets still missing. What each token allows: [Secrets](secrets.md).
+Without a token flag, bootstrap uses the environment variable with the secret's name, if set. `oak bootstrap paper` and `oak bootstrap journal --co-located` take the token flags. `oak bootstrap journal` without `--co-located` refuses them, since that repository publishes nothing. Once an environment holds a secret, bootstrap deletes a repository-level copy of it, which every branch could read. At the end, it lists the secrets still missing. What each token allows: [Secrets](secrets.md).
 
 (upgrade)=
 ### upgrade
 
-`oak upgrade` moves a paper repository to a newer `oak` release, through a pull request. A paper keeps the version its `myst.yml` names until an editor runs `oak upgrade`. A change to the journal repository needs no upgrade: each paper reads it on its next run ([when](../guide/journal-settings.md)).
+`oak upgrade` moves a paper repository to a newer `oak` release, through a pull request. In a co-located journal it moves every paper's `myst.yml` and the `engine_version` in `pins.yml` together. A paper keeps the version its `myst.yml` names until an editor runs `oak upgrade`. A change to the journal repository needs no upgrade: each paper reads it on its next run ([when](../guide/journal-settings.md)).
 
 It fills in the release's `.github/` folder and `CODEOWNERS` with the repository's own values from `pins.yml` and `CODEOWNERS`, and compares them with the repository's files. It then opens a pull request that sets the version in `myst.yml` and replaces each file that differs. Code owners added to `CODEOWNERS` are kept. A file under `.github/` that the release no longer has is listed, and left in place.
 
@@ -173,6 +180,11 @@ The pull request goes through the Journal checks and an editor's review like any
 
 `--files-only`
 : Replaces the files and leaves the version in `myst.yml`.
+
+(add-paper-cli)=
+### add-paper
+
+`oak add-paper --repo <owner/journal> --id <paper id> [--edition <id>] [--yes]` submits a paper to a [co-located journal](../guide/co-located.md#co-located-submit): it forks the repository with your `gh` login, commits the starter manuscript as `papers/<paper id>/` on a branch of the fork, and opens the pull request. `--edition` defaults to the year in the id.
 
 ## Commands the workflows run
 
@@ -199,6 +211,28 @@ It reads the pull request's number from a file the build left in the site, and r
 With `preview.provider: cloudflare` and `preview.cf_project_name` in [`journal.yml`](files.md#file-journal-yml), and both Cloudflare secrets set, it deploys the site to Cloudflare Pages and comments the preview's address on the pull request. Otherwise the comment links the build's artifact and says why. A failed Cloudflare deploy or an unreadable `journal.yml` also gives the artifact link. The comment is updated on every push.
 
 It fails when the pull request's head is another commit (or when gh cannot post the comment).
+
+(papers-cli)=
+### papers
+
+`oak papers` prints the papers a workflow run works on, as JSON with `colocated`, `papers` (each paper's folder and the id its artifacts are named by) and `count`. The build, check and publishing workflows run it in their first job. In a paper repository it is always the paper at `.`. In a co-located journal:
+
+`--for build`
+: On a pull request, the papers it changes. On a push, the papers `registry/papers.yml` lists.
+
+`--for check`
+: On a pull request, the papers it changes, or every paper when it changes anything outside `papers/`. On a push, every paper.
+
+`--tag <tag>`
+: The paper a version tag `<paper id>/vX.Y.Z` names, also as `paper_dir`. A tag naming no paper is refused.
+
+`--id <paper id>`, `--id-env`
+: The paper in `papers/<paper id>`, also as `paper_dir`; `--id-env` reads the id from the environment variable `PAPER_ID`. An unknown id is refused.
+
+(assemble)=
+### assemble
+
+`oak assemble --builds <dir>` builds a co-located journal's website in the current directory and puts each paper `registry/papers.yml` lists at `/<paper id>/`, from its build in `<dir>/paper-build-<paper id>/`. The **Build paper** workflow runs it on every push to `main`.
 
 (conformance)=
 ### conformance

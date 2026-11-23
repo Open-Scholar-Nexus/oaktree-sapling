@@ -12,6 +12,7 @@ import { readDoc, readEngineCoordinateRaw } from './yaml-io.js';
 import * as msg from './messages.js';
 import { UserError } from './messages.js';
 import { compareEngineVersions, ENGINE_VERSION, GITHUB_REPO } from './schema.js';
+import { findRepoRoot, PINS_REL } from './projects.js';
 
 export type PaperVerb = 'build' | 'validate' | 'start' | 'release';
 export type HandoffVerb = PaperVerb | 'bootstrap';
@@ -23,8 +24,6 @@ export type PinSource = { kind: 'paper'; mystPath: string; pinsPath?: string } |
  *  development to run this oak. */
 export const USE_RUNNING_ENV = 'OAK_USE_RUNNING';
 
-const PINS_FILE = join('.github', 'actions', 'engine', 'pins.yml');
-
 export interface PinnedEngine {
   engineRepo: string;
   version: string;
@@ -34,19 +33,11 @@ export interface PinnedEngine {
  *  (co-located) reads the repo's. Outside a git repo, only `paperRoot`'s own. */
 function findPins(paperRoot: string): string | undefined {
   const start = resolve(paperRoot);
-  const top = repoRoot(start) ?? start;
+  const top = findRepoRoot(start) ?? start;
   for (let dir = start; ; dir = dirname(dir)) {
-    const pins = join(dir, PINS_FILE);
+    const pins = join(dir, PINS_REL);
     if (existsSync(pins)) return pins;
     if (dir === top) return undefined;
-  }
-}
-
-/** The nearest directory from `dir` up that holds `.git`. */
-function repoRoot(dir: string): string | undefined {
-  for (; ; dir = dirname(dir)) {
-    if (existsSync(join(dir, '.git'))) return dir;
-    if (dirname(dir) === dir) return undefined;
   }
 }
 
