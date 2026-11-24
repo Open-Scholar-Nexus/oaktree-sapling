@@ -182,11 +182,9 @@ const SUCCESS_CHECK: CheckRunRef[] = [{ name: 'Journal checks', ...PASSING_RUN }
 const SUCCESS_STATUS: CommitStatusRef[] = [{ context: 'Journal checks', state: 'success' }];
 const PREVIEW_COMMENT =
   '<!-- oak-sticky: oak-preview -->\n**Preview deployed** 🚀\n\nhttps://cert-x.oaktree-sapling-test.pages.dev\n';
-
-// The checks comment on the upgrade pull request (#7), which changes `.github/`.
-const UPGRADE_COMMENT = checksComment({ checkRun: PASSING_RUN }, [
-  '.github/workflows/build-paper.yml',
-]);
+// A preview comment that fell back to an artifact link, so it has no URL to check.
+const ARTIFACT_COMMENT =
+  '<!-- oak-sticky: oak-preview -->\n**Preview build ready** 📦\nartifact link, no live preview';
 
 // What post-checks posts on the failing-checks pull request (#41, head 'fail-head-sha').
 const FAILING_RUN = toCheckRun(
@@ -215,7 +213,7 @@ const defaultStatuses = (sha: string): CommitStatusRef[] =>
  *  the failing-checks one (#41). */
 const defaultComments = (pr: number): string[] =>
   ({
-    7: [UPGRADE_COMMENT],
+    7: [PASSING_COMMENT],
     21: [PREVIEW_COMMENT],
     31: [PREVIEW_COMMENT, PASSING_COMMENT],
     41: [FAILING_COMMENT],
@@ -424,12 +422,7 @@ describe('cmdConformanceRun', () => {
   it('fails at the fork preview when it fell back to an artifact link', async () => {
     // Only the fork pull request (#31) falls back; the same-repo preview (#21) passes first.
     const gh = fakeCertGh({
-      comments: (pr) =>
-        pr === 31
-          ? [
-              '<!-- oak-sticky: oak-preview -->\n**Preview build ready** 📦\nartifact link, no live preview',
-            ]
-          : defaultComments(pr),
+      comments: (pr) => (pr === 31 ? [ARTIFACT_COMMENT] : defaultComments(pr)),
     });
     const out = await cmdConformanceRun(
       { repo: REPO, tag: TAG, runId: '42' },
@@ -560,12 +553,7 @@ describe('cmdConformanceRun', () => {
 
   it('fails at the preview when the comment fell back to an artifact link (no pages.dev URL)', async () => {
     const gh = fakeCertGh({
-      comments: (pr) =>
-        pr === 21
-          ? [
-              '<!-- oak-sticky: oak-preview -->\n**Preview build ready** 📦\nartifact link, no live preview',
-            ]
-          : defaultComments(pr),
+      comments: (pr) => (pr === 21 ? [ARTIFACT_COMMENT] : defaultComments(pr)),
     });
     const out = await cmdConformanceRun({ repo: REPO, tag: TAG }, runDeps(gh));
     expect(out.exitCode).toBe(1);
@@ -776,14 +764,12 @@ describe('cmdConformanceRun', () => {
     expect(gh.merged).toEqual([]);
   });
 
-  it('fails at the push to main when the upgrade checks comment carries no .github/ warning', async () => {
-    const gh = fakeCertGh({
-      comments: (pr) => (pr === 7 ? [PASSING_COMMENT] : defaultComments(pr)),
-    });
+  it('fails at the push to main when post-checks posts no checks comment on the upgrade pull request', async () => {
+    const gh = fakeCertGh({ comments: (pr) => (pr === 7 ? [] : defaultComments(pr)) });
     const out = await cmdConformanceRun({ repo: REPO, tag: TAG }, runDeps(gh));
     expect(out.exitCode).toBe(1);
     expect(out.result).toMatchObject({ status: 'failed', path: 'push-main' });
-    expect(String(out.result.failure)).toContain('checks comment on PR #7');
+    expect(String(out.result.failure)).toContain('PR #7 checks comment');
   });
 
   it('fails at the deposit when oak release deposit posted no commit comment', async () => {

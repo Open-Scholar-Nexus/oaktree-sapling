@@ -1225,7 +1225,7 @@ function openOneFilePr(
   branch: string,
   file: string,
   edit: (text: string) => string,
-  text: { commit: string; title: string; body: string },
+  wording: { commit: string; title: string; body: string },
 ): { number: number; headSha: string } {
   const mainSha = gh(['api', `repos/${repo}/git/ref/heads/main`, '--jq', '.object.sha']);
   gh([
@@ -1254,7 +1254,7 @@ function openOneFilePr(
     'PUT',
     `repos/${repo}/contents/${file}`,
     '-f',
-    `message=${text.commit}`,
+    `message=${wording.commit}`,
     '-f',
     `content=${Buffer.from(updated, 'utf8').toString('base64')}`,
     '-f',
@@ -1272,9 +1272,9 @@ function openOneFilePr(
     '--head',
     branch,
     '--title',
-    text.title,
+    wording.title,
     '--body',
-    text.body,
+    wording.body,
   ]);
   const number = Number(url.split('/').pop());
   const headSha = gh(['api', `repos/${repo}/git/ref/heads/${branch}`, '--jq', '.object.sha']);
@@ -1420,8 +1420,8 @@ export const realConformanceGh: ConformanceGh = {
         return String(doc);
       },
       {
-        commit: msg.conformance.failingChecksCommit(marker),
-        title: msg.conformance.failingChecksPrTitle(marker),
+        commit: msg.conformance.failingChecks(marker),
+        title: msg.conformance.failingChecks(marker),
         body: msg.conformance.failingChecksPrBody,
       },
     );

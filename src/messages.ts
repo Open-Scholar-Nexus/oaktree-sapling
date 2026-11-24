@@ -1650,8 +1650,8 @@ export const conformance = {
   forkPreviewPrTitle: (marker: string): string => `conformance fork preview ${marker}`,
   forkPreviewPrBody:
     'Opened and closed by `oak conformance run` to test the preview of a pull request from a fork.',
-  failingChecksCommit: (marker: string): string => `conformance failing checks ${marker}`,
-  failingChecksPrTitle: (marker: string): string => `conformance failing checks ${marker}`,
+  /** The commit message and the title of the failing-checks pull request. */
+  failingChecks: (marker: string): string => `conformance failing checks ${marker}`,
   failingChecksPrBody:
     'Opened and closed by `oak conformance run` to test journal checks that fail.',
 };

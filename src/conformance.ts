@@ -15,7 +15,7 @@
 import { STICKY_PREVIEW } from './preview.js';
 import { STICKY_CHECKS } from './checks.js';
 import type { Outcome } from './result.js';
-import { pr as prMsg, stickyMarker, validate as validateMsg, workflow } from './messages.js';
+import * as msg from './messages.js';
 import { JOURNAL_BUNDLE_NAME, RESERVED_BUNDLE_NAMES } from './zenodo.js';
 import { UPGRADE_BRANCH_PREFIX } from './upgrade.js';
 import { pagesUrl, parseZenodoDoi } from './schema.js';
@@ -315,15 +315,15 @@ async function assertServes200(
   );
 }
 
+/** The conclusion a check is expected to reach. */
+type Conclusion = 'success' | 'failure';
+
 /** null while pending; the ref when it concluded `want`; throws when it concluded otherwise. */
-function checkOutcome(
-  runs: CheckRunRef[],
-  name: string,
-  want: 'success' | 'failure',
-): CheckRunRef | null {
+function checkOutcome(runs: CheckRunRef[], name: string, want: Conclusion): CheckRunRef | null {
   const cr = runs.find((c) => c.name === name);
   if (!cr || cr.conclusion === null) return null;
-  if (cr.conclusion !== want) throw new Error(`${name} Check Run concluded ${cr.conclusion}`);
+  if (cr.conclusion !== want)
+    throw new Error(`${name} Check Run concluded ${cr.conclusion}, expected ${want}`);
   return cr;
 }
 
@@ -331,7 +331,7 @@ function checkOutcome(
 function statusOutcome(
   statuses: CommitStatusRef[],
   context: string,
-  want: 'success' | 'failure',
+  want: Conclusion,
 ): CommitStatusRef | null {
   const s = statuses.find((x) => x.context === context);
   if (!s || s.state === 'pending') return null;
@@ -339,78 +339,32 @@ function statusOutcome(
   return s;
 }
 
-/** The checks comment's marker, built from checks.ts's `STICKY_CHECKS`. */
-const CHECKS_STICKY_MARK = stickyMarker(STICKY_CHECKS);
+/** The checks comment's marker, built from {@link STICKY_CHECKS}. */
+const CHECKS_STICKY_MARK = msg.stickyMarker(STICKY_CHECKS);
 
-/**
- * Marks where a message's variable text starts. Each `*_LEAD` below calls a message with
- * `VARIES` in place of every variable part, and `lead` keeps only the text before it, which every
- * posted copy shares. With '' in its place, a message's text after a variable part would stay in
- * and the match would fail. The tests in test/conformance.test.ts build the posted text with
- * real values, so they catch that.
- */
+/** Stands in for each variable part of a message. No message contains it, so {@link lead} cuts
+ *  at the first one; '' would keep the text after a variable part, and nothing posted would match. */
 const VARIES = '\0';
 
-/** The text of `message` before its first `VARIES`. */
-const lead = (message: string): string => message.split(VARIES)[0]!;
-
-/** The warning post-checks adds for a pull request that changes `.github/`. */
-const GATED_WARNING_LEAD = lead(prMsg.gatedWarning(VARIES, VARIES));
+/** The text of `message` before its first {@link VARIES}, which every posted copy shares. */
+function lead(message: string): string {
+  const head = message.split(VARIES)[0]!;
+  // An empty head would match any text, so the check could never fail.
+  if (!head)
+    throw new Error(`message has no fixed text before its first variable part: ${message}`);
+  return head;
+}
 
 /** The note `oak validate` adds to the Check Run summary when compose fails. */
-const COMPOSE_NOTE_LEAD = lead(validateMsg.noteComposeFailed(VARIES));
+const COMPOSE_NOTE_LEAD = lead(msg.validate.noteComposeFailed(VARIES));
 
-/** The row for `id-shape` in the checks comment's table. */
-const ID_SHAPE_ROW_LEAD = lead(prMsg.checkTableRow('id-shape', VARIES, false, VARIES));
+/** The `id-shape` row in the checks comment. The table lists oak's own checks only when they
+ *  fail, so the row means `id-shape` failed. */
+const ID_SHAPE_ROW_LEAD = lead(msg.pr.checkTableRow('id-shape', VARIES, false, VARIES));
 
 /** The commit comment `oak release deposit` posts for a draft. deposit-version.yml does not pass
  *  `--publish-without-review`, so the deposit is a draft. */
-const DRAFT_COMMENT_LEAD = lead(workflow.releaseCommitComment(VARIES, false));
-
-/** What `journalChecksPosted` needs from the run. `settled(sha)` says every run on `sha` has
- *  finished. */
-interface PollCtx {
-  gh: ConformanceGh;
-  repo: string;
-  sleep(ms: number): Promise<void>;
-  log(msg: string): void;
-  settled(sha: string): () => boolean;
-}
-
-/**
- * Waits for what post-checks posts on `sha`: the Journal checks Check Run and its commit status,
- * both concluding `want`, and given `prNumber`, the checks comment.
- */
-async function journalChecksPosted(
-  ctx: PollCtx,
-  label: string,
-  sha: string,
-  want: 'success' | 'failure',
-  prNumber?: number,
-): Promise<{ checkRun: CheckRunRef; comment?: string }> {
-  const { gh, repo } = ctx;
-  const opts = { ...POLL, settled: ctx.settled(sha) };
-  const checkRun = await pollUntil(
-    `${label} Journal checks`,
-    () => checkOutcome(gh.checkRunsForCommit(repo, sha), 'Journal checks', want),
-    ctx,
-    opts,
-  );
-  await pollUntil(
-    `${label} Journal checks commit status`,
-    () => statusOutcome(gh.commitStatuses(repo, sha), 'Journal checks', want),
-    ctx,
-    opts,
-  );
-  if (prNumber === undefined) return { checkRun };
-  const comment = await pollUntil(
-    `${label} checks comment`,
-    () => gh.listIssueComments(repo, prNumber).find((b) => b.includes(CHECKS_STICKY_MARK)) ?? null,
-    ctx,
-    opts,
-  );
-  return { checkRun, comment };
-}
+const DRAFT_COMMENT_LEAD = lead(msg.workflow.releaseCommitComment(VARIES, false));
 
 /** null while running; the run (picked by `find`) when it succeeded; throws with its URL when it
  *  finished otherwise. `label` names the run in that error. */
@@ -433,7 +387,7 @@ export interface RunInput {
 }
 
 /** The preview comment's marker, built from preview.ts's `STICKY_PREVIEW`. */
-const PREVIEW_STICKY_MARK = stickyMarker(STICKY_PREVIEW);
+const PREVIEW_STICKY_MARK = msg.stickyMarker(STICKY_PREVIEW);
 
 /** The `*.pages.dev` URL in a preview comment, or null when the comment fell back to an
  *  artifact link, so there is no preview to check. */
@@ -458,7 +412,37 @@ export async function cmdConformanceRun(input: RunInput, deps: ConformanceDeps):
     const runs = gh.workflowRunsForCommit(repo, sha);
     return runs.length > 0 && runs.every((r) => r.status === 'completed');
   };
-  const ctx: PollCtx = { gh, repo, sleep, log, settled };
+  /** Waits for the Journal checks Check Run and commit status post-checks posts on `sha`, both
+   *  concluding `want`, and returns the Check Run. */
+  const waitForJournalChecks = async (
+    label: string,
+    sha: string,
+    want: Conclusion,
+  ): Promise<CheckRunRef> => {
+    const opts = { ...POLL, settled: settled(sha) };
+    const checkRun = await pollUntil(
+      `${label} Journal checks`,
+      () => checkOutcome(gh.checkRunsForCommit(repo, sha), 'Journal checks', want),
+      { sleep, log },
+      opts,
+    );
+    await pollUntil(
+      `${label} Journal checks commit status`,
+      () => statusOutcome(gh.commitStatuses(repo, sha), 'Journal checks', want),
+      { sleep, log },
+      opts,
+    );
+    return checkRun;
+  };
+  /** Waits for the checks comment post-checks posts on pull request `prNumber` (head `sha`). */
+  const waitForChecksComment = (label: string, prNumber: number, sha: string): Promise<string> =>
+    pollUntil(
+      `${label} checks comment`,
+      () =>
+        gh.listIssueComments(repo, prNumber).find((b) => b.includes(CHECKS_STICKY_MARK)) ?? null,
+      { sleep, log },
+      { ...POLL, settled: settled(sha) },
+    );
   let phase = 'install';
   // The paths reported on success; the fork phase adds its own when it passes.
   const paths: string[] = ['push-main', 'preview-same-repo', 'deposit', 'failing-checks'];
@@ -489,19 +473,10 @@ export async function cmdConformanceRun(input: RunInput, deps: ConformanceDeps):
     gh.labelPr(repo, prNumber, CONFORMANCE_LABEL);
     log(`upgrade PR #${prNumber}: ${up.prUrl}`);
 
-    // The required Journal checks on the pull request also test check-paper and post-checks. The
-    // upgrade changes `.github/`, so the comment carries the warning.
+    // The required Journal checks on the pull request also test check-paper and post-checks.
     const prSha = gh.prHeadSha(repo, prNumber);
-    const upgradeChecks = await journalChecksPosted(
-      ctx,
-      `PR #${prNumber}`,
-      prSha,
-      'success',
-      prNumber,
-    );
-    if (!upgradeChecks.comment?.includes(GATED_WARNING_LEAD)) {
-      throw new Error(`the checks comment on PR #${prNumber} carries no .github/ warning`);
-    }
+    await waitForJournalChecks(`PR #${prNumber}`, prSha, 'success');
+    await waitForChecksComment(`PR #${prNumber}`, prNumber, prSha);
 
     // The merge is the push to main under test.
     const mergeSha = gh.mergePr(repo, prNumber);
@@ -534,7 +509,7 @@ export async function cmdConformanceRun(input: RunInput, deps: ConformanceDeps):
     log(`Pages 200: ${siteUrl}`);
 
     // The Journal checks Check Run and commit status on main show post-checks ran.
-    await journalChecksPosted(ctx, '(push→main)', mergeSha, 'success');
+    await waitForJournalChecks('push→main', mergeSha, 'success');
 
     log(`push→main PASSED for ${tag}`);
 
@@ -652,17 +627,13 @@ export async function cmdConformanceRun(input: RunInput, deps: ConformanceDeps):
     const failPr = gh.openFailingChecksPr(repo, failBranch, runId, FAILING_ID, FAILING_EDITION);
     gh.labelPr(repo, failPr.number, CONFORMANCE_LABEL);
     log(`failing checks PR #${failPr.number} (${failBranch})`);
-    const failChecks = await journalChecksPosted(
-      ctx,
-      `PR #${failPr.number}`,
-      failPr.headSha,
-      'failure',
-      failPr.number,
-    );
-    if (!failChecks.comment?.includes(ID_SHAPE_ROW_LEAD)) {
-      throw new Error(`the checks comment on PR #${failPr.number} does not name id-shape`);
+    const failLabel = `PR #${failPr.number}`;
+    const failCheckRun = await waitForJournalChecks(failLabel, failPr.headSha, 'failure');
+    const failComment = await waitForChecksComment(failLabel, failPr.number, failPr.headSha);
+    if (!failComment.includes(ID_SHAPE_ROW_LEAD)) {
+      throw new Error(`the checks comment on PR #${failPr.number} reports no id-shape failure`);
     }
-    if (!failChecks.checkRun.summary?.includes(COMPOSE_NOTE_LEAD)) {
+    if (!failCheckRun.summary?.includes(COMPOSE_NOTE_LEAD)) {
       throw new Error(
         `the Journal checks summary on PR #${failPr.number} carries no compose-failure note`,
       );
@@ -725,13 +696,9 @@ export async function cmdConformanceRun(input: RunInput, deps: ConformanceDeps):
       log(`fork preview 200: ${forkPreviewUrl}`);
 
       // On a fork pull request, post-checks posts a report written by the fork's own code.
-      await journalChecksPosted(
-        ctx,
-        `fork PR #${forkPr.number}`,
-        forkPr.headSha,
-        'success',
-        forkPr.number,
-      );
+      const forkLabel = `fork PR #${forkPr.number}`;
+      await waitForJournalChecks(forkLabel, forkPr.headSha, 'success');
+      await waitForChecksComment(forkLabel, forkPr.number, forkPr.headSha);
 
       gh.closePr(repo, forkPr.number); // base repo (primary token)
       gh.deleteForkBranch(fork.repo, fork.token, forkBranch); // fork repo (fork token)
