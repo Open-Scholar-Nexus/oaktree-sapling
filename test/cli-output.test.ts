@@ -600,12 +600,6 @@ describe('a flag passed without a value is refused', () => {
     expect(r.code).toBe(0);
     expect(r.stdout).toContain('oak build');
   });
-
-  it('reads PORT as myst does, and names it when it is not a number', () => {
-    const r = oak(['build', '--paper', fixturePaper], { PORT: 'abc' });
-    expect(r.code).toBe(2);
-    expect(r.stderr).toContain("PORT needs a port number, not 'abc'");
-  });
 });
 
 describe('--repo takes owner/name', () => {

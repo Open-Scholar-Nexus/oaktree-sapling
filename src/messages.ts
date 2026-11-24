@@ -222,9 +222,8 @@ export const noExecute = (verb: string): string =>
   `oak ${verb} does not run notebooks. Run them yourself first and save their outputs; ` +
   `oak ${verb} then uses the saved outputs.`;
 
-/** `source` is the flag (`--port`) or the environment variable (`PORT`) the value came from. */
-export const needsPort = (source: string, got: string): string =>
-  `${source} needs a port number, not '${got}'.`;
+export const flagNeedsPort = (name: string, got: string): string =>
+  `--${name} needs a port number, not '${got}'.`;
 
 /** A YAML file the parser reports an error in (yaml-io.ts `parseYaml`). `why` is the parser's
  *  first line, which gives the line and column. */

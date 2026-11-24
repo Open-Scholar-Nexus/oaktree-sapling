@@ -269,24 +269,18 @@ function readProjectIdQuietly(paperRoot: string): string | null {
   }
 }
 
-/**
- * The app and content server ports, from `--port` and `--server-port` or, as `myst` reads them,
- * `PORT` and `SERVER_PORT`. Unset, myst picks free ones, which builds started together can race
- * for.
- */
+/** The app and content server ports. Unset, myst picks free ones, which builds started together
+ *  can race for. */
 function portsFrom(argv: string[]): { port?: number; serverPort?: number } {
-  const num = (name: string, env: string) => {
-    const fromFlag = flag(argv, name);
-    const raw = fromFlag ?? process.env[env];
-    if (raw === undefined || raw === '') return undefined;
+  const num = (name: string) => {
+    const raw = flag(argv, name);
+    if (raw === undefined) return undefined;
     const n = Number(raw);
-    if (!Number.isInteger(n) || n < 0) {
-      throw new UserError(msg.needsPort(fromFlag !== undefined ? `--${name}` : env, raw));
-    }
+    if (!Number.isInteger(n) || n < 0) throw new UserError(msg.flagNeedsPort(name, raw));
     return n;
   };
-  const port = num('port', 'PORT');
-  const serverPort = num('server-port', 'SERVER_PORT');
+  const port = num('port');
+  const serverPort = num('server-port');
   return {
     ...(port !== undefined ? { port } : {}),
     ...(serverPort !== undefined ? { serverPort } : {}),
