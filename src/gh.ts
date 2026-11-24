@@ -1220,7 +1220,7 @@ function matchingHeadRefs(out: string): string[] {
 /** Opens a pull request on `repo` from a new `branch` off main, whose one commit rewrites `file`
  *  with `edit`. Through the Contents API: no clone, so no git credentials needed in CI. Returns
  *  the pull request's number and head commit. */
-function openProbePr(
+function openOneFilePr(
   repo: string,
   branch: string,
   file: string,
@@ -1381,7 +1381,7 @@ export const realConformanceGh: ConformanceGh = {
       'api',
       `repos/${repo}/commits/${sha}/check-runs`,
       '--jq',
-      '[.check_runs[] | {name, conclusion, title: .output.title, summary: .output.summary}]',
+      '[.check_runs[] | {name, conclusion, summary: .output.summary}]',
     ]);
     return out ? (JSON.parse(out) as import('./conformance.js').CheckRunRef[]) : [];
   },
@@ -1396,7 +1396,7 @@ export const realConformanceGh: ConformanceGh = {
     return out ? (JSON.parse(out) as import('./conformance.js').CommitStatusRef[]) : [];
   },
   openPreviewPr(repo, branch, marker) {
-    return openProbePr(repo, branch, 'index.md', (text) => `${text}\n% conformance ${marker}\n`, {
+    return openOneFilePr(repo, branch, 'index.md', (text) => `${text}\n% conformance ${marker}\n`, {
       commit: msg.conformance.previewCommit(marker),
       title: msg.conformance.previewPrTitle(marker),
       body: msg.conformance.previewPrBody,
@@ -1409,7 +1409,7 @@ export const realConformanceGh: ConformanceGh = {
     return out ? (JSON.parse(out) as string[]) : [];
   },
   openFailingChecksPr(repo, branch, marker, id, edition) {
-    return openProbePr(
+    return openOneFilePr(
       repo,
       branch,
       'myst.yml',

@@ -138,7 +138,6 @@ export interface WorkflowRun {
 export interface CheckRunRef {
   name: string;
   conclusion: string | null; // null while still running
-  title: string | null;
   summary: string | null;
 }
 
@@ -320,7 +319,7 @@ async function assertServes200(
 function checkOutcome(
   runs: CheckRunRef[],
   name: string,
-  want: 'success' | 'failure' = 'success',
+  want: 'success' | 'failure',
 ): CheckRunRef | null {
   const cr = runs.find((c) => c.name === name);
   if (!cr || cr.conclusion === null) return null;
@@ -340,38 +339,51 @@ function statusOutcome(
   return s;
 }
 
-/** The checks comment's marker. checks.ts owns it. */
+/** The checks comment's marker, built from checks.ts's `STICKY_CHECKS`. */
 const CHECKS_STICKY_MARK = stickyMarker(STICKY_CHECKS);
 
-/** The fixed text of a message before its first ` (` hole, to find the message in a posted body. */
-const fixedLead = (message: string): string => message.split(' (')[0]!;
+/** Passed to a message in place of its variable parts, so `lead` can cut there. */
+const HOLE = '\0';
+
+/** The text of a message before its first `HOLE`, to find the message in a posted body. */
+const lead = (message: string): string => message.split(HOLE)[0]!;
 
 /** The warning post-checks adds for a pull request that changes `.github/`. */
-const GATED_WARNING_LEAD = fixedLead(prMsg.gatedWarning('', ''));
+const GATED_WARNING_LEAD = lead(prMsg.gatedWarning(HOLE, HOLE));
 
 /** The note `oak validate` adds to the Check Run summary when compose fails. */
-const COMPOSE_NOTE_LEAD = fixedLead(validateMsg.noteComposeFailed(''));
+const COMPOSE_NOTE_LEAD = lead(validateMsg.noteComposeFailed(HOLE));
+
+/** The row for `id-shape` in the checks comment's table. */
+const ID_SHAPE_ROW_LEAD = lead(prMsg.checkTableRow('id-shape', HOLE, false, HOLE));
+
+/** The commit comment `oak release deposit` posts for a draft. deposit-version.yml does not pass
+ *  `--publish-without-review`, so the deposit is a draft. */
+const DRAFT_COMMENT_LEAD = lead(workflow.releaseCommitComment(HOLE, false));
+
+/** What `journalChecksPosted` needs from the run. `settled(sha)` says every run on `sha` has
+ *  finished. */
+interface PollCtx {
+  gh: ConformanceGh;
+  repo: string;
+  sleep(ms: number): Promise<void>;
+  log(msg: string): void;
+  settled(sha: string): () => boolean;
+}
 
 /**
  * Waits for what post-checks posts on `sha`: the Journal checks Check Run and its commit status,
- * both concluding `want`, and given `prNumber`, the checks comment. Returns the Check Run and the
- * comment ('' without `prNumber`).
+ * both concluding `want`, and given `prNumber`, the checks comment.
  */
 async function journalChecksPosted(
-  ctx: {
-    gh: ConformanceGh;
-    repo: string;
-    sleep(ms: number): Promise<void>;
-    log(msg: string): void;
-  },
+  ctx: PollCtx,
   label: string,
   sha: string,
   want: 'success' | 'failure',
-  settled: () => boolean,
   prNumber?: number,
-): Promise<{ checkRun: CheckRunRef; comment: string }> {
+): Promise<{ checkRun: CheckRunRef; comment?: string }> {
   const { gh, repo } = ctx;
-  const opts = { ...POLL, settled };
+  const opts = { ...POLL, settled: ctx.settled(sha) };
   const checkRun = await pollUntil(
     `${label} Journal checks`,
     () => checkOutcome(gh.checkRunsForCommit(repo, sha), 'Journal checks', want),
@@ -384,7 +396,7 @@ async function journalChecksPosted(
     ctx,
     opts,
   );
-  if (prNumber === undefined) return { checkRun, comment: '' };
+  if (prNumber === undefined) return { checkRun };
   const comment = await pollUntil(
     `${label} checks comment`,
     () => gh.listIssueComments(repo, prNumber).find((b) => b.includes(CHECKS_STICKY_MARK)) ?? null,
@@ -440,6 +452,7 @@ export async function cmdConformanceRun(input: RunInput, deps: ConformanceDeps):
     const runs = gh.workflowRunsForCommit(repo, sha);
     return runs.length > 0 && runs.every((r) => r.status === 'completed');
   };
+  const ctx: PollCtx = { gh, repo, sleep, log, settled };
   let phase = 'install';
   // The paths reported on success; the fork phase adds its own when it passes.
   const paths: string[] = ['push-main', 'preview-same-repo', 'deposit', 'failing-checks'];
@@ -471,22 +484,16 @@ export async function cmdConformanceRun(input: RunInput, deps: ConformanceDeps):
     log(`upgrade PR #${prNumber}: ${up.prUrl}`);
 
     // The required Journal checks on the pull request also test check-paper and post-checks. The
-    // upgrade changes `.github/`, so the Check Run title and the comment carry the warning.
+    // upgrade changes `.github/`, so the comment carries the warning.
     const prSha = gh.prHeadSha(repo, prNumber);
     const upgradeChecks = await journalChecksPosted(
-      { gh, repo, sleep, log },
+      ctx,
       `PR #${prNumber}`,
       prSha,
       'success',
-      settled(prSha),
       prNumber,
     );
-    if (!upgradeChecks.checkRun.title?.startsWith(prMsg.checkRunTitleGatedTouched(''))) {
-      throw new Error(
-        `the Journal checks title on PR #${prNumber} carries no .github/ warning: ${upgradeChecks.checkRun.title}`,
-      );
-    }
-    if (!upgradeChecks.comment.includes(GATED_WARNING_LEAD)) {
+    if (!upgradeChecks.comment?.includes(GATED_WARNING_LEAD)) {
       throw new Error(`the checks comment on PR #${prNumber} carries no .github/ warning`);
     }
 
@@ -521,13 +528,7 @@ export async function cmdConformanceRun(input: RunInput, deps: ConformanceDeps):
     log(`Pages 200: ${siteUrl}`);
 
     // The Journal checks Check Run and commit status on main show post-checks ran.
-    await journalChecksPosted(
-      { gh, repo, sleep, log },
-      '(push→main)',
-      mergeSha,
-      'success',
-      settled(mergeSha),
-    );
+    await journalChecksPosted(ctx, '(push→main)', mergeSha, 'success');
 
     log(`push→main PASSED for ${tag}`);
 
@@ -630,37 +631,29 @@ export async function cmdConformanceRun(input: RunInput, deps: ConformanceDeps):
 
     // `oak release deposit` commented the draft's link on the tagged commit. It only warns when
     // that fails, so the run passing does not show it.
-    await pollUntil(
-      `oak release commit comment on ${tagSha}`,
-      () =>
-        gh
-          .commitComments(repo, tagSha)
-          .find((b) => b.startsWith(workflow.releaseCommitComment('', false))) ?? null,
-      { sleep, log },
-      { ...POLL, settled: settled(tagSha) },
-    );
+    if (!gh.commitComments(repo, tagSha).some((b) => b.startsWith(DRAFT_COMMENT_LEAD))) {
+      throw new Error(`\`oak release deposit\` left no commit comment on ${tagSha}`);
+    }
 
     gh.deleteRelease(repo, depositTag);
     gh.deleteTag(repo, depositTag); // accepts a tag the release deletion already removed
     log(`deposit PASSED for ${tag}`);
 
     // ---- A pull request whose checks fail ----
-    // A bad id fails `id-shape` and a missing edition fails compose. GitHub refusing the merge
-    // is the ruleset's job, so it is not tested.
+    // A bad id fails `id-shape` and a missing edition fails compose.
     phase = 'failing-checks';
     const failBranch = `${CERT_BRANCH_PREFIX}${runId}-fail`;
     const failPr = gh.openFailingChecksPr(repo, failBranch, runId, FAILING_ID, FAILING_EDITION);
     gh.labelPr(repo, failPr.number, CONFORMANCE_LABEL);
-    log(`failing-checks PR #${failPr.number} (${failBranch})`);
+    log(`failing checks PR #${failPr.number} (${failBranch})`);
     const failChecks = await journalChecksPosted(
-      { gh, repo, sleep, log },
+      ctx,
       `PR #${failPr.number}`,
       failPr.headSha,
       'failure',
-      settled(failPr.headSha),
       failPr.number,
     );
-    if (!failChecks.comment.includes('| id-shape |')) {
+    if (!failChecks.comment?.includes(ID_SHAPE_ROW_LEAD)) {
       throw new Error(`the checks comment on PR #${failPr.number} does not name id-shape`);
     }
     if (!failChecks.checkRun.summary?.includes(COMPOSE_NOTE_LEAD)) {
@@ -725,13 +718,12 @@ export async function cmdConformanceRun(input: RunInput, deps: ConformanceDeps):
       await assertServes200({ probe, sleep }, forkPreviewUrl, 'fork preview');
       log(`fork preview 200: ${forkPreviewUrl}`);
 
-      // post-checks reads the fork's artifact, which the fork controls.
+      // On a fork pull request, post-checks posts a report written by the fork's own code.
       await journalChecksPosted(
-        { gh, repo, sleep, log },
+        ctx,
         `fork PR #${forkPr.number}`,
         forkPr.headSha,
         'success',
-        settled(forkPr.headSha),
         forkPr.number,
       );
 
