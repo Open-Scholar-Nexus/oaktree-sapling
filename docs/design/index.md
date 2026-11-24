@@ -43,6 +43,16 @@ The assembled result is written to **`myst.oak.yml`**[^public], next to the pape
 
 [How a paper's config is assembled](config.md) explains why oak generates this file, and the rules that follow from how MyST merges the chain.
 
+(design-myst-flags)=
+### MyST's flags
+
+`oak build` and `oak start` pass a subset of MyST's flags on to MyST, such as `--port`, and refuse the others, for these reasons:
+
+- oak builds what the journal's settings ask for, such as the PDF with the journal's template and the website with its theme. MyST flags such as `--pdf` or `-o` would change what is built or where it is written.
+- A paper should build the same on every machine, and the CI workflows pass no MyST flags.[^local-flags]
+- Some flags need more than passing on. Running notebooks with `--execute` needs setup oak does not do yet.
+- A small set of flags keeps oak simple to maintain as MyST changes.
+
 ## The pages here
 
 Each page takes one part of oaktree-sapling and explains why it is built that way. What each part _does_ belongs in [Reference](../reference/files.md); this section is for the reasoning.
@@ -50,6 +60,8 @@ Each page takes one part of oaktree-sapling and explains why it is built that wa
 [How a paper's config is assembled](config.md) continues from the section above. [How a paper repository's CI is built](paper-ci.md) covers why every job is split in two, what a job with a token uses from a pull request's build, and which files need an editor's review. [The editorial checks](checks.md) covers the checks a journal writes itself, and [How oaktree-sapling is released](releases.md) why each release tag has oak's bundled code committed on it, and what a deposit contains.
 
 Code comments cite decisions as `[R#]` and `[design §N]`. Those not yet written up on these pages are in the original [decision record](https://github.com/pollomarzo/whitelabel/blob/v0.0.7/docs/design/record.md) and [design brief](https://github.com/pollomarzo/whitelabel/blob/v0.0.7/docs/design/brief.md), in the repository oaktree-sapling was developed in.
+
+[^local-flags]: Is there a feature you'd like for local use or testing? [Open an issue](https://github.com/Open-Scholar-Nexus/oaktree-sapling/issues) to let us know.
 
 [^cleanup]: It is not deleted when the build ends. MyST's HTML build finishes by calling `process.exit(0)`, so anything registered to run at the end of the process never runs on a successful build. Deleting the file by hand is always safe.
 
