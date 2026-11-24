@@ -75,8 +75,6 @@ Each version gets a DOI and an archived copy.
 
 +++ {"kind": "justified", "class": "landing-in-use"}
 
-In use
-
 ## See it in use
 
 Oaktree Sapling grew out of the journal of Neuromatch's Impact Scholars Program.
