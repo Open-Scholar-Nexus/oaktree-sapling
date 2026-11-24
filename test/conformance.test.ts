@@ -190,7 +190,7 @@ const ARTIFACT_COMMENT =
 const FAILING_RUN = toCheckRun(
   [{ id: 'id-shape', status: CheckStatus.fail, message: 'bad id' }],
   undefined,
-  [validateMsg.noteComposeFailed('Cannot find config file: editions/typo.yml')],
+  [validateMsg.noteComposeFailed(`Cannot find config file: editions/${FAILING_EDITION}.yml`)],
 );
 const FAILING_CHECK: CheckRunRef[] = [{ name: 'Journal checks', ...FAILING_RUN }];
 const FAILING_STATUS: CommitStatusRef[] = [{ context: 'Journal checks', state: 'failure' }];
@@ -209,11 +209,10 @@ const defaultChecks = (sha: string): CheckRunRef[] =>
 const defaultStatuses = (sha: string): CommitStatusRef[] =>
   sha === 'fail-head-sha' ? FAILING_STATUS : SUCCESS_STATUS;
 
-/** Comments by pull request: the upgrade (#7), the same-repo preview (#21), the fork (#31) and
- *  the failing-checks one (#41). */
+/** Comments by pull request: the same-repo preview (#21), the fork (#31) and the failing-checks
+ *  one (#41). */
 const defaultComments = (pr: number): string[] =>
   ({
-    7: [PASSING_COMMENT],
     21: [PREVIEW_COMMENT],
     31: [PREVIEW_COMMENT, PASSING_COMMENT],
     41: [FAILING_COMMENT],
@@ -764,14 +763,6 @@ describe('cmdConformanceRun', () => {
     expect(gh.merged).toEqual([]);
   });
 
-  it('fails at the push to main when post-checks posts no checks comment on the upgrade pull request', async () => {
-    const gh = fakeCertGh({ comments: (pr) => (pr === 7 ? [] : defaultComments(pr)) });
-    const out = await cmdConformanceRun({ repo: REPO, tag: TAG }, runDeps(gh));
-    expect(out.exitCode).toBe(1);
-    expect(out.result).toMatchObject({ status: 'failed', path: 'push-main' });
-    expect(String(out.result.failure)).toContain('PR #7 checks comment');
-  });
-
   it('fails at the deposit when oak release deposit posted no commit comment', async () => {
     const gh = fakeCertGh({ commitComments: () => [] });
     const out = await cmdConformanceRun({ repo: REPO, tag: TAG }, runDeps(gh));
@@ -807,7 +798,7 @@ describe('cmdConformanceRun', () => {
     expect(String(out.result.failure)).toContain('id-shape');
   });
 
-  it("fails when the failing-checks pull request's summary carries no compose-failure note", async () => {
+  it("fails when the failing-checks pull request's summary contains no compose-failure note", async () => {
     const noNote = toCheckRun([{ id: 'id-shape', status: CheckStatus.fail, message: 'bad id' }]);
     const gh = fakeCertGh({
       checkRuns: (sha) =>

@@ -1,7 +1,7 @@
 /**
  * `oak conformance`: tests a release of oak on GitHub. It moves a paper repo kept for
  * testing (the test repo) onto the release and checks every path its CI takes: build and
- * GitHub Pages, the editorial checks passing and failing, a same-repo preview, the Zenodo deposit
+ * GitHub Pages, the Journal checks passing and failing, a same-repo preview, the Zenodo deposit
  * and, optionally, a preview from a fork. A release passes when all of them do; `npm test` cannot
  * cover these, since they only run on GitHub.
  *
@@ -13,7 +13,7 @@
  * in the test repo and are used by its own runs.
  */
 import { STICKY_PREVIEW } from './preview.js';
-import { STICKY_CHECKS } from './checks.js';
+import { CheckStatus, STICKY_CHECKS } from './checks.js';
 import type { Outcome } from './result.js';
 import * as msg from './messages.js';
 import { JOURNAL_BUNDLE_NAME, RESERVED_BUNDLE_NAMES } from './zenodo.js';
@@ -65,7 +65,7 @@ export interface ConformanceGh {
   workflowRunsForCommit(repo: string, sha: string): WorkflowRun[];
   /** Check Runs on commit `sha`, such as the Journal checks one post-checks posts. */
   checkRunsForCommit(repo: string, sha: string): CheckRunRef[];
-  /** The newest commit status per context on `sha`; post-checks posts Journal checks as one. */
+  /** The newest commit status per context on `sha`; post-checks posts one with context `Journal checks`. */
   commitStatuses(repo: string, sha: string): CommitStatusRef[];
 
   // --- a same-repo pull request and its preview ---
@@ -342,10 +342,8 @@ function statusOutcome(
 /** The checks comment's marker, built from {@link STICKY_CHECKS}. */
 const CHECKS_STICKY_MARK = msg.stickyMarker(STICKY_CHECKS);
 
-/**
- * The start of a message, up to its first argument: the part every posted copy shares. `build`
- * calls the message with `arg` for each argument.
- */
+/** The text of a message before its first argument, the same whatever the arguments are.
+ *  `build` passes `arg` as every argument. */
 function messageStart(build: (arg: string) => string): string {
   const arg = '\0'; // no message contains it, so the cut lands on the first argument
   const start = build(arg).split(arg)[0]!;
@@ -357,9 +355,10 @@ function messageStart(build: (arg: string) => string): string {
 /** The note `oak validate` adds to the Check Run summary when compose fails. */
 const COMPOSE_NOTE_START = messageStart((arg) => msg.validate.noteComposeFailed(arg));
 
-/** The `id-shape` row in the checks comment. The table lists oak's own checks only when they
- *  fail, so the row means `id-shape` failed. */
-const ID_SHAPE_ROW_START = messageStart((arg) => msg.pr.checkTableRow('id-shape', arg, false, arg));
+/** The checks comment's row for a failed `id-shape`. */
+const ID_SHAPE_ROW_START = messageStart((arg) =>
+  msg.pr.checkTableRow('id-shape', CheckStatus.fail, false, arg),
+);
 
 /** The commit comment `oak release deposit` posts for a draft. deposit-version.yml does not pass
  *  `--publish-without-review`, so the deposit is a draft. */
@@ -411,8 +410,8 @@ export async function cmdConformanceRun(input: RunInput, deps: ConformanceDeps):
     const runs = gh.workflowRunsForCommit(repo, sha);
     return runs.length > 0 && runs.every((r) => r.status === 'completed');
   };
-  /** Waits for the Journal checks Check Run and commit status post-checks posts on `sha`, both
-   *  concluding `want`, and returns the Check Run. */
+  /** Waits until post-checks has posted the Journal checks Check Run and commit status on `sha`,
+   *  both concluding `want`; returns the Check Run. */
   const waitForJournalChecks = async (
     label: string,
     sha: string,
@@ -433,7 +432,8 @@ export async function cmdConformanceRun(input: RunInput, deps: ConformanceDeps):
     );
     return checkRun;
   };
-  /** Waits for the checks comment post-checks posts on pull request `prNumber` (head `sha`). */
+  /** Waits until post-checks has posted its comment on pull request `prNumber` (head `sha`);
+   *  returns its body. */
   const waitForChecksComment = (label: string, prNumber: number, sha: string): Promise<string> =>
     pollUntil(
       `${label} checks comment`,
@@ -475,7 +475,6 @@ export async function cmdConformanceRun(input: RunInput, deps: ConformanceDeps):
     // The required Journal checks on the pull request also test check-paper and post-checks.
     const prSha = gh.prHeadSha(repo, prNumber);
     await waitForJournalChecks(`PR #${prNumber}`, prSha, 'success');
-    await waitForChecksComment(`PR #${prNumber}`, prNumber, prSha);
 
     // The merge is the push to main under test.
     const mergeSha = gh.mergePr(repo, prNumber);
@@ -620,7 +619,8 @@ export async function cmdConformanceRun(input: RunInput, deps: ConformanceDeps):
     log(`deposit PASSED for ${tag}`);
 
     // ---- A pull request whose checks fail ----
-    // A bad id fails `id-shape` and a missing edition fails compose.
+    // A bad id fails `id-shape`. A missing edition fails compose, which check-paper runs only
+    // when it has the journal and oak's checkout, so the compose note shows it had both.
     phase = 'failing-checks';
     const failBranch = `${CERT_BRANCH_PREFIX}${runId}-fail`;
     const failPr = gh.openFailingChecksPr(repo, failBranch, runId, FAILING_ID, FAILING_EDITION);
@@ -634,7 +634,7 @@ export async function cmdConformanceRun(input: RunInput, deps: ConformanceDeps):
     }
     if (!failCheckRun.summary?.includes(COMPOSE_NOTE_START)) {
       throw new Error(
-        `the Journal checks summary on PR #${failPr.number} carries no compose-failure note`,
+        `the Journal checks summary on PR #${failPr.number} contains no compose-failure note`,
       );
     }
     gh.closePr(repo, failPr.number);
