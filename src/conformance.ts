@@ -342,29 +342,28 @@ function statusOutcome(
 /** The checks comment's marker, built from {@link STICKY_CHECKS}. */
 const CHECKS_STICKY_MARK = msg.stickyMarker(STICKY_CHECKS);
 
-/** Stands in for each variable part of a message. No message contains it, so {@link lead} cuts
- *  at the first one; '' would keep the text after a variable part, and nothing posted would match. */
-const VARIES = '\0';
-
-/** The text of `message` before its first {@link VARIES}, which every posted copy shares. */
-function lead(message: string): string {
-  const head = message.split(VARIES)[0]!;
-  // An empty head would match any text, so the check could never fail.
-  if (!head)
-    throw new Error(`message has no fixed text before its first variable part: ${message}`);
-  return head;
+/**
+ * The start of a message, up to its first argument: the part every posted copy shares. `build`
+ * calls the message with `arg` for each argument.
+ */
+function messageStart(build: (arg: string) => string): string {
+  const arg = '\0'; // no message contains it, so the cut lands on the first argument
+  const start = build(arg).split(arg)[0]!;
+  // An empty start would match any text, so the check could never fail.
+  if (!start) throw new Error(`message starts with an argument: ${build('…')}`);
+  return start;
 }
 
 /** The note `oak validate` adds to the Check Run summary when compose fails. */
-const COMPOSE_NOTE_LEAD = lead(msg.validate.noteComposeFailed(VARIES));
+const COMPOSE_NOTE_START = messageStart((arg) => msg.validate.noteComposeFailed(arg));
 
 /** The `id-shape` row in the checks comment. The table lists oak's own checks only when they
  *  fail, so the row means `id-shape` failed. */
-const ID_SHAPE_ROW_LEAD = lead(msg.pr.checkTableRow('id-shape', VARIES, false, VARIES));
+const ID_SHAPE_ROW_START = messageStart((arg) => msg.pr.checkTableRow('id-shape', arg, false, arg));
 
 /** The commit comment `oak release deposit` posts for a draft. deposit-version.yml does not pass
  *  `--publish-without-review`, so the deposit is a draft. */
-const DRAFT_COMMENT_LEAD = lead(msg.workflow.releaseCommitComment(VARIES, false));
+const DRAFT_COMMENT_START = messageStart((arg) => msg.workflow.releaseCommitComment(arg, false));
 
 /** null while running; the run (picked by `find`) when it succeeded; throws with its URL when it
  *  finished otherwise. `label` names the run in that error. */
@@ -612,7 +611,7 @@ export async function cmdConformanceRun(input: RunInput, deps: ConformanceDeps):
 
     // `oak release deposit` commented the draft's link on the tagged commit. It only warns when
     // that fails, so the run passing does not show it.
-    if (!gh.commitComments(repo, tagSha).some((b) => b.startsWith(DRAFT_COMMENT_LEAD))) {
+    if (!gh.commitComments(repo, tagSha).some((b) => b.startsWith(DRAFT_COMMENT_START))) {
       throw new Error(`\`oak release deposit\` left no commit comment on ${tagSha}`);
     }
 
@@ -630,10 +629,10 @@ export async function cmdConformanceRun(input: RunInput, deps: ConformanceDeps):
     const failLabel = `PR #${failPr.number}`;
     const failCheckRun = await waitForJournalChecks(failLabel, failPr.headSha, 'failure');
     const failComment = await waitForChecksComment(failLabel, failPr.number, failPr.headSha);
-    if (!failComment.includes(ID_SHAPE_ROW_LEAD)) {
+    if (!failComment.includes(ID_SHAPE_ROW_START)) {
       throw new Error(`the checks comment on PR #${failPr.number} reports no id-shape failure`);
     }
-    if (!failCheckRun.summary?.includes(COMPOSE_NOTE_LEAD)) {
+    if (!failCheckRun.summary?.includes(COMPOSE_NOTE_START)) {
       throw new Error(
         `the Journal checks summary on PR #${failPr.number} carries no compose-failure note`,
       );
