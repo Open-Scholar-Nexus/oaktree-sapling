@@ -342,24 +342,30 @@ function statusOutcome(
 /** The checks comment's marker, built from checks.ts's `STICKY_CHECKS`. */
 const CHECKS_STICKY_MARK = stickyMarker(STICKY_CHECKS);
 
-/** Passed to a message in place of its variable parts, so `lead` can cut there. */
-const HOLE = '\0';
+/**
+ * Marks where a message's variable text starts. Each `*_LEAD` below calls a message with
+ * `VARIES` in place of every variable part, and `lead` keeps only the text before it, which every
+ * posted copy shares. With '' in its place, a message's text after a variable part would stay in
+ * and the match would fail. The tests in test/conformance.test.ts build the posted text with
+ * real values, so they catch that.
+ */
+const VARIES = '\0';
 
-/** The text of a message before its first `HOLE`, to find the message in a posted body. */
-const lead = (message: string): string => message.split(HOLE)[0]!;
+/** The text of `message` before its first `VARIES`. */
+const lead = (message: string): string => message.split(VARIES)[0]!;
 
 /** The warning post-checks adds for a pull request that changes `.github/`. */
-const GATED_WARNING_LEAD = lead(prMsg.gatedWarning(HOLE, HOLE));
+const GATED_WARNING_LEAD = lead(prMsg.gatedWarning(VARIES, VARIES));
 
 /** The note `oak validate` adds to the Check Run summary when compose fails. */
-const COMPOSE_NOTE_LEAD = lead(validateMsg.noteComposeFailed(HOLE));
+const COMPOSE_NOTE_LEAD = lead(validateMsg.noteComposeFailed(VARIES));
 
 /** The row for `id-shape` in the checks comment's table. */
-const ID_SHAPE_ROW_LEAD = lead(prMsg.checkTableRow('id-shape', HOLE, false, HOLE));
+const ID_SHAPE_ROW_LEAD = lead(prMsg.checkTableRow('id-shape', VARIES, false, VARIES));
 
 /** The commit comment `oak release deposit` posts for a draft. deposit-version.yml does not pass
  *  `--publish-without-review`, so the deposit is a draft. */
-const DRAFT_COMMENT_LEAD = lead(workflow.releaseCommitComment(HOLE, false));
+const DRAFT_COMMENT_LEAD = lead(workflow.releaseCommitComment(VARIES, false));
 
 /** What `journalChecksPosted` needs from the run. `settled(sha)` says every run on `sha` has
  *  finished. */
