@@ -595,10 +595,30 @@ describe('a flag passed without a value is refused', () => {
     expect(r.stderr).not.toContain('does not take');
   });
 
-  it('--help after a verb prints the usage', () => {
+  it("--help after a command prints that command's usage and docs link", () => {
     const r = oak(['build', '--help']);
     expect(r.code).toBe(0);
-    expect(r.stdout).toContain('oak build');
+    expect(r.stdout).toContain('oak build [--paper <dir>]');
+    expect(r.stdout).toContain('reference/cli#build');
+    expect(r.stdout).not.toContain('oak start');
+  });
+
+  it('`oak help release deposit` prints that subcommand, `oak release --help` all of them', () => {
+    const one = oak(['help', 'release', 'deposit']);
+    expect(one.stdout).toContain('oak release deposit --tag <vX.Y.Z>');
+    expect(one.stdout).not.toContain('oak release status');
+    const all = oak(['release', '--help']);
+    expect(all.stdout).toContain('oak release deposit');
+    expect(all.stdout).toContain('oak release status');
+  });
+
+  it('every command refuses a flag its table does not list', () => {
+    const r = oak(['conformance', 'run', '--repo', 'o/r', '--tagg', 'v1.0.0']);
+    expect(r.code).toBe(2);
+    expect(r.stderr).toContain(
+      'oak conformance run does not take the flag --tagg; did you mean --tag?',
+    );
+    expect(r.stderr).toContain('Run oak conformance run --help');
   });
 });
 

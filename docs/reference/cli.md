@@ -1,7 +1,7 @@
 (ref-cli)=
 # CLI reference
 
-`oak --help` lists every command and its flags. This page says what each command does, with the flags that need more explanation than `--help` gives.
+`oak --help` lists every command and its flags, and `oak <command> --help` one command's. A command refuses a flag it does not list, so a mistyped flag stops it. This page says what each command does, with the flags that need more explanation than `--help` gives.
 
 ## Commands you run
 
@@ -28,7 +28,7 @@
 `--keep-host`
 : Keeps the `HOST` environment variable for those servers, as `myst build --keep-host` does. Without it, MyST serves on `localhost`.
 
-`oak build`, `oak start` and `oak validate` take only the flags `oak --help` lists for them and refuse any other, so a mistyped flag stops the command. oak does not run notebooks, so MyST's `--execute` is refused too. Run the notebooks first and save their outputs, and oak builds from those. [Why oak passes on only some of MyST's flags](#design-myst-flags).
+oak does not run notebooks, so MyST's `--execute` is refused. Run the notebooks first and save their outputs, and oak builds from those. [Why oak passes on only some of MyST's flags](#design-myst-flags).
 
 (start)=
 ### start

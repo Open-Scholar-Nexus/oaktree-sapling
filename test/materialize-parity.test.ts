@@ -24,16 +24,14 @@ describe('build, start and validate materialize from the same inputs', () => {
     // 0 means the builder stopped passing overrides; more than 1 means a verb builds its own.
     expect(callsTo(cli, 'assetOverridesFrom')).toBe(1);
     const builder = cli.slice(cli.indexOf('function materializeInputFrom'));
-    expect(builder.slice(0, builder.indexOf('\n}')).includes('assetOverridesFrom(argv)')).toBe(
-      true,
-    );
+    expect(builder.slice(0, builder.indexOf('\n}')).includes('assetOverridesFrom(a)')).toBe(true);
   });
 
   it('every verb that materializes spreads the shared builder', () => {
     // build, start and validate. They spread the builder's result, so a new MaterializeInput
     // field reaches all three.
     expect(callsTo(cli, 'materializeInputFrom')).toBe(3);
-    expect(cli.match(/\.\.\.materializeInputFrom\(argv, paperRoot, /g)?.length).toBe(3);
+    expect(cli.match(/\.\.\.materializeInputFrom\(a, paperRoot, /g)?.length).toBe(3);
   });
 
   it('validate does not rebuild the shared fields by hand', () => {

@@ -25,6 +25,8 @@ import type { HandoffContext, HandoffDeps, HandoffVerb, PaperVerb } from './pinn
 import * as msg from './messages.js';
 import { annotate, inCI, UserError } from './messages.js';
 import { readDoc } from './yaml-io.js';
+import { parseArgs, nearest, valueFlags, type Args, type FlagsOf } from './args.js';
+import { COMMANDS } from './commands.js';
 
 // oak only runs as the CJS bundle (ci/run.sh and local runs both call dist/cli.cjs), so
 // `__dirname` is the bundle's directory; @types/node declares it for tsc.
@@ -52,22 +54,16 @@ function engineRoot(): string {
   return resolve(__dirname, '..');
 }
 
-/**
- * The value after `--name`, or undefined when absent. A flag with no value (last, or followed by
- * another `--flag`) throws, since several callers read `flag(...) ?? process.env.X` and a
- * missing value must not fall through to the environment.
- *
- * An empty value is returned as it is: `??` keeps `''`, and some flags mean something by
- * it (`--base-url ""` serves at the root). Flags where empty is wrong check it themselves.
- */
-function flag(argv: string[], name: string): string | undefined {
+/** The value after `--name`, or undefined when absent: for `main`, which reads a flag before it
+ *  knows the command's table. A command reads its flags with {@link parseArgs}. */
+function rawFlag(argv: string[], name: string): string | undefined {
   const i = argv.indexOf(`--${name}`);
   if (i < 0) return undefined;
   const value = argv[i + 1];
   if (value === undefined || value.startsWith('--')) throw new UserError(msg.flagNeedsValue(name));
   return value;
 }
-function has(argv: string[], name: string): boolean {
+function rawHas(argv: string[], name: string): boolean {
   return argv.includes(`--${name}`);
 }
 
@@ -79,11 +75,13 @@ function has(argv: string[], name: string): boolean {
  * Shared by `oak build` and `oak validate` so both write the same `myst.oak.yml` [R82], which
  * `readStampedTemplate` (zenodo.ts) reads as what was rendered.
  */
-function assetOverridesFrom(argv: string[]): ComposeInput['assetOverrides'] {
-  const typstTemplate = flag(argv, 'typst-template');
+function assetOverridesFrom(
+  a: Args<'typst-template' | 'no-site-template'>,
+): ComposeInput['assetOverrides'] {
+  const typstTemplate = a.value('typst-template');
   return {
     ...(typstTemplate ? { typstTemplate: resolve(typstTemplate) } : {}),
-    ...(has(argv, 'no-site-template') ? { siteTemplate: null as string | null } : {}),
+    ...(a.has('no-site-template') ? { siteTemplate: null as string | null } : {}),
   };
 }
 
@@ -101,12 +99,12 @@ type ResolvedInstance = { root: string | null; stamp: JournalStamp | undefined }
  * string, and never exits, so `oak validate` can report the error.
  */
 async function resolveInstanceRoot(
-  argv: string[],
+  a: Args<'instance' | 'no-instance'>,
   paperRoot: string,
   verb: msg.JournalVerb,
 ): Promise<ResolvedInstance | { error: string }> {
-  if (has(argv, 'no-instance')) return { root: null, stamp: undefined };
-  const explicit = flag(argv, 'instance');
+  if (a.has('no-instance')) return { root: null, stamp: undefined };
+  const explicit = a.value('instance');
   // Refused, since the error below would ask for the flag that was just passed.
   if (explicit === '') throw new UserError(msg.flagNeedsValue('instance'));
   const { cachedJournal, journalStamp } = await import('./gh.js');
@@ -161,7 +159,7 @@ function isJournalRepo(root: string): boolean {
 /** Everything `materializeDerived` needs but the myst side, shared by build and start so a
  *  preview composes from the same inputs as the build. */
 function materializeInputFrom(
-  argv: string[],
+  a: Args<'base-url' | 'typst-template' | 'no-site-template'>,
   paperRoot: string,
   instance: ResolvedInstance,
 ): Omit<MaterializeInput, 'edge'> {
@@ -170,22 +168,24 @@ function materializeInputFrom(
     engineRoot: engineRoot(),
     instanceRoot: instance.root,
     journalStamp: instance.stamp,
-    baseUrl: flag(argv, 'base-url') ?? '',
-    assetOverrides: assetOverridesFrom(argv),
+    baseUrl: a.value('base-url') ?? '',
+    assetOverrides: assetOverridesFrom(a),
   };
 }
 
 /** Runs the two-pass build for a paper. Returns the paper root, whose `_build/exports` then
  *  holds the PDF a deposit archives. */
-async function buildPaper(argv: string[]): Promise<{ paperRoot: string; resolvedId?: string }> {
-  const paperRoot = resolve(flag(argv, 'paper') ?? '.');
+async function buildPaper(
+  a: Args<FlagsOf<typeof COMMANDS.build>>,
+): Promise<{ paperRoot: string; resolvedId?: string }> {
+  const paperRoot = resolve(a.value('paper') ?? '.');
   // Parsed before anything else, so a typo costs no build.
-  const site = { ...portsFrom(argv), ...(has(argv, 'keep-host') ? { keepHost: true } : {}) };
+  const site = { ...portsFrom(a), ...(a.has('keep-host') ? { keepHost: true } : {}) };
   if (isJournalRepo(paperRoot)) {
     process.stderr.write(annotate('error', msg.build.inJournalRepo(paperRoot)) + '\n');
     process.exit(2);
   }
-  const resolved = await resolveInstanceRoot(argv, paperRoot, 'build');
+  const resolved = await resolveInstanceRoot(a, paperRoot, 'build');
   if ('error' in resolved) {
     process.stderr.write(resolved.error + '\n');
     process.exit(2);
@@ -194,10 +194,10 @@ async function buildPaper(argv: string[]): Promise<{ paperRoot: string; resolved
   const { runBuild } = await import('./build.js');
   const { createMystEdge } = await import('./myst.js');
   const res = await runBuild({
-    ...materializeInputFrom(argv, paperRoot, resolved),
-    buildOpts: has(argv, 'exports-only')
+    ...materializeInputFrom(a, paperRoot, resolved),
+    buildOpts: a.has('exports-only')
       ? { exportsOnly: true }
-      : has(argv, 'no-exports')
+      : a.has('no-exports')
         ? { all: false, html: true, ...site }
         : { all: true, html: true, ...site },
     edge: createMystEdge(),
@@ -209,8 +209,8 @@ async function buildPaper(argv: string[]): Promise<{ paperRoot: string; resolved
 /** `oak build`: builds a paper ({@link buildPaper}), then {@link finishSite}. Documented at
  *  DOCS.build. */
 async function cmdBuild(argv: string[]): Promise<number> {
-  refuseUnknownArgs(argv, 'build');
-  const paperRoot = resolve(flag(argv, 'paper') ?? '.');
+  const a = parseArgs(COMMANDS.build, argv);
+  const paperRoot = resolve(a.value('paper') ?? '.');
   const { ENGINE_ID_SENTINEL } = await import('./schema.js');
   const artifact = await import('./artifact.js');
   const placeholder = readProjectIdQuietly(paperRoot) === ENGINE_ID_SENTINEL;
@@ -219,7 +219,7 @@ async function cmdBuild(argv: string[]): Promise<number> {
   process.once('exit', (code) => {
     if (code === 0) finishSite(paperRoot, placeholder, artifact);
   });
-  const { resolvedId } = await buildPaper(argv);
+  const { resolvedId } = await buildPaper(a);
   process.stderr.write(msg.build.done(resolvedId ?? '?') + '\n');
   return 0;
 }
@@ -271,9 +271,9 @@ function readProjectIdQuietly(paperRoot: string): string | null {
 
 /** The app and content server ports. Unset, myst picks free ones, which builds started together
  *  can race for. */
-function portsFrom(argv: string[]): { port?: number; serverPort?: number } {
-  const num = (name: string) => {
-    const raw = flag(argv, name);
+function portsFrom(a: Args<'port' | 'server-port'>): { port?: number; serverPort?: number } {
+  const num = (name: 'port' | 'server-port') => {
+    const raw = a.value(name);
     if (raw === undefined) return undefined;
     const n = Number(raw);
     if (!Number.isInteger(n) || n < 0) throw new UserError(msg.flagNeedsPort(name, raw));
@@ -287,52 +287,14 @@ function portsFrom(argv: string[]): { port?: number; serverPort?: number } {
   };
 }
 
-/** The flags each paper verb reads, by whether they take a value. */
-const PAPER_FLAGS = {
-  values: ['paper', 'instance', 'typst-template', 'base-url'],
-  switches: ['no-instance', 'no-site-template', 'json', 'verbose'],
-};
-const VERB_FLAGS: Record<'build' | 'start' | 'validate', { values: string[]; switches: string[] }> =
-  {
-    build: {
-      values: [...PAPER_FLAGS.values, 'port', 'server-port'],
-      switches: [...PAPER_FLAGS.switches, 'exports-only', 'no-exports', 'keep-host'],
-    },
-    start: {
-      values: [...PAPER_FLAGS.values, 'port', 'server-port', 'template'],
-      switches: [...PAPER_FLAGS.switches, 'headless', 'keep-host'],
-    },
-    validate: {
-      values: [...PAPER_FLAGS.values, 'report', 'repo'],
-      switches: [...PAPER_FLAGS.switches, 'strict'],
-    },
-  };
-
-/** Refuses an argument `oak <verb>` does not read, suggesting the closest flag it does. */
-function refuseUnknownArgs(argv: string[], verb: keyof typeof VERB_FLAGS): void {
-  const { values, switches } = VERB_FLAGS[verb];
-  for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i]!;
-    const name = arg.replace(/^--/, '');
-    if (arg.startsWith('--') && values.includes(name)) i++;
-    else if (!(arg.startsWith('--') && switches.includes(name))) {
-      if (name === 'execute' || name === 'execute-parallel') {
-        throw new UserError(msg.noExecute(verb));
-      }
-      const near = arg.startsWith('-') ? nearest(name, [...values, ...switches]) : null;
-      throw new UserError(msg.unknownArg(verb, arg, near && `--${near}`));
-    }
-  }
-}
-
 /** The `myst start` flags `oak start` passes through, under myst's names. */
-function startOptsFrom(argv: string[]): StartOpts {
-  const template = flag(argv, 'template');
-  const baseurl = flag(argv, 'base-url');
+function startOptsFrom(a: Args<FlagsOf<typeof COMMANDS.start>>): StartOpts {
+  const template = a.value('template');
+  const baseurl = a.value('base-url');
   return {
-    ...portsFrom(argv),
-    ...(has(argv, 'headless') ? { headless: true } : {}),
-    ...(has(argv, 'keep-host') ? { keepHost: true } : {}),
+    ...portsFrom(a),
+    ...(a.has('headless') ? { headless: true } : {}),
+    ...(a.has('keep-host') ? { keepHost: true } : {}),
     ...(template ? { template } : {}),
     ...(baseurl ? { baseurl } : {}),
   };
@@ -344,10 +306,10 @@ function startOptsFrom(argv: string[]): StartOpts {
  * it. Ctrl-C ends it. Documented at DOCS.start.
  */
 async function cmdStart(argv: string[]): Promise<number> {
-  refuseUnknownArgs(argv, 'start');
-  const paperRoot = resolve(flag(argv, 'paper') ?? '.');
+  const a = parseArgs(COMMANDS.start, argv);
+  const paperRoot = resolve(a.value('paper') ?? '.');
   // Parsed before anything else, so a typo costs no build.
-  const startOpts = startOptsFrom(argv);
+  const startOpts = startOptsFrom(a);
   const journalSite = isJournalRepo(paperRoot);
   const { createMystEdge } = await import('./myst.js');
   const edge = createMystEdge();
@@ -367,7 +329,7 @@ async function cmdStart(argv: string[]): Promise<number> {
     return await never();
   }
 
-  const resolved = await resolveInstanceRoot(argv, paperRoot, 'start');
+  const resolved = await resolveInstanceRoot(a, paperRoot, 'start');
   if ('error' in resolved) {
     process.stderr.write(resolved.error + '\n');
     return 2;
@@ -376,7 +338,7 @@ async function cmdStart(argv: string[]): Promise<number> {
   const pdfPath = join(paperRoot, TYPST_OUTPUT);
   // myst start builds no PDF, so the download is offered only once `oak build` has made one.
   const inputNow = () => ({
-    ...materializeInputFrom(argv, paperRoot, resolved),
+    ...materializeInputFrom(a, paperRoot, resolved),
     pdfDownload: existsSync(pdfPath),
     edge,
   });
@@ -415,8 +377,8 @@ function never(): Promise<number> {
 }
 
 /** myst.yml path from --myst, or <--paper|.>/myst.yml. */
-function mystPathOf(argv: string[]): string {
-  return resolve(flag(argv, 'myst') ?? join(flag(argv, 'paper') ?? '.', 'myst.yml'));
+function mystPathOf(a: Args<'myst' | 'paper'>): string {
+  return resolve(a.value('myst') ?? join(a.value('paper') ?? '.', 'myst.yml'));
 }
 
 /** Keys the human summary leaves out: narrated already (`runbook`, printed line by line with
@@ -480,12 +442,12 @@ function recordResult(result: Record<string, unknown>): void {
  * it repeats the prose the verb already printed. Prose goes to stderr, so stdout is only JSON.
  */
 function emit(
-  argv: string[],
+  a: Args<'json'>,
   result: Record<string, unknown>,
   human?: (r: Record<string, unknown>) => string[],
 ): void {
   recordResult(result);
-  if (has(argv, 'json')) {
+  if (a.has('json')) {
     process.stdout.write(JSON.stringify(result, null, 2) + '\n');
     return;
   }
@@ -497,14 +459,14 @@ const RELEASE_SUBCOMMANDS = ['reserve-doi', 'deposit', 'status'] as const;
 
 /** The flags of `oak release` and its subcommands that take a value. */
 const RELEASE_VALUE_FLAGS = [
-  'repo',
-  'tag',
-  'paper',
-  'myst',
-  'token',
-  'site-url',
-  'instance',
-  'bundle-out',
+  ...new Set(
+    [
+      COMMANDS.release,
+      COMMANDS.releaseStatus,
+      COMMANDS.releaseReserveDoi,
+      COMMANDS.releaseDeposit,
+    ].flatMap(valueFlags),
+  ),
 ];
 
 /** The first word of `argv` that is no flag and no flag's value, with its index, or null. */
@@ -538,9 +500,9 @@ async function cmdRelease(argv: string[]): Promise<number> {
 
 /** The Zenodo token for the sandbox or production: `--token`, else the environment's. A
  *  sandbox run never uses the production one. */
-function zenodoToken(argv: string[], sandbox: boolean): string | undefined {
+function zenodoToken(a: Args<'token'>, sandbox: boolean): string | undefined {
   return (
-    flag(argv, 'token') ?? (sandbox ? process.env.ZENODO_TOKEN_SANDBOX : process.env.ZENODO_TOKEN)
+    a.value('token') ?? (sandbox ? process.env.ZENODO_TOKEN_SANDBOX : process.env.ZENODO_TOKEN)
   );
 }
 
@@ -560,13 +522,13 @@ async function sandboxFromDoi(
 /** The Zenodo API and the journal root for `oak release reserve-doi` and `status`, or the exit
  *  code after printing why not. */
 async function zenodoSetup(
-  argv: string[],
+  a: Args<'myst' | 'paper' | 'sandbox' | 'token' | 'instance' | 'no-instance'>,
   verb: 'release reserve-doi' | 'release status',
 ): Promise<{ api: ZenodoApi; mystPath: string; instanceRoot: string | null } | number> {
   const z = await import('./zenodo.js');
-  const mystPath = mystPathOf(argv);
-  const sandbox = has(argv, 'sandbox');
-  const token = zenodoToken(argv, sandbox);
+  const mystPath = mystPathOf(a);
+  const sandbox = a.has('sandbox');
+  const token = zenodoToken(a, sandbox);
   if (!token) {
     const why =
       process.env.GITHUB_ACTIONS && verb === 'release reserve-doi'
@@ -575,7 +537,7 @@ async function zenodoSetup(
     process.stderr.write(why + '\n');
     return 2;
   }
-  const instance = await resolveInstanceRoot(argv, dirname(mystPath), verb);
+  const instance = await resolveInstanceRoot(a, dirname(mystPath), verb);
   if ('error' in instance) {
     process.stderr.write(instance.error + '\n');
     return 2;
@@ -587,17 +549,18 @@ async function zenodoSetup(
 /** `oak release reserve-doi`: reserves the DOI and opens the DOI pull request. Documented at
  *  DOCS.releaseReserveDoi. */
 async function cmdReleaseReserveDoi(argv: string[]): Promise<number> {
-  const setup = await zenodoSetup(argv, 'release reserve-doi');
+  const a = parseArgs(COMMANDS.releaseReserveDoi, argv);
+  const setup = await zenodoSetup(a, 'release reserve-doi');
   if (typeof setup === 'number') return setup;
   const { api, mystPath, instanceRoot } = setup;
   const z = await import('./zenodo.js');
   const gh = await import('./gh.js');
-  const repo = gh.currentRepo(flag(argv, 'repo'), dirname(mystPath));
+  const repo = gh.currentRepo(a.value('repo'), dirname(mystPath));
   if (!repo) {
     process.stderr.write(msg.workflow.depositNoRepo + '\n');
     return 2;
   }
-  const siteUrl = flag(argv, 'site-url') ?? process.env.SITE_URL;
+  const siteUrl = a.value('site-url') ?? process.env.SITE_URL;
   const out = await z.cmdPrepare({ mystPath, repo, siteUrl, api, instanceRoot });
   // Open the DOI pull request for the myst.yml write. Without a gh login the write is
   // left for the editor to commit.
@@ -627,21 +590,26 @@ async function cmdReleaseReserveDoi(argv: string[]): Promise<number> {
       );
     }
   }
-  emit(argv, out.result);
+  emit(a, out.result);
   return out.exitCode;
 }
 
 /** `oak release status --repo <owner/name>`: `oak release status` in a clone of the repo in a
  *  temporary folder, removed after. */
 async function releaseStatusOfRepo(repo: string, argv: string[]): Promise<number> {
-  if (flag(argv, 'paper') !== undefined || flag(argv, 'myst') !== undefined) {
+  const word = releaseWord(argv)!;
+  const a = parseArgs(
+    COMMANDS.releaseStatus,
+    argv.filter((_, i) => i !== word.at),
+  );
+  if (a.value('paper') !== undefined || a.value('myst') !== undefined) {
     throw new UserError(msg.workflow.releaseStatusRepoAndPaper);
   }
   const gh = await import('./gh.js');
   const name = gh.currentRepo(repo)!;
   // The refusals `oak release status` would make after the clone, made before it.
-  const sandbox = has(argv, 'sandbox');
-  if (!zenodoToken(argv, sandbox)) {
+  const sandbox = a.has('sandbox');
+  if (!zenodoToken(a, sandbox)) {
     throw new UserError(msg.workflow.noZenodoToken('release status', sandbox));
   }
   if (!gh.ghLoggedIn()) throw new UserError(msg.workflow.releaseStatusNeedsGh);
@@ -670,12 +638,13 @@ async function releaseStatusOfRepo(repo: string, argv: string[]): Promise<number
 
 /** `oak release status`: the deposit's state on Zenodo. Documented at DOCS.releaseStatus. */
 async function cmdReleaseStatus(argv: string[]): Promise<number> {
-  const setup = await zenodoSetup(argv, 'release status');
+  const a = parseArgs(COMMANDS.releaseStatus, argv);
+  const setup = await zenodoSetup(a, 'release status');
   if (typeof setup === 'number') return setup;
   const z = await import('./zenodo.js');
-  const siteUrl = flag(argv, 'site-url') ?? process.env.SITE_URL;
+  const siteUrl = a.value('site-url') ?? process.env.SITE_URL;
   const out = await z.cmdStatus({ ...setup, siteUrl });
-  emit(argv, out.result, msg.workflow.releaseStatusLines);
+  emit(a, out.result, msg.workflow.releaseStatusLines);
   return out.exitCode;
 }
 
@@ -708,13 +677,14 @@ function platformName(): string {
  * release, and comments on the commit. Documented at DOCS.releaseDeposit.
  */
 async function cmdReleaseDeposit(argv: string[]): Promise<number> {
-  const useLocalBuild = has(argv, 'use-local-build');
+  const a = parseArgs(COMMANDS.releaseDeposit, argv);
+  const useLocalBuild = a.has('use-local-build');
   const inActions = Boolean(process.env.GITHUB_ACTIONS);
-  if (useLocalBuild && flag(argv, 'repo') !== undefined) {
+  if (useLocalBuild && a.value('repo') !== undefined) {
     process.stderr.write(msg.workflow.releaseLocalBuildWithRepo + '\n');
     return 2;
   }
-  const tag = flag(argv, 'tag');
+  const tag = a.value('tag');
   if (!tag) {
     process.stderr.write(msg.workflow.releaseNoTag + '\n');
     return 2;
@@ -729,15 +699,15 @@ async function cmdReleaseDeposit(argv: string[]): Promise<number> {
   const gh = await import('./gh.js');
   const release = await import('./release.js');
 
-  const paperRoot = resolve(flag(argv, 'paper') ?? '.');
-  const mystPath = mystPathOf(argv);
+  const paperRoot = resolve(a.value('paper') ?? '.');
+  const mystPath = mystPathOf(a);
   const env = await sandboxFromDoi(mystPath, 'release deposit');
   if ('error' in env) {
     process.stderr.write(env.error + '\n');
     return 2;
   }
   const { sandbox } = env;
-  const token = zenodoToken(argv, sandbox);
+  const token = zenodoToken(a, sandbox);
   // The CI token is optional: a journal without one deposits from the terminal, so its run ends
   // with a notice saying how.
   if (!token && inActions) {
@@ -747,7 +717,7 @@ async function cmdReleaseDeposit(argv: string[]): Promise<number> {
         msg.workflow.releaseNoTokenInCi(process.env.GITHUB_REPOSITORY, tag, sandbox),
       ) + '\n',
     );
-    emit(argv, { status: 'ok', deposit: 'skipped', reason: msg.workflow.releaseNoTokenReason });
+    emit(a, { status: 'ok', deposit: 'skipped', reason: msg.workflow.releaseNoTokenReason });
     return 0;
   }
   if (!token) {
@@ -755,7 +725,7 @@ async function cmdReleaseDeposit(argv: string[]): Promise<number> {
     return 2;
   }
   // The deposit archives this journal and reads its `zenodo:`.
-  const instance = await resolveInstanceRoot(argv, paperRoot, 'release deposit');
+  const instance = await resolveInstanceRoot(a, paperRoot, 'release deposit');
   if ('error' in instance) {
     process.stderr.write(instance.error + '\n');
     return 2;
@@ -787,13 +757,13 @@ async function cmdReleaseDeposit(argv: string[]): Promise<number> {
   }
 
   const api = new z.ZenodoApi(z.createFetchTransport(), sandbox, token);
-  const bundleOut = resolve(flag(argv, 'bundle-out') ?? join('_build', 'bundle'));
-  const publish = has(argv, 'publish-without-review');
+  const bundleOut = resolve(a.value('bundle-out') ?? join('_build', 'bundle'));
+  const publish = a.has('publish-without-review');
   const out = await z.cmdUpload({
     mystPath,
     pdf,
     tag,
-    siteUrl: flag(argv, 'site-url') ?? process.env.SITE_URL,
+    siteUrl: a.value('site-url') ?? process.env.SITE_URL,
     bundleOut,
     api,
     git: gh.realGitContext,
@@ -804,7 +774,7 @@ async function cmdReleaseDeposit(argv: string[]): Promise<number> {
     ...(builtAt !== undefined ? { builtAt } : {}),
   });
   // On success the lines below say what happened; the fields are in --json.
-  emit(argv, out.result, (r) => (r.status === 'ok' ? [] : summarize(r)));
+  emit(a, out.result, (r) => (r.status === 'ok' ? [] : summarize(r)));
   if (out.exitCode !== 0) {
     // In CI nobody watches the run, so the editors get an issue.
     if (inActions && gh.ghLoggedIn()) {
@@ -829,7 +799,7 @@ async function cmdReleaseDeposit(argv: string[]): Promise<number> {
   const url = String(out.result.record_url ?? out.result.draft_url ?? out.result.version_doi);
   const { waitIndicator } = await import('./progress.js');
   const progress = waitIndicator(process.stderr, process.env);
-  const json = has(argv, 'json');
+  const json = a.has('json');
   const step = (line: string) => {
     if (!json) progress.log(line);
   };
@@ -921,20 +891,22 @@ async function cmdReleaseVersion(argv: string[]): Promise<number> {
     process.stderr.write(msg.workflow.releaseUnknownWord(word) + '\n');
     return 2;
   }
-  // The workflows run only the subcommands; an older deposit-version.yml runs `release --tag`.
+  // The workflows run only the subcommands; an older deposit-version.yml runs `release --tag`
+  // with flags of its own, so this comes before the flags are read.
   if (process.env.GITHUB_ACTIONS) {
     const why =
-      flag(argv, 'tag') !== undefined
+      rawFlag(argv, 'tag') !== undefined
         ? msg.workflow.releaseFlowInActions(pinned.DEPOSIT_MIN_VERSION)
         : msg.workflow.releaseInActions;
     process.stderr.write(why + '\n');
     return 2;
   }
-  if (has(argv, 'use-local-build')) {
+  const a = parseArgs(COMMANDS.release, argv);
+  if (a.has('use-local-build')) {
     process.stderr.write(msg.workflow.releaseLocalBuildOnFlow + '\n');
     return 2;
   }
-  if (flag(argv, 'tag') !== undefined) {
+  if (a.value('tag') !== undefined) {
     process.stderr.write(msg.workflow.releaseTagOnFlow + '\n');
     return 2;
   }
@@ -942,7 +914,7 @@ async function cmdReleaseVersion(argv: string[]): Promise<number> {
     process.stderr.write(msg.workflow.releaseNeedsGh + '\n');
     return 2;
   }
-  const repo = gh.currentRepo(flag(argv, 'repo'), '.');
+  const repo = gh.currentRepo(a.value('repo'), '.');
   if (!repo) {
     process.stderr.write(msg.workflow.releaseNoRepo + '\n');
     return 2;
@@ -954,13 +926,13 @@ async function cmdReleaseVersion(argv: string[]): Promise<number> {
     );
     return 2;
   }
-  const sandbox = has(argv, 'sandbox');
-  const publish = has(argv, 'publish-without-review');
+  const sandbox = a.has('sandbox');
+  const publish = a.has('publish-without-review');
   const passOn = RELEASE_SUBCOMMAND_FLAGS.flatMap((name) => {
-    const value = flag(argv, name);
+    const value = a.value(name);
     if (value === undefined) return [];
     return [`--${name}`, name === 'instance' ? resolve(value) : value];
-  }).concat(has(argv, 'no-instance') ? ['--no-instance'] : []);
+  }).concat(a.has('no-instance') ? ['--no-instance'] : []);
   // The token is printed as a placeholder for the editor to fill in.
   const rerun = [
     'oak release --repo',
@@ -968,10 +940,10 @@ async function cmdReleaseVersion(argv: string[]): Promise<number> {
     tag,
     ...(sandbox ? ['--sandbox'] : []),
     ...(publish ? ['--publish-without-review'] : []),
-    ...(has(argv, 'yes') ? ['--yes'] : []),
+    ...(a.has('yes') ? ['--yes'] : []),
     ...passOn.map((arg, i) => (passOn[i - 1] === '--token' ? '<token>' : shellWord(arg))),
   ].join(' ');
-  const verbose = has(argv, 'verbose');
+  const verbose = a.has('verbose');
   const { waitIndicator } = await import('./progress.js');
   const progress = waitIndicator(process.stderr, process.env);
   /** Runs the child, with the spinner unless its output shows live (--verbose). */
@@ -984,7 +956,7 @@ async function cmdReleaseVersion(argv: string[]): Promise<number> {
   const runSubcommand = async (args: string[], clone: string): Promise<SubcommandRun> => {
     const childArgs = [...args, '--json'];
     const ctx = await handoffContext('release', childArgs);
-    const deps = await handoffDeps(argv);
+    const deps = await handoffDeps();
     let run: SubcommandRun | null = null;
     const code = await pinned.handOff(
       { ...ctx, paperRoot: clone },
@@ -1027,10 +999,10 @@ async function cmdReleaseVersion(argv: string[]): Promise<number> {
       { repo, tag, sandbox, publish, rerun },
       {
         src,
-        hasToken: (sb) => Boolean(zenodoToken(argv, sb)),
+        hasToken: (sb) => Boolean(zenodoToken(a, sb)),
         readDepositState: (doi, sb) =>
           z.readDepositState(
-            new z.ZenodoApi(z.createFetchTransport(), sb, zenodoToken(argv, sb)!),
+            new z.ZenodoApi(z.createFetchTransport(), sb, zenodoToken(a, sb)!),
             doi,
           ),
         checkPin: (version) => {
@@ -1064,7 +1036,7 @@ async function cmdReleaseVersion(argv: string[]): Promise<number> {
             ],
             clone,
           ),
-        confirm: makeConfirm(argv),
+        confirm: makeConfirm(a.has('yes')),
         sleep: progress.sleep,
         log: progress.log,
         status: progress.status,
@@ -1085,51 +1057,53 @@ async function cmdReleaseVersion(argv: string[]): Promise<number> {
 
 /** `oak clean [--cache] [--yes]`. Documented at DOCS.clean. */
 async function cmdClean(argv: string[]): Promise<number> {
+  const a = parseArgs(COMMANDS.clean, argv);
   const { cmdClean: clean } = await import('./clean.js');
   const { cacheHome } = await import('./pinned.js');
   const out = await clean(
     {
       dir: tmpdir(),
       cacheDir: join(cacheHome(process.env, homedir()), 'oak'),
-      cache: has(argv, 'cache'),
+      cache: a.has('cache'),
     },
     {
       uid: process.getuid?.(),
-      confirm: makeConfirm(argv),
+      confirm: makeConfirm(a.has('yes')),
       log: (line) => process.stderr.write(line + '\n'),
     },
   );
-  emit(argv, out.result, () => []);
+  emit(a, out.result, () => []);
   return out.exitCode;
 }
 
 /** `oak deploy-preview <site> [--verified-head <sha>]`: deploys the build artifact to
  *  Cloudflare Pages, or falls back to a link to it, and posts the preview comment. */
 async function cmdDeployPreview(argv: string[]): Promise<number> {
+  const a = parseArgs(COMMANDS.deployPreview, argv);
   const preview = await import('./preview.js');
   const gh = await import('./gh.js');
   const { eventHeadSha } = await import('./artifact.js');
-  const siteDir = resolve(argv.find((a) => !a.startsWith('--')) ?? 'site');
-  const paper = flag(argv, 'paper');
-  const instance = await resolveInstanceRoot(argv, resolve(paper ?? '.'), 'deploy-preview');
+  const siteDir = resolve(a.positionals[0] ?? 'site');
+  const paper = a.value('paper');
+  const instance = await resolveInstanceRoot(a, resolve(paper ?? '.'), 'deploy-preview');
   const out = await preview.cmdDeployPreview(
     {
       siteDir,
       repoRoot: resolve('.'),
       instanceRoot: 'error' in instance ? { problem: instance.error } : instance.root,
-      repo: gh.currentRepo(flag(argv, 'repo')),
+      repo: gh.currentRepo(a.value('repo')),
       serverUrl: process.env.GITHUB_SERVER_URL ?? 'https://github.com',
       artifactRunId: process.env.PAPER_BUILD_RUN_ID,
       cf: {
         apiToken: process.env.CLOUDFLARE_API_TOKEN,
         accountId: process.env.CLOUDFLARE_ACCOUNT_ID,
       },
-      verifiedHead: flag(argv, 'verified-head') ?? eventHeadSha(process.env),
+      verifiedHead: a.value('verified-head') ?? eventHeadSha(process.env),
       paper,
     },
     { deployer: gh.realPagesDeployer, gh: gh.realGhPr },
   );
-  emit(argv, out.result);
+  emit(a, out.result);
   return out.exitCode;
 }
 
@@ -1231,9 +1205,9 @@ function validateSummary(out: {
  *  is written, failing or not, since post-checks posts the result.
  *  Documented at DOCS.validate. */
 async function cmdValidate(argv: string[]): Promise<number> {
-  refuseUnknownArgs(argv, 'validate');
-  const paperRoot = resolve(flag(argv, 'paper') ?? '.');
-  const reportPath = flag(argv, 'report');
+  const a = parseArgs(COMMANDS.validate, argv);
+  const paperRoot = resolve(a.value('paper') ?? '.');
+  const reportPath = a.value('report');
   // A journal repo has no version key, so validate stops with a sentence ({@link isJournalRepo},
   // as in `oak build`).
   if (isJournalRepo(paperRoot)) {
@@ -1241,7 +1215,7 @@ async function cmdValidate(argv: string[]): Promise<number> {
     process.stderr.write(annotate('error', text) + '\n');
     return writeFailureReport(reportPath, paperRoot, msg.workflow.validateCouldNotRun, text, 2);
   }
-  const resolved = await resolveInstanceRoot(argv, paperRoot, 'validate');
+  const resolved = await resolveInstanceRoot(a, paperRoot, 'validate');
   if ('error' in resolved) {
     process.stderr.write(annotate('error', resolved.error) + '\n');
     return writeFailureReport(
@@ -1253,12 +1227,12 @@ async function cmdValidate(argv: string[]): Promise<number> {
     );
   }
   const instanceRoot = resolved.root;
-  const strict = has(argv, 'strict');
+  const strict = a.has('strict');
 
   const gh = await import('./gh.js');
   let repo: string | null;
   try {
-    repo = gh.currentRepo(flag(argv, 'repo'), paperRoot);
+    repo = gh.currentRepo(a.value('repo'), paperRoot);
   } catch (err) {
     if (!(err instanceof UserError)) throw err;
     return writeFailureReport(
@@ -1285,7 +1259,7 @@ async function cmdValidate(argv: string[]): Promise<number> {
         // The inputs `oak build` composes from, spread from the same builder so a field added for
         // build reaches validate too [R82]. The [R72] check also needs oak's checkout and the
         // edition; without both, validate reads the author's config and says so.
-        ...materializeInputFrom(argv, paperRoot, resolved),
+        ...materializeInputFrom(a, paperRoot, resolved),
         edge: createMystEdge(),
         edition: readEditionQuietly(paperRoot),
       },
@@ -1313,7 +1287,7 @@ async function cmdValidate(argv: string[]): Promise<number> {
   }
 
   emit(
-    argv,
+    a,
     {
       status: out.status,
       errors: out.errors,
@@ -1351,15 +1325,16 @@ async function cmdValidate(argv: string[]): Promise<number> {
  *  checked against `--verified-head` before anything is posted. Failing to post the Check Run
  *  fails the job; a failed comment only warns. Needs GH_TOKEN. Documented at DOCS.postChecks. */
 async function cmdPostChecks(argv: string[]): Promise<number> {
-  const reportPath = flag(argv, 'report');
+  const a = parseArgs(COMMANDS.postChecks, argv);
+  const reportPath = a.value('report');
   const gh = await import('./gh.js');
-  const repo = gh.currentRepo(flag(argv, 'repo'));
-  const sha = flag(argv, 'sha');
+  const repo = gh.currentRepo(a.value('repo'));
+  const sha = a.value('sha');
   // The gated-files warning [R83]: --base and --verified-head come from the workflow_run event,
   // which GitHub sets and the fork's artifact cannot, so a pull request editing `.github/` or
   // `CODEOWNERS` is flagged even if the artifact lies.
-  const base = flag(argv, 'base');
-  const verifiedHead = flag(argv, 'verified-head');
+  const base = a.value('base');
+  const verifiedHead = a.value('verified-head');
   if (!reportPath || !repo || !sha || !base || !verifiedHead) {
     process.stderr.write(msg.workflow.postChecksArgs + '\n');
     return 2;
@@ -1387,7 +1362,7 @@ async function cmdPostChecks(argv: string[]): Promise<number> {
   // The Stage 1 engine may write no `paper` file; a malformed one is refused here.
   const artifactDir = dirname(resolve(reportPath));
   const paper = artifact.resolvePaperDir(
-    flag(argv, 'paper'),
+    a.value('paper'),
     artifact.readPaperDir(artifactDir, artifact.CHECKS_FILES.paper),
   );
   const pr = artifact.readPrNumber(artifactDir, artifact.CHECKS_FILES.pr) ?? undefined;
@@ -1402,18 +1377,18 @@ async function cmdPostChecks(argv: string[]): Promise<number> {
       sticky: (root, prNum, header, body) => gh.realGhPr.sticky(root, prNum, header, body),
     },
   );
-  emit(argv, { ...out, pr: pr ?? null, paper });
+  emit(a, { ...out, pr: pr ?? null, paper });
   return out.checkRunPosted ? 0 : 1;
 }
 
 /** oak's own repo. */
 const ENGINE_REPO_DEFAULT = 'Open-Scholar-Nexus/oaktree-sapling';
 
-/** Prints the plan to stderr, then takes --yes (required without a TTY) or asks. */
-function makeConfirm(argv: string[], yesAccepts = true): (plan: string[]) => Promise<boolean> {
+/** Prints the plan to stderr, then takes `yes` (--yes, required without a TTY) or asks. */
+function makeConfirm(yes: boolean, yesAccepts = true): (plan: string[]) => Promise<boolean> {
   return async (plan) => {
     for (const line of plan) process.stderr.write(line + '\n');
-    if (yesAccepts && has(argv, 'yes')) {
+    if (yesAccepts && yes) {
       process.stderr.write('\n'); // between the plan and the progress lines
       return true;
     }
@@ -1448,12 +1423,12 @@ function workdir(prefix: string): () => string {
   return () => mkdtempSync(join(tmpdir(), prefix));
 }
 
-function secretsFrom(argv: string[]) {
+function secretsFrom(a: Args<(typeof SECRET_FLAGS)[number]>) {
   return {
-    zenodoToken: flag(argv, 'zenodo-token') ?? process.env.ZENODO_TOKEN,
-    zenodoTokenSandbox: flag(argv, 'zenodo-token-sandbox') ?? process.env.ZENODO_TOKEN_SANDBOX,
-    cfToken: flag(argv, 'cf-token') ?? process.env.CLOUDFLARE_API_TOKEN,
-    cfAccount: flag(argv, 'cf-account') ?? process.env.CLOUDFLARE_ACCOUNT_ID,
+    zenodoToken: a.value('zenodo-token') ?? process.env.ZENODO_TOKEN,
+    zenodoTokenSandbox: a.value('zenodo-token-sandbox') ?? process.env.ZENODO_TOKEN_SANDBOX,
+    cfToken: a.value('cf-token') ?? process.env.CLOUDFLARE_API_TOKEN,
+    cfAccount: a.value('cf-account') ?? process.env.CLOUDFLARE_ACCOUNT_ID,
   };
 }
 
@@ -1463,7 +1438,15 @@ const SECRET_FLAGS = ['zenodo-token', 'zenodo-token-sandbox', 'cf-token', 'cf-ac
 /** `oak bootstrap <paper|journal>`. Documented at DOCS.bootstrap. */
 async function cmdBootstrap(argv: string[]): Promise<number> {
   const sub = argv[0];
+  if (sub !== 'paper' && sub !== 'journal') {
+    process.stderr.write(msg.workflow.bootstrapUsage + '\n');
+    return 2;
+  }
   const rest = argv.slice(1);
+  const pa = sub === 'paper' ? parseArgs(COMMANDS.bootstrapPaper, rest) : null;
+  const ja = sub === 'journal' ? parseArgs(COMMANDS.bootstrapJournal, rest) : null;
+  /** The flags both subcommands take. */
+  const a = (pa ?? ja)!;
   const gh = await import('./gh.js');
   const bootstrap = await import('./bootstrap.js');
   const paperTemplateRoot = bootstrap.paperTemplateRoot(engineRoot());
@@ -1471,33 +1454,33 @@ async function cmdBootstrap(argv: string[]): Promise<number> {
   const siteTemplateRoot = bootstrap.siteTemplateRoot(engineRoot());
   const mystRange = bootstrap.engineMystRange(engineRoot());
 
-  const repo = flag(rest, 'repo');
+  const repo = a.value('repo');
   if (!repo) {
     process.stderr.write(msg.workflow.bootstrapNoRepo + '\n');
     return 2;
   }
   gh.assertRepoName(repo, '--repo');
-  const instance = flag(rest, 'instance');
+  const instance = pa?.value('instance');
   if (instance && instance !== '.') gh.assertRepoName(instance, '--instance');
   // Malformed arguments are refused before any gh call.
-  const external = sub === 'journal' && !has(rest, 'co-located');
-  if (sub === 'journal') {
+  const external = ja !== null && !ja.has('co-located');
+  if (ja) {
     // A typed secret flag is refused with an external journal; environment values are allowed.
-    if (external && SECRET_FLAGS.some((f) => flag(rest, f))) {
+    if (external && SECRET_FLAGS.some((f) => ja.value(f))) {
       process.stderr.write(msg.workflow.bootstrapSecretsNeedPaper + '\n');
       return 2;
     }
   }
   const { pinnedEngineVersion, newerRelease, npmLatest } = await import('./engine-version.js');
-  const pinned = pinnedEngineVersion(flag(rest, 'engine-version'), OAK_VERSION);
-  const engineRepo = flag(rest, 'engine-repo') ?? ENGINE_REPO_DEFAULT;
+  const pinned = pinnedEngineVersion(a.value('engine-version'), OAK_VERSION);
+  const engineRepo = a.value('engine-repo') ?? ENGINE_REPO_DEFAULT;
   // A new repo's files come from the oak version it pins.
   const { runVersion } = await import('./pinned.js');
   const handed = await runVersion(
     { engineRepo, version: pinned.engineVersion },
     { kind: 'flag' },
     await handoffContext('bootstrap', argv),
-    await handoffDeps(argv),
+    await handoffDeps(),
   );
   if (handed !== null) return handed;
   gh.assertRepoName(engineRepo, '--engine-repo');
@@ -1509,7 +1492,7 @@ async function cmdBootstrap(argv: string[]): Promise<number> {
     ...(pinned.resolved.engineVersionFrom === 'running-oak' && engineRepo === ENGINE_REPO_DEFAULT
       ? { newerRelease: await newerRelease(OAK_VERSION, npmLatest) }
       : {}),
-    engineRepoFrom: (flag(rest, 'engine-repo') ? 'flag' : 'default') as 'flag' | 'default',
+    engineRepoFrom: (a.value('engine-repo') ? 'flag' : 'default') as 'flag' | 'default',
   };
   const deps = {
     prov: gh.realProvisioner,
@@ -1518,69 +1501,68 @@ async function cmdBootstrap(argv: string[]): Promise<number> {
     siteTemplateRoot,
     mystRange,
     log: (m: string) => process.stderr.write(m + '\n'),
-    confirm: makeConfirm(rest),
+    confirm: makeConfirm(a.has('yes')),
     workdir: workdir('oak-bootstrap-'),
   };
 
-  if (sub === 'paper') {
+  if (pa) {
     const out = await bootstrap.cmdBootstrapPaper(
       {
         repo,
-        from: flag(rest, 'from'),
-        sourceRef: flag(rest, 'source-ref'),
+        from: pa.value('from'),
+        sourceRef: pa.value('source-ref'),
         instance,
         // No default: the edition must be one the journal already has.
-        edition: flag(rest, 'edition'),
+        edition: a.value('edition'),
         engineVersion,
         engineRepo,
-        owner: flag(rest, 'owner'),
+        owner: a.value('owner'),
         authedUser: gh.authedUser(),
-        private: has(rest, 'private'),
-        requireChecks: !has(rest, 'no-require-checks'),
-        secrets: secretsFrom(rest),
+        private: pa.has('private'),
+        requireChecks: !a.has('no-require-checks'),
+        secrets: secretsFrom(a),
         resolved,
       },
       deps,
     );
-    emit(rest, out.result, narrated);
+    emit(a, out.result, narrated);
     return out.exitCode;
   }
 
-  if (sub === 'journal') {
+  if (ja) {
     const out = await bootstrap.cmdBootstrapJournal(
       {
         repo,
         tier: external ? 'external' : 'co-located',
-        name: flag(rest, 'name'),
+        name: ja.value('name'),
         // Defaulted, and shown in the plan: the new journal's edition file is named from this
         // value, so the two agree. The journal can rename it.
-        edition: flag(rest, 'edition'),
+        edition: a.value('edition'),
         engineVersion,
         engineRepo,
-        owner: flag(rest, 'owner'),
+        owner: a.value('owner'),
         authedUser: gh.authedUser(),
-        requireChecks: !has(rest, 'no-require-checks'),
-        site: !has(rest, 'no-site'),
-        secrets: secretsFrom(rest),
+        requireChecks: !a.has('no-require-checks'),
+        site: !ja.has('no-site'),
+        secrets: secretsFrom(a),
         resolved,
       },
       deps,
     );
-    emit(rest, out.result, narrated);
+    emit(a, out.result, narrated);
     return out.exitCode;
   }
-
-  process.stderr.write(msg.workflow.bootstrapUsage + '\n');
   return 2;
 }
 
 /** `oak upgrade`. Documented at DOCS.upgrade. */
 async function cmdUpgrade(argv: string[]): Promise<number> {
+  const a = parseArgs(COMMANDS.upgrade, argv);
   const gh = await import('./gh.js');
   const upgrade = await import('./upgrade.js');
 
-  const paper = flag(argv, 'paper');
-  const repo = flag(argv, 'repo');
+  const paper = a.value('paper');
+  const repo = a.value('repo');
   if (!paper && !repo) {
     process.stderr.write(msg.upgrade.missingTarget + '\n');
     return 2;
@@ -1588,16 +1570,16 @@ async function cmdUpgrade(argv: string[]): Promise<number> {
   const repoRoot = paper ? resolve(paper) : gh.tempClone(gh.assertRepoName(repo!, '--repo'));
 
   const out = await upgrade.cmdUpgrade(
-    { repoRoot, to: flag(argv, 'to'), filesOnly: has(argv, 'files-only') },
+    { repoRoot, to: a.value('to'), filesOnly: a.has('files-only') },
     {
       resolveTarget: gh.latestEngineRelease,
       materializeTemplate: gh.materializeTemplate,
       pr: gh.realUpgradePr,
       log: (m) => process.stderr.write(m + '\n'),
-      confirm: makeConfirm(argv),
+      confirm: makeConfirm(a.has('yes')),
     },
   );
-  emit(argv, out.result, narrated);
+  emit(a, out.result, narrated);
   return out.exitCode;
 }
 
@@ -1611,20 +1593,22 @@ async function cmdConformance(argv: string[]): Promise<number> {
   const deps = { gh: gh.realConformanceGh, log: (m: string) => process.stderr.write(m + '\n') };
 
   if (sub === 'reset') {
-    const repo = flag(rest, 'repo');
+    const a = parseArgs(COMMANDS.conformanceReset, rest);
+    const repo = a.value('repo');
     if (!repo) {
       process.stderr.write(msg.workflow.conformanceResetArgs + '\n');
       return 2;
     }
     gh.assertRepoName(repo, '--repo');
     const out = await conformance.cmdConformanceReset({ repo }, deps);
-    emit(rest, out.result);
+    emit(a, out.result);
     return out.exitCode;
   }
 
   if (sub === 'run') {
-    const repo = flag(rest, 'repo');
-    const tag = flag(rest, 'tag');
+    const a = parseArgs(COMMANDS.conformanceRun, rest);
+    const repo = a.value('repo');
+    const tag = a.value('tag');
     if (!repo || !tag) {
       process.stderr.write(msg.workflow.conformanceRunArgs + '\n');
       return 2;
@@ -1632,12 +1616,12 @@ async function cmdConformance(argv: string[]): Promise<number> {
     const upgrade = await import('./upgrade.js');
     gh.assertRepoName(repo, '--repo');
     // The fork preview runs only when the fork repo and its token are both set.
-    const forkFlag = flag(rest, 'fork-repo');
+    const forkFlag = a.value('fork-repo');
     const forkRepo = forkFlag ?? process.env.CONFORMANCE_FORK_REPO;
     if (forkRepo) gh.assertRepoName(forkRepo, forkFlag ? '--fork-repo' : 'CONFORMANCE_FORK_REPO');
     const forkToken = process.env.CONFORMANCE_FORK_PAT;
     const out = await conformance.cmdConformanceRun(
-      { repo, tag, runId: flag(rest, 'run-id') },
+      { repo, tag, runId: a.value('run-id') },
       {
         ...deps,
         fork: forkRepo && forkToken ? { repo: forkRepo, token: forkToken } : null,
@@ -1672,10 +1656,10 @@ async function cmdConformance(argv: string[]): Promise<number> {
         },
       },
     );
-    emit(rest, out.result);
+    emit(a, out.result);
     // `--record` writes the result to a file, which the workflow uploads to the release. The file
     // is what machines read; stdout carries JSON only with `--json`.
-    const record = flag(rest, 'record');
+    const record = a.value('record');
     if (record) writeFileSync(resolve(record), JSON.stringify(out.result, null, 2) + '\n');
     return out.exitCode;
   }
@@ -1697,35 +1681,6 @@ const VERBS: Verb[] = [
   'conformance',
 ];
 
-/** Levenshtein distance: only ever run over two short command words. */
-function editDistance(a: string, b: string): number {
-  const prev = Array.from({ length: b.length + 1 }, (_, i) => i);
-  for (let i = 1; i <= a.length; i++) {
-    let diag = prev[0]!;
-    prev[0] = i;
-    for (let j = 1; j <= b.length; j++) {
-      const tmp = prev[j]!;
-      prev[j] = Math.min(prev[j]! + 1, prev[j - 1]! + 1, diag + (a[i - 1] === b[j - 1] ? 0 : 1));
-      diag = tmp;
-    }
-  }
-  return prev[b.length]!;
-}
-
-/** The closest of `candidates` to a typo, or null when nothing is close enough to suggest. */
-function nearest(word: string, candidates: readonly string[]): string | null {
-  let best: string | null = null;
-  let bestD = Infinity;
-  for (const v of candidates) {
-    const d = editDistance(word.toLowerCase(), v);
-    if (d < bestD) {
-      bestD = d;
-      best = v;
-    }
-  }
-  return bestD <= 3 ? best : null;
-}
-
 /** Set by the bundle: the release tag without its `v`, or `<package.json version>-unreleased+<sha>`
  *  in a bundle built outside a release. */
 declare const OAK_VERSION: string;
@@ -1744,7 +1699,7 @@ async function handoffContext(verb: HandoffVerb, argv: string[]): Promise<Handof
   };
 }
 
-async function handoffDeps(argv: string[]): Promise<HandoffDeps> {
+async function handoffDeps(): Promise<HandoffDeps> {
   const { cloneEngineTag } = await import('./gh.js');
   return {
     clone: cloneEngineTag,
@@ -1759,7 +1714,7 @@ async function handoffDeps(argv: string[]): Promise<HandoffDeps> {
     spawn: (cli, args, env) =>
       spawnSync(process.execPath, [cli, ...args], { stdio: 'inherit', env }).status ?? 1,
     // Running another repository's code is asked even with --yes.
-    confirm: makeConfirm(argv, false),
+    confirm: makeConfirm(false, false),
     log: (line) => process.stderr.write(line + '\n'),
   };
 }
@@ -1771,8 +1726,10 @@ async function runPinned(verb: PaperVerb, argv: string[]): Promise<number | null
   const ctx = await handoffContext(verb, argv);
   // The `release` subcommands find the paper from `--myst` too.
   const paperRoot =
-    verb === 'release' ? dirname(mystPathOf(argv)) : resolve(flag(argv, 'paper') ?? '.');
-  return handOff({ ...ctx, paperRoot }, await handoffDeps(argv));
+    verb === 'release'
+      ? dirname(resolve(rawFlag(argv, 'myst') ?? join(rawFlag(argv, 'paper') ?? '.', 'myst.yml')))
+      : resolve(rawFlag(argv, 'paper') ?? '.');
+  return handOff({ ...ctx, paperRoot }, await handoffDeps());
 }
 
 /**
@@ -1790,9 +1747,11 @@ async function main(argv: string[]): Promise<number> {
   const verb = argv[0] as Verb | undefined;
   // One environment variable, read by gh.ts, so `--verbose` reaches the git and gh calls
   // without passing a parameter around, and survives the child process `oak release` starts.
-  if (has(argv, 'verbose')) process.env.OAK_VERBOSE = '1';
-  if (argv[0] === 'help' || has(argv, 'help') || argv.includes('-h')) {
-    process.stdout.write(msg.usage());
+  if (rawHas(argv, 'verbose')) process.env.OAK_VERBOSE = '1';
+  if (argv[0] === 'help' || rawHas(argv, 'help') || argv.includes('-h')) {
+    // `oak help build` and `oak build --help` both print build's.
+    const [v, sub] = argv[0] === 'help' ? argv.slice(1) : argv;
+    process.stdout.write((v && msg.commandHelp(v, sub)) || msg.usage());
     return 0;
   }
   if (argv[0] === '--version') {
@@ -1802,7 +1761,7 @@ async function main(argv: string[]): Promise<number> {
   const args = argv.slice(1);
   // Before the hand-off, so the pinned oak is the one the cloned repo names.
   const statusRepo =
-    verb === 'release' && releaseWord(args)?.word === 'status' ? flag(args, 'repo') : undefined;
+    verb === 'release' && releaseWord(args)?.word === 'status' ? rawFlag(args, 'repo') : undefined;
   if (statusRepo !== undefined) return releaseStatusOfRepo(statusRepo, args);
   if (runsPinned(verb, args)) {
     const code = await runPinned(verb, args);

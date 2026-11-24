@@ -53,6 +53,8 @@
 
 import { DOCS_BASE } from './assets.js';
 import { DOCS, docsUrl } from './docs-links.js';
+import type { CommandSpec, FlagSpec } from './args.js';
+import { COMMANDS, type CommandKey } from './commands.js';
 import type { JournalCache } from './gh.js';
 import type { HandoffVerb, PinnedEngine, PinSource } from './pinned.js';
 import type { BuildState } from './release.js';
@@ -116,6 +118,68 @@ export function firstLine(e: unknown): string {
 }
 
 // ── oak --help ──
+/** The usage line of a command, wrapped at `width` under its first flag. */
+function synopsis(spec: CommandSpec, width = 100): string {
+  const show = (f: FlagSpec) => `--${f.name}${f.value ? ` ${f.value}` : ''}`;
+  const words = (spec.positionals ?? []).slice();
+  for (const e of spec.flags) {
+    const list = (Array.isArray(e) ? e : [e]) as FlagSpec[];
+    const shown = list.filter((f) => !f.hidden);
+    if (!shown.length) continue;
+    const inner = shown.map(show).join(' | ');
+    if (shown.every((f) => f.required)) words.push(shown.length > 1 ? `(${inner})` : inner);
+    else words.push(`[${inner}]`);
+  }
+  const head = `oak ${spec.name} `;
+  const lines: string[] = [];
+  let line = head;
+  for (const w of words) {
+    if (line.length + w.length > width && line.trim() !== head.trim()) {
+      lines.push(line.trimEnd());
+      line = ' '.repeat(head.length);
+    }
+    line += w + ' ';
+  }
+  lines.push(line.trimEnd());
+  return lines.join('\n');
+}
+
+/** `text` wrapped at `width`, each line indented by `indent`. */
+function wrap(text: string, indent: number, width = 100): string {
+  const pad = ' '.repeat(indent);
+  const lines: string[] = [];
+  let line = '';
+  for (const w of text.split(/\s+/)) {
+    if (line && pad.length + line.length + 1 + w.length > width) {
+      lines.push(pad + line);
+      line = w;
+    } else line = line ? `${line} ${w}` : w;
+  }
+  if (line) lines.push(pad + line);
+  return lines.join('\n');
+}
+
+/** A command as the usage shows it: its line, what it does, and the help of its flags. */
+export function commandUsage(spec: CommandSpec): string {
+  const out = [synopsis(spec, 98).replace(/^/gm, '  '), wrap(spec.summary, 20)];
+  for (const f of spec.flags.flat() as FlagSpec[]) {
+    if (!f.help || f.hidden) continue;
+    const label = `      --${f.name}`;
+    const help = wrap(f.help, 20);
+    out.push(label.length < 19 ? label.padEnd(20) + help.slice(20) : `${label}\n${help}`);
+  }
+  return out.join('\n');
+}
+
+const commands = (...keys: CommandKey[]): string =>
+  keys.map((k) => commandUsage(COMMANDS[k]) + '\n').join('');
+
+const anyCommand =
+  `Any command\n` +
+  `  --help      print this text, or with a command, that command's; --version prints oak's version\n` +
+  `  --json      print the full machine-readable result on stdout instead of a summary\n` +
+  `  --verbose   show the raw git/gh commands' output (shown on failure either way)\n`;
+
 export const usage = (): string =>
   `oak: a mystmd-based engine for running a small journal. It sets up the journal\n` +
   `(its branding, editions and list of papers) and the repos its papers are in, then\n` +
@@ -128,77 +192,46 @@ export const usage = (): string =>
   `  oak bootstrap paper   --repo <owner/name> --instance <owner/journal-repo> --edition 2026\n` +
   `\n` +
   `Setting up repos\n` +
-  `  oak bootstrap journal --repo <owner/name> [--name <name>] [--edition <id>]\n` +
-  `                        [--engine-repo <owner/name>] [--engine-version <tag>] [--owner <@user|@org/team>]\n` +
-  `                        [--no-require-checks] [--no-site] [--co-located] [--yes]\n` +
-  `                    a public repo with the journal's settings, branding, website and\n` +
-  `                    list of published papers; each paper is in a repo of its own that\n` +
-  `                    points back at it\n` +
-  `      --co-located  not ready: one repo for the journal and its papers, with no journal\n` +
-  `                    website; for now, with a single paper\n` +
-  `  oak bootstrap paper   --repo <owner/name> --instance <owner/journal-repo> --edition <id>\n` +
-  `                        [--from <author-url> [--source-ref <ref>]]\n` +
-  `                        [--engine-repo <owner/name>] [--engine-version <tag>] [--owner <@user|@org/team>]\n` +
-  `                        [--private] [--no-require-checks] [--yes]\n` +
-  `                        [--zenodo-token <token>] [--zenodo-token-sandbox <token>]\n` +
-  `                        [--cf-token <token>] [--cf-account <id>]\n` +
-  `      --instance    the journal repo this paper belongs to ('.' only if the journal\n` +
-  `                    settings are in this same repo); --edition names one of its editions\n` +
-  `      --zenodo-token, --zenodo-token-sandbox, --cf-token, --cf-account\n` +
-  `                    the Zenodo and Cloudflare secrets to set on the repo; journal --co-located\n` +
-  `                    takes them too. See ${docsUrl(DOCS.bootstrap)}\n` +
+  commands('bootstrapJournal', 'bootstrapPaper') +
+  `  --zenodo-token, --zenodo-token-sandbox, --cf-token, --cf-account set the Zenodo and\n` +
+  `  Cloudflare secrets on a paper repo; journal --co-located takes them too. See\n` +
+  `  ${docsUrl(DOCS.bootstrap)}\n` +
   `  Both bootstrap subcommands: --engine-version naming another oak version runs that version's\n` +
   `  bootstrap, fetched once into ~/.cache/oak.\n` +
-  `  oak upgrade (--repo <owner/name> | --paper <dir>) [--to <tag>] [--files-only] [--yes]\n` +
-  `                    move a paper repo to a newer engine version, as a pull request\n` +
+  commands('upgrade') +
   `\n` +
   `Working on a paper\n` +
-  `  oak validate [--paper <dir>] [--instance <dir> | --no-instance] [--typst-template <dir>] [--strict] [--report <path>]\n` +
-  `                    run the journal's checks over a manuscript and report what fails\n` +
-  `  oak build   [--paper <dir>] [--instance <dir> | --no-instance] [--base-url <url>] [--no-site-template]\n` +
-  `              [--exports-only | --no-exports] [--typst-template <dir>]\n` +
-  `              [--port <n>] [--server-port <n>] [--keep-host]\n` +
-  `                    build the paper's website + PDF into _build/\n` +
-  `  oak start   [--paper <dir>] [--instance <dir> | --no-instance] [--typst-template <dir>] [--port <n>] [--server-port <n>]\n` +
-  `                    run mystmd's live preview of the paper, with the journal's settings\n` +
-  `                    and branding applied (the same config its CI builds). Reloads as you\n` +
-  `                    edit; Ctrl-C stops it. Run in the journal repo, it previews the\n` +
-  `                    journal website instead.\n` +
+  commands('validate', 'build', 'start') +
   `  validate, build, start and the release subcommands run the oak version the paper's myst.yml\n` +
   `  pins, fetched once into ~/.cache/oak.\n` +
   `  OAK_USE_RUNNING=1 runs this oak instead of fetching, for developing oak itself.\n` +
   `\n` +
   `Publishing a paper (from a terminal, gh logged in)\n` +
-  `  oak release [--repo <owner/repo>] <vX.Y.Z> [--sandbox] [--yes] [--publish-without-review]\n` +
-  `              [--instance <dir> | --no-instance] [--site-url <url>]\n` +
-  `                    publish a version: reserve and merge the DOI if needed, tag, wait for the\n` +
-  `                    Deposit version build, fill the Zenodo draft with it, attach the files to\n` +
-  `                    the tag's GitHub release, comment on the commit. Rerun it to continue.\n` +
-  `  oak release status [--repo <owner/repo>] [--sandbox] [--site-url <url>] [--instance <dir> | --no-instance]\n` +
-  `                    the deposit's state on Zenodo\n` +
-  `  oak clean [--cache] [--yes]\n` +
-  `                    remove the folders oak release left in the temporary folder; --cache also removes\n` +
-  `                    the pinned oak versions in ~/.cache/oak\n` +
+  commands('release', 'releaseStatus', 'clean') +
   `  Its subcommands, which the Reserve DOI and Deposit version workflows run:\n` +
-  `  oak release reserve-doi [--sandbox] [--repo <owner/repo>] [--site-url <url>] [--instance <dir> | --no-instance]\n` +
-  `                    reserve the DOI on Zenodo and open the pull request writing it into myst.yml\n` +
-  `  oak release deposit --tag <vX.Y.Z> [--paper <dir>] [--use-local-build] [--publish-without-review]\n` +
-  `                      [--token <token>] [--site-url <url>] [--bundle-out <dir>]\n` +
-  `                    deposit the tag's build, in a clone at the tag; --use-local-build deposits its _build\n` +
+  commands('releaseReserveDoi', 'releaseDeposit') +
   `  The Zenodo token comes from ZENODO_TOKEN, ZENODO_TOKEN_SANDBOX for the sandbox, or --token.\n` +
   `\n` +
   `Run by the workflows (rarely typed by hand)\n` +
-  `  oak post-checks --report <path> --repo <owner/repo> --sha <headsha> --base <branch>\n` +
-  `                  --verified-head <headsha>\n` +
-  `  oak deploy-preview <site> [--verified-head <headsha>] [--instance <dir> | --no-instance] [--repo <owner/repo>]\n` +
-  `  oak conformance reset   --repo <owner/name>\n` +
-  `  oak conformance run   --repo <owner/name> --tag <vX.Y.Z> [--fork-repo <owner/name>]\n` +
-  `                        [--run-id <id>] [--record <path>]\n` +
+  commands('postChecks', 'deployPreview', 'conformanceReset', 'conformanceRun') +
   `\n` +
-  `Any command\n` +
-  `  --help      print this text; --version prints oak's version\n` +
-  `  --json      print the full machine-readable result on stdout instead of a summary\n` +
-  `  --verbose   show the raw git/gh commands' output (shown on failure either way)\n`;
+  anyCommand;
+
+/** `oak <verb> --help`: the verb's commands (one, when `sub` names it) and their docs, or null
+ *  for a verb oak does not have. */
+export const commandHelp = (verb: string, sub?: string): string | null => {
+  const all = Object.values(COMMANDS).filter(
+    (c) => c.name === verb || c.name.startsWith(`${verb} `),
+  );
+  if (!all.length) return null;
+  const one = all.filter((c) => c.name === `${verb} ${sub}`);
+  const shown = one.length ? one : all;
+  const docs = [...new Set(shown.map((c) => c.docs))];
+  return (
+    shown.map((c) => commandUsage(c) + '\n').join('') +
+    docs.map((d) => `See ${docsUrl(d)}\n`).join('')
+  );
+};
 
 const seeHelp = `run oak --help, or see the docs at ${DOCS_BASE} for usage`;
 
@@ -215,7 +248,7 @@ export const version = (v: string): string => `oak ${v}`;
 /** An argument `oak <verb>` does not read; `near` is the closest flag it does, if any. */
 export const unknownArg = (verb: string, arg: string, near: string | null): string =>
   `oak ${verb} does not take ${arg.startsWith('-') ? `the flag ${arg}` : `'${arg}'`}` +
-  `${near ? `; did you mean ${near}?` : '.'}\n${seeHelp}`;
+  `${near ? `; did you mean ${near}?` : '.'}\nRun oak ${verb} --help for the flags it takes.`;
 
 /** `--execute`, which myst takes and oak does not. */
 export const noExecute = (verb: string): string =>
