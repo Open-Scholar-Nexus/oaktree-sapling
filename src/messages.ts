@@ -157,6 +157,7 @@ export const usage = (): string =>
   `                    run the journal's checks over a manuscript and report what fails\n` +
   `  oak build   [--paper <dir>] [--instance <dir> | --no-instance] [--base-url <url>] [--no-site-template]\n` +
   `              [--exports-only | --no-exports] [--typst-template <dir>]\n` +
+  `              [--port <n>] [--server-port <n>] [--keep-host]\n` +
   `                    build the paper's website + PDF into _build/\n` +
   `  oak start   [--paper <dir>] [--instance <dir> | --no-instance] [--typst-template <dir>] [--port <n>] [--server-port <n>]\n` +
   `                    run mystmd's live preview of the paper, with the journal's settings\n` +
@@ -211,8 +212,19 @@ export const flagNeedsValue = (name: string): string =>
 
 export const version = (v: string): string => `oak ${v}`;
 
-export const flagNeedsPort = (name: string, got: string): string =>
-  `--${name} needs a port number, not '${got}'.`;
+/** An argument `oak <verb>` does not read; `near` is the closest flag it does, if any. */
+export const unknownArg = (verb: string, arg: string, near: string | null): string =>
+  `oak ${verb} does not take ${arg.startsWith('-') ? `the flag ${arg}` : `'${arg}'`}` +
+  `${near ? `; did you mean ${near}?` : '.'}\n${seeHelp}`;
+
+/** `--execute`, which myst takes and oak does not. */
+export const noExecute = (verb: string): string =>
+  `oak ${verb} does not run notebooks. Run them yourself first and save their outputs; ` +
+  `oak ${verb} then uses the saved outputs.`;
+
+/** `source` is the flag (`--port`) or the environment variable (`PORT`) the value came from. */
+export const needsPort = (source: string, got: string): string =>
+  `${source} needs a port number, not '${got}'.`;
 
 /** A YAML file the parser reports an error in (yaml-io.ts `parseYaml`). `why` is the parser's
  *  first line, which gives the line and column. */

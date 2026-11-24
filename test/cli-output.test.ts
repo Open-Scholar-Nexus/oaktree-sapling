@@ -559,10 +559,52 @@ describe('a flag passed without a value is refused', () => {
     expect(r.stderr).not.toContain('--base-url needs a value');
   });
 
-  it('refuses a port that is not a number', () => {
-    const r = oak(['start', '--paper', fixturePaper, '--port', 'abc']);
+  it('refuses a port that is not a number, on start and build', () => {
+    for (const verb of ['start', 'build']) {
+      const r = oak([verb, '--paper', fixturePaper, '--server-port', 'abc']);
+      expect(r.code, verb).toBe(2);
+      expect(r.stderr, verb).toContain("--server-port needs a port number, not 'abc'");
+    }
+  });
+
+  it('refuses a flag the verb does not read, suggesting the closest one', () => {
+    const r = oak(['build', '--paper', fixturePaper, '--exprts-only']);
     expect(r.code).toBe(2);
-    expect(r.stderr).toContain("--port needs a port number, not 'abc'");
+    expect(r.stderr).toContain('oak build does not take the flag --exprts-only');
+    expect(r.stderr).toContain('did you mean --exports-only?');
+  });
+
+  it('refuses a stray argument, and a flag of another verb', () => {
+    const stray = oak(['validate', fixturePaper]);
+    expect(stray.code).toBe(2);
+    expect(stray.stderr).toContain(`oak validate does not take '${fixturePaper}'`);
+    const other = oak(['start', '--paper', fixturePaper, '--exports-only']);
+    expect(other.code).toBe(2);
+    expect(other.stderr).toContain('oak start does not take the flag --exports-only');
+  });
+
+  it('says oak does not run notebooks when given --execute', () => {
+    const r = oak(['build', '--paper', fixturePaper, '--execute']);
+    expect(r.code).toBe(2);
+    expect(r.stderr).toContain('oak build does not run notebooks. Run them yourself first');
+  });
+
+  it('a value that looks like a flag is not taken for one', () => {
+    // `--repo` takes the next word, so `-x` is its value, not an argument of its own.
+    const r = oak(['validate', '--paper', fixturePaper, '--no-instance', '--repo', '-x']);
+    expect(r.stderr).not.toContain('does not take');
+  });
+
+  it('--help after a verb prints the usage', () => {
+    const r = oak(['build', '--help']);
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain('oak build');
+  });
+
+  it('reads PORT as myst does, and names it when it is not a number', () => {
+    const r = oak(['build', '--paper', fixturePaper], { PORT: 'abc' });
+    expect(r.code).toBe(2);
+    expect(r.stderr).toContain("PORT needs a port number, not 'abc'");
   });
 });
 
