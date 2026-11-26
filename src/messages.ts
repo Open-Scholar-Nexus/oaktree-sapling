@@ -208,9 +208,22 @@ export const unknownCommand = (verb: string, near: string | null): string =>
 
 export const flagNeedsValue = (name: string): string =>
   `--${name} needs a value. It was passed with none, which usually means an empty shell ` +
-  `variable: quote it, or drop the flag to use the default.`;
+  `variable: quote it, or drop the flag to use the default. A value starting with a dash is ` +
+  `written --${name}=<value>.`;
+
+export const flagTakesNoValue = (name: string): string => `--${name} takes no value.`;
 
 export const version = (v: string): string => `oak ${v}`;
+
+/** An argument `oak <verb>` does not read; `near` is the closest flag it does, if any. */
+export const unknownArg = (verb: string, arg: string, near: string | null): string =>
+  `oak ${verb} does not take ${arg.startsWith('-') ? `the flag ${arg}` : `'${arg}'`}` +
+  `${near ? `; did you mean ${near}?` : '.'}\n${seeHelp}`;
+
+/** `--execute`, which myst takes and oak does not. */
+export const noExecute = (verb: string): string =>
+  `oak ${verb} does not run notebooks. Run them yourself first and save their outputs; ` +
+  `oak ${verb} then uses the saved outputs.`;
 
 export const flagNeedsPort = (name: string, got: string): string =>
   `--${name} needs a port number, not '${got}'.`;
