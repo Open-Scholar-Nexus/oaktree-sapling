@@ -209,7 +209,6 @@ async function buildPaper(argv: string[]): Promise<{ paperRoot: string; resolved
 /** `oak build`: builds a paper ({@link buildPaper}), then {@link finishSite}. Documented at
  *  DOCS.build. */
 async function cmdBuild(argv: string[]): Promise<number> {
-  refuseUnknownArgs(argv, 'build');
   const paperRoot = resolve(flag(argv, 'paper') ?? '.');
   const { ENGINE_ID_SENTINEL } = await import('./schema.js');
   const artifact = await import('./artifact.js');
@@ -287,44 +286,6 @@ function portsFrom(argv: string[]): { port?: number; serverPort?: number } {
   };
 }
 
-/** The flags each paper verb reads, by whether they take a value. */
-const PAPER_FLAGS = {
-  values: ['paper', 'instance', 'typst-template', 'base-url'],
-  switches: ['no-instance', 'no-site-template', 'json', 'verbose'],
-};
-const VERB_FLAGS: Record<'build' | 'start' | 'validate', { values: string[]; switches: string[] }> =
-  {
-    build: {
-      values: [...PAPER_FLAGS.values, 'port', 'server-port'],
-      switches: [...PAPER_FLAGS.switches, 'exports-only', 'no-exports', 'keep-host'],
-    },
-    start: {
-      values: [...PAPER_FLAGS.values, 'port', 'server-port', 'template'],
-      switches: [...PAPER_FLAGS.switches, 'headless', 'keep-host'],
-    },
-    validate: {
-      values: [...PAPER_FLAGS.values, 'report', 'repo'],
-      switches: [...PAPER_FLAGS.switches, 'strict'],
-    },
-  };
-
-/** Refuses an argument `oak <verb>` does not read, suggesting the closest flag it does. */
-function refuseUnknownArgs(argv: string[], verb: keyof typeof VERB_FLAGS): void {
-  const { values, switches } = VERB_FLAGS[verb];
-  for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i]!;
-    const name = arg.replace(/^--/, '');
-    if (arg.startsWith('--') && values.includes(name)) i++;
-    else if (!(arg.startsWith('--') && switches.includes(name))) {
-      if (name === 'execute' || name === 'execute-parallel') {
-        throw new UserError(msg.noExecute(verb));
-      }
-      const near = arg.startsWith('-') ? nearest(name, [...values, ...switches]) : null;
-      throw new UserError(msg.unknownArg(verb, arg, near && `--${near}`));
-    }
-  }
-}
-
 /** The `myst start` flags `oak start` passes through, under myst's names. */
 function startOptsFrom(argv: string[]): StartOpts {
   const template = flag(argv, 'template');
@@ -344,17 +305,15 @@ function startOptsFrom(argv: string[]): StartOpts {
  * it. Ctrl-C ends it. Documented at DOCS.start.
  */
 async function cmdStart(argv: string[]): Promise<number> {
-  refuseUnknownArgs(argv, 'start');
   const paperRoot = resolve(flag(argv, 'paper') ?? '.');
   // Parsed before anything else, so a typo costs no build.
   const startOpts = startOptsFrom(argv);
-  const journalSite = isJournalRepo(paperRoot);
   const { createMystEdge } = await import('./myst.js');
   const edge = createMystEdge();
 
   // A journal repo's myst.yml is its website, a plain myst project: `oak build` refuses it
   // ({@link isJournalRepo}), but here myst serves it as it is, as the site workflow builds it.
-  if (journalSite) {
+  if (isJournalRepo(paperRoot)) {
     if (
       existsSync(join(paperRoot, 'package.json')) &&
       !existsSync(join(paperRoot, 'node_modules'))
@@ -1231,7 +1190,6 @@ function validateSummary(out: {
  *  is written, failing or not, since post-checks posts the result.
  *  Documented at DOCS.validate. */
 async function cmdValidate(argv: string[]): Promise<number> {
-  refuseUnknownArgs(argv, 'validate');
   const paperRoot = resolve(flag(argv, 'paper') ?? '.');
   const reportPath = flag(argv, 'report');
   // A journal repo has no version key, so validate stops with a sentence ({@link isJournalRepo},
@@ -1712,11 +1670,11 @@ function editDistance(a: string, b: string): number {
   return prev[b.length]!;
 }
 
-/** The closest of `candidates` to a typo, or null when nothing is close enough to suggest. */
-function nearest(word: string, candidates: readonly string[]): string | null {
+/** The closest command to a typo, or null when nothing is close enough to suggest. */
+function nearestVerb(word: string): string | null {
   let best: string | null = null;
   let bestD = Infinity;
-  for (const v of candidates) {
+  for (const v of VERBS) {
     const d = editDistance(word.toLowerCase(), v);
     if (d < bestD) {
       bestD = d;
@@ -1791,7 +1749,7 @@ async function main(argv: string[]): Promise<number> {
   // One environment variable, read by gh.ts, so `--verbose` reaches the git and gh calls
   // without passing a parameter around, and survives the child process `oak release` starts.
   if (has(argv, 'verbose')) process.env.OAK_VERBOSE = '1';
-  if (argv[0] === 'help' || has(argv, 'help') || argv.includes('-h')) {
+  if (argv[0] === 'help' || argv[0] === '--help' || argv[0] === '-h') {
     process.stdout.write(msg.usage());
     return 0;
   }
@@ -1819,7 +1777,7 @@ async function main(argv: string[]): Promise<number> {
   if (verb === 'upgrade') return cmdUpgrade(argv.slice(1));
   if (verb === 'conformance') return cmdConformance(argv.slice(1));
   // An unknown command is a short error with a suggestion.
-  if (verb) process.stderr.write(msg.unknownCommand(verb, nearest(verb, VERBS)) + '\n');
+  if (verb) process.stderr.write(msg.unknownCommand(verb, nearestVerb(verb)) + '\n');
   else process.stderr.write(msg.usage());
   return 2;
 }

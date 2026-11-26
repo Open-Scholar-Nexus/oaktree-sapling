@@ -46,7 +46,7 @@ The assembled result is written to **`myst.oak.yml`**[^public], next to the pape
 (design-myst-flags)=
 ### MyST's flags
 
-`oak build` and `oak start` pass a subset of MyST's flags on to MyST, such as `--port`, and refuse the others, for these reasons:
+`oak build` and `oak start` pass a subset of MyST's flags on to MyST, such as `--port`, for these reasons:
 
 - oak builds what the journal's settings ask for, such as the PDF with the journal's template and the website with its theme. MyST flags such as `--pdf` or `-o` would change what is built or where it is written.
 - A paper should build the same on every machine, and the CI workflows pass no MyST flags.[^local-flags]

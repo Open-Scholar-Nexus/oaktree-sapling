@@ -212,16 +212,6 @@ export const flagNeedsValue = (name: string): string =>
 
 export const version = (v: string): string => `oak ${v}`;
 
-/** An argument `oak <verb>` does not read; `near` is the closest flag it does, if any. */
-export const unknownArg = (verb: string, arg: string, near: string | null): string =>
-  `oak ${verb} does not take ${arg.startsWith('-') ? `the flag ${arg}` : `'${arg}'`}` +
-  `${near ? `; did you mean ${near}?` : '.'}\n${seeHelp}`;
-
-/** `--execute`, which myst takes and oak does not. */
-export const noExecute = (verb: string): string =>
-  `oak ${verb} does not run notebooks. Run them yourself first and save their outputs; ` +
-  `oak ${verb} then uses the saved outputs.`;
-
 export const flagNeedsPort = (name: string, got: string): string =>
   `--${name} needs a port number, not '${got}'.`;
 
