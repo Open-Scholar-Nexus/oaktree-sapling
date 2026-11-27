@@ -157,25 +157,47 @@ export function parse<C extends Command>(
   return { values: values as Args<C>, positionals };
 }
 
-/** The flags of `command` that take a value. */
-export function valueFlags(command: Command): string[] {
-  const options: Options = OPTIONS[command];
-  return Object.keys(options).filter((name) => options[name]!.type === 'string');
+/**
+ * Reads `argv` before a command parses it ({@link parse}), to pick the oak version or the
+ * subcommand that runs it: the flags with a value, as `--name value` or `--name=value`, and the
+ * first word that is no flag and no flag's value, with its index. Refuses nothing: the command's
+ * own {@link parse} does.
+ */
+export function peek(argv: readonly string[]): {
+  flags: Readonly<Record<string, string>>;
+  word: { word: string; at: number } | null;
+} {
+  const options: Options = {};
+  for (const command of Object.values(OPTIONS) as Options[]) {
+    for (const [name, o] of Object.entries(command)) if (o.type === 'string') options[name] = o;
+  }
+  const { values, tokens } = parseArgs({
+    args: [...argv],
+    options,
+    allowPositionals: true,
+    strict: false,
+    tokens: true,
+  });
+  const flags: Record<string, string> = {};
+  for (const [name, v] of Object.entries(values)) if (typeof v === 'string') flags[name] = v;
+  const first = tokens.find((t) => t.kind === 'positional');
+  return { flags, word: first ? { word: first.value, at: first.index } : null };
 }
 
-/** `parseArgs`'s error as oak words it, or the error itself when it is not one of those. */
-function refusal(command: Command, options: Options, e: unknown): unknown {
+/** `parseArgs`'s error as oak words it, or node's own message when oak has no wording for it. */
+function refusal(command: Command, options: Options, e: unknown): UserError {
   const code = (e as { code?: unknown }).code;
+  const message = String((e as Error).message);
   // The flag is the first quoted word of node's message, as in `Unknown option '--sanbox'`.
-  const arg = /'(-[^' ]*)/.exec(String((e as Error).message))?.[1];
-  if (!arg || typeof code !== 'string') return e;
+  const arg = /'(-[^' ]*)/.exec(message)?.[1];
+  if (!arg) return new UserError(message);
   const name = arg.replace(/^-+/, '');
   if (code === 'ERR_PARSE_ARGS_INVALID_OPTION_VALUE') {
     return new UserError(
       options[name]?.type === 'string' ? msg.flagNeedsValue(name) : msg.flagTakesNoValue(name),
     );
   }
-  if (code !== 'ERR_PARSE_ARGS_UNKNOWN_OPTION') return e;
+  if (code !== 'ERR_PARSE_ARGS_UNKNOWN_OPTION') return new UserError(message);
   const runsNotebooks = command === 'build' || command === 'start' || command === 'validate';
   if (runsNotebooks && (name === 'execute' || name === 'execute-parallel')) {
     return new UserError(msg.noExecute(command));

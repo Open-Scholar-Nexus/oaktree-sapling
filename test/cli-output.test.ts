@@ -735,12 +735,14 @@ describe.skipIf(bundleState() === 'absent')('the paper commands hand off to the 
     writeFileSync(join(dir, '.github', 'actions', 'engine', 'pins.yml'), 'engine_repo: ../..\n');
     const cache = mkdtempSync(join(tmpdir(), 'oak-pinned-cache-'));
     for (const verb of ['build', 'validate', 'start']) {
-      const { code, stderr } = oak([verb, '--paper', dir], {
-        OAK_USE_RUNNING: undefined,
-        XDG_CACHE_HOME: cache,
-      });
-      expect(code, verb).toBe(2);
-      expect(stderr, verb).toContain(`oak ${verb}: engine_repo in`);
+      for (const paper of [['--paper', dir], [`--paper=${dir}`]]) {
+        const { code, stderr } = oak([verb, ...paper], {
+          OAK_USE_RUNNING: undefined,
+          XDG_CACHE_HOME: cache,
+        });
+        expect(code, `${verb} ${paper[0]}`).toBe(2);
+        expect(stderr, `${verb} ${paper[0]}`).toContain(`oak ${verb}: engine_repo in`);
+      }
     }
     expect(existsSync(join(cache, 'oak'))).toBe(false);
   });
@@ -882,9 +884,11 @@ describe.skipIf(bundleState() === 'absent')(
     });
 
     it('status with --repo refuses --paper, before cloning', () => {
-      const r = oak(['release', 'status', '--repo', 'o/paper', '--paper', '.']);
-      expect(r.code).toBe(2);
-      expect(r.stderr).toContain('--repo reads a clone of the repo, so it takes no --paper');
+      for (const repo of [['--repo', 'o/paper'], ['--repo=o/paper']]) {
+        const r = oak(['release', 'status', ...repo, '--paper', '.']);
+        expect(r.code, repo.join(' ')).toBe(2);
+        expect(r.stderr).toContain('--repo reads a clone of the repo, so it takes no --paper');
+      }
     });
 
     it('status with --repo refuses a missing token before cloning', () => {

@@ -25,7 +25,7 @@ import type { HandoffContext, HandoffDeps, HandoffVerb, PaperVerb } from './pinn
 import * as msg from './messages.js';
 import { annotate, inCI, UserError } from './messages.js';
 import { readDoc } from './yaml-io.js';
-import { nearest, parse, valueFlags, type Args } from './args.js';
+import { nearest, parse, peek, type Args } from './args.js';
 
 // oak only runs as the CJS bundle (ci/run.sh and local runs both call dist/cli.cjs), so
 // `__dirname` is the bundle's directory; @types/node declares it for tsc.
@@ -51,15 +51,6 @@ function engineRoot(): string {
     if (existsSync(join(cand, 'paper-base.yml'))) return cand;
   }
   return resolve(__dirname, '..');
-}
-
-/**
- * The value after `--name`, or undefined, read before a command parses its arguments
- * ({@link parse}): to pick the oak version that runs it, whose own flags may differ.
- */
-function rawFlag(argv: string[], name: string): string | undefined {
-  const i = argv.indexOf(`--${name}`);
-  return i < 0 ? undefined : argv[i + 1];
 }
 
 /**
@@ -453,24 +444,9 @@ function emit(
 /** The subcommands of `oak release`, which the paper's workflows run and the pinned oak runs. */
 const RELEASE_SUBCOMMANDS = ['reserve-doi', 'deposit', 'status'] as const;
 
-/** The flags of `oak release` and its subcommands that take a value. */
-const RELEASE_VALUE_FLAGS = (
-  ['release', 'release status', 'release reserve-doi', 'release deposit'] as const
-).flatMap(valueFlags);
-
-/** The first word of `argv` that is no flag and no flag's value, with its index, or null. */
-function releaseWord(argv: string[]): { word: string; at: number } | null {
-  for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i]!;
-    if (!arg.startsWith('--')) return { word: arg, at: i };
-    if (RELEASE_VALUE_FLAGS.includes(arg.slice(2))) i++;
-  }
-  return null;
-}
-
 /** Whether `oak release <argv>` runs one of {@link RELEASE_SUBCOMMANDS}. */
 function isReleaseSubcommand(argv: string[]): boolean {
-  const first = releaseWord(argv);
+  const first = peek(argv).word;
   return first !== null && (RELEASE_SUBCOMMANDS as readonly string[]).includes(first.word);
 }
 
@@ -479,7 +455,7 @@ function isReleaseSubcommand(argv: string[]): boolean {
  * word names, with that word left out of its arguments. Documented at DOCS.release.
  */
 async function cmdRelease(argv: string[]): Promise<number> {
-  const first = releaseWord(argv);
+  const first = peek(argv).word;
   const rest = first ? argv.filter((_, i) => i !== first.at) : argv;
   if (first?.word === 'reserve-doi') return cmdReleaseReserveDoi(rest);
   if (first?.word === 'deposit') return cmdReleaseDeposit(rest);
@@ -584,7 +560,7 @@ async function cmdReleaseReserveDoi(argv: string[]): Promise<number> {
 /** `oak release status --repo <owner/name>`: `oak release status` in a clone of the repo in a
  *  temporary folder, removed after. */
 async function releaseStatusOfRepo(repo: string, argv: string[]): Promise<number> {
-  const word = releaseWord(argv)!;
+  const word = peek(argv).word!;
   const a = parse(
     'release status',
     argv.filter((_, i) => i !== word.at),
@@ -606,8 +582,9 @@ async function releaseStatusOfRepo(repo: string, argv: string[]): Promise<number
   } catch (e) {
     throw new UserError(msg.workflow.releaseGitHubFailed(msg.firstLine(e)));
   }
-  const at = argv.indexOf('--repo');
-  const rest = [...argv.slice(0, at), ...argv.slice(at + 2)];
+  const rest = argv.filter(
+    (x, i) => x !== '--repo' && argv[i - 1] !== '--repo' && !x.startsWith('--repo='),
+  );
   const remove = () => rmSync(dir, { recursive: true, force: true });
   // Ctrl-C removes the clone, then ends oak as it would with no listener.
   const onInterrupt = () => {
@@ -873,7 +850,7 @@ async function cmdReleaseVersion(argv: string[]): Promise<number> {
   const { removeKeptClones } = await import('./clean.js');
   // Checked first, from the arguments alone.
   const { PAPER_VERSION_TAG } = await import('./schema.js');
-  const word = releaseWord(argv)?.word;
+  const word = peek(argv).word?.word;
   if (word !== undefined && !PAPER_VERSION_TAG.test(word)) {
     process.stderr.write(msg.workflow.releaseUnknownWord(word) + '\n');
     return 2;
@@ -881,7 +858,7 @@ async function cmdReleaseVersion(argv: string[]): Promise<number> {
   // The workflows run only the subcommands; an older deposit-version.yml runs `release --tag`.
   if (process.env.GITHUB_ACTIONS) {
     const why =
-      rawFlag(argv, 'tag') !== undefined
+      peek(argv).flags.tag !== undefined
         ? msg.workflow.releaseFlowInActions(pinned.DEPOSIT_MIN_VERSION)
         : msg.workflow.releaseInActions;
     process.stderr.write(why + '\n');
@@ -1713,11 +1690,12 @@ async function handoffDeps(): Promise<HandoffDeps> {
 async function runPinned(verb: PaperVerb, argv: string[]): Promise<number | null> {
   const { handOff } = await import('./pinned.js');
   const ctx = await handoffContext(verb, argv);
+  const { flags } = peek(argv);
   // The `release` subcommands find the paper from `--myst` too.
   const paperRoot =
     verb === 'release'
-      ? dirname(mystPathOf({ myst: rawFlag(argv, 'myst'), paper: rawFlag(argv, 'paper') }))
-      : resolve(rawFlag(argv, 'paper') ?? '.');
+      ? dirname(mystPathOf({ myst: flags.myst, paper: flags.paper }))
+      : resolve(flags.paper ?? '.');
   return handOff({ ...ctx, paperRoot }, await handoffDeps());
 }
 
@@ -1747,8 +1725,9 @@ async function main(argv: string[]): Promise<number> {
   }
   const args = argv.slice(1);
   // Before the hand-off, so the pinned oak is the one the cloned repo names.
+  const seen = peek(args);
   const statusRepo =
-    verb === 'release' && releaseWord(args)?.word === 'status' ? rawFlag(args, 'repo') : undefined;
+    verb === 'release' && seen.word?.word === 'status' ? seen.flags.repo : undefined;
   if (statusRepo !== undefined) return releaseStatusOfRepo(statusRepo, args);
   if (runsPinned(verb, args)) {
     const code = await runPinned(verb, args);
