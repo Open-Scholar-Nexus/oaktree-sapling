@@ -275,7 +275,8 @@ function portsFrom(argv: string[]): { port?: number; serverPort?: number } {
     const raw = flag(argv, name);
     if (raw === undefined) return undefined;
     const n = Number(raw);
-    if (!Number.isInteger(n) || n < 0) throw new UserError(msg.flagNeedsPort(name, raw));
+    if (raw.trim() === '' || !Number.isInteger(n) || n < 0)
+      throw new UserError(msg.flagNeedsPort(name, raw));
     return n;
   };
   const port = num('port');

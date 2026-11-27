@@ -565,6 +565,9 @@ describe('a flag passed without a value is refused', () => {
       expect(r.code, verb).toBe(2);
       expect(r.stderr, verb).toContain("--server-port needs a port number, not 'abc'");
     }
+    const r = oak(['build', '--paper', fixturePaper, '--port', '']);
+    expect(r.code).toBe(2);
+    expect(r.stderr).toContain("--port needs a port number, not ''");
   });
 });
 
