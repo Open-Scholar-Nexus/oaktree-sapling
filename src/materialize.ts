@@ -26,6 +26,10 @@ export interface BuildOpts {
   all?: boolean;
   html?: boolean;
   exportsOnly?: boolean;
+  /** The website build's server options, as in {@link StartOpts}. */
+  port?: number;
+  serverPort?: number;
+  keepHost?: boolean;
 }
 
 /** The exports myst ran and its first error, passed to {@link MystEdge.build}'s `afterExports`. */

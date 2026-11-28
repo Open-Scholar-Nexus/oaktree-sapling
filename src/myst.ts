@@ -90,9 +90,16 @@ export function createMystEdge(): MystEdge {
         });
 
         // Given no format, myst's `build` runs no exports, only the site. It disposes the session
-        // when it ends, closing any Jupyter kernel.
-        if (site) await build(session, [], { html: opts.html });
-        else session.dispose();
+        // when it ends, closing any Jupyter kernel. The site build runs myst's app and content
+        // servers, with these options when given.
+        if (site) {
+          await build(session, [], {
+            html: opts.html,
+            port: opts.port,
+            serverPort: opts.serverPort,
+            keepHost: opts.keepHost,
+          });
+        } else session.dispose();
       } finally {
         process.chdir(prev);
       }

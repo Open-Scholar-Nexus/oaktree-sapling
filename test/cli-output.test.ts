@@ -559,10 +559,15 @@ describe('a flag passed without a value is refused', () => {
     expect(r.stderr).not.toContain('--base-url needs a value');
   });
 
-  it('refuses a port that is not a number', () => {
-    const r = oak(['start', '--paper', fixturePaper, '--port', 'abc']);
+  it('refuses a port that is not a number, on start and build', () => {
+    for (const verb of ['start', 'build']) {
+      const r = oak([verb, '--paper', fixturePaper, '--server-port', 'abc']);
+      expect(r.code, verb).toBe(2);
+      expect(r.stderr, verb).toContain("--server-port needs a port number, not 'abc'");
+    }
+    const r = oak(['build', '--paper', fixturePaper, '--port', '']);
     expect(r.code).toBe(2);
-    expect(r.stderr).toContain("--port needs a port number, not 'abc'");
+    expect(r.stderr).toContain("--port needs a port number, not ''");
   });
 });
 

@@ -22,6 +22,14 @@
 `--typst-template <dir>`
 : Renders the PDF with the typst template in `<dir>`, ahead of the author's, the journal's and oak's own. [`oak start`](#start) and [`oak validate`](#validate) take it too, so all three write the same `myst.oak.yml`.
 
+`--port <n>`, `--server-port <n>`
+: The ports of MyST's application server and content server, which it runs while it builds the website ([MyST's descriptions](https://github.com/jupyter-book/mystmd/blob/mystmd@1.12.0/packages/myst-cli/src/cli/options.ts#L116-L143)). Without them, MyST picks free ports. Builds started together can pick the same port and one fails, so give each build its own pair, such as `--port 3001 --server-port 4001` for the first and `3002`, `4002` for the second. A port that is taken makes MyST fall back to a free one, so two builds given the same port can still collide.
+
+`--keep-host`
+: Keeps the `HOST` environment variable for those servers, as `myst build --keep-host` does. Without it, MyST serves on `localhost`.
+
+[Why oak passes on only some of MyST's flags](#design-myst-flags).
+
 (start)=
 ### start
 

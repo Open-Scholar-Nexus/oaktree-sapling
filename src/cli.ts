@@ -179,6 +179,7 @@ function materializeInputFrom(
  *  holds the PDF a deposit archives. */
 async function buildPaper(argv: string[]): Promise<{ paperRoot: string; resolvedId?: string }> {
   const paperRoot = resolve(flag(argv, 'paper') ?? '.');
+  const site = { ...portsFrom(argv), ...(has(argv, 'keep-host') ? { keepHost: true } : {}) };
   if (isJournalRepo(paperRoot)) {
     process.stderr.write(annotate('error', msg.build.inJournalRepo(paperRoot)) + '\n');
     process.exit(2);
@@ -196,8 +197,8 @@ async function buildPaper(argv: string[]): Promise<{ paperRoot: string; resolved
     buildOpts: has(argv, 'exports-only')
       ? { exportsOnly: true }
       : has(argv, 'no-exports')
-        ? { all: false, html: true }
-        : { all: true, html: true },
+        ? { all: false, html: true, ...site }
+        : { all: true, html: true, ...site },
     edge: createMystEdge(),
   });
   for (const w of res.warnings) process.stderr.write(annotate('warning', w) + '\n');
@@ -266,22 +267,31 @@ function readProjectIdQuietly(paperRoot: string): string | null {
   }
 }
 
-/** The `myst start` flags `oak start` passes through, under myst's names. */
-function startOptsFrom(argv: string[]): StartOpts {
+/** The app and content server ports. Unset, myst picks free ones, which builds started together
+ *  can race for. */
+function portsFrom(argv: string[]): { port?: number; serverPort?: number } {
   const num = (name: string) => {
     const raw = flag(argv, name);
     if (raw === undefined) return undefined;
     const n = Number(raw);
-    if (!Number.isInteger(n) || n < 0) throw new UserError(msg.flagNeedsPort(name, raw));
+    if (raw.trim() === '' || !Number.isInteger(n) || n < 0)
+      throw new UserError(msg.flagNeedsPort(name, raw));
     return n;
   };
   const port = num('port');
   const serverPort = num('server-port');
-  const template = flag(argv, 'template');
-  const baseurl = flag(argv, 'base-url');
   return {
     ...(port !== undefined ? { port } : {}),
     ...(serverPort !== undefined ? { serverPort } : {}),
+  };
+}
+
+/** The `myst start` flags `oak start` passes through, under myst's names. */
+function startOptsFrom(argv: string[]): StartOpts {
+  const template = flag(argv, 'template');
+  const baseurl = flag(argv, 'base-url');
+  return {
+    ...portsFrom(argv),
     ...(has(argv, 'headless') ? { headless: true } : {}),
     ...(has(argv, 'keep-host') ? { keepHost: true } : {}),
     ...(template ? { template } : {}),
@@ -296,7 +306,6 @@ function startOptsFrom(argv: string[]): StartOpts {
  */
 async function cmdStart(argv: string[]): Promise<number> {
   const paperRoot = resolve(flag(argv, 'paper') ?? '.');
-  // Parsed before anything else, so a typo costs no build.
   const startOpts = startOptsFrom(argv);
   const { createMystEdge } = await import('./myst.js');
   const edge = createMystEdge();

@@ -157,6 +157,7 @@ export const usage = (): string =>
   `                    run the journal's checks over a manuscript and report what fails\n` +
   `  oak build   [--paper <dir>] [--instance <dir> | --no-instance] [--base-url <url>] [--no-site-template]\n` +
   `              [--exports-only | --no-exports] [--typst-template <dir>]\n` +
+  `              [--port <n>] [--server-port <n>] [--keep-host]\n` +
   `                    build the paper's website + PDF into _build/\n` +
   `  oak start   [--paper <dir>] [--instance <dir> | --no-instance] [--typst-template <dir>] [--port <n>] [--server-port <n>]\n` +
   `                    run mystmd's live preview of the paper, with the journal's settings\n` +
