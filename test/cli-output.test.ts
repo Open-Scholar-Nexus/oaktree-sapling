@@ -538,10 +538,13 @@ describe('a flag passed without a value is refused', () => {
     expect(r.stderr).toContain('--repo needs a value');
   });
 
-  it('still accepts a value that merely looks unusual', () => {
-    // One dash is a value, not a flag: only `--` is unambiguous enough to refuse.
+  it('takes a value starting with a dash only after =', () => {
     const r = oak(['validate', '--paper', '-weird', '--no-instance']);
-    expect(r.stderr).not.toContain('needs a value');
+    expect(r.code).toBe(2);
+    expect(r.stderr).toContain('written --paper=<value>');
+    expect(oak(['validate', '--paper=-weird', '--no-instance']).stderr).not.toContain(
+      'needs a value',
+    );
   });
 
   it('refuses an empty --instance', () => {
@@ -569,12 +572,60 @@ describe('a flag passed without a value is refused', () => {
     expect(r.code).toBe(2);
     expect(r.stderr).toContain("--port needs a port number, not ''");
   });
+
+  it('refuses a flag the verb does not read, suggesting the closest one', () => {
+    const r = oak(['build', '--paper', fixturePaper, '--exprts-only']);
+    expect(r.code).toBe(2);
+    expect(r.stderr).toContain('oak build does not take the flag --exprts-only');
+    expect(r.stderr).toContain('did you mean --exports-only?');
+  });
+
+  it('refuses a stray argument, and a flag of another verb', () => {
+    const stray = oak(['validate', fixturePaper]);
+    expect(stray.code).toBe(2);
+    expect(stray.stderr).toContain(`oak validate does not take '${fixturePaper}'`);
+    const other = oak(['start', '--paper', fixturePaper, '--exports-only']);
+    expect(other.code).toBe(2);
+    expect(other.stderr).toContain('oak start does not take the flag --exports-only');
+  });
+
+  it('refuses a mistyped flag on every command, before it acts', () => {
+    const cases = [
+      [['release', 'v1.0.0', '--sanbox'], 'oak release', '--sandbox'],
+      [['bootstrap', 'paper', '--repo', 'o/p', '--privat'], 'oak bootstrap paper', '--private'],
+      [['upgrade', '--paper', '.', '--file-only'], 'oak upgrade', '--files-only'],
+    ] as const;
+    for (const [args, command, near] of cases) {
+      const r = oak([...args]);
+      expect(r.code, command).toBe(2);
+      expect(r.stderr, command).toContain(`${command} does not take the flag`);
+      expect(r.stderr, command).toContain(`did you mean ${near}?`);
+    }
+  });
+
+  it('says oak does not run notebooks when given --execute', () => {
+    const r = oak(['build', '--paper', fixturePaper, '--execute']);
+    expect(r.code).toBe(2);
+    expect(r.stderr).toContain('oak build does not run notebooks. Run them yourself first');
+  });
+
+  it('a value that looks like a flag is not taken for one', () => {
+    // `--repo` takes the next word, so `-x` is its value, not an argument of its own.
+    const r = oak(['validate', '--paper', fixturePaper, '--no-instance', '--repo', '-x']);
+    expect(r.stderr).not.toContain('does not take');
+  });
+
+  it('--help after a verb prints the usage', () => {
+    const r = oak(['build', '--help']);
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain('oak build');
+  });
 });
 
 describe('--repo takes owner/name', () => {
   it('refuses a value gh would read as an option or a foreign URL', () => {
     for (const bad of ['-u', 'https://evil.example/x/y', 'notarepo']) {
-      const r = oak(['upgrade', '--repo', bad, '--yes']);
+      const r = oak(['upgrade', `--repo=${bad}`, '--yes']);
       expect(r.code, bad).toBe(2);
       expect(r.stderr, bad).toContain('--repo takes a GitHub repo as owner/name');
     }
@@ -684,12 +735,14 @@ describe.skipIf(bundleState() === 'absent')('the paper commands hand off to the 
     writeFileSync(join(dir, '.github', 'actions', 'engine', 'pins.yml'), 'engine_repo: ../..\n');
     const cache = mkdtempSync(join(tmpdir(), 'oak-pinned-cache-'));
     for (const verb of ['build', 'validate', 'start']) {
-      const { code, stderr } = oak([verb, '--paper', dir], {
-        OAK_USE_RUNNING: undefined,
-        XDG_CACHE_HOME: cache,
-      });
-      expect(code, verb).toBe(2);
-      expect(stderr, verb).toContain(`oak ${verb}: engine_repo in`);
+      for (const paper of [['--paper', dir], [`--paper=${dir}`]]) {
+        const { code, stderr } = oak([verb, ...paper], {
+          OAK_USE_RUNNING: undefined,
+          XDG_CACHE_HOME: cache,
+        });
+        expect(code, `${verb} ${paper[0]}`).toBe(2);
+        expect(stderr, `${verb} ${paper[0]}`).toContain(`oak ${verb}: engine_repo in`);
+      }
     }
     expect(existsSync(join(cache, 'oak'))).toBe(false);
   });
@@ -831,9 +884,11 @@ describe.skipIf(bundleState() === 'absent')(
     });
 
     it('status with --repo refuses --paper, before cloning', () => {
-      const r = oak(['release', 'status', '--repo', 'o/paper', '--paper', '.']);
-      expect(r.code).toBe(2);
-      expect(r.stderr).toContain('--repo reads a clone of the repo, so it takes no --paper');
+      for (const repo of [['--repo', 'o/paper'], ['--repo=o/paper']]) {
+        const r = oak(['release', 'status', ...repo, '--paper', '.']);
+        expect(r.code, repo.join(' ')).toBe(2);
+        expect(r.stderr).toContain('--repo reads a clone of the repo, so it takes no --paper');
+      }
     });
 
     it('status with --repo refuses a missing token before cloning', () => {
