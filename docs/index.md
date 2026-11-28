@@ -1,32 +1,108 @@
-(docs-home)=
-# Oaktree Sapling
+---
+title: Oaktree Sapling
+site:
+  hide_title_block: true
+  hide_toc: true
+  hide_outline: true
+---
 
-A toolkit to create free, simple journals run on GitHub, archived on Zenodo and built with MystMD. Each paper lives in its own repository, whose CI builds it into a website and a PDF; a separate journal repository holds the settings every paper build reads: the journal's name, its branding, the editorial checks a submission has to pass, and the list of what has been published. Publishing a version deposits it to Zenodo for a DOI, and the `oak` command-line tool sets it all up and runs it.
++++ {"kind": "split-image", "class": "landing-hero"}
+
+A journal engine
+
+(docs-home)=
+## Oaktree Sapling
+
+Run a journal on GitHub, archived on Zenodo and built with MyST.
+
+![The Oaktree Sapling logo: a sapling growing from an open book.](brand/sapling.svg)
+
+{button}`Create a journal <start/setup.md>`
+
++++ {"kind": "centered", "class": "landing-pillars"}
+
+Why Oaktree Sapling
+
+## Free, easy, beautiful, reliable
+
+::::{grid} 1 2 4 4
+
+:::{card}
+:link: why-use-it.md#why-free
+```{image} brand/icons/free.svg
+:width: 48px
+:align: center
+```
+**Free**
+
+Runs on the free tiers of GitHub, Cloudflare and Zenodo.
+:::
+
+:::{card}
+:link: why-use-it.md#why-easy
+```{image} brand/icons/easy.svg
+:width: 48px
+:align: center
+```
+**Easy**
+
+Write in Markdown, review in pull requests.
+:::
+
+:::{card}
+:link: why-use-it.md#why-beautiful
+```{image} brand/icons/beautiful.svg
+:width: 48px
+:align: center
+```
+**Beautiful**
+
+Each paper is a website and a PDF.
+:::
+
+:::{card}
+:link: why-use-it.md#why-reliable
+```{image} brand/icons/reliable.svg
+:width: 48px
+:align: center
+```
+**Reliable**
+
+Each version gets a DOI and an archived copy.
+:::
+
+::::
+
++++ {"kind": "justified", "class": "landing-in-use"}
+
+## See it in use
+
+Oaktree Sapling grew out of the journal of Neuromatch's Impact Scholars Program.
+
+{button}`Impact Scholars journal <https://impact-scholars.github.io/>`
+
++++ {"kind": "justified", "class": "landing-docs"}
+
+Documentation
+
+## Where to start
 
 ::::{grid} 1 1 2 2
 
 :::{card} Run a journal
-Set up the journal's repositories, then one per submission.
-
 [Create a journal](start/setup.md) · [Add a paper](guide/add-paper.md)
 :::
 
 :::{card} Submit a paper
-An editor created a repository for your paper: what to fill in and how to submit.
-
 [Your paper repository](start/paper.md)
 :::
 
 :::{card} Look something up
-Each file in a journal repository, and each `oak` command.
-
 [Files](reference/files.md) · [CLI](reference/cli.md)
 :::
 
 :::{card} Why it's built this way
-Why MyST, GitHub and Zenodo, for anyone deciding whether to run a journal on it. Then the design in detail, for anyone forking it.
-
-[Philosophy](philosophy.md) · [How it works](design/index.md)
+[Why use it](why-use-it.md) · [How it works](design/index.md)
 :::
 
 ::::
