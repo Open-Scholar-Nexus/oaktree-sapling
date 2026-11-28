@@ -371,7 +371,7 @@ describe('the templates declare the oldest engine they run with', () => {
     const repo = mkdtempSync(join(tmpdir(), 'oak-min-'));
     renderPaperTemplate(SHIM, repo, {
       engineRepo: 'me/engine',
-      instanceRepo: 'me/journal',
+      journalRepo: 'me/journal',
       owner: '@me',
       version: 'v9.9.9',
       edition: 'e',

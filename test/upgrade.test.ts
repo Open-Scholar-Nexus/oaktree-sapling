@@ -40,7 +40,7 @@ const tmp = (p = 'oak-up-') => mkdtempSync(join(tmpdir(), p));
 
 const answers: TemplateAnswers = {
   engineRepo: 'me/engine',
-  instanceRepo: 'me/instance-config',
+  journalRepo: 'me/journal-repo',
   owner: '@alice',
   version: 'v1.0.0',
   edition: 'ed-2026',

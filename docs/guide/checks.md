@@ -149,7 +149,7 @@ A paper's edition is the `edition` in its `myst.yml`. The same shape works for C
 From a clone of any paper, run `oak validate` against your copy of the journal repository ([previewing with other settings](journal-settings.md#previewing-with-other-settings)):
 
 ```bash
-oak validate --instance ../<journal-repo>
+oak validate --journal ../<journal-repo>
 ```
 
 It runs the journal's checks, check files included, as they are on disk, uncommitted edits too. `oak validate` runs the version of oak the paper pins, so the paper must pin one that runs check files (>= v0.3.0).
@@ -163,4 +163,4 @@ A check file that is missing, does not load, has no `validate`, throws, [times o
 
 `oak validate`, `oak build` and `oak start` load the MyST plugins a paper lists under `project.plugins` in its `myst.yml`. A plugin is JavaScript, and it runs on your machine with your permissions. Before running `oak` on a submission, read the plugins its `myst.yml` lists.
 
-`oak validate` also runs the journal's [check files](#journal-checks), from the journal repository `pins.yml` names or the folder `--instance` names.
+`oak validate` also runs the journal's [check files](#journal-checks), from the journal repository `pins.yml` names or the folder `--journal` names.

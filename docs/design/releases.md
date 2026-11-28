@@ -44,10 +44,10 @@ The release script downloads typst at the version in `typst.version` and runs th
 A deposit contains the PDF and what it was rendered from. To render the PDF again with nothing fetched from GitHub, unzip `engine.zip`, `journal.zip` and `source.zip` into three folders, and from the paper's folder run:
 
 ```sh
-node <engine>/dist/cli.cjs build --instance <journal> --exports-only
+node <engine>/dist/cli.cjs build --journal <journal> --exports-only
 ```
 
-When the deposit has a `template.zip`, unzip it too and add `--typst-template <template>`. [`--exports-only`](#build) builds the PDF without the website, whose theme is downloaded. For a paper that is its own journal[^own-journal], leave out `--instance`: oak finds `journal.yml` beside the paper.
+When the deposit has a `template.zip`, unzip it too and add `--typst-template <template>`. [`--exports-only`](#build) builds the PDF without the website, whose theme is downloaded. For a paper that is its own journal[^own-journal], leave out `--journal`: oak finds `journal.yml` beside the paper.
 
 | file | holds |
 |---|---|
@@ -67,7 +67,7 @@ The files in the paper's `deposit/` folder are added beside them, and these name
 
 When `journal.yml` sets `zenodo.community`, `oak release` asks Zenodo to have that community review a paper's first-version draft (`/api/records/<id>/draft/review`), so the editor's **Submit for review** on Zenodo sends the draft to the community.[^legacy-communities] A later version's draft gets no review, since Zenodo refuses one; it stays in the communities the record is already in. A published record joins a community when an editor submits it on Zenodo. `--publish-without-review` publishes with no review, so a first version published this way is in no community until an editor submits it on Zenodo.
 
-A paper repository that is its own journal (`instance_repo: "."` in `pins.yml`)[^own-journal] gets no `journal.zip`, because its journal files are in `source.zip` at the same commit; the provenance names the paper's repository and commit as the journal's. A paper built with `--no-instance` has no journal to archive.
+A paper repository that is its own journal (`journal_repo: "."` in `pins.yml`)[^own-journal] gets no `journal.zip`, because its journal files are in `source.zip` at the same commit; the provenance names the paper's repository and commit as the journal's. A paper built with `--no-journal` has no journal to archive.
 
 [^own-journal]: Planned, in development.
 [^legacy-communities]: oak leaves the `communities` field of the legacy Zenodo API unset.

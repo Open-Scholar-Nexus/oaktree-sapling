@@ -264,23 +264,23 @@ export const realGitContext: GitContext = {
 };
 
 /**
- * Which journal checkout `instanceRoot` is ({@link JournalStamp}); undefined without one.
+ * Which journal checkout `journalRoot` is ({@link JournalStamp}); undefined without one.
  * Untracked files count as uncommitted: `git archive` leaves them out.
  */
 export function journalStamp(
-  instanceRoot: string | null,
+  journalRoot: string | null,
   paperRoot: string,
 ): JournalStamp | undefined {
-  if (instanceRoot === null) return undefined;
-  if (resolve(instanceRoot) === resolve(paperRoot)) return { repo: '.' };
+  if (journalRoot === null) return undefined;
+  if (resolve(journalRoot) === resolve(paperRoot)) return { repo: '.' };
   try {
     // A folder inside a larger repo: HEAD and origin are that repo's.
-    if (git(instanceRoot, ['rev-parse', '--show-prefix'], { quiet: true })) {
+    if (git(journalRoot, ['rev-parse', '--show-prefix'], { quiet: true })) {
       return { repo: null, commit: null };
     }
-    const commit = git(instanceRoot, ['rev-parse', 'HEAD'], { quiet: true });
-    const dirty = git(instanceRoot, ['status', '--porcelain'], { quiet: true });
-    return { repo: locationRepo(originRepo(instanceRoot)), commit: dirty ? null : commit };
+    const commit = git(journalRoot, ['rev-parse', 'HEAD'], { quiet: true });
+    const dirty = git(journalRoot, ['status', '--porcelain'], { quiet: true });
+    return { repo: locationRepo(originRepo(journalRoot)), commit: dirty ? null : commit };
   } catch {
     return { repo: null, commit: null };
   }
@@ -1096,7 +1096,7 @@ export function cachedJournal(
   paperRoot: string,
   now = Date.now(),
 ): JournalCache {
-  assertRepoName(journalRepo, 'instance_repo in .github/actions/engine/pins.yml');
+  assertRepoName(journalRepo, 'journal_repo in .github/actions/engine/pins.yml');
   const root = join(paperRoot, '_build', 'journal', ...journalRepo.split('/'));
   // Inside .git, so the journal's own files are exactly what was fetched.
   const stamp = join(root, '.git', 'oak-fetched');
@@ -1400,7 +1400,7 @@ export const realConformanceGh: ConformanceGh = {
     ]);
   },
   committedJournalRepo(repo) {
-    return committedYamlValue(repo, '.github/actions/engine/pins.yml', ['instance_repo']);
+    return committedYamlValue(repo, '.github/actions/engine/pins.yml', ['journal_repo']);
   },
   defaultBranchSha(repo) {
     return gh(['api', `repos/${repo}/git/ref/heads/main`, '--jq', '.object.sha']);

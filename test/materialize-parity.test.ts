@@ -51,7 +51,7 @@ describe('build, start and validate materialize from the same inputs', () => {
       'assetOverrides:',
       'baseUrl:',
       'paperRoot,',
-      'instanceRoot,',
+      'journalRoot,',
     ]) {
       expect(
         body,

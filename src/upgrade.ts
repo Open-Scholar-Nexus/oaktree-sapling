@@ -75,7 +75,7 @@ export function readAnswers(repoRoot: string): TemplateAnswers {
   const pinsPath = join(repoRoot, PINS_REL);
   const pins = existsSync(pinsPath) ? readDoc(pinsPath) : null;
   const engineRepo = String(pins?.get('engine_repo') ?? '');
-  const instanceRepo = String(pins?.get('instance_repo') ?? '.');
+  const journalRepo = String(pins?.get('journal_repo') ?? '.');
   const coPath = join(repoRoot, CODEOWNERS_REL);
   const owner = existsSync(coPath) ? ownerFromCodeowners(readFileSync(coPath, 'utf8')) : '@ghost';
   const myst = join(repoRoot, 'myst.yml');
@@ -86,7 +86,7 @@ export function readAnswers(repoRoot: string): TemplateAnswers {
     version = String(doc.getIn(['project', 'options', 'oaktree-sapling', 'version']) ?? '');
     edition = String(doc.getIn(['project', 'options', 'oaktree-sapling', 'edition']) ?? '');
   }
-  return { engineRepo, instanceRepo, owner, version, edition };
+  return { engineRepo, journalRepo, owner, version, edition };
 }
 
 /* --------------------------------------------------------------------------

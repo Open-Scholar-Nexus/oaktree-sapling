@@ -94,14 +94,14 @@ describe('readEngineOptions (other options are kept)', () => {
 
 describe('fixtures parse against the schemas', () => {
   it('fixture journal.yml is a valid JournalConfig', () => {
-    const j = JournalConfig.parse(read('./fixture-instance/journal.yml'));
+    const j = JournalConfig.parse(read('./fixture-journal/journal.yml'));
     expect(j.name).toBe('Fixture Journal');
     expect(j.preview.provider).toBe('artifact');
     expect(j.zenodo.community).toBe('fixture-community');
   });
 
   it('fixture registry is a valid Registry with distinct id and location', () => {
-    const r = Registry.parse(read('./fixture-instance/registry/papers.yml'));
+    const r = Registry.parse(read('./fixture-journal/registry/papers.yml'));
     expect(r).toHaveLength(1);
     const e = r[0]!;
     expect(e.id).toBe('fixture-2026-sample-paper');
@@ -203,7 +203,7 @@ describe('checkIdShape: catches the placeholder id a paper shipped', () => {
 });
 
 describe('checkIdUniqueness, which needs the registry', () => {
-  const registry = Registry.parse(read('./fixture-instance/registry/papers.yml'));
+  const registry = Registry.parse(read('./fixture-journal/registry/papers.yml'));
 
   it('flags a duplicate id owned by another paper', () => {
     const r = checkIdUniqueness('fixture-2026-sample-paper', registry, {
@@ -312,9 +312,9 @@ describe('registry location: one string', () => {
 });
 
 describe('Pins', () => {
-  it('sets instance_repo to "." when it is omitted (the repo is its own journal)', () => {
+  it('sets journal_repo to "." when it is omitted (the repo is its own journal)', () => {
     const p = Pins.parse({ engine_repo: 'open-scholar-nexus/oaktree-sapling' });
-    expect(p.instance_repo).toBe('.');
+    expect(p.journal_repo).toBe('.');
   });
 });
 
