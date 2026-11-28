@@ -179,7 +179,7 @@ function materializeInputFrom(
  *  holds the PDF a deposit archives. */
 async function buildPaper(argv: string[]): Promise<{ paperRoot: string; resolvedId?: string }> {
   const paperRoot = resolve(flag(argv, 'paper') ?? '.');
-  // Parsed before anything else, so a typo costs no build.
+  // A bad port is refused before the build starts.
   const site = { ...portsFrom(argv), ...(has(argv, 'keep-host') ? { keepHost: true } : {}) };
   if (isJournalRepo(paperRoot)) {
     process.stderr.write(annotate('error', msg.build.inJournalRepo(paperRoot)) + '\n');
@@ -307,7 +307,7 @@ function startOptsFrom(argv: string[]): StartOpts {
  */
 async function cmdStart(argv: string[]): Promise<number> {
   const paperRoot = resolve(flag(argv, 'paper') ?? '.');
-  // Parsed before anything else, so a typo costs no build.
+  // A bad port is refused before the preview starts.
   const startOpts = startOptsFrom(argv);
   const { createMystEdge } = await import('./myst.js');
   const edge = createMystEdge();
