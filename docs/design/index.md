@@ -47,7 +47,7 @@ The assembled result is written to **`myst.oak.yml`**[^public], next to the pape
 
 Each page takes one part of oaktree-sapling and explains why it is built that way. What each part _does_ belongs in [Reference](../reference/files.md); this section is for the reasoning.
 
-[How a paper's config is assembled](config.md) continues from the section above. [How a paper repository's CI is built](paper-ci.md) covers why every job is split in two, what a job with a token uses from a pull request's build, and which files need an editor's review. [The editorial checks](checks.md) covers the checks a journal writes itself, [How oak runs MyST](myst.md) why oak passes on only some of MyST's flags, and [How oaktree-sapling is released](releases.md) why each release tag has oak's bundled code committed on it, and what a deposit contains.
+[How a paper's config is assembled](config.md) continues from the section above. [How a paper repository's CI is built](paper-ci.md) covers why every job is split in two, what a job with a token uses from a pull request's build, and which files need an editor's review. [The editorial checks](checks.md) covers the checks a journal writes itself, and [How oaktree-sapling is released](releases.md) why each release tag has oak's bundled code committed on it, and what a deposit contains. Then [How oak runs MyST](myst.md).
 
 Code comments cite decisions as `[R#]` and `[design §N]`. Those not yet written up on these pages are in the original [decision record](https://github.com/pollomarzo/whitelabel/blob/v0.0.7/docs/design/record.md) and [design brief](https://github.com/pollomarzo/whitelabel/blob/v0.0.7/docs/design/brief.md), in the repository oaktree-sapling was developed in.
 
