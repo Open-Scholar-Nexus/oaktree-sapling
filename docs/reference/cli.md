@@ -214,7 +214,7 @@ It fails when the pull request's head is another commit (or when gh cannot post 
 `oak conformance` tests a release of `oak` on GitHub, with a paper repository kept for testing. The engine's **Conformance** workflow runs it after each release. [RELEASING.md](src:RELEASING.md) covers the workflow.
 
 `oak conformance run --repo <owner/name> --tag <vX.Y.Z>`
-: Moves the test repository to the release with `oak upgrade`, then checks each path its CI takes: the build and GitHub Pages, the editorial checks, a preview from a branch, the Zenodo deposit and, with a fork, a preview from the fork. It exits 0 when all pass, 1 when one fails, 3 when GitHub, Cloudflare or Zenodo did not finish in time, and 4 when the test repository already uses the release, so nothing was tested.
+: Moves the test repository to the release with `oak upgrade`, then checks each path its CI takes: the build and GitHub Pages, the Journal checks passing and failing, a preview from a branch, the Zenodo deposit and, with a fork, a preview from the fork. It exits 0 when all pass, 1 when one fails, 3 when GitHub, Cloudflare or Zenodo did not finish in time, and 4 when the test repository already uses the release, so nothing was tested.
 
 `--fork-repo <owner/name>`
 : The fork to open the fork pull request from, else `CONFORMANCE_FORK_REPO`. The fork preview runs only when `CONFORMANCE_FORK_PAT` holds a token for the fork's owner.

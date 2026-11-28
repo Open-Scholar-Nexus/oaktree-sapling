@@ -21,6 +21,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { bundleState, assertBundleNotStale, bundlePath } from './bundle-state.js';
 import { labelChildOutput } from '../src/gh.js';
+import * as msg from '../src/messages.js';
 
 const engineDir = fileURLToPath(new URL('..', import.meta.url));
 /** A copy of the fixture paper, as in `validate.integration.test.ts`: `materializeDerived`
@@ -1002,6 +1003,34 @@ describe.skipIf(bundleState() === 'absent')(
       );
       expect(r.code).toBe(2);
       expect(r.stderr).toContain('no PDF under _build/exports');
+    });
+
+    it('in Actions, a deposit that fails opens a zenodo-publish-failed issue', () => {
+      // No `project.github`, so the deposit fails before any Zenodo call.
+      const dir = sandboxPaper();
+      mkdirSync(join(dir, '_build', 'exports'), { recursive: true });
+      writeFileSync(join(dir, '_build', 'exports', 'paper.pdf'), '%PDF-1.4\n');
+      const bin = mkdtempSync(join(tmpdir(), 'oak-gh-stub-'));
+      const ghLog = join(bin, 'gh.log');
+      writeFileSync(join(bin, 'gh'), `#!/bin/sh\nprintf '%s\\n' "$@" >> "${ghLog}"\n`, {
+        mode: 0o755,
+      });
+      const r = oak(
+        ['release', 'deposit', '--tag', 'v1.0.0', '--paper', dir, '--no-instance'],
+        {
+          ...noTokens,
+          ZENODO_TOKEN_SANDBOX: 'sandbox-token',
+          GH_TOKEN: 'x',
+          PATH: `${bin}:${dirname(process.execPath)}`,
+        },
+        true,
+      );
+      expect(r.code).toBe(2);
+      const args = readFileSync(ghLog, 'utf8').split('\n');
+      expect(args.slice(0, 2)).toEqual(['issue', 'create']);
+      expect(args[args.indexOf('--title') + 1]).toBe(msg.workflow.releaseFailureIssue('v1.0.0'));
+      expect(args[args.indexOf('--body') + 1]).toContain('project.github missing');
+      expect(args[args.indexOf('--label') + 1]).toBe('zenodo-publish-failed');
     });
 
     // An unset secret reaches the workflow step as an empty string.
